@@ -1,0 +1,437 @@
+:root {
+    --bg: #f5f6f8;
+    --card: #ffffff;
+    --ink: #1a1d21;
+    --ink-soft: #5c6470;
+    --line: #e2e5ea;
+    /* Le contour d'un bouton n'est pas un filet de séparation : mesuré, le
+       trait était à 1,31 de contraste, là où il en faut 3,0 pour qu'un
+       contour d'interface se voie. Celui-ci est à 3,03. */
+    --line-bouton: #91949e;
+
+    /* Le corail de Mimia, et non plus un bleu générique. Un parent qui arrive
+       du site et tombe sur un bouton bleu se demande une seconde s'il est au
+       bon endroit — sur une page qui réclame un mot de passe, cette seconde
+       coûte cher.
+
+       Deux valeurs, parce qu'un aplat et des lettres n'ont pas les mêmes
+       exigences. `--accent` remplit le bouton : #D63F1C tient 4,58:1 sous du
+       blanc, là où le corail clair de la marque ne donnait que 2,8:1 et rendait
+       le libellé délavé. `--accent-texte` sert aux liens, posés eux sur le fond
+       de la carte. */
+    --accent: #d63f1c;
+    --accent-survol: #bf3313;
+    --accent-texte: #bf3313;
+    --accent-ink: #ffffff;
+    /* LE BLEU DES ÉLÈVES.
+       Le corail est la couleur des parents ; deux boutons pleins de la même
+       teinte se disputeraient la première place. Mesuré : blanc sur ce bleu
+       tient 4,88:1, au-delà des 4,5 exigés pour du texte. */
+    --eleve: #2f6fd0;
+    --eleve-fond: #eaf1fc;
+    /* Le TEXTE demande 4,5:1 là où une bordure se contente de 3,0. Le bleu
+       vif tenait 4,29 sur le fond bleu clair : assombri juste ce qu il faut,
+       il passe à 4,54 sans changer la teinte perçue. */
+    --eleve-texte: #2b6bcb;
+
+    --danger: #c0392b;
+    --danger-bg: #fdeceb;
+    --radius: 12px;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        --bg: #14171b;
+        --card: #1c2026;
+        --ink: #eef1f5;
+        --ink-soft: #9aa4b1;
+        --line: #2c323a;
+        --line-bouton: #626874; /* 3,02 sur la carte sombre. */
+
+        /* L'aplat ne bouge pas : son contraste se mesure contre le blanc du
+           libellé, qui ne change pas de thème. Le texte des liens, si — le
+           corail foncé tomberait à 1,8:1 sur la carte sombre. */
+        --accent: #d63f1c;
+        --accent-survol: #bf3313;
+        --accent-texte: #ff7d5e;
+        --eleve: #4f8fe8;
+        --eleve-fond: #172436;
+        --eleve-texte: #4f8fe8; /* 4,79 sur le fond sombre : rien à corriger. */
+
+        --danger: #ff8a7a;
+        --danger-bg: #37211f;
+    }
+}
+
+* { box-sizing: border-box; }
+
+body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-size: 15px;
+    line-height: 1.5;
+}
+
+.auth-shell {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    gap: 16px;
+}
+
+.auth-card {
+    width: 100%;
+    max-width: 420px;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 32px;
+}
+
+.auth-brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 24px;
+}
+
+/* Hauteur fixe, largeur libre : le logo garde ses proportions. */
+.auth-brand__logo { display: block; height: 30px; width: auto; }
+.auth-brand__logo--sombre { display: none; }
+
+@media (prefers-color-scheme: dark) {
+    .auth-brand__logo--clair { display: none; }
+    .auth-brand__logo--sombre { display: block; }
+}
+
+h1 {
+    font-size: 20px;
+    margin: 0 0 4px;
+}
+
+.auth-subtitle {
+    margin: 0 0 24px;
+    color: var(--ink-soft);
+    font-size: 14px;
+}
+
+.field { margin-bottom: 16px; }
+
+.field label {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.field input[type="email"],
+.field input[type="password"],
+.field input[type="text"] {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--bg);
+    color: var(--ink);
+    font-size: 15px;
+    font-family: inherit;
+}
+
+.field input:focus {
+    outline: 2px solid var(--accent);
+    outline-offset: -1px;
+    border-color: transparent;
+}
+
+/* ---------------------------------------- champ de mot de passe, avec l'œil */
+/* La boîte est créée en JavaScript autour du champ : sans lui, rien de ceci ne
+   s'applique et le formulaire reste celui d'avant. */
+.champ-mdp {
+    position: relative;
+}
+
+/* La réserve à droite évite que le texte passe SOUS le bouton : sur un mot de
+   passe long, les derniers caractères — justement ceux qu'on veut vérifier —
+   disparaissaient derrière l'œil. */
+.champ-mdp input[type="password"],
+.champ-mdp input[type="text"] {
+    padding-right: 42px;
+}
+
+.champ-mdp__oeil {
+    position: absolute;
+    top: 0;
+    right: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 100%;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--ink-soft);
+    cursor: pointer;
+}
+
+.champ-mdp__oeil:hover {
+    color: var(--ink);
+}
+
+.champ-mdp__oeil svg {
+    width: 18px;
+    height: 18px;
+}
+
+/* ------------------------------------------------ règles du mot de passe */
+/* Annoncées avant l'envoi, cochées à la frappe. En ligne plutôt qu'en liste à
+   puces empilée : quatre contraintes courtes tiennent sur deux lignes et ne
+   repoussent pas le bouton hors de l'écran sur un téléphone. */
+.regles-mdp {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 14px;
+    margin: 8px 0 0;
+    padding: 0;
+    list-style: none;
+    font-size: 12.5px;
+    color: var(--ink-soft);
+}
+
+/* La pastille porte l'état, en plus de la couleur : un daltonien distingue
+   « · » de « ✓ » là où il ne distinguerait pas le gris du vert. */
+.regles-mdp li::before {
+    content: "·";
+    display: inline-block;
+    width: 12px;
+    font-weight: 700;
+}
+
+.regles-mdp__ok { color: #2e7d32; }
+.regles-mdp__ok::before { content: "✓"; }
+
+.regles-mdp__ko::before { content: "·"; }
+
+@media (prefers-color-scheme: dark) {
+    .regles-mdp__ok { color: #7fc47f; }
+}
+
+.field-row {
+    display: flex;
+    gap: 12px;
+}
+
+.field-row .field { flex: 1; }
+
+.checkbox {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    margin-bottom: 16px;
+    font-size: 13px;
+    color: var(--ink-soft);
+}
+
+.checkbox input { margin-top: 3px; flex-shrink: 0; }
+
+.btn {
+    display: block;
+    width: 100%;
+    padding: 11px 16px;
+    border: 0;
+    border-radius: 8px;
+    background: var(--accent);
+    color: var(--accent-ink);
+    font-size: 15px;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+}
+
+/* Un corail assombri plutôt qu'un filtre de luminosité : `brightness`
+   ÉCLAIRCIT un aplat déjà clair, et le blanc du libellé y perdait le peu de
+   contraste qu'il avait. */
+.btn:hover { background: var(--accent-survol); }
+
+.btn-google {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    width: 100%;
+    padding: 11px 16px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--card);
+    color: var(--ink);
+    font-size: 15px;
+    font-weight: 500;
+    font-family: inherit;
+    cursor: pointer;
+}
+
+.btn-google:hover { background: var(--bg); }
+.btn-google svg { width: 18px; height: 18px; flex-shrink: 0; }
+
+.separator {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 20px 0;
+    color: var(--ink-soft);
+    font-size: 12px;
+}
+
+.separator::before,
+.separator::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: var(--line);
+}
+
+.alert {
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: var(--danger-bg);
+    color: var(--danger);
+    font-size: 13px;
+    margin-bottom: 16px;
+}
+
+.alert ul { margin: 0; padding-left: 18px; }
+
+.field-error {
+    display: block;
+    margin-top: 4px;
+    color: var(--danger);
+    font-size: 12px;
+}
+
+.auth-switch {
+    margin: 20px 0 0;
+    text-align: center;
+    font-size: 14px;
+    color: var(--ink-soft);
+}
+
+.auth-switch a { color: var(--accent-texte); text-decoration: none; font-weight: 500; }
+.auth-switch a:hover { text-decoration: underline; }
+
+.auth-footnote {
+    margin: 0;
+    font-size: 12px;
+    color: var(--ink-soft);
+    text-align: center;
+    max-width: 420px;
+}
+
+/* --------------------------------------------- accès privé (mode test) */
+/* Le titre porte le badge à côté de lui, pas au-dessus : c'est une précision
+   sur la connexion, pas une annonce séparée. */
+.titre-connexion {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.badge-beta {
+    padding: 3px 10px;
+    border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--accent) 10%, transparent);
+    color: var(--accent-texte);
+    font-size: 11.5px;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    /* Le titre est en gras et en grand : sans ce retour à la normale, le badge
+       hériterait de sa graisse et pèserait autant que lui. */
+    line-height: 1.4;
+    white-space: nowrap;
+}
+
+
+/* ================================================================== */
+/* LA PORTE DES ÉLÈVES                                                 */
+/*                                                                     */
+/* En haut de page, sur son propre fond, dans sa propre couleur.       */
+/*                                                                     */
+/* Ce n'est pas de la décoration : ce sont les élèves qui se           */
+/* connectent le plus — tous les jours d'école, quand leurs parents le */
+/* font une fois par mois. La page doit donc s'ouvrir sur eux.         */
+/* ================================================================== */
+
+.entree-eleve-carte {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 22px;
+    padding: 16px 18px;
+    /* Fond distinct de la carte de connexion : on voit qu'on change de
+       territoire avant même d'avoir lu quoi que ce soit. */
+    background: var(--eleve-fond);
+    border: 1.5px solid var(--eleve);
+    border-radius: var(--radius);
+    color: var(--ink);
+    text-decoration: none;
+    transition: transform .12s, box-shadow .12s;
+}
+
+.entree-eleve-carte:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 18px color-mix(in srgb, var(--eleve) 28%, transparent);
+}
+
+/* Un cartable plutôt qu'une icône abstraite : l'enfant qui ne lit pas encore
+   bien reconnaît l'image avant le mot. */
+.entree-eleve-carte__illu {
+    flex-shrink: 0;
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--eleve) 18%, transparent);
+    font-size: 22px;
+}
+
+.entree-eleve-carte__texte { display: grid; gap: 2px; min-width: 0; }
+.entree-eleve-carte__texte strong { font-size: 16px; color: var(--eleve-texte); }
+.entree-eleve-carte__texte span { font-size: 13px; color: var(--ink-soft); line-height: 1.45; }
+
+.entree-eleve-carte__fleche {
+    margin-left: auto;
+    flex-shrink: 0;
+    color: var(--eleve);
+    font-size: 20px;
+}
+
+/* Le trait qui sépare les deux portes. Il porte son libellé plutôt qu'un
+   simple « ou » : sans lui, le formulaire du dessous n'a pas de destinataire. */
+.separateur-portes {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 0 0 20px;
+    color: var(--ink-soft);
+    font-size: 12px;
+}
+
+.separateur-portes::before,
+.separateur-portes::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--line);
+}
+
+@media (max-width: 420px) {
+    .entree-eleve-carte { padding: 14px; gap: 12px; }
+    .entree-eleve-carte__illu { width: 38px; height: 38px; font-size: 19px; }
+}

@@ -1,0 +1,140 @@
+﻿@model LoginViewModel
+@inject SchoolWebApp.IdentityServer.Services.IModeTestService ModeTest
+@inject IConfiguration Configuration
+@{
+    ViewData["Title"] = "Connexion";
+
+    // L'adresse du front vient de la configuration, comme partout ailleurs.
+    // Codée en dur, elle enverrait les enfants sur localhost le jour du
+    // déploiement — et personne ne s'en apercevrait avant un parent perdu.
+    var spaUrl = (Configuration["Clients:Spa:Url"] ?? "http://localhost:3000").TrimEnd('/');
+
+    // Accès privé : ni inscription, ni connexion Google. Le drapeau est lu à
+    // chaque affichage — l'administrateur le bascule, l'effet est immédiat.
+    //
+    // LA MAINTENANCE FERME LA PAGE EXACTEMENT COMME LE MODE TEST. Les deux
+    // situations demandent la même chose du formulaire : plus d'inscription,
+    // plus de Google, plus de mot de passe oublié — tous ces chemins mènent à
+    // un service qui ne répondra pas. Un second jeu de conditions pour le même
+    // résultat aurait fini par diverger d'une ligne.
+    //
+    // Ce qui diffère, c'est ce qu'on ANNONCE : « bêta test » décrit une phase
+    // du produit, la maintenance un état passager. Dire « bêta » pendant une
+    // mise à jour ferait croire à un service jamais sorti.
+    var maintenance = await ModeTest.MaintenanceAsync();
+    var accesPrive = maintenance || await ModeTest.EstActifAsync();
+}
+
+@*
+    LES ÉLÈVES D'ABORD, ET C'EST UNE QUESTION DE FRÉQUENCE.
+
+    Un parent se connecte de temps en temps : pour régler sa formule, pour
+    regarder une fiche. Un enfant se connecte TOUS LES JOURS D'ÉCOLE. La page
+    était rangée par importance du compte — le titulaire d'abord — alors qu'il
+    faut la ranger par fréquence d'usage.
+
+    Le bloc est donc en haut, sur son propre fond, dans une couleur qui n'est
+    pas celle des parents. Deux boutons pleins du même corail se seraient
+    disputé la première place ; le bleu dit « ce n'est pas la même porte »
+    avant même qu'on ait lu le libellé.
+*@
+<a href="@(spaUrl)/code" class="entree-eleve-carte">
+    <span class="entree-eleve-carte__illu" aria-hidden="true">🎒</span>
+    <span class="entree-eleve-carte__texte">
+        <strong>Tu es élève ?</strong>
+        <span>Entre ton code pour retrouver tes cours.</span>
+    </span>
+    <span class="entree-eleve-carte__fleche" aria-hidden="true">→</span>
+</a>
+
+<div class="separateur-portes"><span>ou, pour les parents</span></div>
+
+<h1 class="titre-connexion">
+    Connexion
+    @if (accesPrive)
+    {
+        <span class="badge-beta">@(maintenance ? "Accès privé" : "Bêta test · accès privé")</span>
+    }
+</h1>
+<p class="auth-subtitle">Accédez à l'espace de vos enfants.</p>
+
+@if (TempData["ErreurExterne"] is string erreurExterne)
+{
+    <div class="alert">@erreurExterne</div>
+}
+
+@if (!ViewData.ModelState.IsValid && ViewData.ModelState[string.Empty]?.Errors.Count > 0)
+{
+    <div class="alert">
+        <ul>
+            @foreach (var error in ViewData.ModelState[string.Empty]!.Errors)
+            {
+                <li>@error.ErrorMessage</li>
+            }
+        </ul>
+    </div>
+}
+
+<form asp-action="Login" asp-controller="Account" method="post">
+    <input type="hidden" asp-for="ReturnUrl" />
+
+    <div class="field">
+        <label asp-for="Email"></label>
+        <input asp-for="Email" type="email" autocomplete="username" autofocus />
+        <span asp-validation-for="Email" class="field-error"></span>
+    </div>
+
+    <div class="field">
+        <label asp-for="Password"></label>
+        <input asp-for="Password" type="password" autocomplete="current-password" />
+        <span asp-validation-for="Password" class="field-error"></span>
+    </div>
+
+    <div class="checkbox">
+        <input asp-for="RememberMe" type="checkbox" />
+        <label asp-for="RememberMe" style="margin:0;font-weight:400;"></label>
+    </div>
+
+    <button type="submit" class="btn">Se connecter</button>
+
+    @* Masqué en accès privé : le parcours de réinitialisation envoie un
+       courriel et ouvre une page publique de changement de mot de passe. Le
+       laisser accessible pendant que le reste est fermé serait la seule porte
+       encore ouverte sur la façade. *@
+    @if (!accesPrive)
+    {
+        <p class="auth-switch" style="margin-top:16px;">
+            <a asp-action="ForgotPassword" asp-controller="Account" asp-route-returnUrl="@Model.ReturnUrl">
+                Mot de passe oublié ?
+            </a>
+        </p>
+    }
+</form>
+
+@if (!accesPrive && Model.FournisseursExternes.Contains("Google"))
+{
+<div class="separator">ou</div>
+
+<form asp-action="ExternalLogin" asp-controller="Account" method="post">
+    <input type="hidden" name="provider" value="Google" />
+    <input type="hidden" name="returnUrl" value="@Model.ReturnUrl" />
+    <button type="submit" class="btn-google">
+        <svg viewBox="0 0 48 48" aria-hidden="true">
+            <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z" />
+            <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z" />
+            <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z" />
+            <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z" />
+        </svg>
+        Continuer avec Google
+    </button>
+</form>
+}
+
+@if (!accesPrive)
+{
+    <p class="auth-switch">
+        Pas encore de compte ?
+        <a asp-action="Register" asp-controller="Account" asp-route-returnUrl="@Model.ReturnUrl">Créer un compte parent</a>
+    </p>
+}
+

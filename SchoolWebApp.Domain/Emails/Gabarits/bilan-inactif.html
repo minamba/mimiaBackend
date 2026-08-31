@@ -1,0 +1,39 @@
+<h1 style="margin:0 0 6px 0; font-family:Georgia,'Times New Roman',serif; font-size:27px; line-height:1.25; font-weight:normal; color:#16233a;">
+  {{prenom}} n'a pas travaillé cette semaine
+</h1>
+
+<p style="margin:0 0 24px 0; font-size:15px; line-height:1.6; color:#8b93a3;">
+  {{periode}} &nbsp;·&nbsp; {{classe}}
+</p>
+
+<!-- Pas de chiffres à zéro : trois « 0 » alignés donnent l'impression d'un
+     bulletin raté, alors qu'une semaine sans cours n'est qu'une semaine
+     sans cours. -->
+<p style="margin:0 0 22px 0;">
+  Aucune séance n'a eu lieu depuis {{derniereFois}}. Rien d'alarmant en soi —
+  mais l'habitude est ce qui fait la différence, et vingt minutes suffisent.
+</p>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+       style="margin:0 0 28px 0; background-color:#faf7f2; border-radius:14px;">
+  <tr>
+    <td style="padding:20px 22px; font-size:15px; line-height:1.7; color:#5f6c81;">
+      {{rappel}}
+    </td>
+  </tr>
+</table>
+
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 26px 0;">
+  <tr>
+    <td align="center" bgcolor="#d63f1c" style="border-radius:999px;">
+      <a href="{{lien}}"
+         style="display:inline-block; padding:14px 32px; font-family:-apple-system,'Segoe UI',Helvetica,Arial,sans-serif; font-size:15.5px; font-weight:600; color:#ffffff; text-decoration:none; border-radius:999px;">
+        Reprendre un cours
+      </a>
+    </td>
+  </tr>
+</table>
+
+<p style="margin:0; font-size:13.5px; line-height:1.6; color:#8b93a3;">
+  Vous pouvez régler la fréquence de ces messages depuis votre profil.
+</p>

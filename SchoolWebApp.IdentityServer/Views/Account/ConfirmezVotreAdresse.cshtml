@@ -1,0 +1,54 @@
+@model ConfirmationViewModel
+@{
+    ViewData["Title"] = "Confirmez votre adresse";
+    var renvoye = TempData["ConfirmationRenvoyee"] is true;
+}
+
+<h1>Vérifiez votre boîte mail</h1>
+
+@if (renvoye)
+{
+    <div class="alert alert--succes">
+        Si un compte existe pour cette adresse et attend d'être confirmé, un
+        nouveau lien vient d'y être envoyé.
+    </div>
+}
+
+<p class="auth-subtitle">
+    Nous avons envoyé un lien de confirmation
+    @if (!string.IsNullOrWhiteSpace(Model.Mail))
+    {
+        <text>à <strong>@Model.Mail</strong></text>
+    }
+    . Un clic dessus, et votre compte est ouvert.
+</p>
+
+@* POURQUOI ON EXPLIQUE AU LIEU DE SE CONTENTER D'ATTENDRE.
+   « Vérifiez vos mails » sans raison ressemble à une formalité administrative
+   de plus. Dit autrement — c'est cette adresse qui portera les bilans et la
+   récupération du mot de passe — la confirmation devient un service rendu,
+   et le parent comprend pourquoi ça vaut le détour. *@
+<p>
+    C'est sur cette adresse que vous recevrez le bilan hebdomadaire de vos
+    enfants, et c'est par elle que vous récupéreriez votre mot de passe. Une
+    lettre de travers, et tout cela partirait dans le vide sans que personne ne
+    s'en aperçoive : ce clic est la seule façon de s'en assurer.
+</p>
+
+<p class="auth-note">
+    Rien reçu ? Regardez dans les indésirables — les premiers messages d'un
+    expéditeur inconnu y atterrissent souvent.
+</p>
+
+<form asp-action="RenvoyerConfirmation" asp-controller="Account" method="post">
+    <input type="hidden" name="mail" value="@Model.Mail" />
+    <input type="hidden" name="returnUrl" value="@Model.ReturnUrl" />
+    <button type="submit" class="btn">Renvoyer le lien</button>
+</form>
+
+<p class="auth-switch">
+    Adresse erronée ?
+    <a asp-action="Register" asp-controller="Account" asp-route-returnUrl="@Model.ReturnUrl">
+        Recommencer l'inscription
+    </a>
+</p>

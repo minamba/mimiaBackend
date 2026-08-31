@@ -1,0 +1,41 @@
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UserSecretsId>4a873291-a009-44ef-bc8d-03bd5f3381f9</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Anthropic" Version="12.39.0" />
+
+    <!-- Compter exactement les pages d'un PDF avant de l'accepter. Une page
+         coûte des milliers de jetons à CHAQUE tour tant qu'elle reste dans la
+         fenêtre d'historique : un manuel de deux cents pages, accepté une
+         fois, se paierait pendant toute la séance. Compter à l'expression
+         régulière échoue sur les PDF à flux compressés, c'est-à-dire la
+         plupart de ceux que produisent les scanners. -->
+    <PackageReference Include="PdfPig" Version="0.1.9" />
+    <PackageReference Include="AutoMapper" Version="16.*" />
+    <PackageReference Include="MailKit" Version="4.*" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="9.*">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="OpenIddict.Validation.AspNetCore" Version="7.6.0" />
+    <PackageReference Include="OpenIddict.Validation.SystemNetHttp" Version="7.6.0" />
+    <PackageReference Include="SkiaSharp" Version="4.151.1" />
+    <PackageReference Include="SkiaSharp.NativeAssets.Linux" Version="4.151.1" />
+    <PackageReference Include="Stripe.net" Version="52.2.0" />
+    <PackageReference Include="Svg.Skia" Version="5.2.0" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2" />
+    <PackageReference Include="Swashbuckle.AspNetCore.Annotations" Version="6.6.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SchoolWebApp.Domain\SchoolWebApp.Domain.csproj" />
+    <ProjectReference Include="..\SchoolWebApp.Dal\SchoolWebApp.Dal.csproj" />
+  </ItemGroup>
+
+</Project>

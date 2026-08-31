@@ -1,0 +1,47 @@
+<h1 style="margin:0 0 6px 0; font-family:Georgia,'Times New Roman',serif; font-size:27px; line-height:1.25; font-weight:normal; color:#16233a;">
+  Il reste {{heuresRestantes}} sur votre forfait
+</h1>
+
+<p style="margin:0 0 24px 0; font-size:15px; line-height:1.6; color:#8b93a3;">
+  Formule {{offre}} &nbsp;·&nbsp; renouvellement le {{renouvellement}}
+</p>
+
+<!-- Le ton compte plus que l'information : ce mail annonce une bonne nouvelle
+     (les enfants travaillent) avant d'annoncer une limite. Inversé, il se lit
+     comme une relance commerciale. -->
+<p style="margin:0 0 22px 0;">
+  Vos enfants ont bien travaillé ce mois-ci — assez pour avoir utilisé
+  {{partConsommee}} de vos heures. Nous vous prévenons maintenant pour que
+  personne ne se retrouve arrêté au milieu d'un exercice.
+</p>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+       style="margin:0 0 26px 0; background-color:#faf7f2; border-radius:14px;">
+  <tr>
+    <td style="padding:20px 22px;">
+      <div style="font-size:13px; font-weight:600; letter-spacing:0.07em; text-transform:uppercase; color:#8b93a3;">
+        Ce mois-ci
+      </div>
+      <div style="margin-top:10px; font-size:15px; line-height:1.8; color:#16233a;">
+        {{blocEnfants}}
+      </div>
+    </td>
+  </tr>
+</table>
+
+<p style="margin:0 0 24px 0;">
+  Vos heures repartent au complet le {{renouvellement}}. Si vos enfants ont
+  besoin de plus d'ici là — une semaine de révisions, un contrôle qui approche —
+  vous pouvez ajouter des heures depuis votre espace.
+</p>
+
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 8px 0;">
+  <tr>
+    <td style="border-radius:999px; background-color:#d63f1c;">
+      <a href="{{lien}}"
+         style="display:inline-block; padding:13px 28px; font-family:-apple-system,'Segoe UI',Helvetica,Arial,sans-serif; font-size:15px; font-weight:600; color:#ffffff; text-decoration:none;">
+        Voir mes heures
+      </a>
+    </td>
+  </tr>
+</table>

@@ -1,0 +1,48 @@
+<h1 style="margin:0 0 6px 0; font-family:Georgia,'Times New Roman',serif; font-size:27px; line-height:1.25; font-weight:normal; color:#16233a;">
+  {{sujet}}
+</h1>
+
+<p style="margin:0 0 22px 0; font-size:15px; line-height:1.65; color:#5f6c81;">
+  Message reçu depuis le formulaire de contact de mimia.fr.
+</p>
+
+<!-- L'identité de l'expéditeur en tableau, comme partout ailleurs : les
+     listes de définition sont rendues de façon erratique d'un client de
+     messagerie à l'autre. -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+       style="margin:0 0 24px 0; background-color:#faf7f2; border-radius:14px;">
+  <tr>
+    <td style="padding:20px 22px; font-size:15px; line-height:1.8; color:#16233a;">
+      <strong style="color:#d63f1c;">De&nbsp;:</strong>&nbsp; {{nom}}<br />
+      <strong style="color:#d63f1c;">Adresse&nbsp;:</strong>&nbsp;
+      <a href="mailto:{{mail}}" style="color:#16233a;">{{mail}}</a><br />
+      <strong style="color:#d63f1c;">Compte&nbsp;:</strong>&nbsp; {{statutCompte}}
+    </td>
+  </tr>
+</table>
+
+<p style="margin:0 0 8px 0; font-size:13px; font-weight:600; letter-spacing:0.08em; text-transform:uppercase; color:#5f6c81;">
+  Message
+</p>
+
+<!-- `white-space: pre-wrap` conserve les retours à la ligne saisis dans le
+     formulaire. Sans cela, un message écrit en paragraphes arrive en un seul
+     bloc illisible. -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+       style="margin:0 0 26px 0; border-left:3px solid #d63f1c;">
+  <tr>
+    <td style="padding:4px 0 4px 18px; font-size:16px; line-height:1.7; color:#16233a; white-space:pre-wrap;">{{message}}</td>
+  </tr>
+</table>
+
+<!-- Bouton en tableau : Outlook ignore padding et border-radius sur un <a>. -->
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 8px 0;">
+  <tr>
+    <td style="background-color:#d63f1c; border-radius:12px;">
+      <a href="mailto:{{mail}}?subject={{sujetReponse}}"
+         style="display:inline-block; padding:13px 26px; font-size:15px; font-weight:600; color:#ffffff; text-decoration:none;">
+        Répondre
+      </a>
+    </td>
+  </tr>
+</table>

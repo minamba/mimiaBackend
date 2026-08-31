@@ -1,0 +1,23 @@
+@{
+    ViewData["Title"] = "Lien de confirmation invalide";
+}
+
+<h1>Ce lien n'est plus valable</h1>
+
+@* ON DIT CE QU'IL FAUT FAIRE, PAS SEULEMENT CE QUI A RATÉ.
+   « Jeton invalide » laisse le parent devant un mur. Les deux causes réelles
+   sont banales — un lien périmé, un lien déjà utilisé — et la sortie est la
+   même dans les deux cas : en redemander un. *@
+<p class="auth-subtitle">
+    Il a peut-être expiré, ou il a déjà servi. Rien n'est perdu : votre compte
+    existe toujours, il attend simplement d'être confirmé.
+</p>
+
+<form asp-action="Login" asp-controller="Account" method="get">
+    <button type="submit" class="btn">Aller à la connexion</button>
+</form>
+
+<p class="auth-note">
+    En vous connectant, vous serez renvoyé vers l'écran qui permet de demander
+    un nouveau lien.
+</p>

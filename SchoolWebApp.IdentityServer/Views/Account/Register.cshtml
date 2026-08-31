@@ -1,0 +1,114 @@
+﻿@model RegisterViewModel
+@{
+    ViewData["Title"] = "Créer un compte";
+}
+
+<h1>Créer un compte parent</h1>
+<p class="auth-subtitle">Un seul compte pour tous vos enfants, du CP à la Terminale.</p>
+
+@if (!ViewData.ModelState.IsValid && ViewData.ModelState[string.Empty]?.Errors.Count > 0)
+{
+    <div class="alert">
+        <ul>
+            @foreach (var error in ViewData.ModelState[string.Empty]!.Errors)
+            {
+                <li>@error.ErrorMessage</li>
+            }
+        </ul>
+    </div>
+}
+
+<form asp-action="Register" asp-controller="Account" method="post">
+    <input type="hidden" asp-for="ReturnUrl" />
+
+    <div class="field-row">
+        <div class="field">
+            <label asp-for="Prenom"></label>
+            <input asp-for="Prenom" type="text" autocomplete="given-name" autofocus />
+            <span asp-validation-for="Prenom" class="field-error"></span>
+        </div>
+        <div class="field">
+            <label asp-for="Nom"></label>
+            <input asp-for="Nom" type="text" autocomplete="family-name" />
+            <span asp-validation-for="Nom" class="field-error"></span>
+        </div>
+    </div>
+
+    <div class="field">
+        <label asp-for="Email"></label>
+        <input asp-for="Email" type="email" autocomplete="username" />
+        <span asp-validation-for="Email" class="field-error"></span>
+    </div>
+
+    @* Les règles sont annoncées AVANT l'envoi.
+       Elles n'apparaissaient qu'après coup, sous forme de reproche : le parent
+       choisissait un mot de passe, remplissait tout le formulaire, et
+       découvrait à la validation qu'il manquait une majuscule. Il faut alors
+       en trouver un autre, et le retenir.
+
+       La liste est rendue par le serveur : sans JavaScript, elle reste lisible.
+       Le script ne fait que cocher au fil de la frappe. *@
+    <div class="field">
+        <label asp-for="Password"></label>
+        <input asp-for="Password" type="password" autocomplete="new-password" data-regles="mdp" />
+        <ul class="regles-mdp" id="mdp-regles">
+            <li data-regle="longueur">10 caractères au minimum</li>
+            <li data-regle="majuscule">une majuscule</li>
+            <li data-regle="minuscule">une minuscule</li>
+            <li data-regle="chiffre">un chiffre</li>
+        </ul>
+        <span asp-validation-for="Password" class="field-error"></span>
+    </div>
+
+    <div class="field">
+        <label asp-for="ConfirmPassword"></label>
+        <input asp-for="ConfirmPassword" type="password" autocomplete="new-password"
+               data-confirmation="mdp" />
+        <span asp-validation-for="ConfirmPassword" class="field-error"></span>
+    </div>
+
+    @* `required` PLUTÔT QU'UN SIMPLE CONTRÔLE SERVEUR.
+
+       Sans lui, oublier cette case envoyait le formulaire, le serveur le
+       refusait, et la page revenait AVEC LES DEUX MOTS DE PASSE VIDES — ASP.NET
+       ne réémet jamais la valeur d'un champ de mot de passe, et c'est très bien
+       ainsi : la réémettre l'écrirait en clair dans le HTML, où il finirait
+       dans le cache du navigateur et dans l'historique.
+
+       La bonne réponse n'est donc pas de rendre le mot de passe, c'est de ne
+       pas partir. Le navigateur bloque l'envoi, tout ce qui est saisi reste à
+       l'écran, et rien ne transite. Ça ne remplace pas la validation serveur —
+       qui reste la seule autorité — ça lui évite un aller-retour inutile. *@
+    <div class="checkbox">
+        <input asp-for="ConfirmeResponsabiliteParentale" type="checkbox" required
+               data-message-requis="Vous devez certifier être le parent ou le responsable légal pour créer un compte." />
+        <label asp-for="ConfirmeResponsabiliteParentale" style="margin:0;font-weight:400;"></label>
+    </div>
+    <span asp-validation-for="ConfirmeResponsabiliteParentale" class="field-error"></span>
+
+    <button type="submit" class="btn">Créer mon compte</button>
+</form>
+
+@if (Model.FournisseursExternes.Contains("Google"))
+{
+<div class="separator">ou</div>
+
+<form asp-action="ExternalLogin" asp-controller="Account" method="post">
+    <input type="hidden" name="provider" value="Google" />
+    <input type="hidden" name="returnUrl" value="@Model.ReturnUrl" />
+    <button type="submit" class="btn-google">
+        <svg viewBox="0 0 48 48" aria-hidden="true">
+            <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z" />
+            <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z" />
+            <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z" />
+            <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z" />
+        </svg>
+        S'inscrire avec Google
+    </button>
+</form>
+}
+
+<p class="auth-switch">
+    Vous avez déjà un compte ?
+    <a asp-action="Login" asp-controller="Account" asp-route-returnUrl="@Model.ReturnUrl">Se connecter</a>
+</p>

@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- MailKit et non System.Net.Mail : la boîte d'envoi écoute sur le port
+         465, en SSL implicite. SmtpClient ne sait faire que du STARTTLS (587)
+         et échouerait à la négociation. -->
+    <PackageReference Include="MailKit" Version="4.*" />
+    <PackageReference Include="Microsoft.Extensions.Options" Version="8.*" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="8.*" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Gabarits et logo embarqués dans l'assembly : les deux applications
+         (API et serveur d'identité) envoient des mails, et un chemin de
+         fichier relatif casserait selon celle qui s'exécute. -->
+    <EmbeddedResource Include="Emails\Gabarits\*.html" />
+    <EmbeddedResource Include="Emails\Ressources\*.png" />
+  </ItemGroup>
+
+</Project>

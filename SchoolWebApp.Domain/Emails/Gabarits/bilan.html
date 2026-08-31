@@ -1,0 +1,73 @@
+<h1 style="margin:0 0 6px 0; font-family:Georgia,'Times New Roman',serif; font-size:27px; line-height:1.25; font-weight:normal; color:#16233a;">
+  La semaine de {{prenom}}
+</h1>
+
+<p style="margin:0 0 26px 0; font-size:15px; line-height:1.6; color:#8b93a3;">
+  {{periode}} &nbsp;·&nbsp; {{classe}}
+</p>
+
+<!-- Trois chiffres, en cellules de tableau de largeur égale : trois <div>
+     côte à côte demanderaient du flex, qu'Outlook ne rend pas. -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+       style="margin:0 0 30px 0; background-color:#faf7f2; border-radius:16px;">
+  <tr>
+    <td width="33%" align="center" style="padding:22px 8px;">
+      <div style="font-family:Georgia,'Times New Roman',serif; font-size:30px; line-height:1; color:#16233a;">{{nbSeances}}</div>
+      <div style="margin-top:6px; font-size:12.5px; color:#8b93a3;">{{motSeances}}</div>
+    </td>
+    <td width="33%" align="center" style="padding:22px 8px; border-left:1px solid #ece6dc; border-right:1px solid #ece6dc;">
+      <div style="font-family:Georgia,'Times New Roman',serif; font-size:30px; line-height:1; color:#16233a;">{{nbEchanges}}</div>
+      <div style="margin-top:6px; font-size:12.5px; color:#8b93a3;">échanges</div>
+    </td>
+    <td width="33%" align="center" style="padding:22px 8px;">
+      <div style="font-family:Georgia,'Times New Roman',serif; font-size:30px; line-height:1; color:#16233a;">{{nbMatieres}}</div>
+      <div style="margin-top:6px; font-size:12.5px; color:#8b93a3;">{{motMatieres}}</div>
+    </td>
+  </tr>
+</table>
+
+<!-- ----------------------------------------------------- ce qui a été vu -->
+<h2 style="margin:0 0 14px 0; font-family:-apple-system,'Segoe UI',Helvetica,Arial,sans-serif; font-size:13px; font-weight:600; letter-spacing:0.08em; text-transform:uppercase; color:#8b93a3;">
+  Ce qu'il a travaillé
+</h2>
+
+{{blocsMatieres}}
+
+<!-- --------------------------------------------------- les évaluations -->
+{{blocEvaluations}}
+
+<!-- ------------------------------------------------------- difficultés -->
+{{blocDifficultes}}
+
+<!-- ------------------------------------------- la remarque du professeur -->
+<h2 style="margin:32px 0 14px 0; font-family:-apple-system,'Segoe UI',Helvetica,Arial,sans-serif; font-size:13px; font-weight:600; letter-spacing:0.08em; text-transform:uppercase; color:#8b93a3;">
+  Le mot du professeur
+</h2>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+       style="margin:0 0 30px 0; background-color:#fdf6f3; border-left:3px solid #d63f1c; border-radius:0 14px 14px 0;">
+  <tr>
+    <td style="padding:20px 22px;">
+      <div style="font-size:15.5px; line-height:1.7; color:#16233a;">{{remarque}}</div>
+      <div style="margin-top:14px; font-size:13.5px; color:#8b93a3;">
+        — {{profPrenom}}, {{profMatiere}}
+      </div>
+    </td>
+  </tr>
+</table>
+
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 26px 0;">
+  <tr>
+    <td align="center" bgcolor="#d63f1c" style="border-radius:999px;">
+      <a href="{{lien}}"
+         style="display:inline-block; padding:14px 32px; font-family:-apple-system,'Segoe UI',Helvetica,Arial,sans-serif; font-size:15.5px; font-weight:600; color:#ffffff; text-decoration:none; border-radius:999px;">
+        Voir le détail sur Mimia
+      </a>
+    </td>
+  </tr>
+</table>
+
+<p style="margin:0; font-size:13.5px; line-height:1.6; color:#8b93a3;">
+  Ce bilan est écrit à partir des séances de la semaine. Il ne remplace pas ce
+  que votre enfant vous en dira — mais il vous donne de quoi lui en parler.
+</p>

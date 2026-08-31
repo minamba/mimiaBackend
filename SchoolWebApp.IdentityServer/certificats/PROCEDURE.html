@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<title>Mimia — Certificats de signature des jetons</title>
+<style>
+  /* Feuille pensée pour l'IMPRESSION en A4, pas pour l'écran : c'est un
+     document qu'on ouvre une fois tous les dix ans, probablement sur papier
+     ou en PDF, et sans le projet sous les yeux. */
+  @page { size: A4; margin: 18mm 16mm; }
+
+  body {
+    font-family: "Segoe UI", Helvetica, Arial, sans-serif;
+    font-size: 10.5pt;
+    line-height: 1.55;
+    color: #16233a;
+    max-width: 175mm;
+    margin: 0 auto;
+    padding: 10mm;
+  }
+
+  h1 { font-size: 20pt; margin: 0 0 2mm; }
+  h2 {
+    font-size: 13pt;
+    margin: 9mm 0 3mm;
+    padding-bottom: 1.5mm;
+    border-bottom: 1.5px solid #d63f1c;
+    /* Un titre ne doit jamais rester seul en bas de page. */
+    break-after: avoid;
+  }
+  h3 { font-size: 11pt; margin: 5mm 0 2mm; break-after: avoid; }
+
+  .sous-titre { color: #5f6c81; margin: 0 0 6mm; font-size: 10pt; }
+
+  pre {
+    background: #f4f6f9;
+    border: 1px solid #d9dfe8;
+    border-left: 3px solid #d63f1c;
+    padding: 3mm 4mm;
+    font-family: Consolas, "Courier New", monospace;
+    font-size: 8.8pt;
+    line-height: 1.45;
+    /* Les commandes doivent rester lisibles sur papier : on les replie plutôt
+       que de les laisser déborder de la feuille. */
+    white-space: pre-wrap;
+    word-break: break-all;
+    break-inside: avoid;
+  }
+
+  code {
+    font-family: Consolas, "Courier New", monospace;
+    font-size: 9.2pt;
+    background: #f4f6f9;
+    padding: 0.3mm 1mm;
+    border-radius: 2px;
+  }
+
+  .encadre {
+    border: 1px solid #d9dfe8;
+    border-left: 3px solid #1e7d38;
+    background: #f6faf7;
+    padding: 3mm 4mm;
+    margin: 4mm 0;
+    break-inside: avoid;
+  }
+
+  .attention {
+    border-left-color: #b3271b;
+    background: #fdf5f4;
+  }
+
+  .encadre p:first-child { margin-top: 0; }
+  .encadre p:last-child { margin-bottom: 0; }
+
+  table { width: 100%; border-collapse: collapse; margin: 3mm 0; font-size: 9.5pt; }
+  th, td { border: 1px solid #d9dfe8; padding: 2mm 3mm; text-align: left; vertical-align: top; }
+  th { background: #f4f6f9; }
+
+  ol, ul { padding-left: 6mm; }
+  li { margin-bottom: 1.5mm; }
+
+  .etape { break-inside: avoid; }
+  .pied { margin-top: 10mm; padding-top: 3mm; border-top: 1px solid #d9dfe8;
+          font-size: 9pt; color: #5f6c81; }
+</style>
+</head>
+<body>
+
+<h1>Certificats de signature des jetons</h1>
+<p class="sous-titre">
+  Mimia — serveur d'identité. Procédure complète : générer, transférer,
+  renseigner, vérifier.
+</p>
+
+<h2>1. De quoi il s'agit</h2>
+
+<p>
+  Le serveur d'identité délivre des <strong>jetons</strong> aux parents qui se
+  connectent. Pour reconnaître ceux qu'il a lui-même émis, il les signe avec une
+  clé. Ces deux fichiers contiennent cette clé : l'un sert à <strong>signer</strong>
+  les jetons, l'autre à les <strong>chiffrer</strong>.
+</p>
+
+<div class="encadre">
+  <p>
+    <strong>Ce n'est PAS le certificat HTTPS du site.</strong> Rien à voir avec
+    le cadenas du navigateur, ni avec Let's Encrypt, ni avec quoi que ce soit
+    qui s'achète. Personne d'extérieur ne valide ces certificats : le serveur
+    signe, et c'est le même serveur qui vérifie. Un certificat auto-signé est
+    donc parfaitement correct ici — c'est même la pratique normale.
+  </p>
+</div>
+
+<h3>Pourquoi il faut les poser</h3>
+
+<p>
+  Sans eux, le serveur en fabrique un au démarrage et le range dans le dossier
+  personnel du conteneur — un espace qui <strong>disparaît à chaque
+  reconstruction d'image</strong>. La clé change, et tous les jetons déjà émis
+  deviennent invalides d'un coup.
+</p>
+<p>
+  Conséquence concrète : à chaque déploiement d'une nouvelle version,
+  <strong>tous les parents connectés sont déconnectés</strong> et doivent
+  ressaisir leur mot de passe. Rien n'est perdu — ni données, ni abonnement — et
+  les enfants connectés par code ne sont pas touchés, leurs sessions ne passent
+  pas par ce mécanisme. Mais c'est une gêne qui revient à chaque mise à jour.
+</p>
+
+<h2>2. Ce qu'il faut avant de commencer</h2>
+
+<table>
+  <tr><th>Outil</th><th>Où</th></tr>
+  <tr>
+    <td><code>openssl</code></td>
+    <td>Fourni avec <strong>Git pour Windows</strong>. Ouvrez « Git Bash » et
+        tapez <code>openssl version</code> : si un numéro s'affiche, c'est bon.</td>
+  </tr>
+  <tr>
+    <td>Un mot de passe</td>
+    <td>Il est <strong>déjà écrit</strong> dans la configuration. Voir juste
+        en dessous où le trouver — il ne s'invente pas, il se recopie.</td>
+  </tr>
+</table>
+
+<h3>Où lire le mot de passe</h3>
+
+<div class="encadre attention">
+  <p>
+    <strong>Attention : deux fichiers portent ce nom</strong>, un par projet.
+    Celui de l'API ne contient pas ce bloc — c'est normal, ce n'est pas lui qui
+    signe les jetons. Prenez celui du <strong>serveur d'identité</strong> :
+  </p>
+  <pre style="margin:2mm 0 0">SchoolWebApp.IdentityServer/appsettings.Production.json
+        ↑ celui-ci
+
+SchoolWebApp/appsettings.Production.json
+        ↑ PAS celui-là</pre>
+</div>
+
+<p>
+  Ouvrez-le dans un éditeur de texte et cherchez le bloc
+  <code>Certificats</code>. Vous y verrez ceci — la valeur de
+  <code>MotDePasse</code> est celle à recopier :
+</p>
+
+<pre>"Certificats": {
+  "Signature":   "/app/certificats/signature.pfx",
+  "Chiffrement": "/app/certificats/chiffrement.pfx",
+  "MotDePasse":  "<strong>&lt;— C'EST CETTE VALEUR&gt;</strong>"
+}</pre>
+
+<p>
+  Les deux chemins sont déjà bons, n'y touchez pas : ce sont ceux du conteneur,
+  expliqués à la section&nbsp;6.
+</p>
+
+<h2>3. Générer les deux certificats</h2>
+
+<p>
+  Dans <strong>Git Bash</strong>. Placez-vous d'abord dans le dossier prévu :
+</p>
+
+<pre>cd /c/Users/daryu/source/repos/SchoolWebApp/SchoolWebApp.IdentityServer/certificats</pre>
+
+<div class="encadre attention">
+  <p>
+    <strong>Dans les quatre commandes qui suivent</strong>, remplacez
+    <code>MOT_DE_PASSE</code> par la valeur lue à l'étape 2 — celle de
+    <code>appsettings.Production.json</code>. Elle apparaît deux fois, à la fin
+    des commandes 3.1 et 3.2.
+  </p>
+  <p>
+    <strong>Elle doit être identique aux deux endroits.</strong> Une lettre de
+    différence, et l'un des deux certificats sera illisible par le serveur —
+    sans que rien ne vous le signale au moment de la création.
+  </p>
+</div>
+
+<div class="encadre">
+  <p>
+    <strong>Le double slash de <code>//CN=</code> n'est pas une coquille.</strong>
+    Git Bash tourne sur MSYS, qui prend tout argument commençant par
+    <code>/</code> pour un chemin Unix et le « traduit » en chemin Windows :
+    <code>/CN=Mimia…</code> devient <code>C:/Program Files/Git/CN=Mimia…</code>,
+    qu'OpenSSL refuse avec le message
+    <em>« subject name is expected to be in the format /type0=value0… »</em>.
+    Le second slash lui dit de ne pas y toucher, et il n'en garde qu'un.
+  </p>
+  <p>
+    Sous Linux ou macOS, un seul slash suffirait. Deux fonctionnent
+    <strong>partout</strong> : autant n'avoir qu'une version à retenir.
+  </p>
+</div>
+
+<div class="etape">
+<h3>3.1 — Le certificat de signature</h3>
+
+<pre>openssl req -x509 -newkey rsa:2048 -sha256 -days 3650 -nodes \
+  -keyout signature.key -out signature.crt \
+  -subj "//CN=Mimia Identity Signing"
+
+openssl pkcs12 -export -out signature.pfx \
+  -inkey signature.key -in signature.crt \
+  -passout pass:MOT_DE_PASSE</pre>
+</div>
+
+<div class="etape">
+<h3>3.2 — Le certificat de chiffrement</h3>
+
+<pre>openssl req -x509 -newkey rsa:2048 -sha256 -days 3650 -nodes \
+  -keyout chiffrement.key -out chiffrement.crt \
+  -subj "//CN=Mimia Identity Encryption"
+
+openssl pkcs12 -export -out chiffrement.pfx \
+  -inkey chiffrement.key -in chiffrement.crt \
+  -passout pass:MOT_DE_PASSE</pre>
+</div>
+
+<div class="etape">
+<h3>3.3 — Effacer les fichiers intermédiaires</h3>
+
+<p>
+  Les <code>.key</code> et <code>.crt</code> ont servi à fabriquer les
+  <code>.pfx</code>, qui contiennent désormais tout. Les laisser traîner, c'est
+  laisser la clé privée en clair à côté du coffre.
+</p>
+
+<pre>rm signature.key signature.crt chiffrement.key chiffrement.crt
+ls -l *.pfx</pre>
+
+<p>
+  La dernière commande doit afficher <strong>deux fichiers</strong> :
+  <code>signature.pfx</code> et <code>chiffrement.pfx</code>.
+</p>
+</div>
+
+<h3>Ce que veulent dire ces options</h3>
+
+<table>
+  <tr><th>Option</th><th>Signification</th></tr>
+  <tr><td><code>-x509</code></td><td>Un certificat autonome, pas une demande à envoyer à une autorité.</td></tr>
+  <tr><td><code>rsa:2048</code></td><td>La taille de la clé. 2048 bits est le standard courant.</td></tr>
+  <tr><td><code>-days 3650</code></td><td>Dix ans de validité. Voir la section 7.</td></tr>
+  <tr><td><code>-nodes</code></td><td>Pas de mot de passe sur le fichier intermédiaire ; c'est le <code>.pfx</code> final qui en porte un.</td></tr>
+  <tr><td><code>-subj "//CN=…"</code></td><td>Le nom inscrit dans le certificat. Purement descriptif ici : il n'est vérifié par personne. Le double slash est expliqué plus haut.</td></tr>
+</table>
+
+<h2>4. Vérifier que les fichiers sont corrects</h2>
+
+<p>Avant de les transférer, contrôlez-les. Toujours dans Git Bash :</p>
+
+<pre>openssl pkcs12 -in signature.pfx -nokeys -passin pass:MOT_DE_PASSE | \
+  openssl x509 -noout -subject -enddate</pre>
+
+<p>
+  Même chose pour l'autre, en remplaçant <code>signature.pfx</code> par
+  <code>chiffrement.pfx</code>. <strong>Faites-le pour les deux</strong> : c'est
+  précisément ce contrôle qui révèle une faute de frappe dans le mot de passe,
+  avant qu'elle ne se transforme en serveur qui refuse de démarrer.
+</p>
+
+<p>Vous devez voir quelque chose comme :</p>
+
+<pre>subject=CN = Mimia Identity Signing
+notAfter=Aug  9 12:34:56 2036 GMT</pre>
+
+<div class="encadre attention">
+  <p>
+    <strong>Si vous voyez « Mac verify error: invalid password? »</strong>, le
+    mot de passe utilisé pour créer le fichier n'est pas celui que vous venez de
+    donner. Recommencez la génération : un <code>.pfx</code> dont on a perdu le
+    mot de passe ne se répare pas.
+  </p>
+</div>
+
+<h2>5. Transférer sur le serveur</h2>
+
+<p>
+  Les deux fichiers doivent se trouver, <strong>sur le VPS</strong>, dans le
+  dossier <code>SchoolWebApp.IdentityServer/certificats/</code> du projet — au
+  même endroit que sur votre machine.
+</p>
+
+<pre>scp signature.pfx chiffrement.pfx \
+  utilisateur@votre-serveur:/chemin/vers/SchoolWebApp/SchoolWebApp.IdentityServer/certificats/</pre>
+
+<p>
+  Remplacez <code>utilisateur@votre-serveur</code> et le chemin par les vôtres.
+  Si vous déployez autrement (FTP, panneau d'hébergement, glisser-déposer),
+  peu importe la méthode : seul compte l'emplacement final.
+</p>
+
+<h2>6. Ce qui est déjà configuré</h2>
+
+<p>
+  <strong>Vous n'avez rien à modifier dans les fichiers ci-dessous</strong> :
+  ils sont déjà en place. Cette section existe pour que vous compreniez le
+  montage si vous devez le refaire ou le déplacer un jour.
+</p>
+
+<h3>Le montage — <code>docker-compose.yml</code></h3>
+
+<pre>identity:
+  volumes:
+    - ./SchoolWebApp.IdentityServer/certificats:/app/certificats:ro</pre>
+
+<p>
+  Le dossier du serveur est rendu visible dans le conteneur à l'emplacement
+  <code>/app/certificats</code>. Le <code>:ro</code> signifie « lecture seule » :
+  le programme peut les lire, pas les remplacer.
+</p>
+
+<h3>Le renseignement — <code>appsettings.Production.json</code></h3>
+
+<pre>"Certificats": {
+  "Signature":   "/app/certificats/signature.pfx",
+  "Chiffrement": "/app/certificats/chiffrement.pfx",
+  "MotDePasse":  "…"
+}</pre>
+
+<div class="encadre">
+  <p>
+    Les chemins sont ceux <strong>vus depuis l'intérieur du conteneur</strong>,
+    pas ceux de votre disque. C'est la ligne <code>volumes</code> ci-dessus qui
+    fait le pont entre les deux. Si vous changez l'une, changez l'autre.
+  </p>
+</div>
+
+<h3>Vérifier que ça marche</h3>
+
+<p>Après déploiement, regardez le démarrage du serveur d'identité :</p>
+
+<pre>docker compose logs identity | head -40</pre>
+
+<p>
+  <strong>Si les certificats sont trouvés</strong>, le serveur démarre
+  normalement, sans rien dire de particulier.
+  <strong>S'ils manquent</strong>, il <em>refuse de démarrer</em> et affiche un
+  message qui nomme le fichier introuvable — c'est volontaire : un serveur qui
+  démarrerait quand même donnerait l'illusion que tout va bien, et
+  déconnecterait tout le monde au déploiement suivant.
+</p>
+
+<h2>7. Dans dix ans — le renouvellement</h2>
+
+<p>
+  Les certificats expirent le jour indiqué par la commande de la section 4
+  (<code>notAfter</code>). <strong>Notez cette date quelque part</strong> : un
+  certificat de signature expiré arrête net l'authentification, plus personne ne
+  peut se connecter.
+</p>
+<p>
+  Pour renouveler : refaites simplement les sections 3, 4 et 5, avec le même
+  mot de passe. Le remplacement déconnecte tous les parents une fois — comme un
+  déploiement ordinaire sans certificats.
+</p>
+
+<h2>8. Les cinq choses à ne pas faire</h2>
+
+<ol>
+  <li>
+    <strong>Ne les mettez jamais sur GitHub.</strong> L'extension
+    <code>.pfx</code> est déjà exclue par le <code>.gitignore</code> du projet ;
+    ne l'en retirez pas.
+  </li>
+  <li>
+    <strong>Ne les copiez pas dans l'image Docker.</strong> Ils sont
+    <em>montés</em>, pas embarqués : une image qui les contient les expose à
+    quiconque peut la lire.
+  </li>
+  <li>
+    <strong>Ne les régénérez pas sans raison.</strong> Chaque remplacement
+    déconnecte l'ensemble des parents.
+  </li>
+  <li>
+    <strong>Ne perdez pas le mot de passe.</strong> Sans lui, les fichiers sont
+    inutilisables et il faut tout refaire.
+  </li>
+  <li>
+    <strong>Gardez une sauvegarde</strong> des deux <code>.pfx</code> et du mot
+    de passe, ailleurs que sur le serveur — dans votre gestionnaire de mots de
+    passe, par exemple.
+  </li>
+</ol>
+
+<h2>9. En cas de problème</h2>
+
+<table>
+  <tr><th>Symptôme</th><th>Cause probable</th><th>Quoi faire</th></tr>
+  <tr>
+    <td>À la génération : <em>« subject name is expected to be in the format /type0=value0… »</em>
+        suivi d'un chemin du genre <code>C:/Program Files/Git/CN=…</code></td>
+    <td>Un seul slash devant <code>CN=</code>. Git Bash l'a pris pour un chemin.</td>
+    <td>Mettez-en <strong>deux</strong> : <code>-subj "//CN=…"</code>. Voir l'encadré de la section 3.</td>
+  </tr>
+  <tr>
+    <td>À la génération : <em>« Could not open file … signature.crt: No such file or directory »</em></td>
+    <td>La commande précédente a échoué, le <code>.crt</code> n'a jamais été créé.</td>
+    <td>Remontez dans le terminal pour lire la vraie erreur, corrigez-la, et reprenez la section 3 depuis le début.</td>
+  </tr>
+  <tr>
+    <td>Le serveur d'identité refuse de démarrer, message « Certificat de … introuvable »</td>
+    <td>Le fichier n'est pas au bon endroit sur le serveur, ou le dossier n'est pas monté.</td>
+    <td>Vérifiez avec <code>docker compose exec identity ls -l /app/certificats</code>.</td>
+  </tr>
+  <tr>
+    <td>Erreur au démarrage mentionnant un mot de passe</td>
+    <td>Le mot de passe du <code>.pfx</code> et celui de la configuration diffèrent.</td>
+    <td>Regénérez les <code>.pfx</code> avec le mot de passe lu dans <code>appsettings.Production.json</code>.</td>
+  </tr>
+  <tr>
+    <td>Plus personne ne peut se connecter, du jour au lendemain</td>
+    <td>Certificats expirés.</td>
+    <td>Section 7.</td>
+  </tr>
+  <tr>
+    <td>Tout le monde est déconnecté à chaque déploiement</td>
+    <td>Les certificats ne sont pas pris en compte.</td>
+    <td>Vérifiez que l'environnement est bien <code>Production</code> et relisez la section 6.</td>
+  </tr>
+</table>
+
+<div class="pied">
+  <p>
+    <strong>Pour obtenir ce document en PDF :</strong> ouvrez ce fichier dans un
+    navigateur, faites <code>Ctrl + P</code>, puis choisissez
+    « Enregistrer au format PDF » comme imprimante.
+  </p>
+  <p>
+    Source : <code>SchoolWebApp.IdentityServer/certificats/PROCEDURE.html</code>.
+    Le code qui charge ces certificats se trouve dans
+    <code>SchoolWebApp.IdentityServer/Program.cs</code>, section « LES CLÉS QUI
+    SIGNENT LES JETONS ».
+  </p>
+</div>
+
+</body>
+</html>

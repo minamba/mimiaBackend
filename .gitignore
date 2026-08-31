@@ -1,0 +1,65 @@
+## Build
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+publish/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+## Visual Studio
+.vs/
+*.vsp
+*.vspx
+
+## Rider / VS Code
+.idea/
+*.sln.iml
+
+## ---------------------------------------------------------------- SECRETS
+##
+## TOUS les appsettings sont exclus, y compris le fichier de base.
+##
+## Il ne l'était pas, et l'exception reposait sur une phrase fausse :
+## « appsettings.json reste versionné, c'est le gabarit, jamais de secret ».
+## Vérifié le 31 août 2026 : appsettings.json contenait la clé SMTP Brevo
+## (`EmailSettings:SenderPassword`), l'identifiant SMTP et la chaîne de
+## connexion — dans LES DEUX projets. Un premier commit les publiait.
+##
+## Une règle qui dépend de la discipline de celui qui remplit le fichier n'est
+## pas une règle : on finit toujours par coller une vraie valeur « juste pour
+## essayer », et elle y reste. Le motif couvre donc tout.
+appsettings.json
+appsettings.*.json
+!appsettings.example.json
+
+## Le gabarit, lui, est versionné : même structure, valeurs vides.
+## Il est REGÉNÉRÉ à partir du vrai fichier, jamais écrit à la main — c'est ce
+## qui garantit qu'aucun réglage nouveau ne manque au clonage suivant.
+
+.env
+.env.*
+!.env.example
+*.pfx
+*.p12
+secrets.json
+appsettings.*.Local.json
+
+## NuGet
+*.nupkg
+*.snupkg
+packages/
+!packages/build/
+
+## Divers
+*.log
+Thumbs.db
+.DS_Store
+
+## Fichiers de transfert ponctuels vers la production.
+## Des DONNEES, pas du code : ils ne doivent pas vivre dans le depot.
+*.dat
+reprise-compte-ceo.sql
+migration-production.sql

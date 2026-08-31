@@ -1,0 +1,6 @@
+@SchoolWebApp.IdentityServer_HostAddress = http://localhost:5067
+
+GET {{SchoolWebApp.IdentityServer_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

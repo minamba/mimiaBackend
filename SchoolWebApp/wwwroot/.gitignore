@@ -1,0 +1,6 @@
+# Ce dossier reçoit le contenu de `npm run build` du projet React.
+# Rien de tout cela n'est du code source : c'est un artefact de construction,
+# régénéré à chaque déploiement. Seul ce fichier est versionné, pour que le
+# dossier existe dans un dépôt fraîchement cloné.
+*
+!.gitignore

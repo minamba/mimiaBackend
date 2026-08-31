@@ -1,0 +1,38 @@
+﻿<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"] — Mimia</title>
+    <link rel="icon" href="~/img/favicon-32.png" sizes="32x32" />
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+</head>
+<body>
+    <main class="auth-shell">
+        <div class="auth-card">
+            @* Le vrai logo, et non plus une pastille « SI » avec le nom écrit à
+               côté. C'est la première page que voit un parent : elle doit porter
+               la même marque que le site d'où il arrive, sinon il se demande
+               une seconde s'il est au bon endroit — et une seconde, sur une
+               page qui demande un mot de passe, suffit à faire reculer.
+
+               Deux fichiers plutôt qu'un filtre CSS, comme dans l'application :
+               le lettrage marine est illisible sur fond sombre, et inverser
+               l'image retournerait aussi le corail, qui est la marque. *@
+            <div class="auth-brand">
+                <img src="~/img/logo-fond-clair.png" alt="Mimia" class="auth-brand__logo auth-brand__logo--clair" />
+                <img src="~/img/logo-fond-sombre.png" alt="" aria-hidden="true" class="auth-brand__logo auth-brand__logo--sombre" />
+            </div>
+            @RenderBody()
+        </div>
+        <p class="auth-footnote">
+            Espace parent. Les profils de vos enfants se créent après la connexion.
+        </p>
+    </main>
+    @* Posé dans la mise en page commune plutôt que vue par vue : les trois
+       formulaires qui portent un mot de passe l'obtiennent d'un coup, et celui
+       qui s'ajoutera demain aussi. *@
+    <script src="~/js/mot-de-passe.js" asp-append-version="true" defer></script>
+    @await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>

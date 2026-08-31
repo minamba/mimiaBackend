@@ -1,0 +1,19 @@
+**/bin/
+**/obj/
+**/.vs/
+**/node_modules/
+
+# Filet de sécurité : même si un appsettings.Production.json traîne sur la
+# machine qui construit l'image, il n'y entrera pas. Il est monté au démarrage
+# par docker-compose, pas figé dans l'image.
+**/appsettings.Production.json
+**/appsettings.*.Local.json
+.env
+.env.*
+!.env.example
+**/*.pfx
+**/*.p12
+
+.git/
+.gitignore
+README.md
