@@ -20,7 +20,13 @@ namespace SchoolWebApp.Domain.Repositories
         /// Retrouve le parent à partir du claim `sub` du JWT.
         /// Point d'entrée de toute requête authentifiée.
         /// </summary>
-        Task<Parent?> GetParentByIdentityUserIdAsync(string identityUserId);
+        /// <param name="noterLaVenue">
+        /// Vrai seulement quand c'est LE PARENT qui appelle : le jeton d'un
+        /// enfant porte le même « sub », et noter sa venue ferait passer le
+        /// parent pour présent chaque fois que son enfant travaille.
+        /// </param>
+        Task<Parent?> GetParentByIdentityUserIdAsync(
+            string identityUserId, bool noterLaVenue = false);
 
         Task<Parent> AddParentAsync(Parent model);
 

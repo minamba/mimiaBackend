@@ -1,8 +1,10 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 using SchoolWebApp.Api.Request;
 using SchoolWebApp.Api.Services;
 using SchoolWebApp.Api.Services.Notifications;
+using SchoolWebApp.Api.Services.Paiement;
 using SchoolWebApp.Domain.Models;
 using SchoolWebApp.Domain.Repositories;
 using SchoolWebApp.Domain.Services;
@@ -22,11 +24,74 @@ namespace SchoolWebApp.Api.Controllers
     {
         private readonly IAdminService _adminService;
         private readonly ILogger<AdminController> _logger;
+        private readonly ComptesProteges _comptesProteges;
+        private readonly ExemptionFacturation _exemptions;
 
-        public AdminController(IAdminService adminService, ILogger<AdminController> logger)
+        public AdminController(
+            IAdminService adminService,
+            ILogger<AdminController> logger,
+            ComptesProteges comptesProteges,
+            IOptions<ExemptionFacturation> exemptions)
         {
+            _exemptions = exemptions?.Value ?? throw new ArgumentNullException(nameof(exemptions));
             _adminService = adminService ?? throw new ArgumentNullException(nameof(adminService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+            _comptesProteges = comptesProteges ?? throw new ArgumentNullException(nameof(comptesProteges));
+        }
+
+        /// <summary>
+        /// Refuse toute reprise du compte super-administrateur.
+        ///
+        /// LE MÊME VERROU POUR LES TROIS ROUTES — modifier, supprimer,
+        /// changer le rôle — parce que les trois mènent au même endroit.
+        /// Supprimer le compte le fait disparaître ; changer son adresse le
+        /// fait disparaître aussi, puisque c'est l'adresse qui porte le
+        /// rôle. Le site se retrouverait alors sans personne pour rouvrir
+        /// les Modes ni pour nommer un administrateur, et on ne ressortirait
+        /// de cet état qu'en SQL sur le serveur.
+        ///
+        /// Rend null quand la route peut continuer.
+        /// </summary>
+        /// <summary>
+        /// Les comptes de l'exploitant sont-ils cachés à cet appelant ?
+        ///
+        /// LE COMPTE DE DÉMONSTRATION N'EST PAS UN CLIENT. Il apparaissait
+        /// dans la liste des parents et dans le fichier clients comme une
+        /// famille ordinaire, ce qui gonflait les chiffres et donnait à tout
+        /// administrateur la possibilité d'agir dessus.
+        ///
+        /// LA MÊME LISTE QUE L'EXEMPTION DE FACTURATION, et c'est voulu :
+        /// « ne paie jamais » et « n'est pas un client » sont la même idée.
+        /// Une seconde liste divergerait au premier compte ajouté.
+        ///
+        /// Le super-administrateur, lui, voit tout : sans quoi il ne pourrait
+        /// plus administrer les comptes qui sont précisément les siens.
+        /// </summary>
+        private IReadOnlyCollection<string> MailsCaches() =>
+            EstSuperAdministrateur()
+                ? Array.Empty<string>()
+                : _exemptions.ComptesExemptes
+                      .Where(m => !string.IsNullOrWhiteSpace(m))
+                      .Select(m => m.Trim())
+                      .ToArray();
+
+        private bool EstSuperAdministrateur() =>
+            User.HasClaim("role", "SuperAdmin") || User.IsInRole("SuperAdmin");
+
+        private async Task<IActionResult?> RefuserSiCompteProtegeAsync(int parentId, string geste)
+        {
+            var mail = await _adminService.MailDuParentAsync(parentId);
+            if (!_comptesProteges.Protege(mail)) return null;
+
+            _logger.LogWarning(
+                "Tentative de {Geste} sur le compte super-administrateur {ParentId}, refusee.",
+                geste, parentId);
+
+            return StatusCode(403, new
+            {
+                message = "Le compte super-administrateur ne peut être ni modifié, ni supprimé, "
+                        + "ni changé de rôle. Son adresse se règle dans la configuration du serveur."
+            });
         }
 
         // ------------------------------------------------------------------
@@ -83,6 +148,21 @@ namespace SchoolWebApp.Api.Controllers
         /// jour. Les calculer séparément, depuis deux appels, laisserait le
         /// bandeau et la courbe se contredire au moindre changement de fenêtre.
         /// </summary>
+        /// <summary>
+        /// Le tunnel de conversion sur une fenêtre : combien sont venus,
+        /// combien ont lancé un essai, combien sont allés plus loin.
+        /// </summary>
+        [HttpGet("stats/tunnel")]
+        [SwaggerResponse(200, "Visiteurs, essais, conversions.", typeof(Tunnel))]
+        public async Task<IActionResult> GetTunnel(
+            [FromQuery] string granularite = "jour",
+            [FromQuery] DateTime? debut = null,
+            [FromQuery] DateTime? fin = null)
+        {
+            var (_, d, f) = Fenetre(granularite, debut, fin);
+            return await Executer(() => _adminService.GetTunnelAsync(d, f));
+        }
+
         [HttpGet("stats/visites")]
         [SwaggerResponse(200, "Visiteurs uniques du site public.", typeof(object))]
         public async Task<IActionResult> GetVisites(
@@ -124,6 +204,17 @@ namespace SchoolWebApp.Api.Controllers
         // ------------------------------------------------------------------
         // Comptes
         // ------------------------------------------------------------------
+        /// <summary>
+        /// La répartition du fichier clients, à cet instant.
+        ///
+        /// SANS FENÊTRE, contrairement au reste de l'onglet : « trois
+        /// familles en Solo mensuel » est un état, pas un événement daté.
+        /// </summary>
+        [HttpGet("parents/repartition")]
+        [SwaggerResponse(200, "Répartition des comptes.", typeof(RepartitionParents))]
+        public async Task<IActionResult> GetRepartitionParents() =>
+            await Executer(() => _adminService.GetRepartitionParentsAsync(MailsCaches()));
+
         [HttpGet("parents")]
         [SwaggerResponse(200, "Comptes parents.", typeof(IEnumerable<ParentAdmin>))]
         public async Task<IActionResult> GetParents(
@@ -132,7 +223,34 @@ namespace SchoolWebApp.Api.Controllers
             [FromQuery] int decalage = 0)
         {
             var (debut, fin) = FenetreNommee(periode, decalage);
-            return await Executer(() => _adminService.GetParentsAsync(recherche, debut, fin));
+
+            return await Executer(async () =>
+            {
+                var parents = await _adminService.GetParentsAsync(recherche, debut, fin);
+
+                // Le filtrage a lieu ICI, pas dans le navigateur : une ligne
+                // qu'on masque à l'affichage pendant que l'API l'envoie reste
+                // lisible dans les outils de développement, et ses
+                // identifiants restent utilisables sur les autres routes.
+                var caches = MailsCaches();
+
+                if (caches.Count > 0)
+                {
+                    parents = parents.Where(p => p.Mail is null
+                                                 || !caches.Contains(p.Mail, StringComparer.OrdinalIgnoreCase));
+                }
+
+                // LE DRAPEAU EST POSÉ ICI, PAS EN BASE. La configuration est
+                // la seule à savoir quelle adresse porte le rôle ; la
+                // recopier dans une colonne la rendrait modifiable, et donc
+                // fausse dès le premier changement d'adresse.
+                foreach (var parent in parents)
+                {
+                    parent.EstSuperAdministrateur = _comptesProteges.Protege(parent.Mail);
+                }
+
+                return parents;
+            });
         }
 
         /// <summary>
@@ -223,6 +341,41 @@ namespace SchoolWebApp.Api.Controllers
         /// Fiche détaillée d'un élève : identité, activité par matière,
         /// derniers cours et état des compétences.
         /// </summary>
+        /// <summary>
+        /// Accorde ou retire le droit d'administrer à un compte parent.
+        ///
+        /// RÉSERVÉE AU SUPER-ADMINISTRATEUR. Un administrateur qui pourrait
+        /// promouvoir se donnerait un successeur, puis pourrait être retiré
+        /// sans perdre la main : le droit de distribuer les droits est le seul
+        /// qui ne se distribue pas.
+        /// </summary>
+        [HttpPut("parents/{id:int}/administrateur")]
+        [Authorize(Policy = "EstSuperAdmin")]
+        [SwaggerResponse(204, "Droit mis à jour.")]
+        [SwaggerResponse(404, "Parent inexistant.")]
+        public async Task<IActionResult> DefinirAdministrateur(
+            int id, [FromBody] DefinirAdministrateurRequest requete)
+        {
+            var refus = await RefuserSiCompteProtegeAsync(id, "changement de rôle");
+            if (refus is not null) return refus;
+
+            try
+            {
+                var fait = await _adminService.DefinirAdministrateurAsync(id, requete?.Actif ?? false);
+                return fait ? NoContent() : NotFound();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex,
+                    "Echec de la mise a jour du droit d administration du parent {ParentId}.", id);
+
+                return StatusCode(500, new { message = "Une erreur est survenue, veuillez réessayer." });
+            }
+        }
+
+        /// <param name="Actif">Vrai pour accorder, faux pour retirer.</param>
+        public record DefinirAdministrateurRequest(bool Actif);
+
         [HttpGet("eleves/{id:int}/fiche")]
         [SwaggerResponse(200, "Fiche de l'élève.", typeof(FicheEleve))]
         [SwaggerResponse(404, "Élève inexistant.")]
@@ -387,6 +540,9 @@ namespace SchoolWebApp.Api.Controllers
         public async Task<IActionResult> ModifierParent(int id, [FromBody] ParentAdminRequest model)
         {
             if (!ModelState.IsValid) return BadRequest(ModelState);
+
+            var refus = await RefuserSiCompteProtegeAsync(id, "modification");
+            if (refus is not null) return refus;
 
             try
             {
@@ -938,13 +1094,43 @@ namespace SchoolWebApp.Api.Controllers
             }
         }
 
+        /// <summary>
+        /// Efface un compte parent, ses élèves et ses conversations.
+        ///
+        /// LES PRÉLÈVEMENTS SONT COUPÉS AVANT, ET C'EST TOUT LE POINT.
+        ///
+        /// Cette route ne retirait que la ligne en base. L'abonnement, lui,
+        /// continuait de courir chez Stripe — et une fois le parent effacé,
+        /// plus rien dans l'application ne permettait de le retrouver : ni
+        /// l'écran des abonnements, qui lit la base, ni le tableau de bord.
+        /// Il ne restait que le relevé bancaire du parent pour le signaler.
+        ///
+        /// La suppression demandée par le titulaire lui-même coupait déjà
+        /// (`ProfilController`). Le même compte supprimé depuis
+        /// l'administration ne coupait pas : deux chemins vers le même
+        /// effacement, un seul des deux sûr. C'est le genre d'écart qu'on ne
+        /// rattrape pas par la vigilance.
+        ///
+        /// L'ORDRE EST CELUI DE `ProfilController`, DÉLIBÉRÉMENT. Couper
+        /// d'abord : si Stripe répond mal, la ligne existe encore et le
+        /// compte reste réparable. Effacer d'abord laisserait un abonnement
+        /// orphelin que plus rien ne rattache à personne.
+        /// </summary>
         [HttpDelete("parents/{id:int}")]
         [SwaggerResponse(204, "Compte supprimé, avec ses élèves et conversations.")]
         [SwaggerResponse(404, "Compte inexistant.")]
-        public async Task<IActionResult> SupprimerParent(int id)
+        public async Task<IActionResult> SupprimerParent(
+            int id,
+            [FromServices] ICaisseStripeService caisse,
+            CancellationToken ct)
         {
+            var refus = await RefuserSiCompteProtegeAsync(id, "suppression");
+            if (refus is not null) return refus;
+
             try
             {
+                await caisse.CouperLesPrelevementsAsync(id, ct);
+
                 var supprime = await _adminService.SupprimerParentAsync(id);
                 if (supprime)
                 {

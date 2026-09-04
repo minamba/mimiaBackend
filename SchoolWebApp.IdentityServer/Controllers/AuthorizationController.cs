@@ -26,19 +26,48 @@ namespace SchoolWebApp.IdentityServer.Controllers
         private readonly IOpenIddictApplicationManager _applicationManager;
         private readonly IOpenIddictScopeManager _scopeManager;
         private readonly IModeTestService _modeTest;
+        private readonly IRolesDelegues _rolesDelegues;
 
         public AuthorizationController(
             UserManager<ApplicationUser> userManager,
             SignInManager<ApplicationUser> signInManager,
             IOpenIddictApplicationManager applicationManager,
             IOpenIddictScopeManager scopeManager,
-            IModeTestService modeTest)
+            IModeTestService modeTest,
+            IRolesDelegues rolesDelegues)
         {
             _userManager = userManager ?? throw new ArgumentNullException(nameof(userManager));
             _signInManager = signInManager ?? throw new ArgumentNullException(nameof(signInManager));
             _applicationManager = applicationManager ?? throw new ArgumentNullException(nameof(applicationManager));
             _scopeManager = scopeManager ?? throw new ArgumentNullException(nameof(scopeManager));
             _modeTest = modeTest ?? throw new ArgumentNullException(nameof(modeTest));
+            _rolesDelegues = rolesDelegues ?? throw new ArgumentNullException(nameof(rolesDelegues));
+        }
+
+        /// <summary>
+        /// Les rôles du compte : ceux de la base d'identité, plus le droit
+        /// délégué s'il a été accordé.
+        ///
+        /// LES DEUX SE CUMULENT SANS SE CONFONDRE. « SuperAdmin » vient de la
+        /// configuration et ne se retire pas depuis l'interface ; « Admin »
+        /// vient du tableau de bord et s'y retire. Un super-administrateur
+        /// porte les deux, ce qui laisse toutes les autorisations existantes
+        /// fonctionner telles quelles.
+        ///
+        /// « Distinct » parce qu'un super-administrateur à qui on aurait aussi
+        /// coché le droit délégué porterait sinon « Admin » deux fois — sans
+        /// conséquence, mais un jeton ne gagne rien à répéter.
+        /// </summary>
+        private async Task<IReadOnlyList<string>> RolesDuCompteAsync(ApplicationUser user)
+        {
+            var roles = (await _userManager.GetRolesAsync(user)).ToList();
+
+            if (await _rolesDelegues.EstAdministrateurAsync(await _userManager.GetUserIdAsync(user)))
+            {
+                roles.Add("Admin");
+            }
+
+            return roles.Distinct(StringComparer.Ordinal).ToList();
         }
 
         // ------------------------------------------------------------------
@@ -197,7 +226,7 @@ namespace SchoolWebApp.IdentityServer.Controllers
 
             if (User.HasScope(Scopes.Roles))
             {
-                claims[Claims.Role] = await _userManager.GetRolesAsync(user);
+                claims[Claims.Role] = await RolesDuCompteAsync(user);
             }
 
             return Ok(claims);
@@ -233,7 +262,7 @@ namespace SchoolWebApp.IdentityServer.Controllers
                     .SetClaim(Claims.Name, await _userManager.GetUserNameAsync(user))
                     .SetClaim(Claims.GivenName, user.Prenom)
                     .SetClaim(Claims.FamilyName, user.Nom)
-                    .SetClaims(Claims.Role, (await _userManager.GetRolesAsync(user)).ToImmutableArray());
+                    .SetClaims(Claims.Role, (await RolesDuCompteAsync(user)).ToImmutableArray());
 
             identity.SetScopes(scopes);
 

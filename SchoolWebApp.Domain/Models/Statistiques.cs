@@ -41,11 +41,49 @@ namespace SchoolWebApp.Domain.Models
         /// </summary>
         public int Nouveaux { get; set; }
 
+        /// <summary>
+        /// Essais gratuits lancés pendant la période.
+        ///
+        /// SÉPARÉS DES ABONNEMENTS, ET C'EST UNE CORRECTION. Un essai crée une
+        /// ligne d'abonnement comme une offre payante — même table, même
+        /// mécanique. `Nouveaux` les comptait donc ensemble, et le graphique
+        /// annonçait un abonnement là où personne n'avait rien payé.
+        /// </summary>
+        public int Essais { get; set; }
+
         /// <summary>Résiliations demandées pendant la période.</summary>
         public int Demandes { get; set; }
 
         /// <summary>Abonnements réellement arrivés à leur terme pendant la période.</summary>
         public int Arrets { get; set; }
+    }
+
+    /// <summary>
+    /// Le tunnel : de la visite à l'abonnement payant.
+    ///
+    /// LES TROIS CHIFFRES NE SE COMPTENT PAS SUR LA MÊME FENÊTRE, et c'est
+    /// voulu. Les visites et les essais sont datés dans la période ; la
+    /// conversion, elle, est comptée QUAND QU'ELLE ARRIVE — un essai lancé
+    /// lundi peut se transformer en abonnement le mois suivant.
+    ///
+    /// Les enfermer tous les trois dans la même fenêtre donnerait un taux
+    /// toujours faux : nul sur la semaine en cours, faute de recul, et amputé
+    /// sur les anciennes, faute de compter ce qui a suivi.
+    /// </summary>
+    public class Tunnel
+    {
+        /// <summary>Visiteurs uniques du site public sur la période.</summary>
+        public int Visiteurs { get; set; }
+
+        /// <summary>Essais gratuits lancés sur la période.</summary>
+        public int Essais { get; set; }
+
+        /// <summary>
+        /// Parmi ces essais, combien ont pris une offre payante ENSUITE.
+        /// Peut continuer d'augmenter après la période : c'est la nature d'un
+        /// tunnel, pas un défaut de mesure.
+        /// </summary>
+        public int Convertis { get; set; }
     }
 
     public class PointSerie
@@ -83,6 +121,63 @@ namespace SchoolWebApp.Domain.Models
     }
 
     /// <summary>Ligne du tableau des comptes parents.</summary>
+    /// <summary>
+    /// Où en est le fichier clients, à cet instant.
+    ///
+    /// UN ÉTAT, PAS UNE PÉRIODE. Le bandeau du dessus compte ce qui s'est
+    /// passé pendant une fenêtre ; celui-ci dit ce qui EST. « Trois familles
+    /// en Solo mensuel » n'a pas de sens rapporté à une semaine — elles le
+    /// sont aujourd'hui, un point c'est tout.
+    ///
+    /// LES CASES S'ADDITIONNENT, et c'est la propriété qui rend le bloc
+    /// vérifiable : payants + essais + en pause + résiliés + jamais abonnés
+    /// = total. Une répartition qui ne retombe pas sur son total est une
+    /// répartition dans laquelle on ne peut pas avoir confiance — et les
+    /// comptes en pause étaient exactement le genre de case qui disparaît
+    /// quand on ne cherche que les abonnés actifs.
+    /// </summary>
+    public class RepartitionParents
+    {
+        /// <summary>Tous les comptes parents, sans exception.</summary>
+        public int Total { get; set; }
+
+        /// <summary>Un essai gratuit en cours.</summary>
+        public int Essais { get; set; }
+
+        /// <summary>Abonnement suspendu pour un mois, à leur demande.</summary>
+        public int EnPause { get; set; }
+
+        /// <summary>
+        /// Ont payé, puis sont partis : plus aucun abonnement en cours, mais
+        /// au moins un abonnement payant derrière eux. C'est le chiffre des
+        /// désinscrits — à distinguer de ceux qui ne se sont jamais abonnés.
+        /// </summary>
+        public int Resilies { get; set; }
+
+        /// <summary>
+        /// Inscrits, jamais abonnés — pas même à un essai. Ni clients ni
+        /// perdus : des comptes ouverts et laissés là.
+        /// </summary>
+        public int JamaisAbonnes { get; set; }
+
+        /// <summary>Une ligne par formule payante, du plus cher au moins cher.</summary>
+        public List<LigneForfait> Forfaits { get; set; } = [];
+    }
+
+    /// <summary>Une formule, et comment elle se répartit entre les deux rythmes.</summary>
+    public class LigneForfait
+    {
+        public string? Code { get; set; }
+
+        public string? Libelle { get; set; }
+
+        public int Mensuel { get; set; }
+
+        public int Annuel { get; set; }
+
+        public int Total => Mensuel + Annuel;
+    }
+
     public class ParentAdmin
     {
         public int Id { get; set; }
@@ -100,6 +195,36 @@ namespace SchoolWebApp.Domain.Models
         public int NombreRequetes { get; set; }
 
         public DateTime? DerniereActivite { get; set; }
+
+        /// <summary>
+        /// La dernière venue du PARENT, à distinguer de DerniereActivite juste
+        /// au-dessus, qui est celle de ses ENFANTS.
+        ///
+        /// Les deux côte à côte disent ce qu'aucune ne dit seule : un enfant
+        /// qui travaille tous les jours pendant que son parent n'ouvre plus
+        /// rien depuis deux mois n'est pas un compte en bonne santé.
+        /// </summary>
+        public DateTime? DerniereConnexion { get; set; }
+
+        /// <summary>
+        /// Ce parent a-t-il le droit d'administrer ?
+        ///
+        /// Le super-administrateur, lui, n'apparaît pas ici : son rôle vient de
+        /// la configuration et ne se lit pas dans cette table. C'est voulu —
+        /// une colonne qui l'afficherait laisserait croire qu'on peut le
+        /// décocher.
+        /// </summary>
+        public bool EstAdministrateur { get; set; }
+
+        /// <summary>
+        /// Ce compte est-il celui du super-administrateur ?
+        ///
+        /// NE VIENT PAS DE LA BASE : il est calculé à la volée en comparant
+        /// l'adresse à la configuration. Une colonne l'aurait rendu
+        /// modifiable, donc perdable — et le rendre perdable est exactement
+        /// ce contre quoi il protège.
+        /// </summary>
+        public bool EstSuperAdministrateur { get; set; }
 
         /// <summary>
         /// LA CONSOMMATION DE LA PÉRIODE EN COURS, ET POURQUOI ELLE COMPTE.
@@ -255,6 +380,17 @@ namespace SchoolWebApp.Domain.Models
         public Sexe Sexe { get; set; }
 
         public string? NiveauLibelle { get; set; }
+
+        /// <summary>
+        /// Le RANG de la classe dans l échelle scolaire, du CP à la terminale.
+        ///
+        /// Le libellé ne suffit pas à trier : par ordre alphabétique, « 3e »
+        /// précède « 6e » qui précède « CM1 » — exactement l envers de la
+        /// progression. Ce rang existe déjà en base pour décider des matières
+        /// au programme ; il descend maintenant jusqu au tableau, qui n avait
+        /// aucun moyen de ranger une colonne « classe » honnêtement.
+        /// </summary>
+        public int NiveauOrdre { get; set; }
 
         public string? ParentMail { get; set; }
 

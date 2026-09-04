@@ -464,6 +464,135 @@ namespace SchoolWebApp.Dal.Migrations
                     b.ToTable("EssaiConsomme", (string)null);
                 });
 
+            modelBuilder.Entity("SchoolWebApp.Dal.Entities.AvisClient", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasColumnName("id");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Commentaire")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)")
+                        .HasColumnName("commentaire");
+
+                    b.Property<DateTime>("DateCreation")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("date_creation");
+
+                    b.Property<DateTime?>("DateModification")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("date_modification");
+
+                    b.Property<int>("Note")
+                        .HasColumnType("int")
+                        .HasColumnName("note");
+
+                    b.Property<int>("ParentId")
+                        .HasColumnType("int")
+                        .HasColumnName("parent_id");
+
+                    b.Property<bool>("Publie")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false)
+                        .HasColumnName("publie");
+
+                    b.Property<string>("Titre")
+                        .HasMaxLength(120)
+                        .HasColumnType("nvarchar(120)")
+                        .HasColumnName("titre");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ParentId")
+                        .IsUnique();
+
+                    b.HasIndex("Publie", "DateCreation");
+
+                    b.ToTable("AvisClient", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_AvisClient_note", "[note] >= 1 AND [note] <= 5");
+                        });
+                });
+
+            modelBuilder.Entity("SchoolWebApp.Dal.Entities.BandeauPromo", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasColumnName("id");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("Actif")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false)
+                        .HasColumnName("actif");
+
+                    b.Property<DateTime>("DateCreation")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("date_creation");
+
+                    b.Property<DateTime?>("DateModification")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("date_modification");
+
+                    b.Property<byte[]>("ImageLarge")
+                        .IsRequired()
+                        .HasColumnType("varbinary(max)")
+                        .HasColumnName("image_large");
+
+                    b.Property<byte[]>("ImageMobile")
+                        .HasColumnType("varbinary(max)")
+                        .HasColumnName("image_mobile");
+
+                    b.Property<string>("Lien")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)")
+                        .HasColumnName("lien");
+
+                    b.Property<int>("TailleLarge")
+                        .HasColumnType("int")
+                        .HasColumnName("taille_large");
+
+                    b.Property<int>("TailleMobile")
+                        .HasColumnType("int")
+                        .HasColumnName("taille_mobile");
+
+                    b.Property<string>("TexteAlternatif")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)")
+                        .HasColumnName("texte_alternatif");
+
+                    b.Property<string>("Titre")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("nvarchar(120)")
+                        .HasColumnName("titre");
+
+                    b.Property<string>("TypeMimeLarge")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)")
+                        .HasColumnName("type_mime_large");
+
+                    b.Property<string>("TypeMimeMobile")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)")
+                        .HasColumnName("type_mime_mobile");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Actif");
+
+                    b.ToTable("BandeauPromo");
+                });
+
             modelBuilder.Entity("SchoolWebApp.Dal.Entities.VisiteSite", b =>
                 {
                     b.Property<int>("Id")
@@ -1019,6 +1148,16 @@ namespace SchoolWebApp.Dal.Migrations
                         .HasColumnType("datetime2")
                         .HasColumnName("date_creation");
 
+                    b.Property<DateTime?>("DerniereConnexion")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("derniere_connexion");
+
+                    b.Property<bool>("EstAdministrateur")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false)
+                        .HasColumnName("est_administrateur");
+
                     b.Property<string>("IdentityUserId")
                         .IsRequired()
                         .HasMaxLength(450)
@@ -1407,6 +1546,18 @@ namespace SchoolWebApp.Dal.Migrations
                         .IsUnique();
 
                     b.ToTable("SessionEleve", (string)null);
+                });
+
+            modelBuilder.Entity("SchoolWebApp.Dal.Entities.AvisClient", b =>
+                {
+                    b.HasOne("SchoolWebApp.Dal.Entities.Parent", "Parent")
+                        .WithMany()
+                        .HasForeignKey("ParentId")
+                        .HasConstraintName("FK_AvisClient_Parent")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Parent");
                 });
 
             modelBuilder.Entity("SchoolWebApp.Dal.Entities.Abonnement", b =>

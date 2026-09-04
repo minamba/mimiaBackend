@@ -21,14 +21,16 @@ namespace SchoolWebApp.Domain.Services.impl
         public Task<Parent?> GetParentByIdentityUserIdAsync(string identityUserId) =>
             _parentRepository.GetParentByIdentityUserIdAsync(identityUserId);
 
-        public async Task<Parent> GetOrCreateAsync(string identityUserId, string? mail, string? prenom, string? nom)
+        public async Task<Parent> GetOrCreateAsync(
+            string identityUserId, string? mail, string? prenom, string? nom,
+            bool noterLaVenue = false)
         {
             if (string.IsNullOrWhiteSpace(identityUserId))
             {
                 throw new ArgumentException("L'identifiant utilisateur est obligatoire.", nameof(identityUserId));
             }
 
-            var existant = await _parentRepository.GetParentByIdentityUserIdAsync(identityUserId);
+            var existant = await _parentRepository.GetParentByIdentityUserIdAsync(identityUserId, noterLaVenue);
             if (existant is not null)
             {
                 return existant;

@@ -35,6 +35,17 @@ namespace SchoolWebApp.Api.Services.Notifications
         Task NotifierAbonnementAsync(
             Parent? parent, string formule, string? periodicite, bool changement);
 
+        /// <summary>
+        /// Une famille vient de déposer un avis.
+        ///
+        /// ENVOYÉ AVANT PUBLICATION, et c'est tout l'intérêt : l'avis n'est
+        /// visible de personne tant qu'il n'a pas été relu. Sans cette
+        /// alerte, il faudrait ouvrir le tableau de bord au hasard pour
+        /// découvrir qu'une famille attend depuis trois jours.
+        /// </summary>
+        Task NotifierAvisAsync(
+            string? mail, int note, string? titre, string? commentaire, DateTime quand);
+
         /// <summary>Un parent a demandé la résiliation de son abonnement.</summary>
         Task NotifierResiliationAsync(Parent? parent, string? formule, DateTime? finPeriode);
 
@@ -75,6 +86,8 @@ namespace SchoolWebApp.Api.Services.Notifications
         private readonly string? _abonnementChatId;
         private readonly string? _resiliationToken;
         private readonly string? _resiliationChatId;
+        private readonly string? _avisToken;
+        private readonly string? _avisChatId;
         private readonly string? _contactToken;
         private readonly string? _contactChatId;
         private readonly string? _exploitationToken;
@@ -92,6 +105,8 @@ namespace SchoolWebApp.Api.Services.Notifications
             _abonnementChatId = config["TelegramAbonnement:ChatId"];
             _resiliationToken = config["TelegramResiliation:BotToken"];
             _resiliationChatId = config["TelegramResiliation:ChatId"];
+            _avisToken = config["TelegramAvis:BotToken"];
+            _avisChatId = config["TelegramAvis:ChatId"];
             _contactToken = config["TelegramContact:BotToken"];
             _contactChatId = config["TelegramContact:ChatId"];
 
@@ -179,6 +194,56 @@ namespace SchoolWebApp.Api.Services.Notifications
             return EnvoyerAsync(_resiliationToken, _resiliationChatId, sb.ToString());
         }
 
+        /// <summary>
+        /// Un avis vient d'être déposé, et il attend une relecture.
+        ///
+        /// LA NOTE EN ÉTOILES PLEINES ET VIDES, pas en chiffres. « 2/5 » se
+        /// lit, « ★★☆☆☆ » se voit — et sur un téléphone, en diagonale, entre
+        /// deux notifications, c'est la différence entre repérer un mécontent
+        /// tout de suite et le découvrir la semaine suivante.
+        ///
+        /// LE COMMENTAIRE EST TRONQUÉ À 400 CARACTÈRES. Telegram refuse
+        /// au-delà de 4096, et un avis peut en faire 2000 : le message
+        /// partirait en erreur, donc pas du tout. On en envoie de quoi
+        /// décider, le reste se lit dans le tableau de bord.
+        /// </summary>
+        public Task NotifierAvisAsync(
+            string? mail, int note, string? titre, string? commentaire, DateTime quand)
+        {
+            var sb = new StringBuilder();
+
+            var etoiles = new string('★', Math.Clamp(note, 0, 5))
+                          + new string('☆', 5 - Math.Clamp(note, 0, 5));
+
+            sb.AppendLine($"⭐ *Nouvel avis* — {Echapper(etoiles)}");
+            sb.AppendLine($"— De : {Echapper(mail)}");
+            sb.AppendLine($"— Note : {note}/5");
+
+            if (!string.IsNullOrWhiteSpace(titre))
+            {
+                sb.AppendLine($"— Titre : {Echapper(titre)}");
+            }
+
+            if (!string.IsNullOrWhiteSpace(commentaire))
+            {
+                var texte = commentaire.Length > 400
+                    ? commentaire[..400] + "…"
+                    : commentaire;
+
+                sb.AppendLine($"— Avis : {Echapper(texte)}");
+            }
+
+            sb.AppendLine($"— Écrit le : {Echapper(ALHeureDeParis(quand))}");
+            // LE POINT EST ÉCHAPPÉ À LA MAIN, comme à la ligne de l’étalement
+            // plus bas. En MarkdownV2 il est réservé : sans la barre oblique,
+            // Telegram rejette le message ENTIER en 400 — et le rejet est muet,
+            // puisque personne ne surveille l’absence d’une alerte. Ce point-là
+            // a coûté une alerte qui n’est jamais partie.
+            sb.AppendLine("— En attente de relecture\\.");
+
+            return EnvoyerAsync(_avisToken, _avisChatId, sb.ToString());
+        }
+
         public Task NotifierEtalementBilansAsync(int total, int groupes, int budget, int seuil)
         {
             var sb = new StringBuilder();
@@ -255,6 +320,40 @@ namespace SchoolWebApp.Api.Services.Notifications
 
         private static string Horodatage() =>
             Echapper($"{DateTime.UtcNow:dd/MM/yyyy} à {DateTime.UtcNow:HH:mm} UTC");
+
+        /// <summary>
+        /// Le fuseau des lecteurs de ces messages.
+        ///
+        /// Les autres alertes de ce service affichent l'heure UTC, en le
+        /// disant. C'est honnête mais peu pratique : personne ne lit une
+        /// notification sur son téléphone en retranchant deux heures de tête.
+        ///
+        /// Celle-ci affiche donc l'heure de Paris. Le mélange des deux dans
+        /// le même canal est un défaut assumé, pas un oubli — aligner les
+        /// quatre autres se fera d'un geste, quand il sera décidé.
+        /// </summary>
+        private static readonly TimeZoneInfo Fuseau = TrouverLeFuseau();
+
+        private static TimeZoneInfo TrouverLeFuseau()
+        {
+            foreach (var identifiant in new[] { "Europe/Paris", "Romance Standard Time" })
+            {
+                try
+                {
+                    return TimeZoneInfo.FindSystemTimeZoneById(identifiant);
+                }
+                catch (TimeZoneNotFoundException) { }
+                catch (InvalidTimeZoneException) { }
+            }
+
+            return TimeZoneInfo.Utc;
+        }
+
+        /// <summary>Une date UTC de la base, rendue lisible à Paris.</summary>
+        private static string ALHeureDeParis(DateTime utc) =>
+            TimeZoneInfo.ConvertTimeFromUtc(
+                DateTime.SpecifyKind(utc, DateTimeKind.Utc), Fuseau)
+                .ToString("dd/MM/yyyy à HH:mm");
 
         /// <summary>
         /// Échappe les caractères réservés de MarkdownV2.

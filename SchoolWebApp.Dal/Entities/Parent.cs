@@ -41,6 +41,29 @@ namespace SchoolWebApp.Dal.Entities
 
         public DateTime DateCreation { get; set; }
 
+        /// <summary>
+        /// La dernière venue du PARENT sur le site.
+        ///
+        /// À ne pas confondre avec DerniereActivite, qui vit sur l'élève :
+        /// celle-là dit quand l'ENFANT a travaillé. Les deux ensemble racontent
+        /// des choses opposées — un enfant assidu dont le parent n'ouvre plus
+        /// rien depuis deux mois est un désabonnement qui se prépare, et rien
+        /// ne le montrait.
+        ///
+        /// Nulle tant que le parent n'est pas revenu depuis l'ajout de la
+        /// colonne : on n'invente pas un passé qu'on n'a pas mesuré.
+        /// </summary>
+        public DateTime? DerniereConnexion { get; set; }
+
+        /// <summary>
+        /// Ce parent a-t-il reçu le droit d administrer ?
+        ///
+        /// Accordé et retiré par le SUPER-administrateur seul. Celui-ci n est
+        /// pas ici : il vient de la configuration, et reste donc hors de portée
+        /// de l interface — une fausse manœuvre ne peut pas fermer la maison.
+        /// </summary>
+        public bool EstAdministrateur { get; set; }
+
         public virtual ICollection<Eleve> Eleves { get; set; } = new List<Eleve>();
 
         public virtual ICollection<Abonnement> Abonnements { get; set; } = new List<Abonnement>();

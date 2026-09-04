@@ -15,7 +15,13 @@ namespace SchoolWebApp.Domain.Services
         /// Le compte existe côté serveur d'identité mais pas encore côté métier :
         /// c'est ici que les deux se rejoignent, plutôt que par un webhook fragile.
         /// </summary>
-        Task<Parent> GetOrCreateAsync(string identityUserId, string? mail, string? prenom, string? nom);
+        /// <param name="noterLaVenue">
+        /// Vrai seulement quand c'est LE PARENT qui appelle — voir
+        /// IParentRepository. Un enfant porte le « sub » de son parent.
+        /// </param>
+        Task<Parent> GetOrCreateAsync(
+            string identityUserId, string? mail, string? prenom, string? nom,
+            bool noterLaVenue = false);
 
         Task<Parent> AddParentAsync(Parent model);
 

@@ -43,6 +43,11 @@ namespace SchoolWebApp.Dal.Entities
 
         public virtual DbSet<VisiteSite> VisitesSite { get; set; }
 
+        /// <summary>Les avis laissés par les familles sur le produit.</summary>
+        public virtual DbSet<AvisClient> AvisClients { get; set; }
+
+        public virtual DbSet<BandeauPromo> BandeauxPromo { get; set; }
+
         public virtual DbSet<MesureVoix> MesuresVoix { get; set; }
 
         /// <summary>Les appels au modèle qui ne sont pas des tours de dialogue.</summary>
@@ -97,6 +102,13 @@ namespace SchoolWebApp.Dal.Entities
                 entity.Property(e => e.Mail).HasMaxLength(255).HasColumnName("mail");
                 entity.Property(e => e.StripeClientId).HasMaxLength(255).HasColumnName("stripe_client_id");
                 entity.Property(e => e.DateCreation).HasColumnName("date_creation");
+                entity.Property(e => e.DerniereConnexion).HasColumnName("derniere_connexion");
+                // LA VALEUR PAR DÉFAUT EST DÉCLARÉE ICI AUSSI, pas seulement dans
+                // la migration : sans elle, le modèle et l instantané divergent
+                // et EF refuse de démarrer sur un « PendingModelChanges ».
+                entity.Property(e => e.EstAdministrateur)
+                      .HasDefaultValue(false)
+                      .HasColumnName("est_administrateur");
 
                 // Un utilisateur du serveur d'identité = un parent, jamais deux.
                 entity.HasIndex(e => e.IdentityUserId).IsUnique();
@@ -799,6 +811,88 @@ namespace SchoolWebApp.Dal.Entities
             });
 
             // ---------------------------------------------------- VisiteSite
+            modelBuilder.Entity<AvisClient>(entity =>
+            {
+                entity.ToTable("AvisClient", t =>
+                    t.HasCheckConstraint("CK_AvisClient_note", "[note] >= 1 AND [note] <= 5"));
+
+                entity.HasKey(e => e.Id);
+
+                entity.Property(e => e.Id).HasColumnName("id");
+                entity.Property(e => e.ParentId).HasColumnName("parent_id");
+                entity.Property(e => e.Note).HasColumnName("note");
+                entity.Property(e => e.Titre).HasMaxLength(120).HasColumnName("titre");
+                entity.Property(e => e.Commentaire).HasMaxLength(2000).HasColumnName("commentaire");
+                entity.Property(e => e.DateCreation).HasColumnName("date_creation");
+                entity.Property(e => e.DateModification).HasColumnName("date_modification");
+
+                // LE DÉFAUT EST DÉCLARÉ ICI AUSSI, et pas seulement dans la
+                // migration : un défaut présent en base et absent du modèle
+                // fait diverger le snapshot, et le démarrage suivant lève
+                // `PendingModelChangesWarning`.
+                entity.Property(e => e.Publie).HasDefaultValue(false).HasColumnName("publie");
+
+                // UN SEUL AVIS PAR FOYER, garanti par la base. Une règle
+                // tenue uniquement par le code céderait au premier
+                // double-clic sur « Envoyer ».
+                entity.HasIndex(e => e.ParentId).IsUnique();
+
+                // La page d'accueil ne lit que les avis publiés, du plus
+                // récent au plus ancien : le seul chemin chaud de la table.
+                entity.HasIndex(e => new { e.Publie, e.DateCreation });
+
+                entity.HasOne(e => e.Parent)
+                      .WithMany()
+                      .HasForeignKey(e => e.ParentId)
+                      .HasConstraintName("FK_AvisClient_Parent")
+                      .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            modelBuilder.Entity<BandeauPromo>(entity =>
+            {
+                entity.ToTable("BandeauPromo");
+
+                entity.HasKey(e => e.Id);
+
+                entity.Property(e => e.Id).HasColumnName("id");
+                entity.Property(e => e.Titre)
+                      .HasMaxLength(120).IsRequired().HasColumnName("titre");
+
+                entity.Property(e => e.TexteAlternatif)
+                      .HasMaxLength(300).IsRequired().HasColumnName("texte_alternatif");
+
+                entity.Property(e => e.Lien)
+                      .HasMaxLength(500).HasColumnName("lien");
+
+                entity.Property(e => e.Actif)
+                      .HasDefaultValue(false).HasColumnName("actif");
+
+                entity.Property(e => e.ImageLarge)
+                      .IsRequired().HasColumnName("image_large");
+
+                entity.Property(e => e.TypeMimeLarge)
+                      .HasMaxLength(100).IsRequired().HasColumnName("type_mime_large");
+
+                entity.Property(e => e.TailleLarge).HasColumnName("taille_large");
+
+                entity.Property(e => e.ImageMobile).HasColumnName("image_mobile");
+
+                entity.Property(e => e.TypeMimeMobile)
+                      .HasMaxLength(100).HasColumnName("type_mime_mobile");
+
+                entity.Property(e => e.TailleMobile).HasColumnName("taille_mobile");
+
+                entity.Property(e => e.DateCreation).HasColumnName("date_creation");
+                entity.Property(e => e.DateModification).HasColumnName("date_modification");
+
+                // La page d'accueil ne cherche QUE le bandeau affiché, à
+                // chaque visite y compris anonyme. Un index sur un booléen
+                // paraît maigre, mais la table est petite et très
+                // déséquilibrée — au plus une ligne vraie — : c'est
+                // exactement le cas où il sert.
+                entity.HasIndex(e => e.Actif);
+            });
+
             modelBuilder.Entity<VisiteSite>(entity =>
             {
                 entity.ToTable("VisiteSite");

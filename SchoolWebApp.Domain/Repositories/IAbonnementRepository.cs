@@ -216,6 +216,27 @@ namespace SchoolWebApp.Domain.Repositories
             string? paiementStripeId, CancellationToken ct = default);
 
         /// <summary>
+        /// Offre un pack, sans encaissement, une seule fois par clé.
+        /// </summary>
+        /// <param name="cleUnicite">
+        /// Ce qui garantit qu'on n'offre pas deux fois. Pour l'offre de
+        /// lancement, la session de paiement qui a ouvert l'abonnement —
+        /// Stripe réémet tout événement dont il n'a pas eu de 200.
+        /// </param>
+        /// <param name="motif">Ce qui apparaît dans l'historique du parent.</param>
+        /// <remarks>
+        /// SÉPARÉE DE `RechargerApresPaiementAsync`, ET CE N'EST PAS UN
+        /// DOUBLON. Celle-là enregistre le prix du catalogue, parce que le
+        /// parent l'a payé ; celle-ci enregistre ZÉRO. Les fondre en une
+        /// seule méthode avec un booléen aurait laissé le choix du prix à
+        /// l'appelant — et le premier qui l'oublie gonfle le chiffre
+        /// d'affaires de l'administration sans que rien ne le signale.
+        /// </remarks>
+        Task<EtatQuota?> OffrirPackAsync(
+            int parentId, string codeRecharge, string cleUnicite, string motif,
+            CancellationToken ct = default);
+
+        /// <summary>
         /// Reprend les heures d'une recharge remboursée.
         ///
         /// La ligne n'est pas effacée mais datée : le quota cesse de la

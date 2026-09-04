@@ -136,7 +136,12 @@ namespace SchoolWebApp.Api.Controllers
             }
 
             return _parentService.GetOrCreateAsync(
-                identifiant, _currentUser.Mail, _currentUser.Prenom, _currentUser.Nom);
+                identifiant, _currentUser.Mail, _currentUser.Prenom, _currentUser.Nom,
+
+                // SEULEMENT SI CE N EST PAS L ENFANT. Son jeton porte le « sub »
+                // du parent : sans ce test, chaque clic d un enfant ferait
+                // passer son parent pour présent.
+                noterLaVenue: _currentUser.EleveId is null);
         }
 
         public class ProfilRequest

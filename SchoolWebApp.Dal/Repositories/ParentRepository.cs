@@ -34,13 +34,65 @@ namespace SchoolWebApp.Dal.Repositories
             return entity is null ? null : Map(entity);
         }
 
-        public async Task<DomainParent?> GetParentByIdentityUserIdAsync(string identityUserId)
+        /// <summary>
+        /// Combien de temps on laisse passer avant de renoter une venue.
+        ///
+        /// Cette méthode est le point de passage de CHAQUE requête authentifiée
+        /// d'un parent : écrire à chaque fois ferait une écriture en base par
+        /// clic, pour une information qui se lit au jour près.
+        /// </summary>
+        private static readonly TimeSpan PasDeConnexion = TimeSpan.FromHours(1);
+
+        /// <param name="noterLaVenue">
+        /// Vrai seulement quand c'est LE PARENT qui appelle.
+        ///
+        /// LE JETON D'UN ENFANT PORTE LE « sub » DE SON PARENT — c'est voulu,
+        /// tous les contrôles d'appartenance en dépendent. Conséquence : cette
+        /// méthode est traversée aussi bien par les requêtes du parent que par
+        /// celles de l'enfant, et rien ici ne permet de les distinguer.
+        ///
+        /// Noter la venue sans ce garde-fou aurait rendu la colonne inutile :
+        /// un enfant qui travaille tous les jours aurait fait passer son parent
+        /// pour un visiteur quotidien, et « dernière connexion » serait devenue
+        /// une copie de « dernière activité » — c'est-à-dire l'exact inverse du
+        /// signal cherché.
+        ///
+        /// Le défaut est FAUX à dessein : un appelant qui oublie de trancher ne
+        /// fausse rien, il ne note simplement pas.
+        /// </param>
+        public async Task<DomainParent?> GetParentByIdentityUserIdAsync(
+            string identityUserId, bool noterLaVenue = false)
         {
-            var entity = await _context.Parents
-                .AsNoTracking()
+            // SUIVI PAR LE CONTEXTE quand il y a une venue à noter : c'est ce
+            // qui permet de l'écrire sans une seconde requête.
+            var requete = noterLaVenue
+                ? _context.Parents
+                : _context.Parents.AsNoTracking();
+
+            var entity = await requete
                 .FirstOrDefaultAsync(p => p.IdentityUserId == identityUserId);
 
-            return entity is null ? null : Map(entity);
+            if (entity is null) return null;
+            if (!noterLaVenue) return Map(entity);
+
+            // LA VENUE DU PARENT SE NOTE ICI, ET NULLE PART AILLEURS.
+            //
+            // Pas à la connexion proprement dite : celle-ci se passe chez le
+            // serveur d'identité, dans une autre base, et une session dure des
+            // heures — un parent connecté lundi et revenu vendredi n'aurait
+            // qu'une seule date. Ce qu'on veut savoir est « quand est-il venu
+            // pour la dernière fois », pas « quand a-t-il saisi son mot de
+            // passe ».
+            var maintenant = DateTime.UtcNow;
+
+            if (entity.DerniereConnexion is null
+                || maintenant - entity.DerniereConnexion.Value >= PasDeConnexion)
+            {
+                entity.DerniereConnexion = maintenant;
+                await _context.SaveChangesAsync();
+            }
+
+            return Map(entity);
         }
 
         public async Task<DomainParent> AddParentAsync(DomainParent model)

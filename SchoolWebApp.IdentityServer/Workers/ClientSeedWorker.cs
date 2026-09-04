@@ -137,10 +137,12 @@ namespace SchoolWebApp.IdentityServer.Workers
             var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
             var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
 
-            if (!await roleManager.RoleExistsAsync("Admin"))
+            foreach (var role in new[] { "Admin", "SuperAdmin" })
             {
-                await roleManager.CreateAsync(new IdentityRole("Admin"));
-                _logger.LogInformation("Rôle Admin créé.");
+                if (await roleManager.RoleExistsAsync(role)) continue;
+
+                await roleManager.CreateAsync(new IdentityRole(role));
+                _logger.LogInformation("Rôle {Role} créé.", role);
             }
 
             await SeedCompteInitialAsync(userManager);
@@ -156,11 +158,64 @@ namespace SchoolWebApp.IdentityServer.Workers
                 // démarrage, une fois inscrit. Rien à signaler.
                 if (utilisateur is null) continue;
 
-                if (!await userManager.IsInRoleAsync(utilisateur, "Admin"))
+                // LES DEUX RÔLES, ET C'EST VOULU.
+                //
+                // « SuperAdmin » ouvre ce qui lui est réservé — les Modes, et
+                // l'attribution du droit d'administrer. « Admin » lui garde
+                // l'accès à tout le reste sans qu'aucune autorisation existante
+                // n'ait à être réécrite.
+                foreach (var role in new[] { "Admin", "SuperAdmin" })
                 {
-                    await userManager.AddToRoleAsync(utilisateur, "Admin");
-                    _logger.LogInformation("{Email} promu administrateur.", email);
+                    if (await userManager.IsInRoleAsync(utilisateur, role)) continue;
+
+                    await userManager.AddToRoleAsync(utilisateur, role);
+                    _logger.LogInformation("{Email} promu {Role}.", email, role);
                 }
+            }
+
+            await RetirerSuperAdminHorsListeAsync(userManager, emails, ct);
+        }
+
+        /// <summary>
+        /// Retire « SuperAdmin » à qui n'est plus dans la liste.
+        ///
+        /// POURQUOI CE RETRAIT EXISTE
+        /// --------------------------
+        /// Le semeur n'accordait que. Changer la liste de configuration
+        /// promouvait donc la nouvelle adresse sans démettre l'ancienne, et le
+        /// rôle qu'on dit UNIQUE se serait accumulé au fil des changements —
+        /// avec, à la fin, plusieurs comptes capables de fermer le site sans
+        /// que personne ne s'en souvienne.
+        ///
+        /// La configuration devient ainsi la source de vérité dans les DEUX
+        /// sens : ce qui n'y est pas ne l'est plus.
+        ///
+        /// SEUL « SuperAdmin » EST RETIRÉ, jamais « Admin ». Le second peut
+        /// avoir été accordé autrement — par le compte initial, ou par le
+        /// tableau de bord — et le retirer ici effacerait une décision qui ne
+        /// vient pas de cette liste.
+        /// </summary>
+        private async Task RetirerSuperAdminHorsListeAsync(
+            UserManager<ApplicationUser> userManager, string[] emails, CancellationToken ct)
+        {
+            var autorisees = emails
+                .Where(e => !string.IsNullOrWhiteSpace(e))
+                .Select(e => e.Trim())
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            var actuels = await userManager.GetUsersInRoleAsync("SuperAdmin");
+
+            foreach (var utilisateur in actuels)
+            {
+                ct.ThrowIfCancellationRequested();
+
+                if (utilisateur.Email is not null && autorisees.Contains(utilisateur.Email)) continue;
+
+                await userManager.RemoveFromRoleAsync(utilisateur, "SuperAdmin");
+
+                _logger.LogWarning(
+                    "{Email} n'est plus super-administrateur : absent de Admin:Emails.",
+                    utilisateur.Email);
             }
         }
 

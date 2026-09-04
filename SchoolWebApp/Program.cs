@@ -166,6 +166,26 @@ builder.Services.AddAuthorization(options =>
             contexte.User.IsInRole("Admin")));
 
     // -----------------------------------------------------------------------
+    // LE SUPER-ADMINISTRATEUR : CE QUI NE SE DÉLÈGUE PAS
+    // -----------------------------------------------------------------------
+    // Deux choses lui restent : les Modes — mode test, maintenance, catalogue
+    // Stripe, qui touchent le site entier — et l'attribution du droit
+    // d'administrer lui-même.
+    //
+    // POURQUOI CELLE-LÀ SURTOUT. Un administrateur qui pourrait promouvoir
+    // aurait le pouvoir de se donner un successeur, puis de se faire retirer
+    // sans perdre la main. Le droit de distribuer les droits est le seul qui
+    // ne doit jamais se distribuer.
+    //
+    // Son rôle vient de la configuration « Admin:Emails », jamais de la base :
+    // aucune manœuvre depuis l'interface ne peut le lui retirer, et donc
+    // aucune ne peut fermer la maison.
+    options.AddPolicy("EstSuperAdmin", policy =>
+        policy.RequireAssertion(contexte =>
+            contexte.User.HasClaim("role", "SuperAdmin") ||
+            contexte.User.IsInRole("SuperAdmin")));
+
+    // -----------------------------------------------------------------------
     // L'AGENT QUI COLLECTE LES PLANCHES
     // -----------------------------------------------------------------------
     // Un administrateur connecté, OU un secret partagé en en-tête.
@@ -302,6 +322,10 @@ builder.Services.AddSingleton<IJournalClaudeRepository, JournalClaudeRepository>
 builder.Services.AddScoped<IConversationService, ConversationService>();
 builder.Services.AddScoped<IMaitriseService, MaitriseService>();
 builder.Services.AddScoped<IAdminService, AdminService>();
+builder.Services.AddScoped<IAvisRepository, AvisRepository>();
+builder.Services.AddScoped<IPromoRepository, PromoRepository>();
+builder.Services.AddScoped<IOffreLancementService, OffreLancementService>();
+builder.Services.AddSingleton<SchoolWebApp.Api.Services.ComptesProteges>();
 
 builder.Services.AddScoped<IEleveViewModelBuilder, EleveViewModelBuilder>();
 builder.Services.AddScoped<IReferentielViewModelBuilder, ReferentielViewModelBuilder>();
@@ -750,11 +774,62 @@ app.UseDefaultFiles();
 app.UseStaticFiles(optionsFichiers);
 app.MapControllers();
 
+// ---------------------------------------------------------------------------
+// UNE ROUTE D'API INCONNUE DOIT ÉCHOUER, PAS RENDRE DU HTML.
+// ---------------------------------------------------------------------------
+//
+// Le repli ci-dessous renvoie index.html avec un code 200 pour TOUTE adresse
+// non reconnue. Pour un navigateur c'est ce qu'on veut ; pour un appel d'API
+// c'est un piège : la réponse est un succès, le client lit les champs qu'il
+// attend sur une chaîne de HTML, les trouve absents, et affiche des zéros
+// parfaitement plausibles.
+//
+// C'est arrivé : un écran a montré « 0 compte parent » sur une base qui en
+// comptait onze, parce que la route venait d'être écrite et pas encore
+// déployée. Aucune erreur nulle part — le symptôme ressemblait à une donnée,
+// ce qui est la panne la plus coûteuse à diagnostiquer.
+//
+// LE TRI SE FAIT SUR L'INTENTION, PAS SUR L'ADRESSE. Un filtre par préfixe
+// serait plus simple à lire mais faux ici : « /admin » est À LA FOIS le
+// préfixe d'AdminController et une route React. Le même chemin sert donc les
+// deux usages, et seul l'en-tête « Accept » les distingue — une navigation
+// demande du text/html, un appel XHR ne le demande jamais.
+app.Use(async (contexte, suivant) =>
+{
+    var versLeSpa = contexte.GetEndpoint()?.Metadata.GetMetadata<ReplieVersLeSpa>() is not null;
+
+    if (versLeSpa && !contexte.Request.Headers.Accept.ToString()
+            .Contains("text/html", StringComparison.OrdinalIgnoreCase))
+    {
+        contexte.Response.StatusCode = StatusCodes.Status404NotFound;
+
+        await contexte.Response.WriteAsJsonAsync(new
+        {
+            message = "Cette route n'existe pas.",
+            chemin = contexte.Request.Path.Value,
+        });
+
+        return;
+    }
+
+    await suivant();
+});
+
 // Le repli SPA : toute adresse qui ne correspond à aucun contrôleur ni à aucun
 // fichier rend index.html, et c'est React qui décide de la page. Sans lui,
 // rafraîchir /tarifs ou /mes-enfants renverrait une 404.
 // Les mêmes options qu'au-dessus, sinon index.html repartirait sans en-tête
 // de cache par ce chemin-là — c'est pourtant le plus fréquent.
-app.MapFallbackToFile("index.html", optionsFichiers);
+app.MapFallbackToFile("index.html", optionsFichiers)
+   .WithMetadata(new ReplieVersLeSpa());
 
 app.Run();
+
+/// <summary>
+/// Marque le point de repli SPA pour le filtre ci-dessus.
+///
+/// Une métadonnée plutôt qu'une comparaison de nom : le libellé d'un endpoint
+/// est un détail interne du framework, qui changerait sans prévenir et sans
+/// rien casser de visible — le filtre cesserait simplement de filtrer.
+/// </summary>
+internal sealed record ReplieVersLeSpa;

@@ -283,6 +283,11 @@ builder.Services.AddScoped<IServiceEmail, ServiceEmail>();
 // viderait a chaque affichage de page.
 builder.Services.AddSingleton<IModeTestService, ModeTestService>();
 
+// Le rôle d'administrateur délégué, lu dans la base métier au moment d'émettre
+// le jeton. Voir RolesDelegues : ce rôle-là est accordé depuis le tableau de
+// bord, donc par l'API, qui n'a pas la base d'identité.
+builder.Services.AddSingleton<IRolesDelegues, RolesDelegues>();
+
 builder.Services.AddHostedService<ClientSeedWorker>();
 
 // Les comptes nés avant l'obligation de confirmation ne doivent pas se

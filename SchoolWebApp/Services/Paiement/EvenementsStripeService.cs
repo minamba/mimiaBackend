@@ -45,6 +45,7 @@ namespace SchoolWebApp.Api.Services.Paiement
     public class EvenementsStripeService : IEvenementsStripeService
     {
         private readonly IAbonnementRepository _abonnements;
+        private readonly IOffreLancementService _lancement;
         private readonly IParentRepository _parents;
         private readonly Notifications.ITelegramService _telegram;
         private readonly SchoolWebApp.Domain.Emails.IServiceEmail _email;
@@ -53,6 +54,7 @@ namespace SchoolWebApp.Api.Services.Paiement
 
         public EvenementsStripeService(
             IAbonnementRepository abonnements,
+            IOffreLancementService lancement,
             IParentRepository parents,
             IOptions<OptionsStripe> options,
             Notifications.ITelegramService telegram,
@@ -60,6 +62,7 @@ namespace SchoolWebApp.Api.Services.Paiement
             ILogger<EvenementsStripeService> logger)
         {
             _abonnements = abonnements ?? throw new ArgumentNullException(nameof(abonnements));
+            _lancement = lancement ?? throw new ArgumentNullException(nameof(lancement));
             _parents = parents ?? throw new ArgumentNullException(nameof(parents));
             _telegram = telegram ?? throw new ArgumentNullException(nameof(telegram));
             _email = email ?? throw new ArgumentNullException(nameof(email));
@@ -185,6 +188,8 @@ namespace SchoolWebApp.Api.Services.Paiement
                 "Abonnement {Offre} ouvert pour le parent {ParentId} apres paiement "
                 + "(abonnement Stripe {Sub}).", codeOffre, parentId, session.SubscriptionId);
 
+            await OffrirLancementAsync(session, parentId, codeOffre, periodicite, ct);
+
             // ALERTE DEPUIS LE WEBHOOK, ET NON DEPUIS LE CONTRÔLEUR.
             //
             // C'est ici qu'un abonnement payant naît. Le contrôleur, lui, ne
@@ -194,6 +199,89 @@ namespace SchoolWebApp.Api.Services.Paiement
             await _telegram.NotifierAbonnementAsync(
                 await _parents.GetParentByIdAsync(parentId),
                 etat.OffreLibelle ?? codeOffre, etat.Periodicite, changement: false);
+        }
+
+        /// <summary>
+        /// Les trois heures de l'offre de lancement, créditées à la
+        /// souscription.
+        ///
+        /// CHEZ NOUS ET NON CHEZ STRIPE, et ce choix porte loin. Un coupon
+        /// Stripe s'attache à un abonnement et le suit : il faudrait le
+        /// retirer un par un à la fin de la campagne, et un oubli offrirait
+        /// la remise à vie. Ici, l'offre est un CRÉDIT PONCTUEL sur la
+        /// période en cours — elle s'éteint d'elle-même, et éteindre
+        /// l'interrupteur suffit à arrêter les suivantes.
+        ///
+        /// ICI ET NON DANS LE CONTRÔLEUR : les heures ne sont offertes
+        /// qu'après ENCAISSEMENT. Les donner à l'ouverture de la page de
+        /// paiement les donnerait aussi à qui renonce devant sa carte.
+        ///
+        /// IDEMPOTENCE PAR LA SESSION, comme pour un pack acheté : Stripe
+        /// réémet tout événement dont il n'a pas eu de 200. Le préfixe
+        /// `lancement:` garantit que cette clé ne peut jamais entrer en
+        /// collision avec celle d'une vraie recharge payée — et rend la
+        /// ligne lisible en base, ce qu'un identifiant nu ne ferait pas.
+        ///
+        /// AUCUN PAIEMENT N'EST RATTACHÉ, et c'est délibéré : un
+        /// remboursement d'abonnement reprend les heures de la recharge qui
+        /// porte son paiement. Un cadeau ne se reprend pas comme un achat.
+        ///
+        /// ET IL EST ENREGISTRÉ À ZÉRO EURO. `OffrirPackAsync` plutôt que
+        /// `RechargerApresPaiementAsync` : la seconde inscrit le prix du
+        /// catalogue, ce qui est juste pour un achat et faux pour un cadeau.
+        /// Au tarif du pack, chaque bénéficiaire aurait ajouté 14,90 € au
+        /// chiffre d'affaires de l'administration — sur l'écran même qui
+        /// sert à décider des prix.
+        /// </summary>
+        private async Task OffrirLancementAsync(
+            Session session, int parentId, string codeOffre,
+            string? periodicite, CancellationToken ct)
+        {
+            // MENSUEL SEULEMENT, parce que la carte annonce « 12 h LE PREMIER
+            // MOIS ». Les heures se créditent sur la période en cours : sur un
+            // abonnement annuel, cette période dure un an, et « trois heures
+            // offertes sur douze mois » ne veut plus rien dire.
+            //
+            // La page des tarifs retire la mention quand on bascule en annuel.
+            // Cette garde est ce qui empêche les deux de diverger — sans elle,
+            // on offrirait en silence ce qu'on n'a pas promis.
+            // `EstAnnuel` plutôt qu'une égalité à « Mensuel » : c'est le seul
+            // des deux qui traite l'absence d'étiquette comme du mensuel, ce que
+            // fait déjà l'ouverture de l'abonnement juste au-dessus.
+            if (PeriodiciteAbonnement.EstAnnuel(periodicite)) return;
+
+            if (!string.Equals(
+                    codeOffre, OffreLancementService.OffreConcernee,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            // RELUE MAINTENANT, au moment d'encaisser — pas à l'ouverture de
+            // la caisse. C'est la lecture qui fait foi : une offre éteinte
+            // entre le clic et le paiement ne doit plus rien offrir.
+            if (!await _lancement.EstVivanteAsync(ct)) return;
+
+            var etat = await _abonnements.OffrirPackAsync(
+                parentId,
+                OffreLancementService.PackOffert,
+                $"lancement:{session.Id}",
+                "Offre de lancement",
+                ct);
+
+            if (etat is null)
+            {
+                // Pack absent du catalogue, ou événement déjà traité. Ni
+                // l'un ni l'autre n'autorise à recréditer.
+                _logger.LogWarning(
+                    "Offre de lancement non creditee au parent {ParentId} (session {Session}) : "
+                    + "pack inconnu ou session deja traitee.", parentId, session.Id);
+                return;
+            }
+
+            _logger.LogWarning(
+                "Offre de lancement : {Pack} offert au parent {ParentId} (session {Session}).",
+                OffreLancementService.PackOffert, parentId, session.Id);
         }
 
         /// <summary>

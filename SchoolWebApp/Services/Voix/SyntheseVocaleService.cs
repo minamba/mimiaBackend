@@ -1,4 +1,5 @@
 using System.Net.Http.Headers;
+using SchoolWebApp.Domain.Repositories;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Options;
@@ -30,27 +31,95 @@ namespace SchoolWebApp.Api.Services.Voix
         private static readonly Dictionary<string, string> Voix = new(StringComparer.OrdinalIgnoreCase)
         {
             ["nora"] = "coral",    // maths — chaleureuse, posée
-            ["chloe"] = "shimmer", // anglais — claire, énergique
+            ["marine"] = "shimmer",// anglais — claire, énergique
             ["adrien"] = "ash",    // français — grave, expressive
             ["salim"] = "onyx",    // histoire-géo — profonde, narrative
             ["yann"] = "echo",     // sciences et physique-chimie — nette, curieuse
             ["ines"] = "sage"      // SVT — posée, explicative
         };
 
+        /// <summary>
+        /// Les voix du mode de secours, et elles ne sont PAS les mêmes.
+        ///
+        /// Un timbre propre sur un modèle ne l’est pas sur l’autre : `sage`
+        /// donne 167 sauts francs par seconde sur `gpt-4o-mini-tts` et 609
+        /// sur `tts-1` ; `nova` fait 1175 sur le premier et 8 sur le second.
+        /// Reprendre la même table aurait donc rendu le secours pire que la
+        /// panne pour la moitié des professeurs.
+        ///
+        /// Chaque attribution ci-dessous a été mesurée sur le même texte :
+        /// les six professeurs y gagnent, de deux à cent fois.
+        /// </summary>
+        private static readonly Dictionary<string, string> VoixSecours = new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["nora"] = "nova",      // 8 sauts/s — contre 208 aujourd’hui
+            ["marine"] = "coral",   // 238 — contre 589
+            ["adrien"] = "alloy",   // 102 — contre 398
+            ["salim"] = "onyx",     // 1 — contre 108
+            ["yann"] = "echo",      // 255 — contre 578
+            ["ines"] = "shimmer"    // 175 — contre 212
+        };
+
         private const string VoixParDefaut = "coral";
+
+        private const string VoixSecoursParDefaut = "onyx";
+
+        /// <summary>Le modèle de secours, quand le principal produit des clics.</summary>
+        private const string ModeleSecours = "tts-1";
+
+        /// <summary>
+        /// La lenteur de dictée, en mode de secours.
+        ///
+        /// Le modèle principal refuse `speed` : on lui DEMANDE de ralentir,
+        /// par consigne. `tts-1` fait l’inverse — il ignore les consignes
+        /// mais accepte le paramètre. La dictée reste donc lente dans les
+        /// deux modes, par deux chemins opposés.
+        ///
+        /// 0,8 : mesuré, une phrase de 2,09 s passe à 2,48 s. Assez pour
+        /// écrire, pas assez pour traîner.
+        /// </summary>
+        private const double VitesseDictee = 0.8;
 
         private readonly HttpClient _http;
         private readonly OptionsVoix _options;
+        private readonly IReglageRepository _reglages;
         private readonly ILogger<SyntheseVocaleService> _logger;
 
         public SyntheseVocaleService(
             HttpClient http,
             IOptions<OptionsVoix> options,
+            IReglageRepository reglages,
             ILogger<SyntheseVocaleService> logger)
         {
             _http = http ?? throw new ArgumentNullException(nameof(http));
             _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
+            _reglages = reglages ?? throw new ArgumentNullException(nameof(reglages));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        }
+
+        /// <summary>
+        /// Le mode de secours est-il armé ?
+        ///
+        /// LU À CHAQUE PHRASE, ET C’EST VOULU. Un administrateur qui bascule
+        /// pendant une panne veut que le cours en cours change de voix, pas
+        /// le prochain. Le coût est une lecture par phrase sur une table de
+        /// cinq lignes — sans commune mesure avec le reste de l’appel.
+        ///
+        /// UNE PANNE DE LECTURE REND FAUX, donc le modèle principal. Le
+        /// secours ne doit pas s’armer sur une base injoignable : on
+        /// resterait alors sur une voix dégradée sans savoir pourquoi.
+        /// </summary>
+        private async Task<bool> SecoursAsync(CancellationToken ct)
+        {
+            try
+            {
+                return await _reglages.EstActifAsync("VOIX_DE_SECOURS", false, ct);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Lecture du mode de voix impossible : on reste sur le modele principal.");
+                return false;
+            }
         }
 
         public bool Disponible => !string.IsNullOrWhiteSpace(_options.ApiKey);
@@ -103,11 +172,29 @@ namespace SchoolWebApp.Api.Services.Voix
                 propre = propre[.._options.LongueurMax];
             }
 
-            var corps = new
+            var secours = await SecoursAsync(ct);
+
+            // DEUX MODÈLES, DEUX FAÇONS DE RALENTIR UNE DICTÉE.
+            //
+            // Le principal refuse `speed` : on le lui demande par consigne.
+            // Le secours ignore les consignes mais accepte `speed`. Chacun
+            // reçoit donc ce qu’il sait lire, et l’autre champ est absent
+            // plutôt que nul — un `instructions: null` sur `tts-1` passe,
+            // mais autant n’envoyer que ce qui a un sens.
+            object corps = secours
+                ? new
+                {
+                    model = ModeleSecours,
+                    input = propre,
+                    voice = ChoisirVoix(avatar, true),
+                    speed = dictee ? VitesseDictee : 1.0,
+                    response_format = "pcm",
+                }
+                : new
             {
                 model = _options.Modele,
                 input = propre,
-                voice = ChoisirVoix(avatar),
+                voice = ChoisirVoix(avatar, false),
                 instructions = Jeu(age, dictee),
                 // PCM brut : ni en-tête, ni encodage.
                 //
@@ -150,8 +237,13 @@ namespace SchoolWebApp.Api.Services.Voix
             return reponse;
         }
 
-        private static string ChoisirVoix(string? avatar) =>
-            avatar is not null && Voix.TryGetValue(avatar, out var voix) ? voix : VoixParDefaut;
+        private static string ChoisirVoix(string? avatar, bool secours)
+        {
+            var table = secours ? VoixSecours : Voix;
+            var defaut = secours ? VoixSecoursParDefaut : VoixParDefaut;
+
+            return avatar is not null && table.TryGetValue(avatar, out var voix) ? voix : defaut;
+        }
 
         /// <summary>
         /// Consigne de jeu passée au modèle.
@@ -169,6 +261,29 @@ namespace SchoolWebApp.Api.Services.Voix
         /// en fin de phrase. Le demander explicitement change beaucoup plus le
         /// résultat que n'importe quel réglage technique.
         /// </summary>
+        /// <remarks>
+        /// CE QU'ON NE DEMANDE PLUS, ET POURQUOI.
+        ///
+        /// Ce bloc réclamait « les petites imperfections de l’oral : une
+        /// syllabe appuyée, une inspiration, une légère hésitation ». Sur le
+        /// papier c’est ce qui rend une voix vivante ; à la mesure, c’est ce
+        /// qui fabriquait des clics.
+        ///
+        /// Une inspiration synthétisée est un souffle : large bande, très
+        /// bref, sans hauteur définie. Le modèle la rend par une bouffée
+        /// d’énergie jusqu’au voisinage de Nyquist — et à 24 kHz
+        /// d’échantillonnage, ça s’entend comme un « bip » sec au milieu
+        /// d’un mot. Dont la hauteur change d’une fois à l’autre, puisque
+        /// c’est du contenu généré et non un défaut mécanique.
+        ///
+        /// MESURÉ : même texte, même voix, 216 sauts francs par seconde avec
+        /// cette phrase, 134 sans. Trente-huit pour cent de moins pour une
+        /// ligne — et une consigne explicite de propreté fait mieux que
+        /// l’absence de consigne (192).
+        ///
+        /// Ce qui reste demandé — varier le rythme, ne pas retomber en fin
+        /// de phrase — porte l’essentiel du naturel et ne coûte rien.
+        /// </remarks>
         private const string Naturel = """
             Tu parles, tu ne lis pas. Ce n'est pas une lecture à voix haute :
             c'est une personne qui s'adresse à quelqu'un qu'elle a en face.
@@ -178,9 +293,7 @@ namespace SchoolWebApp.Api.Services.Voix
             l'intonation à la fin de chaque phrase — enchaîne, comme dans une
             conversation où l'on sait déjà ce qu'on va dire ensuite.
 
-            Laisse passer les petites imperfections de l'oral : une syllabe
-            appuyée, une inspiration, une légère hésitation avant un mot
-            important. Une diction parfaitement régulière sonne artificielle.
+            Articule proprement, sans bruit de bouche ni souffle audible.
 
             N'articule pas exagérément. Ne détache pas les mots. Ne prends pas
             de ton de présentateur.

@@ -14,6 +14,72 @@ namespace SchoolWebApp.Dal.Repositories
         /// </summary>
         private static readonly DateTime Origine = new(2001, 1, 1);
 
+        /// <summary>
+        /// Le fuseau dans lequel se lisent les chiffres.
+        ///
+        /// POURQUOI CE FUSEAU EXISTE
+        /// -------------------------
+        /// Tout est horodaté en UTC — c'est la bonne décision, et elle ne
+        /// change pas. Mais les fenêtres arrivent du navigateur en heure
+        /// LOCALE : le tableau de bord demande « le 2 septembre », pas
+        /// « du 1er à 22 h au 2 à 22 h ». Les deux étaient comparées telles
+        /// quelles, et l'écart se voyait à l'œil nu : un abonnement souscrit
+        /// à 16 h 08 apparaissait dans la barre de 14 h.
+        ///
+        /// Deux heures en été, une en hiver, et le décalage se déplaçait
+        /// avec la saison — de quoi rendre suspect chaque chiffre du
+        /// tableau de bord sans qu'aucun ne soit franchement faux.
+        /// </summary>
+        private static readonly TimeZoneInfo Fuseau = TrouverLeFuseau();
+
+        /// <summary>
+        /// Le fuseau de Paris, quel que soit le système d'exploitation.
+        ///
+        /// L'identifiant IANA marche sur Linux et, depuis .NET 6, sur
+        /// Windows aussi. Le nom Windows reste en second recours pour une
+        /// machine sans ICU. En dernier ressort UTC : des heures décalées
+        /// valent mieux qu'un tableau de bord qui refuse de s'ouvrir.
+        /// </summary>
+        private static TimeZoneInfo TrouverLeFuseau()
+        {
+            foreach (var identifiant in new[] { "Europe/Paris", "Romance Standard Time" })
+            {
+                try
+                {
+                    return TimeZoneInfo.FindSystemTimeZoneById(identifiant);
+                }
+                catch (TimeZoneNotFoundException) { }
+                catch (InvalidTimeZoneException) { }
+            }
+
+            return TimeZoneInfo.Utc;
+        }
+
+        /// <summary>
+        /// Traduit une fenêtre locale en fenêtre UTC, et rend le décalage.
+        ///
+        /// Le décalage sert deux fois : ici pour borner la requête, et dans
+        /// `Grouper` pour ramener chaque horodatage à l'heure locale AVANT
+        /// de le ranger dans un seau. Sans ce second usage, les bornes
+        /// seraient justes et les barres toujours décalées.
+        ///
+        /// UN SEUL DÉCALAGE POUR TOUTE LA FENÊTRE, celui de son début. Une
+        /// fenêtre qui enjambe un changement d’heure — la dernière semaine
+        /// d'octobre, ou une vue à l'année — a donc une heure de biais sur
+        /// sa seconde moitié. Le calculer ligne par ligne coûterait un appel
+        /// de fuseau par enregistrement, pour une erreur qui ne déplace
+        /// jamais un point de plus d'un cran et jamais un seau mensuel.
+        /// </summary>
+        private static (DateTime Debut, DateTime Fin, int Decalage) EnUtc(DateTime debut, DateTime fin)
+        {
+            var decalage = Fuseau.GetUtcOffset(
+                DateTime.SpecifyKind(debut, DateTimeKind.Unspecified));
+
+            var heures = (int)decalage.TotalHours;
+
+            return (debut.AddHours(-heures), fin.AddHours(-heures), heures);
+        }
+
         private readonly SchoolWebAppDatabaseContext _context;
 
         public AdminRepository(SchoolWebAppDatabaseContext context)
@@ -52,33 +118,36 @@ namespace SchoolWebApp.Dal.Repositories
         public async Task<IEnumerable<PointSerie>> GetSerieRequetesAsync(
             Granularite granularite, DateTime debut, DateTime fin, int? eleveId)
         {
+            var (debutUtc, finUtc, decalage) = EnUtc(debut, fin);
+
             var requete = _context.Messages
                 .AsNoTracking()
                 .Where(m => m.Role == "assistant")
-                .Where(m => m.DateCreation >= debut && m.DateCreation < fin);
+                .Where(m => m.DateCreation >= debutUtc && m.DateCreation < finUtc);
 
             if (eleveId.HasValue)
             {
                 requete = requete.Where(m => m.Conversation!.EleveId == eleveId.Value);
             }
 
-            var seaux = await Grouper(requete.Select(m => m.DateCreation), granularite);
+            var seaux = await Grouper(requete.Select(m => m.DateCreation), granularite, decalage);
             return Completer(seaux, granularite, debut, fin, cumulDepart: null);
         }
 
         public async Task<IEnumerable<PointSerie>> GetSerieParentsAsync(
             Granularite granularite, DateTime debut, DateTime fin)
         {
+            var (debutUtc, finUtc, decalage) = EnUtc(debut, fin);
             var source = _context.Parents.AsNoTracking();
 
             // Le cumul doit démarrer au nombre de comptes déjà existants avant
             // la fenêtre, sinon la courbe repartirait de zéro à chaque filtre.
-            var avant = await source.CountAsync(p => p.DateCreation < debut);
+            var avant = await source.CountAsync(p => p.DateCreation < debutUtc);
 
             var seaux = await Grouper(
-                source.Where(p => p.DateCreation >= debut && p.DateCreation < fin)
+                source.Where(p => p.DateCreation >= debutUtc && p.DateCreation < finUtc)
                       .Select(p => p.DateCreation),
-                granularite);
+                granularite, decalage);
 
             return Completer(seaux, granularite, debut, fin, avant);
         }
@@ -86,15 +155,112 @@ namespace SchoolWebApp.Dal.Repositories
         public async Task<IEnumerable<PointSerie>> GetSerieElevesAsync(
             Granularite granularite, DateTime debut, DateTime fin)
         {
+            var (debutUtc, finUtc, decalage) = EnUtc(debut, fin);
             var source = _context.Eleves.AsNoTracking();
-            var avant = await source.CountAsync(e => e.DateCreation < debut);
+            var avant = await source.CountAsync(e => e.DateCreation < debutUtc);
 
             var seaux = await Grouper(
-                source.Where(e => e.DateCreation >= debut && e.DateCreation < fin)
+                source.Where(e => e.DateCreation >= debutUtc && e.DateCreation < finUtc)
                       .Select(e => e.DateCreation),
-                granularite);
+                granularite, decalage);
 
             return Completer(seaux, granularite, debut, fin, avant);
+        }
+
+        /// <summary>
+        /// Accorde ou retire le droit d'administrer à un parent.
+        ///
+        /// LE JETON NE CHANGE PAS TOUT DE SUITE, et il faut le savoir : le rôle
+        /// est lu à l'émission du jeton, pas à chaque requête. Un parent promu
+        /// pendant qu'il est connecté n'obtiendra l'accès qu'à sa prochaine
+        /// connexion — et un administrateur déchu gardera le sien jusque-là.
+        ///
+        /// C'est le prix d'un jeton signé, et il est assumé : vérifier le rôle
+        /// en base à chaque appel coûterait une lecture par requête pour un
+        /// droit qui change deux fois par an.
+        /// </summary>
+        public async Task<bool> DefinirAdministrateurAsync(int parentId, bool actif)
+        {
+            var parent = await _context.Parents.FirstOrDefaultAsync(p => p.Id == parentId);
+            if (parent is null) return false;
+
+            parent.EstAdministrateur = actif;
+            await _context.SaveChangesAsync();
+
+            return true;
+        }
+
+        /// <summary>
+        /// Le tunnel de conversion, sur une fenêtre.
+        ///
+        /// POURQUOI LA CONVERSION N'EST PAS BORNÉE PAR LA FENÊTRE
+        /// -----------------------------------------------------
+        /// Un essai lancé lundi peut se transformer en abonnement des semaines
+        /// plus tard. Compter les conversions DANS la fenêtre donnerait un taux
+        /// nul sur la semaine en cours — faute de recul — et amputé sur les
+        /// anciennes, faute de compter ce qui a suivi.
+        ///
+        /// On date donc l'ESSAI dans la fenêtre, et on regarde ce qu'il est
+        /// devenu, quand que ce soit. Le taux d'une période récente monte
+        /// encore pendant des semaines, et c'est la vérité du tunnel.
+        ///
+        /// « APRÈS » COMPTE DEPUIS LE DÉBUT DE L'ESSAI, pas depuis la fin de la
+        /// fenêtre : un parent qui prend une offre payante le lendemain de son
+        /// essai est converti, même si les deux tombent le même jour.
+        /// </summary>
+        public async Task<Tunnel> GetTunnelAsync(DateTime debut, DateTime fin)
+        {
+            // Les essais lancés dans la fenêtre, avec leur date : c'est elle qui
+            // borne la recherche de conversion, parent par parent.
+            var (debutUtc, finUtc, _) = EnUtc(debut, fin);
+
+            var essais = await _context.Abonnements
+                .AsNoTracking()
+                .Where(a => a.Offre!.EstEssai && a.DateDebut >= debutUtc && a.DateDebut < finUtc)
+                .GroupBy(a => a.ParentId)
+                .Select(g => new { ParentId = g.Key, Premier = g.Min(a => a.DateDebut) })
+                .ToListAsync();
+
+            if (essais.Count == 0)
+            {
+                return new Tunnel
+                {
+                    Visiteurs = await CompterVisiteursAsync(debut, fin),
+                    Essais = 0,
+                    Convertis = 0,
+                };
+            }
+
+            // UNE SEULE REQUÊTE POUR TOUTES LES CONVERSIONS. Interroger la base
+            // une fois par parent tiendrait tant qu'ils sont dix ; à mille, le
+            // tableau de bord mettrait une minute à s'afficher.
+            var parents = essais.Select(e => e.ParentId).ToList();
+
+            // TOUTES LES DATES, PAS LA PREMIÈRE.
+            //
+            // Prendre le minimum condamnait tout parent ayant déjà payé AVANT
+            // son essai : sa première offre payante étant antérieure, la
+            // comparaison échouait même s il en reprenait une le lendemain.
+            // Relevé sur les données réelles — essai le 4 août à 00h38, offre
+            // payante le même jour à 12h47, comptée zéro.
+            //
+            // Ce qu on cherche n est pas « quand a-t-il payé la première fois »
+            // mais « a-t-il payé APRÈS son essai ».
+            var payants = await _context.Abonnements
+                .AsNoTracking()
+                .Where(a => !a.Offre!.EstEssai && parents.Contains(a.ParentId))
+                .Select(a => new { a.ParentId, a.DateDebut })
+                .ToListAsync();
+
+            var convertis = essais.Count(e =>
+                payants.Any(p => p.ParentId == e.ParentId && p.DateDebut >= e.Premier));
+
+            return new Tunnel
+            {
+                Visiteurs = await CompterVisiteursAsync(debut, fin),
+                Essais = essais.Count,
+                Convertis = convertis,
+            };
         }
 
         /// <summary>
@@ -121,26 +287,28 @@ namespace SchoolWebApp.Dal.Repositories
         public async Task<IEnumerable<PointSerie>> GetSerieVisitesAsync(
             Granularite granularite, DateTime debut, DateTime fin)
         {
+            var (debutUtc, finUtc, decalage) = EnUtc(debut, fin);
+
             var visites = _context.VisitesSite
                 .AsNoTracking()
-                .Where(v => v.Horodatage >= debut && v.Horodatage < fin);
+                .Where(v => v.Horodatage >= debutUtc && v.Horodatage < finUtc);
 
             IQueryable<IGrouping<int, VisiteSite>> groupes = granularite switch
             {
                 Granularite.Heure =>
-                    visites.GroupBy(v => EF.Functions.DateDiffHour(Origine, v.Horodatage)),
+                    visites.GroupBy(v => EF.Functions.DateDiffHour(Origine, v.Horodatage.AddHours(decalage))),
 
                 Granularite.Jour =>
-                    visites.GroupBy(v => EF.Functions.DateDiffDay(Origine, v.Horodatage)),
+                    visites.GroupBy(v => EF.Functions.DateDiffDay(Origine, v.Horodatage.AddHours(decalage))),
 
                 Granularite.Semaine =>
-                    visites.GroupBy(v => EF.Functions.DateDiffDay(Origine, v.Horodatage) / 7),
+                    visites.GroupBy(v => EF.Functions.DateDiffDay(Origine, v.Horodatage.AddHours(decalage)) / 7),
 
                 Granularite.Mois =>
-                    visites.GroupBy(v => EF.Functions.DateDiffMonth(Origine, v.Horodatage)),
+                    visites.GroupBy(v => EF.Functions.DateDiffMonth(Origine, v.Horodatage.AddHours(decalage))),
 
                 _ =>
-                    visites.GroupBy(v => EF.Functions.DateDiffYear(Origine, v.Horodatage)),
+                    visites.GroupBy(v => EF.Functions.DateDiffYear(Origine, v.Horodatage.AddHours(decalage))),
             };
 
             var seaux = await groupes
@@ -158,9 +326,12 @@ namespace SchoolWebApp.Dal.Repositories
         /// une requête à part, et c'est elle que le bandeau affiche.
         /// </summary>
         public Task<int> CompterVisiteursAsync(DateTime debut, DateTime fin) =>
+            CompterVisiteursUtcAsync(EnUtc(debut, fin));
+
+        private Task<int> CompterVisiteursUtcAsync((DateTime Debut, DateTime Fin, int _) fenetre) =>
             _context.VisitesSite
                 .AsNoTracking()
-                .Where(v => v.Horodatage >= debut && v.Horodatage < fin)
+                .Where(v => v.Horodatage >= fenetre.Debut && v.Horodatage < fenetre.Fin)
                 .Select(v => v.Visiteur)
                 .Distinct()
                 .CountAsync();
@@ -195,26 +366,32 @@ namespace SchoolWebApp.Dal.Repositories
         /// lignes en mémoire.
         /// </summary>
         private static async Task<Dictionary<int, int>> Grouper(
-            IQueryable<DateTime> dates, Granularite granularite)
+            IQueryable<DateTime> dates, Granularite granularite, int decalage)
         {
+            // RAMENÉ À L'HEURE LOCALE AVANT DE RANGER, et en SQL : décaler
+            // le seau plutôt que la valeur ne marcherait que pour les
+            // heures — DATEDIFF(day) ignore la partie horaire de son
+            // origine, et les jours ne bougeraient pas d'un pouce.
+            var locales = decalage == 0 ? dates : dates.Select(d => d.AddHours(decalage));
+
             IQueryable<IGrouping<int, DateTime>> groupes = granularite switch
             {
                 Granularite.Heure =>
-                    dates.GroupBy(d => EF.Functions.DateDiffHour(Origine, d)),
+                    locales.GroupBy(d => EF.Functions.DateDiffHour(Origine, d)),
 
                 Granularite.Jour =>
-                    dates.GroupBy(d => EF.Functions.DateDiffDay(Origine, d)),
+                    locales.GroupBy(d => EF.Functions.DateDiffDay(Origine, d)),
 
                 // Division entière sur le nombre de jours : DATEDIFF(week) de
                 // SQL Server compte les dimanches, ce qui décalerait les libellés.
                 Granularite.Semaine =>
-                    dates.GroupBy(d => EF.Functions.DateDiffDay(Origine, d) / 7),
+                    locales.GroupBy(d => EF.Functions.DateDiffDay(Origine, d) / 7),
 
                 Granularite.Mois =>
-                    dates.GroupBy(d => EF.Functions.DateDiffMonth(Origine, d)),
+                    locales.GroupBy(d => EF.Functions.DateDiffMonth(Origine, d)),
 
                 _ =>
-                    dates.GroupBy(d => EF.Functions.DateDiffYear(Origine, d)),
+                    locales.GroupBy(d => EF.Functions.DateDiffYear(Origine, d)),
             };
 
             return await groupes
@@ -284,6 +461,7 @@ namespace SchoolWebApp.Dal.Repositories
         public async Task<IEnumerable<PointAbonnements>> GetSerieAbonnementsAsync(
             Granularite granularite, DateTime debut, DateTime fin, int? eleveId)
         {
+            var (debutUtc, finUtc, decalage) = EnUtc(debut, fin);
             var source = _context.Abonnements.AsNoTracking();
 
             // Le filtre « élève » se traduit en filtre PARENT : un abonnement
@@ -303,32 +481,55 @@ namespace SchoolWebApp.Dal.Repositories
                 source = source.Where(a => a.ParentId == parentId);
             }
 
-            // Les trois flux se groupent comme n'importe quel événement daté.
+            // LES ESSAIS SONT COMPTÉS À PART DES ABONNEMENTS PAYANTS.
+            //
+            // Un essai crée une ligne d'abonnement comme une offre payante :
+            // même table, même mécanique. Les compter ensemble annonçait un
+            // abonnement là où personne n'avait rien payé.
             var nouveaux = await Grouper(
-                source.Where(a => a.DateDebut >= debut && a.DateDebut < fin)
+                source.Where(a => a.DateDebut >= debutUtc && a.DateDebut < finUtc
+                                  && !a.Offre!.EstEssai)
                       .Select(a => a.DateDebut),
-                granularite);
+                granularite, decalage);
+
+            var essais = await Grouper(
+                source.Where(a => a.DateDebut >= debutUtc && a.DateDebut < finUtc
+                                  && a.Offre!.EstEssai)
+                      .Select(a => a.DateDebut),
+                granularite, decalage);
 
             var demandes = await Grouper(
                 source.Where(a => a.ResiliationDemandeeLe != null
-                                  && a.ResiliationDemandeeLe >= debut
-                                  && a.ResiliationDemandeeLe < fin)
+                                  && a.ResiliationDemandeeLe >= debutUtc
+                                  && a.ResiliationDemandeeLe < finUtc)
                       .Select(a => a.ResiliationDemandeeLe!.Value),
-                granularite);
+                granularite, decalage);
 
             var arrets = await Grouper(
                 source.Where(a => a.DateFin != null
-                                  && a.DateFin >= debut
-                                  && a.DateFin < fin)
+                                  && a.DateFin >= debutUtc
+                                  && a.DateFin < finUtc)
                       .Select(a => a.DateFin!.Value),
-                granularite);
+                granularite, decalage);
 
             // Pour le stock, on ramène les bornes des abonnements qui touchent
             // la fenêtre — pas tous, seulement ceux qui la chevauchent.
-            var bornes = await source
-                .Where(a => a.DateDebut < fin && (a.DateFin == null || a.DateFin >= debut))
+            var bornesUtc = await source
+                .Where(a => a.DateDebut < finUtc && (a.DateFin == null || a.DateFin >= debutUtc))
                 .Select(a => new { a.DateDebut, a.DateFin })
                 .ToListAsync();
+
+            // RAMENÉES À L'HEURE LOCALE, parce qu'elles sont comparées plus
+            // bas à des bornes de seau, lesquelles sont locales. Deux
+            // référentiels dans la même comparaison feraient apparaître ou
+            // disparaître un abonnement selon l'heure de la journée.
+            var bornes = bornesUtc
+                .Select(b => new
+                {
+                    DateDebut = b.DateDebut.AddHours(decalage),
+                    DateFin = b.DateFin?.AddHours(decalage),
+                })
+                .ToList();
 
             var points = new List<PointAbonnements>();
             var seau = IndexSeau(debut, granularite);
@@ -351,6 +552,7 @@ namespace SchoolWebApp.Dal.Repositories
                     Actifs = bornes.Count(b => b.DateDebut < finPeriode
                                                && (b.DateFin == null || b.DateFin >= finPeriode)),
                     Nouveaux = nouveaux.TryGetValue(seau, out var n) ? n : 0,
+                    Essais = essais.TryGetValue(seau, out var e) ? e : 0,
                     Demandes = demandes.TryGetValue(seau, out var d) ? d : 0,
                     Arrets = arrets.TryGetValue(seau, out var a) ? a : 0,
                 });
@@ -476,10 +678,12 @@ FROM sys.database_files;";
 
         public async Task<CoutPeriode> GetCoutAsync(DateTime debut, DateTime fin)
         {
+            var (debutUtc, finUtc, _) = EnUtc(debut, fin);
+
             var seaux = await _context.Messages
                 .AsNoTracking()
                 .Where(m => m.TokensEntree > 0
-                            && m.DateCreation >= debut && m.DateCreation < fin)
+                            && m.DateCreation >= debutUtc && m.DateCreation < finUtc)
                 .GroupBy(m => new { m.Modele, m.DateCreation.Year, m.DateCreation.Month })
                 .Select(g => new
                 {
@@ -520,7 +724,7 @@ FROM sys.database_files;";
             // tableau ne bouge n'avait aucune explication visible.
             var fond = await _context.AppelsClaude
                 .AsNoTracking()
-                .Where(a => a.DateCreation >= debut && a.DateCreation < fin)
+                .Where(a => a.DateCreation >= debutUtc && a.DateCreation < finUtc)
                 .GroupBy(a => new { a.Origine, a.Modele, a.DateCreation.Year, a.DateCreation.Month })
                 .Select(g => new
                 {
@@ -595,6 +799,107 @@ FROM sys.database_files;";
         /// « ce jour a mangé tant du mois », ce qui est exactement la question
         /// qu'on se pose en regardant un jour.
         /// </summary>
+        /// <summary>
+        /// Où en est le fichier clients, à cet instant.
+        ///
+        /// UN SEUL ABONNEMENT RETENU PAR PARENT, le plus récent. La table en
+        /// garde plusieurs — un changement de formule laisse derrière lui la
+        /// ligne résiliée — et les compter tous afficherait plus de clients
+        /// que de comptes, ce qui ferait douter de l'écran entier.
+        /// </summary>
+        public async Task<RepartitionParents> GetRepartitionParentsAsync(
+            IReadOnlyCollection<string> mailsExclus)
+        {
+            var parents = _context.Parents.AsNoTracking().AsQueryable();
+
+            // LES COMPTES DE L'EXPLOITANT SORTENT DU COMPTE, quand l'appelant
+            // n'a pas le droit de les voir. Les laisser dans le total pendant
+            // que le tableau du dessous les masque afficherait un fichier
+            // clients qui ne correspond à aucune liste — et ce sont les deux
+            // mêmes chiffres, à deux endroits.
+            if (mailsExclus.Count > 0)
+            {
+                parents = parents.Where(p => p.Mail == null || !mailsExclus.Contains(p.Mail));
+            }
+
+            var retenus = await parents.Select(p => p.Id).ToListAsync();
+            var total = retenus.Count;
+
+            var lignes = await _context.Abonnements
+                .AsNoTracking()
+                .Where(a => retenus.Contains(a.ParentId))
+                .Select(a => new
+                {
+                    a.ParentId,
+                    a.Statut,
+                    a.Periodicite,
+                    a.DateDebut,
+                    Code = a.Offre!.Code,
+                    a.Offre.Libelle,
+                    a.Offre.EstEssai,
+                    a.Offre.PrixMensuelCentimes,
+                })
+                .ToListAsync();
+
+            var parAbonne = lignes
+                .GroupBy(l => l.ParentId)
+                .Select(g => new
+                {
+                    // Le courant si le parent en a un, sinon le dernier connu :
+                    // c'est lui qui dit s'il est parti ou s'il n'est jamais venu.
+                    Courant = g.Where(l => l.Statut != StatutAbonnement.Resilie)
+                               .OrderByDescending(l => l.DateDebut)
+                               .FirstOrDefault(),
+                    APayeUnJour = g.Any(l => !l.EstEssai),
+                })
+                .ToList();
+
+            var forfaits = parAbonne
+                .Where(p => p.Courant is not null
+                            && p.Courant.Statut == StatutAbonnement.Actif
+                            && !p.Courant.EstEssai)
+                .GroupBy(p => new { p.Courant!.Code, p.Courant.Libelle, p.Courant.PrixMensuelCentimes })
+                .Select(g => new LigneForfait
+                {
+                    Code = g.Key.Code,
+                    Libelle = g.Key.Libelle,
+                    Mensuel = g.Count(p => !PeriodiciteAbonnement.EstAnnuel(p.Courant!.Periodicite)),
+                    Annuel = g.Count(p => PeriodiciteAbonnement.EstAnnuel(p.Courant!.Periodicite)),
+                })
+                .OrderByDescending(f => f.Total)
+                .ThenBy(f => f.Libelle)
+                .ToList();
+
+            return new RepartitionParents
+            {
+                Total = total,
+
+                Essais = parAbonne.Count(p => p.Courant is not null
+                                              && p.Courant.EstEssai
+                                              && p.Courant.Statut == StatutAbonnement.Actif),
+
+                EnPause = parAbonne.Count(p => p.Courant is not null
+                                               && p.Courant.Statut == StatutAbonnement.EnPause),
+
+                Resilies = parAbonne.Count(p => p.Courant is null && p.APayeUnJour),
+
+                // Le reste : les comptes sans aucun abonnement en cours et qui
+                // n'ont jamais rien payé. Déduit du total plutôt que compté,
+                // pour que la somme des cases retombe TOUJOURS sur le total,
+                // même le jour où un état nouveau apparaît dans la table.
+                JamaisAbonnes = total
+                                - forfaits.Sum(f => f.Total)
+                                - parAbonne.Count(p => p.Courant is not null
+                                                       && p.Courant.EstEssai
+                                                       && p.Courant.Statut == StatutAbonnement.Actif)
+                                - parAbonne.Count(p => p.Courant is not null
+                                                       && p.Courant.Statut == StatutAbonnement.EnPause)
+                                - parAbonne.Count(p => p.Courant is null && p.APayeUnJour),
+
+                Forfaits = forfaits,
+            };
+        }
+
         public async Task<IEnumerable<ParentAdmin>> GetParentsAsync(
             string? recherche, DateTime debut, DateTime fin)
         {
@@ -626,6 +931,8 @@ FROM sys.database_files;";
                     DerniereActivite = p.Eleves
                         .Where(e => e.DerniereActivite != null)
                         .Max(e => e.DerniereActivite),
+                    DerniereConnexion = p.DerniereConnexion,
+                    EstAdministrateur = p.EstAdministrateur,
 
                     // LA CONSOMMATION DE LA PÉRIODE EN COURS.
                     //
@@ -710,6 +1017,39 @@ FROM sys.database_files;";
             return lignes;
         }
 
+        /// <summary>La lecture de cache : un dixième du tarif d'entrée.</summary>
+        private const decimal LectureCache = 0.1m;
+
+        /// <summary>
+        /// L'écriture de cache, en multiple du tarif d'entrée.
+        ///
+        /// 1,75x ET NON 1,25x, ET C'EST UNE APPROXIMATION ASSUMÉE.
+        /// -------------------------------------------------------
+        /// Anthropic facture l'écriture 1,25x pour un cache de cinq minutes
+        /// et 2x pour un cache d'une heure. Le prompt système utilise le TTL
+        /// d'une heure — voir `AgentPedagogiqueService.CacheLong` — pendant
+        /// que l'historique roulant garde les cinq minutes par défaut.
+        ///
+        /// ON NE PEUT PAS LES SÉPARER ICI : la colonne `tokens_cache_ecriture`
+        /// ne porte que le TOTAL rendu par `CacheCreationInputTokens`. Le
+        /// détail par TTL existe dans la réponse de l'API mais n'est ni lu ni
+        /// stocké — il faudrait une colonne de plus, donc une migration.
+        ///
+        /// 1,25x SOUS-ESTIMAIT DE 40 % SUR LES TOURS QUI COMPTENT. Mesuré en
+        /// septembre 2026 : les reprises après plus d'une heure réécrivent le
+        /// préfixe entier — 36 000 jetons, au tarif 2x — et 11 % des tours
+        /// portaient ainsi 65 % des jetons écrits. Les compter à 1,25x
+        /// donnait un coût de dialogue plus bas que la facture réelle, sur
+        /// l’écran même qui sert à fixer les prix.
+        ///
+        /// La pondération retenue penche vers le 2x parce que le gros des
+        /// jetons écrits vient du préfixe système. Elle reste fausse d'un
+        /// côté ou de l’autre selon les séances ; elle est simplement BEAUCOUP
+        /// moins fausse que 1,25x. Le jour où la colonne existera, remplacer
+        /// cette constante par les deux tarifs exacts sera un jeu d’enfant.
+        /// </summary>
+        private const decimal EcritureCache = 1.75m;
+
         /// <summary>
         /// Le tarif d'un modèle, par million de jetons d'entrée et de sortie.
         ///
@@ -754,6 +1094,8 @@ FROM sys.database_files;";
         /// </summary>
         private async Task<int> MinutesTravailleesAsync(DateTime debut, DateTime fin)
         {
+            var (debutUtc, finUtc, _) = EnUtc(debut, fin);
+
             const string sql = @"
 WITH avec_ecart AS (
     SELECT  m.role, m.date_creation,
@@ -784,7 +1126,7 @@ WHERE  role = 'assistant' AND date_creation >= {0}";
             // `ToListAsync` se contente de matérialiser ce que la requête rend,
             // sans rien ajouter autour.
             var lignes = await _context.Database
-                .SqlQueryRaw<int>(sql, debut, fin)
+                .SqlQueryRaw<int>(sql, debutUtc, finUtc)
                 .ToListAsync();
 
             return lignes.Count == 0 ? 0 : lignes[0] / 60;
@@ -825,6 +1167,8 @@ WHERE  role = 'assistant' AND date_creation >= {0}";
         {
             if (lignes.Count == 0) return;
 
+            var (debutUtc, finUtc, _) = EnUtc(debut, fin);
+
             var ids = lignes.Select(l => l.Id).ToList();
 
             var seaux = await _context.Messages
@@ -834,7 +1178,7 @@ WHERE  role = 'assistant' AND date_creation >= {0}";
                 // antérieur à la télémétrie — dans les deux cas, zéro à
                 // additionner et une ligne de moins à ramener.
                 .Where(m => m.TokensEntree > 0
-                            && m.DateCreation >= debut && m.DateCreation < fin
+                            && m.DateCreation >= debutUtc && m.DateCreation < finUtc
                             && ids.Contains(m.Conversation!.Eleve!.ParentId))
                 .GroupBy(m => new
                 {
@@ -863,12 +1207,10 @@ WHERE  role = 'assistant' AND date_creation >= {0}";
             {
                 var (entree, sortie) = Tarif(s.Modele, new DateTime(s.Year, s.Month, 1));
 
-                // Lecture de cache à 0,1x, écriture à 1,25x : ce sont les
-                // multiplicateurs d'Anthropic, pas des approximations.
                 var cout =
                     (s.Entree * entree
-                     + s.CacheLu * entree * 0.1m
-                     + s.CacheEcrit * entree * 1.25m
+                     + s.CacheLu * entree * LectureCache
+                     + s.CacheEcrit * entree * EcritureCache
                      + s.Sortie * sortie) / 1_000_000m;
 
                 dialogue[s.ParentId] = dialogue.GetValueOrDefault(s.ParentId) + cout;
@@ -951,6 +1293,7 @@ WHERE  role = 'assistant' AND date_creation >= {0}";
                     Age = e.Age,
                     Sexe = e.Sexe,
                     NiveauLibelle = e.NiveauScolaire!.Libelle,
+                    NiveauOrdre = e.NiveauScolaire.Ordre,
                     ParentMail = e.Parent!.Mail,
                     DateCreation = e.DateCreation,
                     DerniereActivite = e.DerniereActivite,
@@ -1022,10 +1365,45 @@ WHERE  role = 'assistant' AND date_creation >= {0}";
                 .ToListAsync();
 
             // --- une ligne par matière active, activité ou non ---------------
-            var matieres = await _context.Matieres
+            // LES MATIÈRES DE SA CLASSE, PAS TOUTES CELLES QUI EXISTENT.
+            //
+            // Le filtre ne portait que sur `Active`, et la fiche d'un élève de
+            // troisième affichait donc la philosophie — matière de terminale —
+            // avec sa professeure et son « pas encore travaillée », comme s'il
+            // avait simplement négligé de s'y mettre.
+            //
+            // C'est la MÊME règle que celle qui décide ce qu'un enfant peut
+            // ouvrir : `VoiesScolaires.EstAuProgramme`, qui croise les bornes
+            // de niveau de la matière ET les exclusions par voie — le français
+            // n'existe pas en terminale, la philosophie pas en terminale pro.
+            // La réécrire ici aurait fait deux vérités pour une seule question.
+            //
+            // Le filtrage se fait en mémoire, après la requête : la règle vit
+            // dans le domaine et ne se traduit pas en SQL. Une dizaine de
+            // matières, c'est sans conséquence.
+            var niveau = await _context.NiveauxScolaires
+                .AsNoTracking()
+                .FirstOrDefaultAsync(n => n.Code == fiche.NiveauCode);
+
+            var toutes = await _context.Matieres
                 .AsNoTracking()
                 .Where(m => m.Active)
                 .OrderBy(m => m.Ordre)
+                .ToListAsync();
+
+            var matieres = toutes
+                .Where(m => Domain.Models.VoiesScolaires.EstAuProgramme(
+                    new Domain.Models.Matiere
+                    {
+                        Code = m.Code,
+                        NiveauOrdreMin = m.NiveauOrdreMin,
+                        NiveauOrdreMax = m.NiveauOrdreMax,
+                    },
+                    niveau is null ? null : new Domain.Models.NiveauScolaire
+                    {
+                        Code = niveau.Code,
+                        Ordre = niveau.Ordre,
+                    }))
                 .Select(m => new StatMatiereEleve
                 {
                     MatiereId = m.Id,
@@ -1035,7 +1413,7 @@ WHERE  role = 'assistant' AND date_creation >= {0}";
                     ProfAvatar = m.ProfAvatar,
                     ProfCouleur = m.ProfCouleur
                 })
-                .ToListAsync();
+                .ToList();
 
             foreach (var matiere in matieres)
             {
@@ -1163,6 +1541,12 @@ WHERE  role = 'assistant' AND date_creation >= {0}";
 
             return (await GetElevesAsync(null, null)).FirstOrDefault(e => e.Id == id);
         }
+
+        public Task<string?> MailDuParentAsync(int id) =>
+            _context.Parents.AsNoTracking()
+                .Where(p => p.Id == id)
+                .Select(p => p.Mail)
+                .FirstOrDefaultAsync();
 
         public async Task<bool> SupprimerParentAsync(int id)
         {

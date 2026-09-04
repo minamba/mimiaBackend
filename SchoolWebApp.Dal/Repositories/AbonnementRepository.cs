@@ -514,21 +514,39 @@ namespace SchoolWebApp.Dal.Repositories
             }
 
             var (consommeesPot, consommeesEnfant) = await ConsommationAsync(abonnement, eleveId, ct);
-            var alloueesPot = offre.MinutesPotMensuel + await MinutesRechargeAsync(abonnement, ct);
 
-            // Le pot d'abord : c'est lui qui borne le coût, et son épuisement se
-            // débloque par une recharge. Le plafond individuel ensuite : il ne
-            // se débloque pas, il attend la période suivante.
+            var recharge = await MinutesRechargeAsync(abonnement, ct);
+            var alloueesPot = offre.MinutesPotMensuel + recharge;
+
+            // LES RECHARGES LÈVENT AUSSI LE PLAFOND INDIVIDUEL.
+            //
+            // Elles ne le levaient pas, et sur Solo c'était une vente à vide.
+            // Le pot vaut 9 h, le plafond aussi, et un seul enfant est admis :
+            // les trois heures achetées entraient dans le pot puis butaient
+            // sur le plafond, refusées avec le motif `PlafondEnfant` — pendant
+            // que l'écran du parent affichait bien 12 h allouées. Il pouvait
+            // donc payer 14,90 € pour des heures inatteignables.
+            //
+            // Le plafond existe pour protéger les FRÈRES ET SŒURS d'un aîné
+            // qui viderait le pot. Une recharge, elle, est ajoutée exprès pour
+            // débloquer quelqu'un : la refuser à celui qu'elle vise vide le
+            // geste de son sens. Sur Duo et Famille, elle ne dérègle rien —
+            // le pot reste le vrai frein, et il est commun.
+            var plafondEnfant = offre.MinutesPlafondEnfant + recharge;
+
+            // Le pot d'abord : c'est lui qui borne le coût. Le plafond ensuite,
+            // qui protège la fratrie plutôt que la facture — d'où deux motifs
+            // de refus distincts, que les écrans expliquent différemment.
             if (consommeesPot >= alloueesPot) return VerdictQuota.Refus(MotifRefus.PotEpuise);
 
-            if (consommeesEnfant >= offre.MinutesPlafondEnfant)
+            if (consommeesEnfant >= plafondEnfant)
             {
                 return VerdictQuota.Refus(MotifRefus.PlafondEnfant);
             }
 
             var restantes = Math.Min(
                 alloueesPot - consommeesPot,
-                offre.MinutesPlafondEnfant - consommeesEnfant);
+                plafondEnfant - consommeesEnfant);
 
             return VerdictQuota.Ok(restantes);
         }
@@ -725,7 +743,7 @@ namespace SchoolWebApp.Dal.Repositories
         // ------------------------------------------------------------ recharge
         public Task<EtatQuota?> RechargerAsync(
             int parentId, string codeRecharge, CancellationToken ct = default) =>
-            CrediterPackAsync(parentId, codeRecharge, null, null, ct);
+            CrediterPackAsync(parentId, codeRecharge, null, null, null, ct);
 
         public async Task<EtatQuota?> RechargerApresPaiementAsync(
             int parentId, string codeRecharge, string sessionStripeId,
@@ -752,7 +770,8 @@ namespace SchoolWebApp.Dal.Repositories
 
             try
             {
-                return await CrediterPackAsync(parentId, codeRecharge, sessionStripeId, paiementStripeId, ct);
+                return await CrediterPackAsync(
+                    parentId, codeRecharge, sessionStripeId, paiementStripeId, null, ct);
             }
             catch (DbUpdateException)
             {
@@ -763,9 +782,54 @@ namespace SchoolWebApp.Dal.Repositories
             }
         }
 
+        /// <summary>
+        /// Offre un pack : les mêmes heures, au prix de zéro.
+        ///
+        /// LE PRIX EST LA SEULE DIFFÉRENCE AVEC UN PACK ACHETÉ, et elle
+        /// compte double. Enregistré au tarif du catalogue, un cadeau
+        /// gonflerait le chiffre d'affaires lu en administration — l'écran
+        /// même qui sert à décider des prix — et afficherait au parent une
+        /// ligne à 14,90 € qu'il n'a jamais payée. Le motif, lui, dit dans
+        /// l'historique d'où viennent ces heures.
+        ///
+        /// L'UNICITÉ PASSE PAR LA MÊME COLONNE que les paiements, et le
+        /// même index unique filtré la garantit. C'est ce qui permet
+        /// d'appeler cette méthode depuis un webhook, que Stripe réémet
+        /// tant qu'il n'a pas reçu de 200.
+        /// </summary>
+        public async Task<EtatQuota?> OffrirPackAsync(
+            int parentId, string codeRecharge, string cleUnicite, string motif,
+            CancellationToken ct = default)
+        {
+            if (string.IsNullOrWhiteSpace(cleUnicite)) return null;
+            if (string.IsNullOrWhiteSpace(motif)) return null;
+
+            // Même garde en deux temps que pour un pack payé : ce test
+            // attrape le cas courant, la contrainte tranche les courses.
+            var deja = await _context.Recharges
+                .AsNoTracking()
+                .AnyAsync(r => r.StripeSessionId == cleUnicite, ct);
+
+            if (deja) return null;
+
+            try
+            {
+                return await CrediterPackAsync(
+                    parentId, codeRecharge, cleUnicite, null, motif.Trim(), ct);
+            }
+            catch (DbUpdateException)
+            {
+                return null;
+            }
+        }
+
+        /// <param name="motif">
+        /// Nul quand le pack est ACHETÉ ; renseigné quand il est offert. Ce
+        /// paramètre décide aussi du prix enregistré — voir plus bas.
+        /// </param>
         private async Task<EtatQuota?> CrediterPackAsync(
             int parentId, string codeRecharge, string? sessionStripeId,
-            string? paiementStripeId, CancellationToken ct)
+            string? paiementStripeId, string? motif, CancellationToken ct)
         {
             var pack = await _context.OffresRecharge
                 .AsNoTracking()
@@ -797,7 +861,16 @@ namespace SchoolWebApp.Dal.Repositories
                 AbonnementId = abonnement.Id,
                 PeriodeDebut = abonnement.PeriodeDebut,
                 Minutes = pack.Minutes,
-                PrixCentimes = pack.PrixCentimes,
+
+                // UN PACK OFFERT VAUT ZÉRO EURO. Le porter au prix du
+                // catalogue fausserait le chiffre d'affaires lu en
+                // administration, et montrerait au parent une ligne à
+                // 14,90 € qu'il n'a jamais payée. Même raisonnement que
+                // pour `AjusterHeuresAsync`, qui traite les gestes
+                // commerciaux saisis à la main.
+                PrixCentimes = motif is null ? pack.PrixCentimes : 0,
+                Motif = motif,
+
                 DateAchat = DateTime.UtcNow,
 
                 // Nul quand la recharge est offerte : compte exempté, geste
@@ -1133,7 +1206,14 @@ namespace SchoolWebApp.Dal.Repositories
                 MinutesAllouees = offre.MinutesPotMensuel + recharge,
                 MinutesRecharge = recharge,
                 MinutesConsommees = lignes.Sum(l => l.SecondesConsommees) / 60,
-                MinutesPlafondEnfant = offre.MinutesPlafondEnfant,
+
+                // LE PLAFOND ANNONCÉ SUIT LES RECHARGES, comme le verdict.
+                // C'est ici que le décalage se voyait : l'écran promettait
+                // 12 h allouées et 9 h de plafond, et le moteur refusait à 9 h.
+                // Deux chiffres qui décrivent la même règle doivent sortir du
+                // même calcul, sans quoi celui qui affiche et celui qui décide
+                // finissent par se contredire.
+                MinutesPlafondEnfant = offre.MinutesPlafondEnfant + recharge,
                 Impaye = abonnement.ImpayeDepuis is not null,
                 ImpayeDepuis = abonnement.ImpayeDepuis,
                 OffrePrevueCode = abonnement.OffrePrevue?.Code,
@@ -1155,7 +1235,7 @@ namespace SchoolWebApp.Dal.Repositories
                         Prenom = e.Prenom,
                         MinutesConsommees =
                             lignes.Where(l => l.EleveId == e.Id).Sum(l => l.SecondesConsommees) / 60,
-                        MinutesPlafond = offre.MinutesPlafondEnfant,
+                        MinutesPlafond = offre.MinutesPlafondEnfant + recharge,
                     })
                     .ToList(),
             };
