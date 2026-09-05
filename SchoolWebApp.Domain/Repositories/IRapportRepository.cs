@@ -41,6 +41,7 @@ namespace SchoolWebApp.Domain.Repositories
             int taille,
             int? matiereId = null,
             bool duPlusAncien = false,
+            int? niveauScolaireId = null,
             CancellationToken ct = default);
 
         /// <summary>Les rapports d'un élève, le plus récent d'abord.</summary>

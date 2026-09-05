@@ -58,6 +58,10 @@ namespace SchoolWebApp.Dal.Seed.Referentiels
                 ("QUATRIEME", "SV_4E_METH_CORRELATION","Méthode", "Ne pas conclure à une cause à partir d'une simple corrélation", 14),
                 ("QUATRIEME", "SV_4E_METH_ECHELLE",   "Méthode", "Préciser l'échelle à laquelle on raisonne : cellule, organe, organisme", 15),
 
+                ("QUATRIEME", "SV_4E_TERRE_SOLAIRE", "La planète Terre", "Situer la Terre parmi les planètes telluriques et gazeuses", 16),
+                ("QUATRIEME", "SV_4E_TERRE_ERES", "La planète Terre", "Situer les grandes ères géologiques", 17),
+                ("QUATRIEME", "SV_4E_VIV_ECOSYSTEME", "Le vivant et son évolution", "Expliquer l’organisation et le fonctionnement d’un écosystème", 18),
+
                 // --- 3e ---
                 ("TROISIEME", "SV_3E_TERRE_CLIMAT",   "La planète Terre", "Expliquer l'effet de serre et l'origine du réchauffement actuel", 1),
                 ("TROISIEME", "SV_3E_TERRE_RESSOURCES","La planète Terre", "Relier l'exploitation d'une ressource à son impact sur l'environnement", 2),
@@ -75,6 +79,8 @@ namespace SchoolWebApp.Dal.Seed.Referentiels
                 ("TROISIEME", "SV_3E_METH_ARGUMENTER","Méthode", "Rédiger une explication reliant documents et connaissances", 14),
                 ("TROISIEME", "SV_3E_METH_TABLEAU",   "Méthode", "Exploiter un tableau de résultats et repérer le témoin", 15),
                 ("TROISIEME", "SV_3E_METH_CRITIQUE",  "Méthode", "Évaluer la fiabilité d'une information scientifique et de sa source", 16),
+
+                ("TROISIEME", "SV_3E_TERRE_ECOSYSTEME", "La planète Terre", "Expliquer comment une activité humaine modifie un écosystème", 17),
 
                 // --- Seconde : tronc commun ---
                 ("SECONDE", "SV_2DE_VIV_BIODIVERSITE","La biodiversité", "Décrire la biodiversité à ses trois échelles et son évolution", 1),
@@ -95,6 +101,9 @@ namespace SchoolWebApp.Dal.Seed.Referentiels
                 ("SECONDE", "SV_2DE_METH_STATISTIQUE","Méthode", "Interpréter des données chiffrées et une variabilité", 16),
                 ("SECONDE", "SV_2DE_METH_REDIGER",    "Méthode", "Rédiger une explication structurée et sans finalisme", 17),
 
+                ("SECONDE", "SV_2DE_CORPS_PATHOGENES", "Corps humain et santé", "Expliquer la transmission d’une maladie vectorielle et sa prévention", 18),
+                ("SECONDE", "SV_2DE_VIV_SELECTION_SEX", "Le vivant et son évolution", "Expliquer la communication intra-spécifique et la sélection sexuelle", 19),
+
                 // --- Première : spécialité ---
                 ("PREMIERE", "SV_1RE_GEN_MITOSE",     "Génétique", "Expliquer la conservation du génome par la mitose et la réplication", 1),
                 ("PREMIERE", "SV_1RE_GEN_MUTATIONS",  "Génétique", "Relier mutations, réparation de l'ADN et variabilité", 2),
@@ -114,6 +123,10 @@ namespace SchoolWebApp.Dal.Seed.Referentiels
                 ("PREMIERE", "SV_1RE_METH_ANALYSE",   "Méthode", "Analyser un document en distinguant résultat, interprétation et conclusion", 16),
                 ("PREMIERE", "SV_1RE_METH_MODELE",    "Méthode", "Discuter les limites d'un modèle scientifique", 17),
                 ("PREMIERE", "SV_1RE_METH_ARGUMENTER","Méthode", "Construire une argumentation reliant plusieurs documents", 18),
+
+                ("PREMIERE", "SV_1RE_VIV_ENZYMES", "Le vivant et son évolution", "Expliquer le rôle catalytique et la spécificité d’une enzyme", 19),
+                ("PREMIERE", "SV_1RE_CORPS_IMMUNITE_ADAPT", "Corps humain et santé", "Décrire l’immunité adaptative et la mémoire immunitaire", 20),
+                ("PREMIERE", "SV_1RE_TERRE_DIVERGENCE", "La planète Terre", "Expliquer la dynamique d’une zone de divergence", 21),
 
                 // --- Terminale : spécialité ---
                 ("TERMINALE", "SV_TLE_GEN_MEIOSE",    "Génétique et évolution", "Expliquer le brassage génétique lors de la méiose et de la fécondation", 1),

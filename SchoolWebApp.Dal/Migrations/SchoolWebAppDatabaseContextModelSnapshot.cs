@@ -346,12 +346,17 @@ namespace SchoolWebApp.Dal.Migrations
                         .HasColumnType("int")
                         .HasColumnName("matiere_id");
 
+                    b.Property<int?>("NiveauScolaireId")
+                        .HasColumnType("int")
+                        .HasColumnName("niveau_scolaire_id");
                     b.Property<string>("Titre")
                         .HasMaxLength(300)
                         .HasColumnType("nvarchar(300)")
                         .HasColumnName("titre");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("NiveauScolaireId");
 
                     b.HasIndex("DatePurge");
 
@@ -412,6 +417,10 @@ namespace SchoolWebApp.Dal.Migrations
                     b.Property<int>("ParentId")
                         .HasColumnType("int")
                         .HasColumnName("parent_id");
+
+                    b.Property<DateTime?>("ProgressionVueLe")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("progression_vue_le");
 
                     b.Property<string>("Prenom")
                         .HasMaxLength(100)
@@ -543,6 +552,40 @@ namespace SchoolWebApp.Dal.Migrations
                     b.ToTable((string)null);
 
                     b.ToView("vw_ForfaitAbonnement", (string)null);
+                });
+
+            modelBuilder.Entity("SchoolWebApp.Dal.Entities.HistoriqueClasseEleve", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasColumnName("id");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("Debut")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("debut");
+
+                    b.Property<int>("EleveId")
+                        .HasColumnType("int")
+                        .HasColumnName("eleve_id");
+
+                    b.Property<DateTime?>("Fin")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("fin");
+
+                    b.Property<int>("NiveauScolaireId")
+                        .HasColumnType("int")
+                        .HasColumnName("niveau_scolaire_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("NiveauScolaireId");
+
+                    b.HasIndex("EleveId", "Debut");
+
+                    b.ToTable("HistoriqueClasseEleve", (string)null);
                 });
 
             modelBuilder.Entity("SchoolWebApp.Dal.Entities.MailBanni", b =>
@@ -723,6 +766,10 @@ namespace SchoolWebApp.Dal.Migrations
                         .HasColumnType("int")
                         .HasColumnName("matiere_id");
 
+                    b.Property<int?>("NiveauScolaireId")
+                        .HasColumnType("int")
+                        .HasColumnName("niveau_scolaire_id");
+
                     b.Property<double>("Note")
                         .HasColumnType("float")
                         .HasColumnName("note");
@@ -742,6 +789,8 @@ namespace SchoolWebApp.Dal.Migrations
                     b.HasIndex("ConversationId");
 
                     b.HasIndex("MatiereId");
+
+                    b.HasIndex("NiveauScolaireId");
 
                     b.HasIndex("EleveId", "DateCreation");
 
@@ -846,6 +895,9 @@ namespace SchoolWebApp.Dal.Migrations
                         .HasColumnType("datetime2")
                         .HasColumnName("prochaine_revision");
 
+                    b.Property<int?>("NiveauScolaireId")
+                        .HasColumnType("int")
+                        .HasColumnName("niveau_scolaire_id");
                     b.Property<double>("Score")
                         .HasColumnType("float")
                         .HasColumnName("score");
@@ -856,6 +908,8 @@ namespace SchoolWebApp.Dal.Migrations
                         .HasColumnName("source");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("NiveauScolaireId");
 
                     b.HasIndex("CompetenceId");
 
@@ -1729,6 +1783,11 @@ namespace SchoolWebApp.Dal.Migrations
 
                     b.Navigation("Eleve");
 
+b.HasOne("SchoolWebApp.Dal.Entities.NiveauScolaire", "NiveauScolaire")
+                        .WithMany()
+                        .HasForeignKey("NiveauScolaireId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
                     b.Navigation("Matiere");
                 });
 
@@ -1771,11 +1830,37 @@ namespace SchoolWebApp.Dal.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("SchoolWebApp.Dal.Entities.NiveauScolaire", "NiveauScolaire")
+                        .WithMany()
+                        .HasForeignKey("NiveauScolaireId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
                     b.Navigation("Conversation");
 
                     b.Navigation("Eleve");
 
                     b.Navigation("Matiere");
+
+                    b.Navigation("NiveauScolaire");
+                });
+
+            modelBuilder.Entity("SchoolWebApp.Dal.Entities.HistoriqueClasseEleve", b =>
+                {
+                    b.HasOne("SchoolWebApp.Dal.Entities.Eleve", "Eleve")
+                        .WithMany()
+                        .HasForeignKey("EleveId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("SchoolWebApp.Dal.Entities.NiveauScolaire", "NiveauScolaire")
+                        .WithMany()
+                        .HasForeignKey("NiveauScolaireId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+
+                    b.Navigation("Eleve");
+
+                    b.Navigation("NiveauScolaire");
                 });
 
             modelBuilder.Entity("SchoolWebApp.Dal.Entities.FicheRevision", b =>
@@ -1812,6 +1897,11 @@ namespace SchoolWebApp.Dal.Migrations
                         .IsRequired();
 
                     b.Navigation("Competence");
+
+b.HasOne("SchoolWebApp.Dal.Entities.NiveauScolaire", "NiveauScolaire")
+                        .WithMany()
+                        .HasForeignKey("NiveauScolaireId")
+                        .OnDelete(DeleteBehavior.NoAction);
 
                     b.Navigation("Eleve");
                 });

@@ -95,14 +95,27 @@ namespace SchoolWebApp.Domain.Services.impl
         /// une autre table que l'activité, et faire porter les deux au même
         /// repository l'obligerait à connaître le modèle d'évaluation.
         /// </summary>
-        public async Task<FicheEleve?> GetFicheEleveAsync(int eleveId)
+        /// <summary>
+        /// La fiche entière, éventuellement réduite à une année scolaire.
+        ///
+        /// LE FILTRE VA JUSQU'AU BOUT, y compris aux historiques paginés : une
+        /// fiche ouverte sur la 4e dont les évaluations resteraient celles de
+        /// toute la scolarité ne serait pas un suivi de niveau, mais deux
+        /// lectures contradictoires côte à côte.
+        /// </summary>
+        public async Task<FicheEleve?> GetFicheEleveAsync(int eleveId, int? niveauScolaireId = null)
         {
-            var fiche = await _adminRepository.GetFicheEleveAsync(eleveId);
+            var fiche = await _adminRepository.GetFicheEleveAsync(eleveId, niveauScolaireId);
             if (fiche is null) return null;
 
-            fiche.Evaluations = await _evaluationRepository.GetHistoriqueAsync(eleveId, null, TaillePage);
-            fiche.Rapports = await _rapportRepository.GetHistoriqueAsync(eleveId, null, TaillePage);
-            fiche.Progression = await _evaluationRepository.GetProgressionAsync(eleveId);
+            fiche.Evaluations = await _evaluationRepository.GetHistoriqueAsync(
+                eleveId, null, TaillePage, niveauScolaireId: niveauScolaireId);
+
+            fiche.Rapports = await _rapportRepository.GetHistoriqueAsync(
+                eleveId, null, TaillePage, niveauScolaireId: niveauScolaireId);
+
+            fiche.Progression = await _evaluationRepository.GetProgressionAsync(
+                eleveId, niveauScolaireId);
 
             return fiche;
         }

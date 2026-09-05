@@ -38,6 +38,13 @@ namespace SchoolWebApp.Dal.Seed.Referentiels
                 ("CP", "FR_CP_LANG_PLURIEL",     "Étude de la langue", "Marquer le pluriel d'un nom par un -s", 11),
                 ("CP", "FR_CP_ORAL_RACONTER",    "Oral", "Raconter un événement de façon compréhensible", 12),
 
+                ("CP", "FR_CP_ORAL_ECOUTER", "Oral", "Écouter une histoire et montrer qu’on l’a comprise", 13),
+                ("CP", "FR_CP_LECT_DEVENIR", "Lecture", "Choisir un livre et dire ce qu’on y a aimé", 14),
+                ("CP", "FR_CP_ECR_ENCODER", "Écriture", "Encoder un mot en s’appuyant sur les sons qu’on entend", 15),
+                ("CP", "FR_CP_LANG_TYPES", "Étude de la langue", "Reconnaître une phrase qui interroge et une phrase qui ordonne", 16),
+                ("CP", "FR_CP_LANG_VOC_MOTS", "Étude de la langue", "Apprendre des mots nouveaux et les réemployer", 17),
+                ("CP", "FR_CP_LANG_VOC_ORTHO", "Étude de la langue", "Mémoriser l’orthographe des mots courants", 18),
+
                 // --- CE1 : automatiser la lecture ---
                 ("CE1", "FR_CE1_LECT_COMPLEXES",  "Lecture", "Lire des mots contenant des graphies complexes (ou, on, an, ill)", 1),
                 ("CE1", "FR_CE1_LECT_FLUENCE",    "Lecture", "Lire à voix haute un texte court d'un seul tenant", 2),
@@ -53,6 +60,13 @@ namespace SchoolWebApp.Dal.Seed.Referentiels
                 ("CE1", "FR_CE1_LANG_ALPHABET",   "Étude de la langue", "Chercher un mot dans le dictionnaire", 12),
                 ("CE1", "FR_CE1_ORAL_ECHANGE",    "Oral", "Participer à un échange en écoutant et en répondant au propos", 13),
 
+                ("CE1", "FR_CE1_ORAL_ECOUTER", "Oral", "Comprendre un message oral ou une histoire entendue", 14),
+                ("CE1", "FR_CE1_LECT_DEVENIR", "Lecture", "Choisir un livre et dire pourquoi on l’a aimé", 15),
+                ("CE1", "FR_CE1_LANG_TYPES", "Étude de la langue", "Distinguer les phrases déclarative, interrogative et impérative", 16),
+                ("CE1", "FR_CE1_LANG_NEGATION", "Étude de la langue", "Écrire une phrase à la forme négative", 17),
+                ("CE1", "FR_CE1_LANG_VOC_RELATIONS", "Étude de la langue", "Employer des synonymes et des contraires", 18),
+                ("CE1", "FR_CE1_LANG_VOC_ORTHO", "Étude de la langue", "Mémoriser l’orthographe des mots fréquents", 19),
+
                 // --- CE2 : lire pour comprendre, écrire pour être lu ---
                 ("CE2", "FR_CE2_LECT_FLUENCE",     "Lecture", "Lire à voix haute en respectant la ponctuation et le sens", 1),
                 ("CE2", "FR_CE2_LECT_DOCUMENT",    "Lecture", "Prélever une information dans un texte documentaire", 2),
@@ -66,6 +80,12 @@ namespace SchoolWebApp.Dal.Seed.Referentiels
                 ("CE2", "FR_CE2_LANG_SON_ONT",     "Étude de la langue", "Distinguer son et sont, on et ont", 10),
                 ("CE2", "FR_CE2_LANG_FEMININ",     "Étude de la langue", "Former le féminin et le pluriel des noms et des adjectifs", 11),
                 ("CE2", "FR_CE2_ORAL_PRESENTER",   "Oral", "Présenter un travail devant la classe sans lire ses notes mot à mot", 12),
+
+                ("CE2", "FR_CE2_ORAL_ECOUTER", "Oral", "Comprendre un message oral et en restituer l’essentiel", 13),
+                ("CE2", "FR_CE2_ECR_COPIE_LONGUE", "Écriture", "Copier un texte long en s’aidant de stratégies", 14),
+                ("CE2", "FR_CE2_LANG_FORMES", "Étude de la langue", "Transformer une phrase : négative, exclamative, interrogative", 15),
+                ("CE2", "FR_CE2_LANG_VOC_RELATIONS", "Étude de la langue", "Utiliser synonymes, contraires et familles de mots", 16),
+                ("CE2", "FR_CE2_LANG_VOC_ORTHO", "Étude de la langue", "Mémoriser l’orthographe des mots fréquents et irréguliers", 17),
 
                 // --- CM1 : la phrase se complexifie ---
                 ("CM1", "FR_CM1_LECT_LONG",        "Lecture", "Rendre compte d'un texte long lu en plusieurs fois", 1),
@@ -82,6 +102,17 @@ namespace SchoolWebApp.Dal.Seed.Referentiels
                 ("CM1", "FR_CM1_LANG_FAMILLES",    "Étude de la langue", "Utiliser les familles de mots, les préfixes et les suffixes", 12),
                 ("CM1", "FR_CM1_ORAL_ARGUMENTER",  "Oral", "Donner son avis et l'appuyer sur une raison", 13),
 
+                ("CM1", "FR_CM1_LECT_FLUENCE", "Lecture", "Lire sans effort un texte d’une page, environ 110 mots par minute", 14),
+                ("CM1", "FR_CM1_LECT_GENRES", "Lecture", "Distinguer un poème, une scène de théâtre et un récit", 15),
+                ("CM1", "FR_CM1_LECT_SOURCE", "Lecture", "Donner la nature et la source d’un document", 16),
+                ("CM1", "FR_CM1_ORAL_ECOUTER", "Oral", "Comprendre un reportage ou une interview", 17),
+                ("CM1", "FR_CM1_ECR_REFLEXIF", "Écriture", "Écrire pour apprendre : reformuler une leçon avec ses mots", 18),
+                ("CM1", "FR_CM1_ECR_COPIE", "Écriture", "Copier un texte long de manière fluide et sans erreur", 19),
+                ("CM1", "FR_CM1_LANG_TYPES", "Étude de la langue", "Identifier les trois types de phrases et les transformer", 20),
+                ("CM1", "FR_CM1_LANG_FORMES", "Étude de la langue", "Identifier et employer les formes négative et exclamative", 21),
+                ("CM1", "FR_CM1_LANG_VOC_SYNONYMES", "Étude de la langue", "Employer synonymes et antonymes à bon escient", 22),
+                ("CM1", "FR_CM1_LANG_VOC_ORTHO", "Étude de la langue", "Mémoriser l’orthographe des mots fréquents", 23),
+
                 // --- CM2 : préparer l'entrée au collège ---
                 ("CM2", "FR_CM2_LECT_OEUVRE",      "Lecture", "Lire une œuvre intégrale et en restituer l'essentiel", 1),
                 ("CM2", "FR_CM2_LECT_NARRATEUR",   "Lecture", "Distinguer l'auteur du narrateur et repérer qui raconte", 2),
@@ -95,6 +126,15 @@ namespace SchoolWebApp.Dal.Seed.Referentiels
                 ("CM2", "FR_CM2_LANG_SENS",        "Étude de la langue", "Distinguer sens propre et sens figuré, et les niveaux de langue", 10),
                 ("CM2", "FR_CM2_ORAL_EXPRESSIF",   "Oral", "Lire à voix haute un texte préparé de façon expressive", 11),
                 ("CM2", "FR_CM2_ORAL_DEBAT",       "Oral", "Participer à un débat en répondant à l'argument de l'autre", 12),
+
+                ("CM2", "FR_CM2_LECT_FLUENCE", "Lecture", "Lire un texte long sans effort et sans se reprendre", 13),
+                ("CM2", "FR_CM2_ORAL_ECOUTER", "Oral", "Comprendre un document oral ou médiatique et le restituer", 14),
+                ("CM2", "FR_CM2_ECR_REFLEXIF", "Écriture", "Écrire pour apprendre et mémoriser une leçon", 15),
+                ("CM2", "FR_CM2_ECR_VARIES", "Écriture", "Produire des écrits variés : raconter, expliquer, donner son avis", 16),
+                ("CM2", "FR_CM2_LANG_TYPES", "Étude de la langue", "Identifier les types et les formes de phrases et les transformer", 17),
+                ("CM2", "FR_CM2_LANG_SIMPLE_COMPLEXE", "Étude de la langue", "Différencier phrase simple et phrase complexe", 18),
+                ("CM2", "FR_CM2_LANG_VOC_SYNONYMES", "Étude de la langue", "Employer synonymes, antonymes et mots polysémiques", 19),
+                ("CM2", "FR_CM2_LANG_VOC_ORTHO", "Étude de la langue", "Mémoriser l’orthographe des mots fréquents", 20),
 
                 // --- 6e : le récit, et la grammaire de phrase ---
                 ("SIXIEME", "FR_6E_LECT_OEUVRE",      "Lecture", "Lire une œuvre intégrale et en rendre compte à l'écrit", 1),
@@ -118,6 +158,13 @@ namespace SchoolWebApp.Dal.Seed.Referentiels
                 ("SIXIEME", "FR_6E_ORAL_VOIX_HAUTE",  "Oral", "Lire à voix haute un texte littéraire de façon expressive", 19),
                 ("SIXIEME", "FR_6E_ORAL_RACONTER",    "Oral", "Raconter une histoire à l'oral sans support écrit", 20),
 
+                ("SIXIEME", "FR_6E_LECT_FLUENCE", "Lecture", "Lire un texte long avec fluidité", 21),
+                ("SIXIEME", "FR_6E_ORAL_ECOUTER", "Oral", "Écouter un document et en restituer l’essentiel", 22),
+                ("SIXIEME", "FR_6E_ECR_REFLEXIF", "Écriture", "Écrire pour réfléchir, apprendre et mémoriser", 23),
+                ("SIXIEME", "FR_6E_ECR_MAIN", "Écriture", "Écrire à la main de manière fluide et efficace", 24),
+                ("SIXIEME", "FR_6E_LANG_VOC_RELATIONS", "Étude de la langue", "Établir des relations entre les mots : synonymie, antonymie, polysémie", 25),
+                ("SIXIEME", "FR_6E_LANG_VOC_ORTHO", "Étude de la langue", "Mémoriser l’orthographe des mots étudiés", 26),
+
                 // --- 5e : la phrase complexe et le théâtre ---
                 ("CINQUIEME", "FR_5E_LECT_CHEVALERIE", "Lecture", "Lire un récit chevaleresque et en situer les valeurs", 1),
                 ("CINQUIEME", "FR_5E_LECT_THEATRE",    "Lecture", "Lire une pièce de théâtre : réplique, didascalie, acte, scène", 2),
@@ -139,6 +186,12 @@ namespace SchoolWebApp.Dal.Seed.Referentiels
                 ("CINQUIEME", "FR_5E_ORAL_THEATRE",    "Oral", "Dire un texte de théâtre en le jouant", 18),
                 ("CINQUIEME", "FR_5E_ORAL_EXPOSE",     "Oral", "Présenter un exposé structuré de cinq minutes", 19),
 
+                ("CINQUIEME", "FR_5E_ORAL_ECOUTER", "Oral", "Écouter, comprendre et interpréter un document oral", 20),
+                ("CINQUIEME", "FR_5E_ECR_REFLEXIF", "Écriture", "Écrire pour réfléchir, apprendre et mémoriser", 21),
+                ("CINQUIEME", "FR_5E_ECR_EVALUER", "Écriture", "Évaluer son écrit et savoir le faire évoluer", 22),
+                ("CINQUIEME", "FR_5E_LANG_VOC_RELATIONS", "Étude de la langue", "Identifier les relations entre les mots et enrichir son vocabulaire", 23),
+                ("CINQUIEME", "FR_5E_LANG_ORTHOGRAPHE", "Étude de la langue", "Écrire avec justesse : orthographe lexicale et grammaticale", 24),
+
                 // --- 4e : le regard critique ---
                 ("QUATRIEME", "FR_4E_LECT_REALISME",    "Lecture", "Lire une nouvelle réaliste ou fantastique et en analyser la chute", 1),
                 ("QUATRIEME", "FR_4E_LECT_FANTASTIQUE", "Lecture", "Identifier ce qui crée le doute dans un récit fantastique", 2),
@@ -159,6 +212,10 @@ namespace SchoolWebApp.Dal.Seed.Referentiels
                 ("QUATRIEME", "FR_4E_ORAL_DEBAT",       "Oral", "Soutenir un point de vue dans un débat et répondre aux objections", 17),
                 ("QUATRIEME", "FR_4E_ORAL_RECITER",     "Oral", "Dire un poème de mémoire en respectant son rythme", 18),
 
+                ("QUATRIEME", "FR_4E_ORAL_ECOUTER", "Oral", "Écouter, comprendre et interpréter un document oral", 19),
+                ("QUATRIEME", "FR_4E_ECR_EVALUER", "Écriture", "Évaluer son écrit et savoir le faire évoluer", 20),
+                ("QUATRIEME", "FR_4E_LANG_VOC_RELATIONS", "Étude de la langue", "Identifier les relations entre les mots et enrichir son vocabulaire", 21),
+
                 // --- 3e : préparer le brevet et le lycée ---
                 ("TROISIEME", "FR_3E_LECT_AUTOBIO",     "Lecture", "Lire un récit autobiographique et distinguer auteur, narrateur, personnage", 1),
                 ("TROISIEME", "FR_3E_LECT_GUERRE",      "Lecture", "Analyser un texte qui dit l'expérience de la guerre", 2),
@@ -177,6 +234,10 @@ namespace SchoolWebApp.Dal.Seed.Referentiels
                 ("TROISIEME", "FR_3E_LANG_LEXIQUE",     "Étude de la langue", "Employer un lexique précis plutôt que des mots passe-partout", 15),
                 ("TROISIEME", "FR_3E_ORAL_EXPOSE",      "Oral", "Présenter un projet à l'oral et répondre aux questions du jury", 16),
                 ("TROISIEME", "FR_3E_ORAL_LECTURE",     "Oral", "Lire à voix haute un texte long sans perdre son auditoire", 17),
+
+                ("TROISIEME", "FR_3E_ORAL_ECOUTER", "Oral", "Écouter, comprendre et interpréter un document oral", 18),
+                ("TROISIEME", "FR_3E_ECR_EVALUER", "Écriture", "Évaluer son écrit et savoir le faire évoluer", 19),
+                ("TROISIEME", "FR_3E_LANG_VOC_RELATIONS", "Étude de la langue", "Identifier les relations entre les mots et enrichir son vocabulaire", 20),
 
                 // --- Seconde : les quatre objets d'étude ---
                 ("SECONDE", "FR_2DE_LECT_ROMAN",       "Littérature", "Analyser un roman du XVIIIe au XXIe siècle et son personnage", 1),
@@ -199,6 +260,9 @@ namespace SchoolWebApp.Dal.Seed.Referentiels
                 ("SECONDE", "FR_2DE_LANG_LEXIQUE",     "Étude de la langue", "Analyser un mot par son étymologie et son évolution", 18),
                 ("SECONDE", "FR_2DE_ORAL_LECTURE",     "Oral", "Lire à voix haute un texte littéraire en rendant son sens", 19),
 
+                ("SECONDE", "FR_2DE_LECT_POESIE_ANCIENNE", "Littérature", "Analyser un poème du Moyen Âge au XVIIIe siècle", 20),
+                ("SECONDE", "FR_2DE_LECT_PRESSE", "Littérature", "Analyser un texte de la littérature d’idées et de la presse du XIXe au XXIe siècle", 21),
+
                 // --- Première : l'année des épreuves anticipées ---
                 ("PREMIERE", "FR_1RE_LECT_OEUVRES",     "Littérature", "Connaître les quatre œuvres au programme et leur parcours associé", 1),
                 ("PREMIERE", "FR_1RE_LECT_ROMAN",       "Littérature", "Analyser l'œuvre romanesque au programme", 2),
@@ -219,6 +283,29 @@ namespace SchoolWebApp.Dal.Seed.Referentiels
                 ("PREMIERE", "FR_1RE_LANG_INTERROGATION","Étude de la langue", "Analyser une phrase interrogative pour la question de grammaire", 17),
                 ("PREMIERE", "FR_1RE_LANG_NEGATION",    "Étude de la langue", "Analyser une phrase négative pour la question de grammaire", 18),
                 ("PREMIERE", "FR_1RE_ORAL_EXPRESSION",  "Oral", "S'exprimer douze minutes sans lire ses notes", 19),
+
+                // --- Terminale professionnelle : le français continue ici ---
+                //
+                // Il s'arrête en première dans les voies générale et
+                // technologique, pas au bac professionnel, où il reste une
+                // épreuve. Ces lignes portent le rang 12 mais ne seront vues
+                // que par la terminale professionnelle : VoiesScolaires exclut
+                // le français des deux autres terminales, et la carte applique
+                // cette exclusion avant d'afficher.
+                ("TERMINALE_PRO", "FR_TPRO_LECT_OEUVRE", "Littérature", "Lire une œuvre de la littérature d’idées et en rendre compte", 1),
+                ("TERMINALE_PRO", "FR_TPRO_LECT_GROUPEMENT", "Littérature", "Analyser un groupement de textes et de documents autour d’un thème", 2),
+                ("TERMINALE_PRO", "FR_TPRO_LECT_FORMES", "Littérature", "Reconnaître les formes de la littérature d’idées : essai, apologue, utopie, dystopie", 3),
+                ("TERMINALE_PRO", "FR_TPRO_LECT_METIER", "Littérature", "Lire une étude ou un essai sur le monde du travail et ses évolutions", 4),
+                ("TERMINALE_PRO", "FR_TPRO_ECR_REFLEXIF", "Écriture", "Rédiger un écrit réflexif qui développe un raisonnement", 5),
+                ("TERMINALE_PRO", "FR_TPRO_ECR_HIERARCHISER", "Écriture", "Trier et hiérarchiser ses connaissances à l’appui d’une thèse", 6),
+                ("TERMINALE_PRO", "FR_TPRO_ECR_NUANCER", "Écriture", "Nuancer son point de vue et envisager les arguments contraires", 7),
+                ("TERMINALE_PRO", "FR_TPRO_ECR_COMPTE_RENDU", "Écriture", "Rédiger un compte rendu à partir de paroles prononcées", 8),
+                ("TERMINALE_PRO", "FR_TPRO_ECR_PROFESSIONNEL", "Écriture", "Adapter son écrit au support : courriel et message professionnel", 9),
+                ("TERMINALE_PRO", "FR_TPRO_ORAL_DEBAT", "Oral", "Prendre part à un débat d’idées en formulant sa pensée", 10),
+                ("TERMINALE_PRO", "FR_TPRO_ORAL_REAGIR", "Oral", "S’adapter à son interlocuteur, relancer et préciser sa pensée", 11),
+                ("TERMINALE_PRO", "FR_TPRO_ORAL_PRESENTER", "Oral", "Présenter et justifier une démarche à l’oral", 12),
+                ("TERMINALE_PRO", "FR_TPRO_METH_CONVAINCRE", "Méthode", "Distinguer convaincre, persuader et négocier", 13),
+                ("TERMINALE_PRO", "FR_TPRO_METH_POINTS_VUE", "Méthode", "Confronter des points de vue pour construire un raisonnement personnel", 14),
             };
 
         /// <summary>

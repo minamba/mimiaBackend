@@ -37,11 +37,47 @@ namespace SchoolWebApp.Api.Controllers
         /// vérifiée AVANT toute lecture : un parent ne peut demander que la
         /// fiche d'un enfant rattaché à son compte.
         /// </summary>
+        /// <summary>
+        /// La carte des compétences de l enfant.
+        ///
+        /// UNE TRACE, PAS UN CHEMIN IMPOSÉ. Le professeur laisse l élève
+        /// choisir son sujet — c est une règle écrite en majuscules dans son
+        /// prompt. Cette carte montre ce qui est acquis derrière lui, elle ne
+        /// verrouille rien devant.
+        ///
+        /// LA VISITE DU PARENT NE CONSOMME PAS LA RÉCOMPENSE. Les compétences
+        /// gagnées depuis la dernière fois ne sont marquées comme vues que
+        /// lorsque c est l ENFANT qui ouvre l écran. Sans cette distinction, un
+        /// parent curieux effacerait la seule surprise du produit.
+        /// </summary>
+        [HttpGet("{id:int}/progression")]
+        [SchoolWebApp.Api.Auth.AutoriseEleve]
+        [SwaggerResponse(200, "La carte des compétences.")]
+        [SwaggerResponse(404, "Profil inexistant ou n appartenant pas à ce compte.")]
+        public async Task<IActionResult> GetProgression(
+            int id,
+            [FromServices] IMaitriseRepository maitrises,
+            [FromServices] IChatContexteResolver resolveur,
+            [FromServices] SchoolWebApp.Api.Utils.ICurrentUserAccessor utilisateur,
+            CancellationToken ct)
+        {
+            // La même garde que les autres routes enfant : rend null si le
+            // profil n appartient pas au parent du jeton, ou si un enfant
+            // demande la fiche d un autre.
+            var eleve = await resolveur.ResoudreEleveAsync(id);
+            if (eleve is null) return NotFound();
+
+            var progression = await maitrises.GetProgressionAsync(
+                id, utilisateur.EleveId is not null, ct);
+
+            return progression is null ? NotFound() : Ok(progression);
+        }
+
         [HttpGet("{id:int}/fiche")]
         [SchoolWebApp.Api.Auth.AutoriseEleve]
         [SwaggerResponse(200, "Fiche de l'enfant.", typeof(FicheEleve))]
         [SwaggerResponse(404, "Profil inexistant ou n'appartenant pas à ce compte.")]
-        public async Task<IActionResult> GetFiche(int id, [FromServices] IAdminService ficheService)
+        public async Task<IActionResult> GetFiche(int id, [FromServices] IAdminService ficheService, [FromQuery] int? niveau = null)
         {
             try
             {
@@ -50,7 +86,19 @@ namespace SchoolWebApp.Api.Controllers
                 var eleve = await _eleveBuilder.GetEleveByIdAsync(id);
                 if (eleve is null) return NotFound();
 
-                var fiche = await ficheService.GetFicheEleveAsync(id);
+                // PAS D'ANNÉE DEMANDÉE = SON ANNÉE EN COURS, et non toute sa
+                // scolarité.
+                //
+                // Sans ça, la fiche s'ouvrirait sur l'onglet « en cours » tout
+                // en affichant les données de toutes les années cumulées :
+                // l'onglet dirait « seconde » et les chiffres compteraient aussi
+                // la troisième. Un parent lirait un niveau qui n'existe pas.
+                //
+                // La route d'administration, elle, garde la vue globale : elle
+                // n'a pas de sélecteur, et un aperçu réduit à l'année en cours
+                // sans moyen d'en sortir cacherait le reste du dossier.
+                var fiche = await ficheService.GetFicheEleveAsync(
+                    id, niveau ?? eleve.NiveauScolaireId);
                 return fiche is null ? NotFound() : Ok(fiche);
             }
             catch (Exception ex)

@@ -1307,7 +1307,25 @@ WHERE  role = 'assistant' AND date_creation >= {0}";
         /// incompatibles. Les fusionner produirait un produit cartésien où le
         /// nombre de requêtes serait multiplié par le nombre de compétences.
         /// </summary>
-        public async Task<FicheEleve?> GetFicheEleveAsync(int eleveId)
+        /// <summary>
+        /// La fiche d'un élève, éventuellement réduite à UNE ANNÉE SCOLAIRE.
+        /// </summary>
+        /// <param name="niveauScolaireId">
+        /// L'année à regarder, ou null pour toute la scolarité.
+        ///
+        /// LE FILTRE PORTE SUR TOUTE LA FICHE, pas seulement sur la
+        /// progression : cours suivis, réponses du professeur, dernier cours,
+        /// statistiques par matière, points fragiles et compétences acquises.
+        /// Un suivi de niveau qui mélangerait les années ne dirait rien — et
+        /// afficher « 44 compétences maîtrisées » en cumulant la 6e à la 3e
+        /// laisserait croire à un niveau de 3e qui n'est pas mesuré.
+        ///
+        /// C'EST L'ANNÉE DU TRAVAIL, PAS LE NIVEAU DE LA NOTION. Un élève de 3e
+        /// qui rattrape une notion de CM1 travaille en 3e : sa maîtrise porte
+        /// l'année de l'observation, la compétence garde le niveau où elle
+        /// s'apprend.
+        /// </param>
+        public async Task<FicheEleve?> GetFicheEleveAsync(int eleveId, int? niveauScolaireId = null)
         {
             var fiche = await _context.Eleves
                 .AsNoTracking()
@@ -1321,6 +1339,7 @@ WHERE  role = 'assistant' AND date_creation >= {0}";
                     Sexe = e.Sexe,
                     NiveauCode = e.NiveauScolaire!.Code,
                     NiveauLibelle = e.NiveauScolaire.Libelle,
+                    NiveauOrdre = e.NiveauScolaire.Ordre,
                     NiveauCycle = e.NiveauScolaire.Cycle,
                     ParentId = e.ParentId,
                     ParentMail = e.Parent!.Mail,
@@ -1332,24 +1351,124 @@ WHERE  role = 'assistant' AND date_creation >= {0}";
 
             if (fiche is null) return null;
 
-            // --- activité par matière ---------------------------------------
-            var activite = await _context.Conversations
+            // --- les années qu'il a passées chez nous ------------------------
+            //
+            // Elles viennent de l'HISTORIQUE DES CLASSES, pas du travail lui-même :
+            // c'est la seule source qui dise où l'élève était, y compris sur une
+            // année où il n'a rien fait. Une année vide reste une année, et son
+            // onglet doit exister pour qu'on puisse constater le vide.
+            var intervalles = await _context.HistoriquesClasse
                 .AsNoTracking()
-                .Where(c => c.EleveId == eleveId)
-                .GroupBy(c => c.MatiereId)
+                .Where(h => h.EleveId == eleveId)
+                .OrderBy(h => h.Debut)
+                .Select(h => new { h.NiveauScolaireId, h.Debut, h.Fin })
+                .ToListAsync();
+
+            var annees = intervalles.Select(i => i.NiveauScolaireId).Distinct().ToList();
+
+            // LES BORNES DE L'ANNÉE REGARDÉE.
+            //
+            // Un élève peut avoir occupé la même classe sur deux intervalles —
+            // un redoublement, ou une correction de saisie suivie d'un retour en
+            // arrière. On prend donc du premier début à la dernière fin, ce qui
+            // couvre les deux d'un seul encadrement.
+            //
+            // Sans filtre, les bornes restent ouvertes et la fiche montre tout.
+            var vises = niveauScolaireId is int cible
+                ? intervalles.Where(i => i.NiveauScolaireId == cible).ToList()
+                : [];
+
+            DateTime? depuis = vises.Count > 0 ? vises.Min(i => i.Debut) : null;
+
+            // Une fin nulle veut dire « toujours en cours » : l'année n'est pas
+            // bornée à droite, et tout ce qui arrive aujourd'hui lui appartient.
+            DateTime? jusqua = vises.Count > 0 && vises.All(i => i.Fin != null)
+                ? vises.Max(i => i.Fin)
+                : null;
+
+            var eleveNiveauId = await _context.Eleves
+                .AsNoTracking()
+                .Where(e => e.Id == eleveId)
+                .Select(e => e.NiveauScolaireId)
+                .FirstOrDefaultAsync();
+
+            if (eleveNiveauId != 0 && !annees.Contains(eleveNiveauId)) annees.Add(eleveNiveauId);
+
+            fiche.Classes = await _context.NiveauxScolaires
+                .AsNoTracking()
+                .Where(n => annees.Contains(n.Id))
+                .OrderByDescending(n => n.Ordre)
+                .Select(n => new ClasseFrequentee
+                {
+                    NiveauScolaireId = n.Id,
+                    Libelle = n.Libelle,
+                    Ordre = n.Ordre,
+                    Courante = n.Id == eleveNiveauId,
+                })
+                .ToListAsync();
+
+            // --- activité par matière ---------------------------------------
+            //
+            // UN COURS SUIVI = UNE SÉANCE, et non une conversation. Le fil d'une
+            // matière traverse les années : le compter dans une seule serait
+            // faux, et « 6 cours » — une par matière — ne changerait jamais
+            // d'une année sur l'autre. Les séances, elles, sont datées et
+            // parlent : « 49 cours suivis en 3e » dit quelque chose.
+            var seancesParMatiere = await _context.RapportsSeance
+                .AsNoTracking()
+                .Where(r => r.EleveId == eleveId)
+                .Where(r => depuis == null || r.DateCreation >= depuis)
+                .Where(r => jusqua == null || r.DateCreation < jusqua)
+                .GroupBy(r => r.MatiereId)
+                .Select(g => new { MatiereId = g.Key, NombreCours = g.Count() })
+                .ToListAsync();
+
+            // Les messages du professeur, datés eux aussi. C'est ce qui évite
+            // d'avoir à estampiller chaque message à l'écriture — plus de mille
+            // par matière et par élève, sur le chemin le plus chaud du produit.
+            var messagesParMatiere = await _context.Messages
+                .AsNoTracking()
+                .Where(m => m.Conversation!.EleveId == eleveId && m.Role == "assistant")
+                .Where(m => depuis == null || m.DateCreation >= depuis)
+                .Where(m => jusqua == null || m.DateCreation < jusqua)
+                .GroupBy(m => m.Conversation!.MatiereId)
                 .Select(g => new
                 {
                     MatiereId = g.Key,
-                    NombreCours = g.Count(),
-                    NombreRequetes = g.SelectMany(c => c.Messages).Count(m => m.Role == "assistant"),
-                    DernierCours = g.Max(c => c.DateDernierMessage ?? c.DateCreation)
+                    NombreRequetes = g.Count(),
+                    DernierCours = g.Max(x => x.DateCreation)
                 })
                 .ToListAsync();
+
+            var activite = messagesParMatiere
+                .Select(m => new
+                {
+                    m.MatiereId,
+                    NombreCours = seancesParMatiere
+                        .FirstOrDefault(s => s.MatiereId == m.MatiereId)?.NombreCours ?? 0,
+                    m.NombreRequetes,
+                    DernierCours = (DateTime?)m.DernierCours
+                })
+                .Concat(seancesParMatiere
+                    .Where(s => !messagesParMatiere.Any(m => m.MatiereId == s.MatiereId))
+                    .Select(s => new
+                    {
+                        s.MatiereId,
+                        s.NombreCours,
+                        NombreRequetes = 0,
+                        DernierCours = (DateTime?)null
+                    }))
+                .ToList();
 
             // --- maîtrise par matière ---------------------------------------
             var maitrise = await _context.MaitrisesEleves
                 .AsNoTracking()
                 .Where(m => m.EleveId == eleveId)
+                // La maîtrise est un ÉTAT, pas un événement : on la rattache à
+                // l'année de sa dernière observation, qui est le moment où
+                // l'élève y a effectivement travaillé.
+                .Where(m => depuis == null || m.DerniereEvaluation >= depuis)
+                .Where(m => jusqua == null || m.DerniereEvaluation < jusqua)
                 .GroupBy(m => m.Competence!.MatiereId)
                 .Select(g => new
                 {
@@ -1437,6 +1556,12 @@ WHERE  role = 'assistant' AND date_creation >= {0}";
             var seances = await _context.Conversations
                 .AsNoTracking()
                 .Where(c => c.EleveId == eleveId)
+                // Les fils qui ont VÉCU pendant l'année, et non ceux qui y ont
+                // été ouverts : une conversation de maths commencée en 3e et
+                // poursuivie en 2de appartient aux deux.
+                .Where(c => c.Messages.Any(m =>
+                    (depuis == null || m.DateCreation >= depuis)
+                    && (jusqua == null || m.DateCreation < jusqua)))
                 .OrderByDescending(c => c.DateDernierMessage ?? c.DateCreation)
                 .Take(10)
                 .Select(c => new SeanceEleve
@@ -1463,6 +1588,8 @@ WHERE  role = 'assistant' AND date_creation >= {0}";
             var competences = await _context.MaitrisesEleves
                 .AsNoTracking()
                 .Where(x => x.EleveId == eleveId)
+                .Where(x => depuis == null || x.DerniereEvaluation >= depuis)
+                .Where(x => jusqua == null || x.DerniereEvaluation < jusqua)
                 .Select(x => new CompetenceEleve
                 {
                     CompetenceId = x.CompetenceId,
@@ -1529,7 +1656,16 @@ WHERE  role = 'assistant' AND date_creation >= {0}";
             if (prenom is not null) entite.Prenom = prenom;
             if (nom is not null) entite.Nom = nom;
             if (age is > 0) entite.Age = age.Value;
-            if (niveauScolaireId is > 0) entite.NiveauScolaireId = niveauScolaireId.Value;
+
+            // AVANT d'écraser la classe, comme côté parent : une fois la colonne
+            // remplacée, l'ancienne est perdue et l'intervalle ne peut plus être
+            // fermé. Le helper ne fait rien si la classe est inchangée.
+            if (niveauScolaireId is > 0)
+            {
+                await HistoriqueClasse.ChangerAsync(_context, entite.Id, niveauScolaireId.Value);
+                entite.NiveauScolaireId = niveauScolaireId.Value;
+            }
+
             if (sexe is not null and not Sexe.NonPrecise) entite.Sexe = sexe.Value;
 
             await _context.SaveChangesAsync();

@@ -37,6 +37,11 @@ namespace SchoolWebApp.Dal.Seed.Referentiels
                 ("CM1", "HG_CM1_EMC_SYMBOLES",     "EMC", "Identifier les symboles de la République et leur sens", 11),
                 ("CM1", "HG_CM1_METH_VOCABULAIRE", "Méthode", "Employer le vocabulaire de la chronologie : siècle, décennie, avant et après J.-C.", 12),
 
+                ("CM1", "HG_CM1_HIST_MONARCHIE", "Histoire", "Caractériser la monarchie en France aux XVIe et XVIIe siècles", 13),
+                ("CM1", "HG_CM1_HIST_1789", "Histoire", "Raconter 1789, une année révolutionnaire", 14),
+                ("CM1", "HG_CM1_HIST_QUOTIDIEN", "Histoire", "Décrire la vie quotidienne au Moyen Âge", 15),
+                ("CM1", "HG_CM1_GEO_MODES_VIE", "Géographie", "Comparer des modes de vie dans le monde", 16),
+
                 // --- CM2 : de la Révolution à aujourd'hui ---
                 ("CM2", "HG_CM2_HIST_REVOLUTION",  "Histoire", "Expliquer ce que la Révolution française change dans la société", 1),
                 ("CM2", "HG_CM2_HIST_XIXE",        "Histoire", "Caractériser l'âge industriel et ses transformations sociales", 2),
@@ -50,6 +55,10 @@ namespace SchoolWebApp.Dal.Seed.Referentiels
                 ("CM2", "HG_CM2_EMC_LAICITE",      "EMC", "Expliquer ce qu'est la laïcité à l'école", 10),
                 ("CM2", "HG_CM2_EMC_ENGAGEMENT",   "EMC", "Distinguer un droit d'un devoir dans la vie collective", 11),
                 ("CM2", "HG_CM2_METH_REPONSE",     "Méthode", "Rédiger une réponse complète en réutilisant les mots de la question", 12),
+
+                ("CM2", "HG_CM2_HIST_EMPIRE", "Histoire", "Situer le passage de la République à l’Empire (1792-1815)", 13),
+                ("CM2", "HG_CM2_HIST_DEPUIS_1945", "Histoire", "Décrire les transformations de la France depuis 1945", 14),
+                ("CM2", "HG_CM2_HIST_DEUX_REPUBLIQUES", "Histoire", "Distinguer la IIe et la IIIe République", 15),
 
                 // --- 6e : de la préhistoire à l'Empire romain ---
                 ("SIXIEME", "HG_6E_HIST_PREHISTOIRE","Histoire", "Situer les premières traces de vie humaine et la révolution néolithique", 1),
@@ -91,6 +100,9 @@ namespace SchoolWebApp.Dal.Seed.Referentiels
                 ("CINQUIEME", "HG_5E_METH_CROQUIS",   "Méthode", "Réaliser un croquis simple avec une légende organisée", 17),
                 ("CINQUIEME", "HG_5E_METH_CRITIQUE",  "Méthode", "Identifier le point de vue de l'auteur d'un document", 18),
 
+                ("CINQUIEME", "HG_5E_HIST_BYZANCE", "Histoire", "Situer Byzance et l’Europe carolingienne, des mondes en contact", 19),
+                ("CINQUIEME", "HG_5E_HIST_EMPIRES_XVI", "Histoire", "Décrire le monde au temps de Charles Quint et de Soliman", 20),
+
                 // --- 4e : le XVIIIe, la révolution industrielle, la mondialisation ---
                 ("QUATRIEME", "HG_4E_HIST_LUMIERES",  "Histoire", "Caractériser l'esprit des Lumières et sa diffusion", 1),
                 ("QUATRIEME", "HG_4E_HIST_COMMERCE",  "Histoire", "Expliquer le commerce atlantique et la traite négrière", 2),
@@ -109,6 +121,11 @@ namespace SchoolWebApp.Dal.Seed.Referentiels
                 ("QUATRIEME", "HG_4E_METH_STATISTIQUE","Méthode", "Lire un graphique ou un tableau statistique et en tirer une idée", 15),
                 ("QUATRIEME", "HG_4E_METH_PLAN",      "Méthode", "Organiser un développement construit en deux ou trois parties", 16),
                 ("QUATRIEME", "HG_4E_METH_CROQUIS",   "Méthode", "Réaliser un croquis avec figurés adaptés et légende hiérarchisée", 17),
+
+                ("QUATRIEME", "HG_4E_HIST_VOTER", "Histoire", "Retracer la difficile conquête du droit de vote de 1815 à 1870", 18),
+                ("QUATRIEME", "HG_4E_HIST_FEMMES_XIX", "Histoire", "Décrire les conditions féminines dans la société du XIXe siècle", 19),
+                ("QUATRIEME", "HG_4E_GEO_ETATS_UNIS", "Géographie", "Expliquer l’adaptation du territoire des États-Unis à la mondialisation", 20),
+                ("QUATRIEME", "HG_4E_GEO_AFRIQUE", "Géographie", "Décrire les dynamiques d’un grand ensemble géographique africain", 21),
 
                 // --- 3e : le XXe siècle et la France d'aujourd'hui ---
                 ("TROISIEME", "HG_3E_HIST_1GM",       "Histoire", "Expliquer pourquoi la Première Guerre mondiale est une guerre totale", 1),
@@ -131,6 +148,10 @@ namespace SchoolWebApp.Dal.Seed.Referentiels
                 ("TROISIEME", "HG_3E_METH_DOCUMENT",  "Méthode", "Analyser un document en le replaçant dans son contexte", 18),
                 ("TROISIEME", "HG_3E_METH_CARTE",     "Méthode", "Compléter la carte de la France ou de l'Europe demandée au brevet", 19),
 
+                ("TROISIEME", "HG_3E_HIST_PROJET_EUROPEEN", "Histoire", "Expliquer l’affirmation et la mise en œuvre du projet européen", 20),
+                ("TROISIEME", "HG_3E_HIST_APRES_1989", "Histoire", "Caractériser les enjeux et les conflits du monde après 1989", 21),
+                ("TROISIEME", "HG_3E_HIST_REFONDER", "Histoire", "Expliquer comment la République est refondée entre 1944 et 1947", 22),
+
                 // --- Seconde : les grandes ruptures ---
                 ("SECONDE", "HG_2DE_HIST_MEDITERRANEE","Histoire", "Caractériser la Méditerranée antique et ses héritages", 1),
                 ("SECONDE", "HG_2DE_HIST_MEDIEVALE",  "Histoire", "Expliquer les échanges et les affrontements en Méditerranée médiévale", 2),
@@ -152,6 +173,9 @@ namespace SchoolWebApp.Dal.Seed.Referentiels
                 ("SECONDE", "HG_2DE_METH_CROQUIS",    "Méthode", "Réaliser un croquis de géographie avec une légende organisée", 18),
                 ("SECONDE", "HG_2DE_METH_ECHELLES",   "Méthode", "Changer d'échelle pour nuancer une analyse", 19),
 
+                ("SECONDE", "HG_2DE_HIST_SOCIETE_ORDRES", "Histoire", "Analyser les tensions et les mutations de la société d’ordres", 20),
+                ("SECONDE", "HG_2DE_HIST_LUMIERES", "Histoire", "Expliquer les Lumières et le développement des sciences", 21),
+
                 // --- Première : États, démocratie, mondialisation ---
                 ("PREMIERE", "HG_1RE_HIST_NATIONS",   "Histoire", "Expliquer l'affirmation des nations en Europe au XIXe siècle", 1),
                 ("PREMIERE", "HG_1RE_HIST_INDUSTRIE", "Histoire", "Analyser les transformations sociales de l'industrialisation", 2),
@@ -172,6 +196,14 @@ namespace SchoolWebApp.Dal.Seed.Referentiels
                 ("PREMIERE", "HG_1RE_METH_ARGUMENT",  "Méthode", "Appuyer chaque argument sur un exemple précis et daté", 17),
                 ("PREMIERE", "HG_1RE_METH_INTRO",     "Méthode", "Rédiger une introduction qui pose le sujet, les bornes et la problématique", 18),
 
+                ("PREMIERE", "HG_1RE_HIST_REVOLUTION_NATION", "Histoire", "Expliquer comment la Révolution et l’Empire forgent une nouvelle conception de la nation", 19),
+                ("PREMIERE", "HG_1RE_HIST_RESTAURATION", "Histoire", "Analyser l’Europe entre restauration et révolution, de 1814 à 1848", 20),
+                ("PREMIERE", "HG_1RE_HIST_AGE_DEMOCRATIQUE", "Histoire", "Analyser la Deuxième République et le Second Empire", 21),
+                ("PREMIERE", "HG_1RE_HIST_NOUVEAUX_ETATS", "Histoire", "Expliquer la construction de nouveaux États par la guerre et la diplomatie", 22),
+                ("PREMIERE", "HG_1RE_HIST_SOCIETE_1914", "Histoire", "Analyser les permanences et les mutations de la société française jusqu’en 1914", 23),
+                ("PREMIERE", "HG_1RE_HIST_EMBRASEMENT", "Histoire", "Retracer l’embrasement mondial de 1914 et ses grandes étapes", 24),
+                ("PREMIERE", "HG_1RE_HIST_SORTIR_GUERRE", "Histoire", "Analyser la tentative de construction d’un ordre des nations après 1918", 25),
+
                 // --- Terminale : le monde depuis 1945 ---
                 ("TERMINALE", "HG_TLE_HIST_1945",     "Histoire", "Expliquer la reconstruction d'un ordre mondial après 1945", 1),
                 ("TERMINALE", "HG_TLE_HIST_GUERRE_FROIDE","Histoire", "Analyser les formes et les crises de la guerre froide", 2),
@@ -190,6 +222,12 @@ namespace SchoolWebApp.Dal.Seed.Referentiels
                 ("TERMINALE", "HG_TLE_METH_ETUDE_DOC","Méthode", "Conduire une étude critique en confrontant deux documents", 15),
                 ("TERMINALE", "HG_TLE_METH_CROQUIS",  "Méthode", "Réaliser un croquis complet de géographie en temps limité", 16),
                 ("TERMINALE", "HG_TLE_METH_REPERES",  "Méthode", "Mobiliser les repères chronologiques et spatiaux du programme", 17),
+                ("TERMINALE", "HG_TLE_HIST_CRISE_1929", "Histoire", "Analyser l’impact de la crise de 1929 sur les sociétés et les régimes", 19),
+                ("TERMINALE", "HG_TLE_HIST_TOTALITAIRES", "Histoire", "Caractériser les régimes totalitaires de l’entre-deux-guerres", 20),
+                ("TERMINALE", "HG_TLE_HIST_2GM", "Histoire", "Analyser la Seconde Guerre mondiale et ses basculements", 21),
+                ("TERMINALE", "HG_TLE_HIST_CONSTRUCTION_EU", "Histoire", "Analyser la construction européenne, ses élargissements et ses remises en question", 22),
+                ("TERMINALE", "HG_TLE_HIST_FRANCE_1974", "Histoire", "Analyser le tournant social et politique de la France de 1974 à 1988", 23),
+
                 ("TERMINALE", "HG_TLE_METH_NUANCER",  "Méthode", "Nuancer une thèse en confrontant les échelles et les acteurs", 18),
             };
 

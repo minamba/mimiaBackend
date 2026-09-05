@@ -25,6 +25,13 @@ namespace SchoolWebApp.Domain.Models
 
         public string? NiveauLibelle { get; set; }
 
+        /// <summary>
+        /// Le rang de sa classe. Sert à ouvrir la fiche sur l'année en cours,
+        /// même quand elle est encore vide — un élève qui vient de passer en 3e
+        /// n'a rien en 3e, et c'est pourtant là qu'on veut le suivre.
+        /// </summary>
+        public int NiveauOrdre { get; set; }
+
         public string? NiveauCycle { get; set; }
 
         // ------------------------------------------------------------ parent
@@ -91,6 +98,30 @@ namespace SchoolWebApp.Domain.Models
         /// avec la courbe des notes et l'état des notions.
         /// </summary>
         public IEnumerable<ProgressionMatiere> Progression { get; set; } = [];
+
+        /// <summary>
+        /// LES ANNÉES QUE L'ÉLÈVE A RÉELLEMENT PASSÉES CHEZ NOUS.
+        ///
+        /// Elles ne se déduisent pas du niveau des notions travaillées : un
+        /// élève de 3e qui rattrape une notion de CM1 n'a pas fait son CM1 ici.
+        /// La liste vient donc de ce qui porte l'année du TRAVAIL — cours,
+        /// évaluations, observations de maîtrise — plus sa classe actuelle, qui
+        /// figure toujours même vide : c'est là qu'on veut ouvrir sa fiche le
+        /// jour où il change de classe.
+        /// </summary>
+        public IEnumerable<ClasseFrequentee> Classes { get; set; } = [];
+    }
+
+    public class ClasseFrequentee
+    {
+        public int NiveauScolaireId { get; set; }
+
+        public string? Libelle { get; set; }
+
+        public int Ordre { get; set; }
+
+        /// <summary>Son année en cours. Une seule à la fois, forcément.</summary>
+        public bool Courante { get; set; }
     }
 
     /// <summary>Activité et niveau d'un élève dans une matière donnée.</summary>

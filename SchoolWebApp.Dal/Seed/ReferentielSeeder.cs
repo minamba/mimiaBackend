@@ -15,6 +15,132 @@ namespace SchoolWebApp.Dal.Seed
     /// diagnostic de remonter d'un blocage en 6e vers une lacune de CM1 :
     /// sans les niveaux amont, une lacune ancienne n'aurait aucune compétence
     /// à laquelle se rattacher, et le professeur s'acharnerait sur l'aval.
+    ///
+    /// ================== PROVENANCE DU RÉFÉRENTIEL ==================
+    ///
+    /// VÉRIFIÉ LE 5 SEPTEMBRE 2026 contre les textes officiels, matière par
+    /// matière et niveau par niveau. CE TABLEAU SE MET À JOUR, il ne se
+    /// recopie pas : une ligne périmée ici est un élève qui ne se retrouve
+    /// pas dans son année.
+    ///
+    ///   MATIÈRE / NIVEAUX          TEXTE                    EN VIGUEUR DEPUIS
+    ///   ------------------------------------------------------------------
+    ///   Français et maths
+    ///     CP, CE1, CE2             BO spécial n° 40         rentrée 2025
+    ///                              du 31/10/2024
+    ///     CM1, 6e                  BO n° 16 du 17/04/2025   rentrée 2025
+    ///     CM2                      BO n° 16 du 17/04/2025   rentrée 2026
+    ///     5e                       BO n° 10 de 2026         rentrée 2026
+    ///     4e                       BO n° 10 de 2026         rentrée 2027  (*)
+    ///     3e                       BO n° 10 de 2026         rentrée 2028  (*)
+    ///
+    ///   Langues vivantes
+    ///     CP, CM1                  BO n° 12 de 2026         rentrée 2026
+    ///     CE1, CE2, CM2            BO n° 12 de 2026         rentrée 2027  (*)
+    ///     5e                       BO n° 22 du 29/05/2025   rentrée 2026
+    ///     4e                       BO n° 22 du 29/05/2025   rentrée 2027  (*)
+    ///     3e                       BO n° 22 du 29/05/2025   rentrée 2028  (*)
+    ///     Lycée GT                 BO n° 22 du 29/05/2025   rentrée 2026
+    ///
+    ///   Histoire-géographie
+    ///     CM1                      BO n° 22 du 28/05/2026   rentrée 2026
+    ///     CM2, 6e                  BO n° 22 du 28/05/2026   rentrée 2027  (*)
+    ///     Cycle 4                  programmes de 2020, projet de refonte
+    ///                              en cours — rien à changer aujourd'hui
+    ///
+    ///   Sciences et technologie
+    ///     CP, CM1                  BO n° 24 du 11/06/2026   rentrée 2026
+    ///     CE1                      BO n° 24 du 11/06/2026   rentrée 2027  (*)
+    ///     CE2, CM2, 6e             ancien programme encore en vigueur
+    ///                              en 2026-2027
+    ///
+    ///   Physique-chimie et SVT (cycle 4)
+    ///     5e, 4e, 3e               programmes en vigueur ; de nouveaux
+    ///                              textes étaient en consultation nationale
+    ///                              en mai-juin 2026 — À SURVEILLER
+    ///
+    ///   Lycée général et technologique (toutes matières)
+    ///     2de, 1re, Tle            programmes de 2019, en vigueur en
+    ///                              2026-2027. Un nouveau programme de maths
+    ///                              de terminale entre en application à la
+    ///                              rentrée 2027 — À FAIRE AVANT.
+    ///
+    ///   (*) Ces niveaux suivent ENCORE le programme précédent cette année.
+    ///       Les compétences du nouveau texte y ont malgré tout été ajoutées
+    ///       quand elles étaient déjà valables sous l'ancien : rien n'a été
+    ///       retiré, et rien d'inconnu n'est montré en avance.
+    ///
+    /// CE QUI AVAIT ÉTÉ MANQUÉ, et qui dit ce qu'il faut regarder la
+    /// prochaine fois. Le référentiel décrivait les programmes d'AVANT la
+    /// refonte de 2025, sur sept niveaux du CP à la 5e. Manquaient entre
+    /// autres : les fractions au CE1 et au CE2, les nombres ordinaux au CP,
+    /// la typologie des problèmes arithmétiques, l'algèbre au cours moyen et
+    /// en 6e, les probabilités au CM1 et au CM2, l'organisation de données au
+    /// cycle 2 ; en français, les formes de phrase, la synonymie et
+    /// l'antonymie, la polysémie, « écouter pour comprendre » et les écrits
+    /// réflexifs — six notions qui n'apparaissaient à AUCUN niveau ; en
+    /// anglais, les paliers du CECRL et les axes culturels de l'année.
+    ///
+    /// La leçon tient en une ligne : un programme scolaire change, et il
+    /// change par niveau et par date, pas d'un bloc.
+    ///
+    /// ---------------------------------------------------------------
+    ///
+    /// DEUXIÈME PASSE, LE 5 SEPTEMBRE 2026 : LES MATIÈRES DONT LE
+    /// PROGRAMME N'AVAIT PAS CHANGÉ.
+    ///
+    /// « Le programme n'a pas changé » ne dit pas « le référentiel le
+    /// décrit correctement ». Ces matières-là n'étaient pas périmées,
+    /// elles étaient NON VÉRIFIÉES — et la vérification a trouvé :
+    ///
+    ///   — physique-chimie : l'attendu de fin de cycle « Décrire
+    ///     l'organisation de la matière dans l'Univers » n'était
+    ///     représenté par aucune compétence ; manquaient aussi la
+    ///     classification périodique, les gaz à effet de serre, et le
+    ///     couple signal-information, concept-titre d'un thème entier ;
+    ///   — mathématiques : « Vocabulaire ensembliste et logique » ne
+    ///     figurait à AUCUN des trois niveaux du lycée, alors qu'il est
+    ///     au programme des trois. C'est le raisonnement lui-même ;
+    ///   — histoire-géographie de terminale : le programme ouvre en
+    ///     1929 (crise, totalitarismes, Seconde Guerre mondiale) ; le
+    ///     référentiel faisait commencer l'année en 1945. L'élève ne
+    ///     trouvait rien du premier chapitre traité en septembre ;
+    ///   — français de seconde : deux périodes étaient INTERVERTIES
+    ///     avec celles de première — poésie et littérature d'idées ;
+    ///   — histoire de première : quatre chapitres couverts sur onze.
+    ///     Manquaient la Révolution française comme NOUVELLE CONCEPTION
+    ///     DE LA NATION — elle n'existait qu'en 4e, comme récit
+    ///     d'événements — et les deux chapitres qui encadrent la
+    ///     Grande Guerre. Le texte est l'ANNEXE 2 de MENE1901577A :
+    ///     un même arrêté porte les trois classes, et le script n'en
+    ///     lisait que la première annexe. On liste TOUTES les annexes
+    ///     d'un arrêté avant de conclure qu'un texte n'existe pas ;
+    ///   — philosophie : rien. Les dix-sept notions étaient déjà là,
+    ///     rangées selon les trois perspectives du programme. Une
+    ///     vérification ne trouve pas toujours un trou, et c'est une
+    ///     information aussi.
+    ///
+    /// CE QUI RESTE À CONFRONTER À UN TEXTE :
+    ///
+    ///   — les sciences en CE1, CE2, CM2 et 6e, et l'anglais en CE1,
+    ///     CE2 et CM2, face aux programmes de 2026 : ces niveaux
+    ///     suivent encore l'ancien texte et basculeront en 2027.
+    ///
+    /// L'anglais a été confronté en entier le 5 septembre 2026 : paliers
+    /// du CECRL, axes culturels, et outils linguistiques. Le référentiel
+    /// y était VERBAL — le verbe était couvert à tous les niveaux, mais
+    /// les adverbes et groupes prépositionnels, catégorie entière du
+    /// programme à sept niveaux sur huit, n'apparaissaient nulle part ;
+    /// le groupe nominal se réduisait au génitif de 6e ; la phonologie
+    /// était absente de TOUT le lycée, alors que le baccalauréat comporte
+    /// une épreuve orale. La médiation — expliciter un message pour
+    /// autrui — manquait également : c'est une activité langagière à part
+    /// entière du CECRL, ni compréhension ni expression.
+    ///
+    /// ENFIN, DEUX LIMITES QUI NE SONT PAS DES OUBLIS MAIS DES CHOIX :
+    /// les compétences ajoutées lors de ces deux passes n'ont PAS de
+    /// prérequis — elles s'affichent, mais le diagnostic remontant ne
+    /// les traverse pas encore — et aucun professeur ne les a relues.
     /// </summary>
     public static class ReferentielSeeder
     {

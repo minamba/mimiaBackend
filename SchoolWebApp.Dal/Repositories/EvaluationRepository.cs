@@ -37,6 +37,21 @@ namespace SchoolWebApp.Dal.Repositories
 
             if (conversation is null) return null;
 
+            // LA CLASSE EST LUE MAINTENANT, PAS À LA RELECTURE.
+            //
+            // Une note appartient à l'année où elle a été prise. Si on se
+            // contentait de la classe actuelle de l'élève au moment d'afficher
+            // la fiche, une note de 4e deviendrait une note de 3e le jour où le
+            // parent change la classe — et le suivi de niveau, faux. Le
+            // changement de classe est une simple mise à jour de colonne qui ne
+            // laisse aucune trace datée : ce qui n'est pas capturé ici est perdu
+            // pour toujours.
+            var niveauId = await _context.Eleves
+                .AsNoTracking()
+                .Where(e => e.Id == eleveId)
+                .Select(e => e.NiveauScolaireId)
+                .FirstOrDefaultAsync(ct);
+
             var liste = questions?.ToList() ?? [];
 
             var evaluation = new Evaluation
@@ -49,7 +64,12 @@ namespace SchoolWebApp.Dal.Repositories
                 Remarque = Tronquer(remarque, 2000),
                 ARevoir = Tronquer(aRevoir, 1000),
                 Detail = liste.Count == 0 ? null : JsonSerializer.Serialize(liste, JsonOptions),
-                DateCreation = DateTime.UtcNow
+                DateCreation = DateTime.UtcNow,
+
+                // Zéro plutôt que null signifierait « niveau inconnu » avec un
+                // identifiant qui n'existe pas : on garde null, qui a déjà ce
+                // sens dans la colonne.
+                NiveauScolaireId = niveauId == 0 ? null : niveauId
             };
 
             _context.Evaluations.Add(evaluation);
@@ -86,6 +106,7 @@ namespace SchoolWebApp.Dal.Repositories
             int taille,
             int? matiereId = null,
             bool duPlusAncien = false,
+            int? niveauScolaireId = null,
             CancellationToken ct = default)
         {
             var lesSiennes = _context.Evaluations
@@ -98,6 +119,17 @@ namespace SchoolWebApp.Dal.Repositories
             // afficherait « aucune » pour un élève qui en a trente.
             if (matiereId is int matiere)
                 lesSiennes = lesSiennes.Where(e => e.MatiereId == matiere);
+
+            // L'ANNÉE SCOLAIRE, encadrée par des DATES et non par une colonne :
+            // c'est l'historique des classes qui dit quand l'élève y était.
+            // Filtrée en base pour la même raison que la matière — le compte
+            // affiché doit suivre le filtre, sans quoi « 10 sur 214 » parlerait
+            // de toute la scolarité sous un onglet qui n'en montre qu'une année.
+            var (debutAnnee, finAnnee) = await BornesAnnee.ResoudreAsync(
+                _context, eleveId, niveauScolaireId, ct);
+
+            if (debutAnnee is DateTime d) lesSiennes = lesSiennes.Where(e => e.DateCreation >= d);
+            if (finAnnee is DateTime f) lesSiennes = lesSiennes.Where(e => e.DateCreation < f);
 
             // Compté sur l'historique ENTIER (filtre compris), pas sur la
             // tranche : c'est ce qui permet d'écrire « 10 sur 214 », et le
@@ -159,11 +191,15 @@ namespace SchoolWebApp.Dal.Repositories
         /// cartésien de l'une par l'autre.
         /// </summary>
         public async Task<IEnumerable<ProgressionMatiere>> GetProgressionAsync(
-            int eleveId, CancellationToken ct = default)
+            int eleveId, int? niveauScolaireId = null, CancellationToken ct = default)
         {
+            var bornes = await BornesAnnee.ResoudreAsync(_context, eleveId, niveauScolaireId, ct);
+
             var notes = await _context.Evaluations
                 .AsNoTracking()
                 .Where(e => e.EleveId == eleveId)
+                .Where(e => bornes.Depuis == null || e.DateCreation >= bornes.Depuis)
+                .Where(e => bornes.Jusqua == null || e.DateCreation < bornes.Jusqua)
                 .OrderBy(e => e.DateCreation)
                 .Select(e => new
                 {
@@ -172,7 +208,9 @@ namespace SchoolWebApp.Dal.Repositories
                     {
                         Date = e.DateCreation,
                         Note = e.Note,
-                        Notion = e.Notion
+                        Notion = e.Notion,
+                        NiveauLibelle = e.NiveauScolaire!.Libelle,
+                        NiveauOrdre = e.NiveauScolaire!.Ordre
                     }
                 })
                 .ToListAsync(ct);
@@ -180,6 +218,10 @@ namespace SchoolWebApp.Dal.Repositories
             var notions = await _context.MaitrisesEleves
                 .AsNoTracking()
                 .Where(m => m.EleveId == eleveId)
+                // La maîtrise est un ÉTAT : on la rattache à l'année de sa
+                // dernière observation, le moment où l'élève y a travaillé.
+                .Where(m => bornes.Depuis == null || m.DerniereEvaluation >= bornes.Depuis)
+                .Where(m => bornes.Jusqua == null || m.DerniereEvaluation < bornes.Jusqua)
                 .OrderByDescending(m => m.Score)
                 .Select(m => new
                 {
@@ -190,6 +232,7 @@ namespace SchoolWebApp.Dal.Repositories
                         Libelle = m.Competence.Libelle,
                         Domaine = m.Competence.Domaine,
                         NiveauLibelle = m.Competence.NiveauScolaire!.Libelle,
+                        NiveauOrdre = m.Competence.NiveauScolaire!.Ordre,
                         Score = m.Score,
                         Confiance = m.Confiance,
                         NombreObservations = m.NombreObservations,

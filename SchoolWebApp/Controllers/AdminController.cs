@@ -379,11 +379,11 @@ namespace SchoolWebApp.Api.Controllers
         [HttpGet("eleves/{id:int}/fiche")]
         [SwaggerResponse(200, "Fiche de l'élève.", typeof(FicheEleve))]
         [SwaggerResponse(404, "Élève inexistant.")]
-        public async Task<IActionResult> GetFicheEleve(int id)
+        public async Task<IActionResult> GetFicheEleve(int id, [FromQuery] int? niveau = null)
         {
             try
             {
-                var fiche = await _adminService.GetFicheEleveAsync(id);
+                var fiche = await _adminService.GetFicheEleveAsync(id, niveau);
                 return fiche is null ? NotFound() : Ok(fiche);
             }
             catch (Exception ex)
@@ -424,6 +424,79 @@ namespace SchoolWebApp.Api.Controllers
             [FromServices] IRapportRepository rapports) =>
             await Executer(() => rapports.GetHistoriqueAsync(
                 id, curseur, Borner(taille), matiereId, ancien));
+
+        /// <summary>
+        /// Le détail d'un compte rendu de séance.
+        /// </summary>
+        /// <remarks>
+        /// POURQUOI UN DOUBLON DE LA ROUTE PARENT.
+        ///
+        /// La fiche est le MÊME composant des deux côtés. Ses listes étaient
+        /// déjà paramétrées — l'administration y injecte ses propres routes —
+        /// mais l'ouverture du détail restait figée sur `/eleves/...`, dont la
+        /// première ligne vérifie que l'enfant appartient au parent du jeton.
+        ///
+        /// Un administrateur consultant une autre famille échouait donc à cette
+        /// garde : la liste des séances s'affichait, et le bouton « Voir le
+        /// rapport » renvoyait 404. Le symptôme désignait mal sa cause — on
+        /// cherchait un rapport manquant, c'était un contrôle d'accès.
+        ///
+        /// La garde n'est pas relâchée pour autant : elle est simplement la
+        /// bonne ici — `[Authorize]` d'administrateur au lieu de l'appartenance
+        /// au parent. Le filtre sur l'élève reste dans la requête.
+        /// </remarks>
+        [HttpGet("eleves/{id:int}/rapports/{rapportId:int}")]
+        [SwaggerResponse(200, "Le rapport.", typeof(RapportEleve))]
+        [SwaggerResponse(404, "Rapport inexistant, ou n'appartenant pas à cet élève.")]
+        /// <remarks>
+        /// ÉCRITE À LA MAIN PLUTÔT QU'AVEC `Executer`, qui renvoie toujours 200
+        /// — même sur un résultat nul. Un rapport introuvable arriverait alors
+        /// au front comme un corps vide : le clic ne ferait rien, sans erreur ni
+        /// message. Un 404 franc est plus honnête, et c'est déjà ce que fait la
+        /// route parent.
+        /// </remarks>
+        public async Task<IActionResult> GetRapportEleve(
+            int id, int rapportId, [FromServices] IRapportRepository rapports)
+        {
+            try
+            {
+                var rapport = await rapports.GetDetailAsync(rapportId, id);
+                return rapport is null ? NotFound() : Ok(rapport);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(
+                    ex, "Erreur lors du chargement du rapport {RapportId} de l'eleve {EleveId}.",
+                    rapportId, id);
+
+                return StatusCode(500, new { message = "Une erreur est survenue, veuillez réessayer." });
+            }
+        }
+
+        /// <summary>
+        /// La copie d'une évaluation. Même raison que ci-dessus : le bouton
+        /// « Voir la copie » souffrait exactement du même défaut.
+        /// </summary>
+        [HttpGet("eleves/{id:int}/evaluations/{evaluationId:int}/copie")]
+        [SwaggerResponse(200, "La copie.", typeof(EvaluationEleve))]
+        [SwaggerResponse(404, "Évaluation inexistante, ou n'appartenant pas à cet élève.")]
+        public async Task<IActionResult> GetCopieEleve(
+            int id, int evaluationId, [FromServices] IEvaluationRepository evaluations)
+        {
+            try
+            {
+                var copie = await evaluations.GetCopieAsync(evaluationId, id);
+                return copie is null ? NotFound() : Ok(copie);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(
+                    ex, "Erreur lors du chargement de la copie {EvaluationId} de l'eleve {EleveId}.",
+                    evaluationId, id);
+
+                return StatusCode(500, new { message = "Une erreur est survenue, veuillez réessayer." });
+            }
+        }
 
         /// <summary>
         /// La taille de tranche demandée, ramenée dans le raisonnable : zéro

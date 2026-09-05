@@ -39,5 +39,19 @@ namespace SchoolWebApp.Domain.Repositories
             IEnumerable<ObservationCompetence> observations,
             string source,
             CancellationToken ct = default);
+
+        /// <summary>
+        /// La carte des compétences de l enfant, pour son propre écran.
+        /// </summary>
+        /// <param name="marquerVue">
+        /// Vrai quand l enfant OUVRE sa carte : la date de dernière visite est
+        /// alors avancée, et les victoires listées dans cet appel ne
+        /// reparaîtront plus au suivant.
+        ///
+        /// Faux quand c est le parent qui regarde : sa visite ne doit pas
+        /// consommer la récompense de son enfant, qui ne la verrait jamais.
+        /// </param>
+        Task<Progression?> GetProgressionAsync(
+            int eleveId, bool marquerVue, CancellationToken ct = default);
     }
 }

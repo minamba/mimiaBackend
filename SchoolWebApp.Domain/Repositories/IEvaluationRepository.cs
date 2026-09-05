@@ -48,6 +48,7 @@ namespace SchoolWebApp.Domain.Repositories
             int taille,
             int? matiereId = null,
             bool duPlusAncien = false,
+            int? niveauScolaireId = null,
             CancellationToken ct = default);
 
         /// <summary>
@@ -62,6 +63,6 @@ namespace SchoolWebApp.Domain.Repositories
         /// Une entrée par matière où l'élève a laissé une trace.
         /// </summary>
         Task<IEnumerable<ProgressionMatiere>> GetProgressionAsync(
-            int eleveId, CancellationToken ct = default);
+            int eleveId, int? niveauScolaireId = null, CancellationToken ct = default);
     }
 }

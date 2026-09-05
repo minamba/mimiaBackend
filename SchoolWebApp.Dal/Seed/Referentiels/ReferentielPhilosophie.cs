@@ -75,6 +75,9 @@ namespace SchoolWebApp.Dal.Seed.Referentiels
                 // --- La connaissance ---
                 ("TERMINALE", "PHI_TLE_CONN_RAISON",       "La connaissance", "Interroger la raison : ses pouvoirs et ses limites", 29),
                 ("TERMINALE", "PHI_TLE_CONN_VERITE",       "La connaissance", "Distinguer vérité, certitude et opinion", 30),
+                ("TERMINALE", "PHI_TLE_METH_OEUVRE", "Méthode", "Conduire l’étude suivie d’une œuvre philosophique", 32),
+                ("TERMINALE", "PHI_TLE_METH_AUTEURS", "Méthode", "Situer un auteur dans l’une des trois périodes du programme", 33),
+
                 ("TERMINALE", "PHI_TLE_CONN_SCIENCE",      "La connaissance", "Comprendre ce qui fait la scientificité d'une science : preuve, expérience, réfutation", 31),
             };
 

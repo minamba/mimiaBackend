@@ -45,13 +45,27 @@ namespace SchoolWebApp.Dal.Repositories
 
         public async Task<DomainConversation> AddConversationAsync(DomainConversation model)
         {
+            // LA CLASSE DE L'ÉLÈVE AU MOMENT OÙ IL OUVRE LE COURS.
+            //
+            // C'est elle qui permettra de découper sa fiche par année. Lue ici
+            // et pas à la relecture : le jour où le parent le fait passer en 3e,
+            // les cours de 4e deviendraient sinon des cours de 3e. Rien
+            // n'enregistre le changement de classe, donc ce qui n'est pas
+            // capturé maintenant est perdu.
+            var niveauId = await _context.Eleves
+                .AsNoTracking()
+                .Where(e => e.Id == model.EleveId)
+                .Select(e => e.NiveauScolaireId)
+                .FirstOrDefaultAsync();
+
             var entity = new Conversation
             {
                 EleveId = model.EleveId,
                 MatiereId = model.MatiereId,
                 Titre = model.Titre,
                 DateCreation = model.DateCreation == default ? DateTime.UtcNow : model.DateCreation,
-                DatePurge = model.DatePurge
+                DatePurge = model.DatePurge,
+                NiveauScolaireId = niveauId == 0 ? null : niveauId
             };
 
             _context.Conversations.Add(entity);

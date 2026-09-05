@@ -43,10 +43,29 @@ namespace SchoolWebApp.Dal.Entities
 
         public DateTime DateCreation { get; set; }
 
+        /// <summary>
+        /// LA CLASSE DE L'ÉLÈVE LE JOUR DE LA NOTE, ET NON SA CLASSE ACTUELLE.
+        ///
+        /// Sans elle, une note prise en 4e remonte dans la fiche d'un élève de
+        /// 3e comme si elle était de cette année. Le suivi mélangeait ainsi
+        /// toute la scolarité en une seule courbe, alors qu'on suit le niveau
+        /// d'une classe.
+        ///
+        /// NULLABLE, ET DÉFINITIVEMENT. Les notes antérieures à cette colonne
+        /// n'ont pas de classe et n'en auront jamais : rien n'enregistrait le
+        /// niveau au moment de l'évaluation, et le changement de classe est une
+        /// simple mise à jour de colonne qui ne laisse aucune trace datée. On ne
+        /// peut donc rien reconstituer. Ces notes se rangent dans « Toute la
+        /// scolarité » plutôt que d'être attribuées au hasard à une année.
+        /// </summary>
+        public int? NiveauScolaireId { get; set; }
+
         public virtual Eleve? Eleve { get; set; }
 
         public virtual Matiere? Matiere { get; set; }
 
         public virtual Conversation? Conversation { get; set; }
+
+        public virtual NiveauScolaire? NiveauScolaire { get; set; }
     }
 }

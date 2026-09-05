@@ -49,7 +49,7 @@ namespace SchoolWebApp.Domain.Services
 
         Task<ParentAdmin?> ModifierParentAsync(int id, string? prenom, string? nom, string? mail);
 
-        Task<FicheEleve?> GetFicheEleveAsync(int eleveId);
+        Task<FicheEleve?> GetFicheEleveAsync(int eleveId, int? niveauScolaireId = null);
 
         Task<EleveAdmin?> ModifierEleveAsync(int id, string? prenom, string? nom, int? age, int? niveauScolaireId, Sexe? sexe);
 

@@ -99,6 +99,19 @@ namespace SchoolWebApp.Domain.Models
         public double Note { get; set; }
 
         public string? Notion { get; set; }
+
+        /// <summary>
+        /// La classe où l'élève était le jour de l'évaluation.
+        ///
+        /// NULL POUR LES NOTES ANTÉRIEURES À CE CHAMP, et c'est irrattrapable :
+        /// rien n'enregistrait la classe de l'élève au moment de la note, et le
+        /// changement de classe ne laisse aucune trace datée. On ne peut donc
+        /// pas la reconstituer après coup. Ces notes-là restent rangées dans
+        /// « Toute la scolarité ».
+        /// </summary>
+        public string? NiveauLibelle { get; set; }
+
+        public int? NiveauOrdre { get; set; }
     }
 
     public class NotionMaitrisee
@@ -111,6 +124,13 @@ namespace SchoolWebApp.Domain.Models
 
         /// <summary>Niveau où la notion s'apprend — pas celui de l'élève.</summary>
         public string? NiveauLibelle { get; set; }
+
+        /// <summary>
+        /// Le RANG de ce niveau, et non son libellé, parce que c'est lui qui
+        /// ordonne l'historique. Trier sur le libellé rangerait « CM2 » avant
+        /// « 6e » — l'ordre alphabétique n'est pas l'ordre scolaire.
+        /// </summary>
+        public int NiveauOrdre { get; set; }
 
         /// <summary>Maîtrise estimée, de 0 à 1.</summary>
         public double Score { get; set; }

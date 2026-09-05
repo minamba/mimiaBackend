@@ -86,7 +86,7 @@ namespace SchoolWebApp.Domain.Repositories
         Task<ParentAdmin?> ModifierParentAsync(int id, string? prenom, string? nom, string? mail);
 
         /// <summary>Fiche complète d'un élève, ou null s'il n'existe pas.</summary>
-        Task<FicheEleve?> GetFicheEleveAsync(int eleveId);
+        Task<FicheEleve?> GetFicheEleveAsync(int eleveId, int? niveauScolaireId = null);
 
         Task<EleveAdmin?> ModifierEleveAsync(int id, string? prenom, string? nom, int? age, int? niveauScolaireId, Sexe? sexe);
     }

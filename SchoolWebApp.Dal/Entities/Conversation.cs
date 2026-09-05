@@ -44,7 +44,22 @@ namespace SchoolWebApp.Dal.Entities
         /// </summary>
         public DateTime? DateSortie { get; set; }
 
+        /// <summary>
+        /// LA CLASSE DE L'ÉLÈVE À CE MOMENT-LÀ, ET NON SA CLASSE ACTUELLE.
+        ///
+        /// Sans elle, la fiche ne se découpe pas par année : tout le travail
+        /// remonte comme s'il datait de l'année en cours. Le changement de
+        /// classe est une simple mise à jour de colonne sur `Eleve`, qui ne
+        /// laisse aucune trace datée — ce qui n'est pas capturé ici est perdu
+        /// pour toujours.
+        ///
+        /// NULLABLE POUR L'EXISTANT, qui n'a pas d'année et n'en aura jamais.
+        /// </summary>
+        public int? NiveauScolaireId { get; set; }
+
         public virtual Eleve? Eleve { get; set; }
+
+        public virtual NiveauScolaire? NiveauScolaire { get; set; }
 
         public virtual Matiere? Matiere { get; set; }
 

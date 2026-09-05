@@ -84,6 +84,11 @@ namespace SchoolWebApp.Dal.Repositories
             _context.Eleves.Add(entity);
             await _context.SaveChangesAsync();
 
+            // Sa première année s'ouvre ici, et elle part de sa création : c'est
+            // elle qui rattachera tout son travail à une classe.
+            HistoriqueClasse.Ouvrir(_context, entity.Id, entity.NiveauScolaireId, entity.DateCreation);
+            await _context.SaveChangesAsync();
+
             // Recharge pour récupérer le niveau dénormalisé.
             return await GetEleveByIdAsync(entity.Id) ?? Map(entity);
         }
@@ -97,7 +102,14 @@ namespace SchoolWebApp.Dal.Repositories
             if (model.Nom is not null) entity.Nom = model.Nom;
             if (model.Age > 0) entity.Age = model.Age;
             if (model.Sexe != Domain.Models.Sexe.NonPrecise) entity.Sexe = model.Sexe;
-            if (model.NiveauScolaireId > 0) entity.NiveauScolaireId = model.NiveauScolaireId;
+            // AVANT d'écraser la classe : le changement doit être vu pour
+            // fermer l'intervalle en cours. Une fois la colonne écrasée,
+            // l'ancienne classe est perdue.
+            if (model.NiveauScolaireId > 0)
+            {
+                await HistoriqueClasse.ChangerAsync(_context, entity.Id, model.NiveauScolaireId);
+                entity.NiveauScolaireId = model.NiveauScolaireId;
+            }
 
             await _context.SaveChangesAsync();
             return await GetEleveByIdAsync(entity.Id);

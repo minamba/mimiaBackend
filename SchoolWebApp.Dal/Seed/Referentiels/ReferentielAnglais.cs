@@ -34,6 +34,11 @@ namespace SchoolWebApp.Dal.Seed.Referentiels
                 ("CP", "AN_CP_PHONO_SONS",      "Phonologie", "Répéter un mot en respectant les sons anglais", 7),
                 ("CP", "AN_CP_CULT_FETES",      "Culture", "Reconnaître une fête du monde anglophone", 8),
 
+                ("CP", "AN_CP_ORAL_INTERACTION", "Expression orale", "Répondre à une question simple sur soi", 9),
+
+                ("CP", "AN_CP_COMP_HISTOIRE", "Compréhension", "Suivre le fil d’une histoire racontée en anglais", 10),
+                ("CP", "AN_CP_ORAL_EMOTIONS", "Expression orale", "Exprimer une émotion ou un souhait simple", 11),
+
                 // --- CE1 ---
                 ("CE1", "AN_CE1_ORAL_PRESENTER", "Expression orale", "Se présenter en trois phrases", 1),
                 ("CE1", "AN_CE1_ORAL_GOUTS",     "Expression orale", "Dire ce qu'on aime et ce qu'on n'aime pas", 2),
@@ -45,6 +50,8 @@ namespace SchoolWebApp.Dal.Seed.Referentiels
                 ("CE1", "AN_CE1_PHONO_ACCENT",   "Phonologie", "Placer l'accent au bon endroit dans un mot courant", 8),
                 ("CE1", "AN_CE1_CULT_PAYS",      "Culture", "Situer les principaux pays anglophones", 9),
 
+                ("CE1", "AN_CE1_ORAL_INTERACTION", "Expression orale", "Poser une question simple et y répondre", 10),
+
                 // --- CE2 ---
                 ("CE2", "AN_CE2_ORAL_QUESTIONS", "Expression orale", "Poser et répondre à une question simple", 1),
                 ("CE2", "AN_CE2_ORAL_DECRIRE",   "Expression orale", "Décrire une image en quelques phrases", 2),
@@ -55,6 +62,8 @@ namespace SchoolWebApp.Dal.Seed.Referentiels
                 ("CE2", "AN_CE2_GRAM_PLURIEL",   "Grammaire", "Former le pluriel des noms courants", 7),
                 ("CE2", "AN_CE2_ECR_COPIE",      "Expression écrite", "Copier et compléter des phrases modèles", 8),
                 ("CE2", "AN_CE2_PHONO_ALPHABET", "Phonologie", "Épeler un mot en anglais", 9),
+
+                ("CE2", "AN_CE2_COMP_HISTOIRE", "Compréhension", "Suivre le fil d’une histoire simple racontée en anglais", 10),
 
                 // --- CM1 : vers le niveau A1 ---
                 ("CM1", "AN_CM1_ORAL_PRESENTER", "Expression orale", "Se présenter et présenter quelqu'un d'autre", 1),
@@ -69,6 +78,14 @@ namespace SchoolWebApp.Dal.Seed.Referentiels
                 ("CM1", "AN_CM1_PHONO_INTONATION","Phonologie", "Distinguer l'intonation d'une question et d'une affirmation", 10),
                 ("CM1", "AN_CM1_CULT_ECOLE",     "Culture", "Comparer l'école anglaise ou américaine à la sienne", 11),
 
+                ("CM1", "AN_CM1_COMP_MESSAGE", "Compréhension", "Comprendre un message oral court sur un sujet familier", 12),
+
+                ("CM1", "AN_CM1_COMP_TRAME", "Compréhension", "Identifier la trame narrative d’un récit simple", 13),
+                ("CM1", "AN_CM1_ORAL_EMOTIONS", "Expression orale", "Exprimer ses émotions et ses souhaits, et réagir", 14),
+                ("CM1", "AN_CM1_ORAL_CLARIFIER", "Expression orale", "Demander de répéter ou d’expliquer ce qu’on n’a pas compris", 15),
+                ("CM1", "AN_CM1_ECR_DICTEE", "Expression écrite", "Épeler, copier et écrire sous la dictée des mots connus", 16),
+                ("CM1", "AN_CM1_MED_EXPLICITER", "Méthode", "Expliquer à quelqu’un le sens d’un message ou d’un document", 17),
+
                 // --- CM2 : le A1 doit être acquis ---
                 ("CM2", "AN_CM2_ORAL_DIALOGUE",  "Expression orale", "Tenir un dialogue simple sur un sujet familier", 1),
                 ("CM2", "AN_CM2_ORAL_RACONTER",  "Expression orale", "Raconter un événement passé en quelques phrases", 2),
@@ -81,6 +98,8 @@ namespace SchoolWebApp.Dal.Seed.Referentiels
                 ("CM2", "AN_CM2_ECR_TEXTE",      "Expression écrite", "Écrire un court texte de présentation ou une carte postale", 9),
                 ("CM2", "AN_CM2_LEX_VILLE",      "Lexique", "Employer le lexique de la ville et des déplacements", 10),
                 ("CM2", "AN_CM2_CULT_TRADITIONS","Culture", "Décrire une tradition d'un pays anglophone", 11),
+
+                ("CM2", "AN_CM2_CECRL", "Méthode", "Atteindre le niveau A1 dans les cinq activités langagières", 12),
 
                 // --- 6e : consolider A1, entrer dans A2 ---
                 ("SIXIEME", "AN_6E_ORAL_CONTINU",  "Expression orale", "Parler une minute en continu sur un sujet préparé", 1),
@@ -99,6 +118,12 @@ namespace SchoolWebApp.Dal.Seed.Referentiels
                 ("SIXIEME", "AN_6E_PHONO_TERMINAISON","Phonologie", "Prononcer les terminaisons -s et -ed", 14),
                 ("SIXIEME", "AN_6E_CULT_ROYAUME",  "Culture", "Situer les nations du Royaume-Uni et leurs symboles", 15),
 
+                ("SIXIEME", "AN_6E_CECRL", "Méthode", "Atteindre le niveau A1+ visé en fin de sixième", 16),
+                ("SIXIEME", "AN_6E_CULT_IMAGINAIRE", "Culture", "Découvrir contes et légendes du monde anglophone", 17),
+
+                ("SIXIEME", "AN_6E_GRAM_GN", "Grammaire", "Employer les articles et les démonstratifs dans le groupe nominal", 18),
+                ("SIXIEME", "AN_6E_GRAM_PRONOMS", "Grammaire", "Employer les pronoms personnels sujets et compléments", 19),
+
                 // --- 5e ---
                 ("CINQUIEME", "AN_5E_ORAL_CONTINU",  "Expression orale", "Parler deux minutes en continu à partir de notes", 1),
                 ("CINQUIEME", "AN_5E_ORAL_OPINION",  "Expression orale", "Donner son avis et le justifier avec because", 2),
@@ -114,6 +139,11 @@ namespace SchoolWebApp.Dal.Seed.Referentiels
                 ("CINQUIEME", "AN_5E_LEX_VOYAGE",    "Lexique", "Employer le lexique du voyage et de l'alimentation", 12),
                 ("CINQUIEME", "AN_5E_PHONO_ACCENT",  "Phonologie", "Placer l'accent tonique dans les mots de deux syllabes", 13),
                 ("CINQUIEME", "AN_5E_CULT_ETATS_UNIS","Culture", "Situer les grands repères géographiques des États-Unis", 14),
+
+                ("CINQUIEME", "AN_5E_CECRL", "Méthode", "Atteindre le niveau A2 visé en fin de cinquième", 15),
+                ("CINQUIEME", "AN_5E_CULT_ROYAUME_UNI", "Culture", "Connaître le Royaume-Uni : nations, symboles, repères", 16),
+
+                ("CINQUIEME", "AN_5E_GRAM_PREPOSITIONS", "Grammaire", "Situer dans le temps et dans l’espace avec les prépositions et les adverbes", 17),
 
                 // --- 4e ---
                 ("QUATRIEME", "AN_4E_ORAL_CONTINU",  "Expression orale", "Présenter un document en trois minutes sans le lire", 1),
@@ -131,6 +161,14 @@ namespace SchoolWebApp.Dal.Seed.Referentiels
                 ("QUATRIEME", "AN_4E_LEX_CONNECTEURS","Lexique", "Relier ses idées avec however, therefore, although", 13),
                 ("QUATRIEME", "AN_4E_CULT_HISTOIRE", "Culture", "Situer un moment marquant de l'histoire du monde anglophone", 14),
 
+                ("QUATRIEME", "AN_4E_CECRL", "Méthode", "Atteindre le niveau A2+ visé en fin de quatrième", 15),
+                ("QUATRIEME", "AN_4E_CULT_IRLANDE", "Culture", "Connaître l’Irlande : repères, histoire, culture", 16),
+                ("QUATRIEME", "AN_4E_CULT_SPORT", "Culture", "Comprendre la place du sport dans les sociétés anglophones", 17),
+
+                ("QUATRIEME", "AN_4E_GRAM_PREPOSITIONS", "Grammaire", "Employer adverbes et groupes prépositionnels pour situer et nuancer", 18),
+                ("QUATRIEME", "AN_4E_LEX_DERIVATION", "Lexique", "Former un mot par préfixe ou suffixe et reconnaître un nom composé", 19),
+                ("QUATRIEME", "AN_4E_PHONO_ACCENT", "Phonologie", "Placer l’accent de mot et l’accent de phrase", 20),
+
                 // --- 3e : le A2 est exigé au brevet ---
                 ("TROISIEME", "AN_3E_ORAL_EXPOSE",   "Expression orale", "Présenter un exposé de cinq minutes et répondre aux questions", 1),
                 ("TROISIEME", "AN_3E_ORAL_INTERAGIR","Expression orale", "Soutenir une conversation sur un sujet d'actualité", 2),
@@ -146,6 +184,13 @@ namespace SchoolWebApp.Dal.Seed.Referentiels
                 ("TROISIEME", "AN_3E_LEX_SOCIETE",   "Lexique", "Employer le lexique du travail, des inégalités et de l'engagement", 12),
                 ("TROISIEME", "AN_3E_PHONO_MOTS",    "Phonologie", "Prononcer les mots dont l'accent change le sens", 13),
                 ("TROISIEME", "AN_3E_CULT_DIVERSITE","Culture", "Décrire la diversité culturelle du monde anglophone", 14),
+
+                ("TROISIEME", "AN_3E_CECRL", "Méthode", "Atteindre le niveau B1 visé en fin de troisième", 15),
+                ("TROISIEME", "AN_3E_CULT_ETATS_UNIS", "Culture", "Connaître les États-Unis : repères, histoire, société", 16),
+                ("TROISIEME", "AN_3E_CULT_ENGAGEMENT", "Culture", "Comprendre des formes d’engagement dans le monde anglophone", 17),
+
+                ("TROISIEME", "AN_3E_GRAM_GN", "Grammaire", "Maîtriser les accords et la construction du groupe nominal", 18),
+                ("TROISIEME", "AN_3E_GRAM_PREPOSITIONS", "Grammaire", "Employer avec justesse les adverbes et prépositions de temps et de lieu", 19),
 
                 // --- Seconde : vers B1 ---
                 ("SECONDE", "AN_2DE_ORAL_CONTINU",  "Expression orale", "S'exprimer cinq minutes en continu de façon organisée", 1),
@@ -163,6 +208,14 @@ namespace SchoolWebApp.Dal.Seed.Referentiels
                 ("SECONDE", "AN_2DE_METH_SYNTHESE", "Méthode", "Rendre compte d'un document sans le paraphraser", 13),
                 ("SECONDE", "AN_2DE_CULT_AXES",     "Culture", "Traiter un axe du programme à partir de documents variés", 14),
 
+                ("SECONDE", "AN_2DE_CECRL", "Méthode", "Atteindre le niveau B1+ visé en fin de seconde", 15),
+                ("SECONDE", "AN_2DE_CULT_COMMONWEALTH", "Culture", "Connaître le Commonwealth : héritages, unité, diversité", 16),
+                ("SECONDE", "AN_2DE_CULT_GENERATIONS", "Culture", "Analyser les rapports entre générations dans le monde anglophone", 17),
+
+                ("SECONDE", "AN_2DE_GRAM_GN", "Grammaire", "Maîtriser la construction du groupe nominal et ses déterminants", 18),
+                ("SECONDE", "AN_2DE_GRAM_PRONOMS", "Grammaire", "Employer les pronoms relatifs et réfléchis à bon escient", 19),
+                ("SECONDE", "AN_2DE_PHONO_PROSODIE", "Phonologie", "Respecter l’accentuation et le rythme de la phrase anglaise", 20),
+
                 // --- Première : B1 consolidé, entrée en B2 ---
                 ("PREMIERE", "AN_1RE_ORAL_PRESENTER","Expression orale", "Présenter et mettre en relation deux documents à l'oral", 1),
                 ("PREMIERE", "AN_1RE_ORAL_DEBAT",   "Expression orale", "Débattre en anticipant et réfutant les objections", 2),
@@ -179,6 +232,13 @@ namespace SchoolWebApp.Dal.Seed.Referentiels
                 ("PREMIERE", "AN_1RE_METH_PLAN",    "Méthode", "Organiser un essai en introduction, développement, conclusion", 13),
                 ("PREMIERE", "AN_1RE_CULT_PROBLEMATIQUE","Culture", "Problématiser une question culturelle du monde anglophone", 14),
 
+                ("PREMIERE", "AN_1RE_CECRL", "Méthode", "Atteindre le niveau B1+ visé en fin de première", 15),
+                ("PREMIERE", "AN_1RE_CULT_AMERIQUE", "Culture", "Connaître les aires anglophones américaines", 16),
+                ("PREMIERE", "AN_1RE_CULT_INCLUSION", "Culture", "Analyser diversité et inclusion dans les sociétés anglophones", 17),
+
+                ("PREMIERE", "AN_1RE_GRAM_PRONOMS", "Grammaire", "Employer les pronoms pour éviter les répétitions et lier le propos", 18),
+                ("PREMIERE", "AN_1RE_PHONO_PROSODIE", "Phonologie", "Placer l’accent de phrase pour mettre une idée en relief", 19),
+
                 // --- Terminale : B2 attendu ---
                 ("TERMINALE", "AN_TLE_ORAL_EPREUVE","Expression orale", "Tenir l'épreuve orale : présentation puis entretien", 1),
                 ("TERMINALE", "AN_TLE_ORAL_SPONTANE","Expression orale", "S'exprimer spontanément et se reprendre sans perdre le fil", 2),
@@ -192,6 +252,12 @@ namespace SchoolWebApp.Dal.Seed.Referentiels
                 ("TERMINALE", "AN_TLE_LEX_REGISTRE","Lexique", "Adapter son registre de langue à la situation", 10),
                 ("TERMINALE", "AN_TLE_METH_ARGUMENT","Méthode", "Soutenir une thèse en anticipant l'objection", 11),
                 ("TERMINALE", "AN_TLE_METH_CITATION","Méthode", "S'appuyer sur les documents sans les recopier", 12),
+                ("TERMINALE", "AN_TLE_CECRL", "Méthode", "Atteindre le niveau B2 visé en fin de terminale", 14),
+                ("TERMINALE", "AN_TLE_CULT_ROYAUME_UNI", "Culture", "Connaître le Royaume-Uni et ses nations", 15),
+                ("TERMINALE", "AN_TLE_CULT_COMMUNICATION", "Culture", "Analyser les enjeux et les formes de la communication", 16),
+                ("TERMINALE", "AN_TLE_GRAM_GN", "Grammaire", "Maîtriser le groupe nominal complexe et ses déterminants", 17),
+                ("TERMINALE", "AN_TLE_PHONO_PROSODIE", "Phonologie", "Soigner prosodie et intonation pour l’épreuve orale", 18),
+
                 ("TERMINALE", "AN_TLE_CULT_AXES",   "Culture", "Traiter les axes du programme avec des exemples précis", 13),
             };
 

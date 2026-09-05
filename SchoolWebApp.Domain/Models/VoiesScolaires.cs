@@ -48,6 +48,27 @@ namespace SchoolWebApp.Domain.Models
 
                 // Pas de philosophie au bac professionnel.
                 ["PHILOSOPHIE"] = ["TERMINALE_PRO"],
+
+                // PAS DE SVT AU BAC PROFESSIONNEL — AUCUNE ANNÉE, AUCUNE
+                // SPÉCIALITÉ.
+                //
+                // L enseignement général du bac pro tient en français,
+                // histoire-géographie-EMC, mathématiques, langue vivante,
+                // physique-chimie pour les secteurs industriels, économie et
+                // prévention-santé-environnement. La SVT n y figure pas.
+                //
+                // Elle était pourtant proposée : ouverte du rang 7 au rang 12
+                // sans exclusion de voie, elle apparaissait dans la grille d un
+                // élève de seconde professionnelle comme une matière à
+                // travailler. Treize compétences de son année portaient sur un
+                // programme qu il ne verra jamais.
+                //
+                // LA PHYSIQUE-CHIMIE RESTE, ELLE, et c est un choix : elle est
+                // au programme des spécialités industrielles et de plusieurs
+                // spécialités tertiaires. La base ne connaît pas la spécialité
+                // de l élève — la proposer à tous vaut mieux que de la retirer
+                // à ceux qui l ont.
+                ["SVT"] = ["SECONDE_PRO", "PREMIERE_PRO", "TERMINALE_PRO"],
             };
 
         /// <summary>

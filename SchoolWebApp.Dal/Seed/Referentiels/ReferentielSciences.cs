@@ -39,6 +39,12 @@ namespace SchoolWebApp.Dal.Seed.Referentiels
                 ("CP", "SC_CP_DEM_OBSERVER",   "Démarche", "Décrire ce qu'on observe sans l'interpréter", 10),
                 ("CP", "SC_CP_DEM_COMPARER",   "Démarche", "Comparer deux objets et dire ce qui les différencie", 11),
 
+                ("CP", "SC_CP_MAT_MESURER", "La matière", "Comparer des masses, des volumes et lire une température", 12),
+                ("CP", "SC_CP_VIV_ENVIRONNEMENT", "Le vivant", "Observer et décrire son environnement proche", 13),
+                ("CP", "SC_CP_VIV_PROTEGER", "Le vivant", "Citer un geste qui protège l’environnement", 14),
+                ("CP", "SC_CP_VIV_ALIMENTATION", "Le vivant", "Distinguer les groupes d’aliments et leur rôle", 15),
+                ("CP", "SC_CP_VIV_MOUVEMENT", "Le vivant", "Décrire comment le corps grandit et se déplace", 16),
+
                 // --- CE1 ---
                 ("CE1", "SC_CE1_VIV_CYCLE",     "Le vivant", "Décrire les étapes de la vie d'une plante ou d'un animal", 1),
                 ("CE1", "SC_CE1_VIV_CLASSER",   "Le vivant", "Classer des animaux selon un critère observable", 2),
@@ -80,6 +86,11 @@ namespace SchoolWebApp.Dal.Seed.Referentiels
                 ("CM1", "SC_CM1_DEM_GRAPHIQUE",  "Démarche", "Lire et construire un graphique à partir de mesures", 12),
                 ("CM1", "SC_CM1_DEM_OBS_DEDUIT", "Démarche", "Distinguer ce qu'on observe de ce qu'on en déduit", 13),
 
+                ("CM1", "SC_CM1_MAT_MOUVEMENT", "Matière, mouvement, énergie", "Décrire et comparer différents types de mouvement", 14),
+                ("CM1", "SC_CM1_MAT_SIGNAUX", "Matière, mouvement, énergie", "Identifier un signal et le message qu’il transporte", 15),
+                ("CM1", "SC_CM1_VIV_ECOSYSTEMES", "Le vivant", "Décrire un écosystème et les relations entre ses êtres vivants", 16),
+                ("CM1", "SC_CM1_TERRE_ACTIVE", "La planète Terre", "Expliquer que la Terre est une planète active", 17),
+
                 // --- CM2 ---
                 ("CM2", "SC_CM2_MAT_MOUVEMENT",  "Matière, mouvement, énergie", "Décrire un mouvement par sa trajectoire et sa vitesse", 1),
                 ("CM2", "SC_CM2_MAT_SOLUTION",   "Matière, mouvement, énergie", "Distinguer un mélange homogène d'un mélange hétérogène", 2),
@@ -93,6 +104,7 @@ namespace SchoolWebApp.Dal.Seed.Referentiels
                 ("CM2", "SC_CM2_TERRE_SYSTEME",  "La planète Terre", "Situer la Terre dans le système solaire et expliquer l'alternance jour-nuit", 10),
                 ("CM2", "SC_CM2_TERRE_RESSOURCES","La planète Terre", "Distinguer une ressource renouvelable d'une ressource épuisable", 11),
                 ("CM2", "SC_CM2_DEM_EXPERIENCE", "Démarche", "Mener une expérience et en tirer une conclusion écrite", 12),
+
 
                 // --- 6e : fin du cycle 3 ---
                 ("SIXIEME", "SC_6E_MAT_ETATS",     "Matière, mouvement, énergie", "Décrire les états et les changements d'état à l'échelle de la matière", 1),
@@ -118,6 +130,8 @@ namespace SchoolWebApp.Dal.Seed.Referentiels
                 ("SIXIEME", "SC_6E_DEM_PROTOCOLE", "Démarche", "Concevoir un protocole avec un témoin et un seul paramètre variable", 21),
                 ("SIXIEME", "SC_6E_DEM_MESURE",    "Démarche", "Exprimer un résultat avec son unité et un ordre de grandeur", 22),
                 ("SIXIEME", "SC_6E_DEM_GRAPHIQUE", "Démarche", "Construire et exploiter un graphique de mesures", 23),
+                ("SIXIEME", "SC_6E_TECH_SIGNAL", "Objets techniques", "Distinguer un signal et l’information qu’il transporte", 25),
+
                 ("SIXIEME", "SC_6E_DEM_CONCLURE",  "Démarche", "Rédiger une conclusion qui répond à la question posée", 24),
             };
 

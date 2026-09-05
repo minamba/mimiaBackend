@@ -40,6 +40,8 @@ namespace SchoolWebApp.Dal.Seed.Referentiels
                 ("CINQUIEME", "PC_5E_METH_UNITES",   "Méthode", "Accompagner tout résultat de son unité", 14),
                 ("CINQUIEME", "PC_5E_METH_SECURITE", "Méthode", "Appliquer les règles de sécurité au laboratoire", 15),
 
+                ("CINQUIEME", "PC_5E_SIG_INFORMATION", "Signaux", "Comprendre qu’un signal transporte une information", 16),
+
                 // --- 4e ---
                 ("QUATRIEME", "PC_4E_MAT_ATOMES",    "Organisation de la matière", "Décrire la matière en atomes et en molécules", 1),
                 ("QUATRIEME", "PC_4E_MAT_FORMULES",  "Organisation de la matière", "Lire et écrire la formule d'une molécule courante", 2),
@@ -57,6 +59,10 @@ namespace SchoolWebApp.Dal.Seed.Referentiels
                 ("QUATRIEME", "PC_4E_SIG_FREQUENCE", "Signaux", "Relier hauteur d'un son et fréquence", 14),
                 ("QUATRIEME", "PC_4E_METH_TABLEAU",  "Méthode", "Exploiter un tableau de mesures pour établir une relation", 15),
                 ("QUATRIEME", "PC_4E_METH_CONVERSION","Méthode", "Convertir avant de calculer, jamais après", 16),
+
+                ("QUATRIEME", "PC_4E_MAT_PERIODIQUE", "Organisation de la matière", "Associer un symbole à un élément avec la classification périodique", 17),
+                ("QUATRIEME", "PC_4E_UNIV_STRUCTURE", "Organisation de la matière", "Décrire la structure de l’Univers et du système solaire", 18),
+                ("QUATRIEME", "PC_4E_UNIV_DISTANCES", "Organisation de la matière", "Convertir des distances, du kilomètre à l’année-lumière", 19),
 
                 // --- 3e ---
                 ("TROISIEME", "PC_3E_MAT_IONS",      "Organisation de la matière", "Décrire la structure d'un atome et la formation d'un ion", 1),
@@ -77,6 +83,11 @@ namespace SchoolWebApp.Dal.Seed.Referentiels
                 ("TROISIEME", "PC_3E_METH_RESOUDRE", "Méthode", "Identifier les données, l'inconnue et la relation qui les lie", 16),
                 ("TROISIEME", "PC_3E_METH_ORDRE",    "Méthode", "Vérifier la vraisemblance d'un résultat par son ordre de grandeur", 17),
 
+                ("TROISIEME", "PC_3E_MAT_EFFET_SERRE", "Organisation de la matière", "Identifier les gaz à effet de serre produits par une transformation chimique", 18),
+                ("TROISIEME", "PC_3E_UNIV_MATIERE", "Organisation de la matière", "Comprendre que la matière de l’Univers est partout de même nature", 19),
+                ("TROISIEME", "PC_3E_MAT_RESSOURCES", "Organisation de la matière", "Comparer les ressources terrestres en éléments chimiques", 20),
+                ("TROISIEME", "PC_3E_ENER_RAYONNEMENT", "L'énergie", "Associer l’émission ou l’absorption d’un rayonnement à un transfert d'énergie", 21),
+
                 // --- Seconde : tronc commun ---
                 ("SECONDE", "PC_2DE_CHIM_ESPECES",   "Constitution de la matière", "Identifier une espèce chimique et distinguer corps pur et mélange", 1),
                 ("SECONDE", "PC_2DE_CHIM_ENTITES",   "Constitution de la matière", "Décrire un atome, un ion et une molécule à partir du tableau périodique", 2),
@@ -96,6 +107,9 @@ namespace SchoolWebApp.Dal.Seed.Referentiels
                 ("SECONDE", "PC_2DE_METH_HOMOGENEITE","Méthode", "Contrôler l'homogénéité d'une relation par ses unités", 16),
                 ("SECONDE", "PC_2DE_METH_MODELISER", "Méthode", "Choisir le modèle adapté à la situation et en dire les limites", 17),
                 ("SECONDE", "PC_2DE_METH_PROTOCOLE", "Méthode", "Concevoir et mettre en œuvre un protocole expérimental", 18),
+
+                ("SECONDE", "PC_2DE_MAT_NUCLEAIRE", "Constitution et transformations de la matière", "Décrire une transformation nucléaire et sa conservation", 19),
+                ("SECONDE", "PC_2DE_SIG_CAPTEUR", "Ondes et signaux", "Expliquer le principe d’un capteur électrique", 20),
 
                 // --- Première : spécialité ---
                 ("PREMIERE", "PC_1RE_CHIM_SUIVI",    "Constitution de la matière", "Suivre l'évolution d'une transformation par une grandeur physique", 1),
@@ -119,6 +133,8 @@ namespace SchoolWebApp.Dal.Seed.Referentiels
                 ("PREMIERE", "PC_1RE_METH_INCERTITUDE","Méthode", "Évaluer une incertitude et comparer un résultat à une valeur de référence", 19),
                 ("PREMIERE", "PC_1RE_METH_PYTHON",   "Méthode", "Exploiter un programme Python de traitement de mesures", 20),
 
+                ("PREMIERE", "PC_1RE_MOUV_FLUIDE", "Mouvements et interactions", "Décrire un fluide au repos et calculer une pression", 21),
+
                 // --- Terminale : spécialité ---
                 ("TERMINALE", "PC_TLE_CHIM_PH",      "Constitution de la matière", "Relier pH, concentration et constante d'acidité", 1),
                 ("TERMINALE", "PC_TLE_CHIM_FORCE",   "Constitution de la matière", "Comparer la force de deux acides à partir de leur pKa", 2),
@@ -141,6 +157,9 @@ namespace SchoolWebApp.Dal.Seed.Referentiels
                 ("TERMINALE", "PC_TLE_ONDES_INTERFERENCES","Ondes et signaux", "Interpréter une figure d'interférences", 19),
                 ("TERMINALE", "PC_TLE_ONDES_DUALITE","Ondes et signaux", "Choisir entre modèle ondulatoire et modèle particulaire", 20),
                 ("TERMINALE", "PC_TLE_METH_ANALYSE", "Méthode", "Résoudre un problème ouvert en explicitant sa démarche", 21),
+                ("TERMINALE", "PC_TLE_MOUV_ECOULEMENT", "Mouvements et interactions", "Modéliser l’écoulement d’un fluide incompressible", 23),
+                ("TERMINALE", "PC_TLE_MAT_SYNTHESE", "Constitution et transformations de la matière", "Élaborer une stratégie de synthèse organique", 24),
+
                 ("TERMINALE", "PC_TLE_METH_PYTHON",  "Méthode", "Écrire ou compléter un programme Python de simulation", 22),
             };
 

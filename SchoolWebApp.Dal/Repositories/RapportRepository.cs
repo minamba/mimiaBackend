@@ -109,6 +109,7 @@ namespace SchoolWebApp.Dal.Repositories
             int taille,
             int? matiereId = null,
             bool duPlusAncien = false,
+            int? niveauScolaireId = null,
             CancellationToken ct = default)
         {
             var lesSiens = _context.RapportsSeance
@@ -121,6 +122,18 @@ namespace SchoolWebApp.Dal.Repositories
             // figure dans les dix dernières.
             if (matiereId is int matiere)
                 lesSiens = lesSiens.Where(r => r.MatiereId == matiere);
+
+            // L'ANNÉE PASSE PAR LA DATE, PAS PAR LA CONVERSATION.
+            //
+            // Une première version héritait le niveau de la conversation. C'était
+            // faux : le fil d'une matière vit d'une année sur l'autre, et une
+            // séance de seconde tenue dans un fil ouvert en troisième aurait été
+            // comptée en troisième. Une séance, elle, est datée.
+            var (debutAnnee, finAnnee) = await BornesAnnee.ResoudreAsync(
+                _context, eleveId, niveauScolaireId, ct);
+
+            if (debutAnnee is DateTime d) lesSiens = lesSiens.Where(r => r.DateCreation >= d);
+            if (finAnnee is DateTime f) lesSiens = lesSiens.Where(r => r.DateCreation < f);
 
             // Compté sur l'historique ENTIER (filtre compris) : « 10 sur 214 »
             // doit suivre le filtre pour rester vrai.

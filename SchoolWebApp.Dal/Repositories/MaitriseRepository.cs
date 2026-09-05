@@ -136,6 +136,21 @@ namespace SchoolWebApp.Dal.Repositories
                 .ToDictionaryAsync(m => m.CompetenceId, ct);
 
             var maintenant = DateTime.UtcNow;
+
+            // L'ANNÉE OÙ LE TRAVAIL A EU LIEU, PAS LE NIVEAU DE LA NOTION.
+            //
+            // Les deux se confondent facilement et ce n'est pas la même chose :
+            // un élève de 3e qui rattrape une notion de CM1 travaille EN 3e. La
+            // compétence garde son niveau — celui où elle s'apprend — tandis que
+            // la maîtrise porte l'année de l'observation. Sans cette distinction,
+            // la fiche d'un élève de 3e afficherait un onglet « CM1 » pour une
+            // année qu'il n'a jamais passée chez nous.
+            var niveauId = await _context.Eleves
+                .AsNoTracking()
+                .Where(e => e.Id == eleveId)
+                .Select(e => e.NiveauScolaireId)
+                .FirstOrDefaultAsync(ct);
+
             var appliquees = 0;
 
             foreach (var observation in liste)
@@ -163,6 +178,11 @@ namespace SchoolWebApp.Dal.Repositories
                 maitrise.DerniereEvaluation = maintenant;
                 maitrise.ProchaineRevision = ProchaineRevision(maintenant, maitrise.Score, maitrise.NombreObservations);
                 maitrise.Source = source;
+
+                // Réécrit à CHAQUE observation, et non seulement à la création :
+                // une notion travaillée en 4e puis reprise en 3e appartient à la
+                // 3e, qui est l'année où l'élève y est revenu.
+                if (niveauId != 0) maitrise.NiveauScolaireId = niveauId;
 
                 appliquees += 1;
             }
@@ -274,5 +294,257 @@ namespace SchoolWebApp.Dal.Repositories
             Confiance = m.Confiance,
             DerniereEvaluation = m.DerniereEvaluation,
         };
+        /// <summary>
+        /// LES SEUILS SONT CEUX DU PRODUIT, recopiés depuis `MaitriseService`.
+        ///
+        /// Ils y sont privés, et cette copie est assumée : l'alternative était
+        /// de faire remonter la lecture dans le service, qui n'a pas accès au
+        /// contexte, ou de rendre publics deux nombres qui ne regardent que la
+        /// pédagogie. Le jour où ils bougent, ils bougent ici aussi — c'est
+        /// écrit des deux côtés.
+        /// </summary>
+        private const double SeuilAcquis = 0.8;
+
+        private const double SeuilEnCours = 0.4;
+
+        public async Task<Progression?> GetProgressionAsync(
+            int eleveId, bool marquerVue, CancellationToken ct = default)
+        {
+            var eleve = await _context.Eleves
+                .Include(e => e.NiveauScolaire)
+                .FirstOrDefaultAsync(e => e.Id == eleveId, ct);
+
+            if (eleve is null) return null;
+
+            var vueLe = eleve.ProgressionVueLe;
+
+            // SON NIVEAU, PLUS TOUT CE QU IL A DÉJÀ TRAVAILLÉ.
+            //
+            // La première version ne montrait que le niveau courant, et
+            // c était faux : la maîtrise d un élève est répartie sur
+            // plusieurs années. Mesuré sur les données de développement, un
+            // élève de 3e avait sept notions acquises — six en 6e, une en 5e,
+            // aucune en 3e. Sa carte affichait ZÉRO.
+            //
+            // C est même tout l intérêt du graphe, et le dépôt le dit ailleurs :
+            // « un blocage en 6e vient souvent d une notion de CM1 ». Restreindre
+            // au niveau courant jetait précisément ce qui a été travaillé.
+            //
+            // ON NE MONTRE PAS TOUT POUR AUTANT. Les mille compétences du CP
+            // à la Terminale noieraient un enfant de CE1. La règle est donc :
+            // ce qui est de son année — la carte à remplir — et ce qu il a
+            // touché ailleurs — la carte déjà remplie.
+            var deja = await _context.MaitrisesEleves
+                .AsNoTracking()
+                .Where(m => m.EleveId == eleveId)
+                .Select(m => new { m.CompetenceId, m.Score, m.DerniereEvaluation })
+                .ToListAsync(ct);
+
+            var parCompetence = deja.ToDictionary(m => m.CompetenceId);
+
+            var travaillees = parCompetence.Keys.ToList();
+
+            // LE RANG D ANNÉE, ET NON L IDENTIFIANT DU NIVEAU.
+            //
+            // C'est la clé de toute la scolarité au lycée, et le semeur du
+            // référentiel le dit : « trois classes partagent le rang 11 —
+            // première générale, technologique, professionnelle. En partageant
+            // le rang, une première professionnelle hérite SANS RIEN ÉCRIRE du
+            // référentiel. »
+            //
+            // La première version comparait `NiveauScolaireId`. Six classes
+            // n'ont aucune compétence à leur nom — 3e prépa-métiers, les voies
+            // professionnelles et technologiques — et leur carte sortait vide,
+            // alors que les 108 à 125 compétences de leur rang existaient et
+            // que le professeur les utilisait déjà pour eux.
+            //
+            // Le reste du produit interroge le rang depuis toujours : voir
+            // `GetCandidatesAsync`, qui prend un `niveauOrdre`. Cette carte
+            // était le seul endroit à s'y prendre autrement.
+            var rang = eleve.NiveauScolaire!.Ordre;
+
+            var competences = await _context.Competences
+                .AsNoTracking()
+                .Where(co => co.NiveauScolaire!.Ordre == rang
+                             || travaillees.Contains(co.Id))
+                .Select(co => new
+                {
+                    co.Id,
+                    co.Libelle,
+                    co.Domaine,
+                    co.Ordre,
+                    co.MatiereId,
+                    co.NiveauScolaireId,
+                    NiveauLibelle = co.NiveauScolaire!.Libelle,
+                    NiveauOrdre = co.NiveauScolaire!.Ordre,
+                    MatiereLibelle = co.Matiere!.Libelle,
+                    MatiereCouleur = co.Matiere!.ProfCouleur,
+                })
+                .ToListAsync(ct);
+
+            // AUCUNE COMPÉTENCE N EST UNE CARTE VIDE, PAS UNE ERREUR.
+            //
+            // Six niveaux du référentiel n en ont aucune : 3e prépa-métiers,
+            // les secondes, premières et terminales professionnelles et
+            // technologiques. Rendre null y faisait répondre 404, et l enfant
+            // lisait « ta carte n a pas pu être chargée » — un message de
+            // panne pour une absence de données.
+            //
+            // On rend donc une carte vide, que l écran sait présenter. Le seul
+            // null qui subsiste est celui d un élève qui n existe pas.
+
+            var progression = new Progression
+            {
+                Niveau = await _context.NiveauxScolaires
+                    .AsNoTracking()
+                    .Where(n => n.Id == eleve.NiveauScolaireId)
+                    .Select(n => n.Libelle)
+                    .FirstOrDefaultAsync(ct),
+
+                // Lu AVANT que `marquerVue` ne l'écrase plus bas : après, la
+                // date existe et la première visite n'a plus de trace.
+                PremiereVisite = vueLe is null,
+            };
+
+            // LES MATIÈRES QUI NE SONT PAS AU PROGRAMME DE SA VOIE SORTENT.
+            //
+            // Le rang donne accès au référentiel de son année, toutes voies
+            // confondues — c'est ce qu'on veut. Mais il n'y a pas de
+            // philosophie au bac professionnel, ni de français en terminale
+            // générale : les afficher mettrait devant un élève des dizaines de
+            // notions qu'il ne verra jamais, et son pourcentage
+            // s'effondrerait pour rien.
+            //
+            // La règle vit dans `VoiesScolaires`, où le reste du produit la
+            // lit déjà. On ne la réécrit pas ici.
+            var exclues = new HashSet<int>();
+
+            foreach (var matiereId in competences.Select(co => co.MatiereId).Distinct())
+            {
+                var matiere = await _context.Matieres
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(m => m.Id == matiereId, ct);
+
+                if (matiere is null) { exclues.Add(matiereId); continue; }
+
+                // LES TROIS COMPOSANTS D EstAuProgramme, ET NON L APPEL.
+                //
+                // Cette méthode prend les modèles du DOMAINE ; ici on tient des
+                // entités de la couche de données, et les deux ne se convertissent
+                // pas. On réutilise donc la seule partie qui porte une décision
+                // — la table des exclusions par voie — et on recopie les deux
+                // bornes, qui sont de simples comparaisons.
+                var horsBornes = rang < matiere.NiveauOrdreMin || rang > matiere.NiveauOrdreMax;
+
+                var horsVoie = VoiesScolaires
+                    .NiveauxExclus(matiere.Code)
+                    .Contains(eleve.NiveauScolaire!.Code, StringComparer.OrdinalIgnoreCase);
+
+                if (horsBornes || horsVoie) exclues.Add(matiereId);
+            }
+
+            foreach (var groupe in competences
+                .Where(co => !exclues.Contains(co.MatiereId))
+                .GroupBy(co => new { co.MatiereId, co.MatiereLibelle, co.MatiereCouleur })
+                .OrderBy(g => g.Key.MatiereLibelle))
+            {
+                var matiere = new MatiereProgression
+                {
+                    MatiereId = groupe.Key.MatiereId,
+                    Libelle = groupe.Key.MatiereLibelle,
+                    Couleur = groupe.Key.MatiereCouleur,
+                    // LE TOTAL DE L'ANNÉE, et non de tout ce qui est affiché.
+                    // Les notions des années précédentes figurent dans la liste
+                    // — l'enfant doit les voir — mais elles ne rallongent pas le
+                    // chemin de sa classe.
+                    Total = groupe.Count(x => x.NiveauOrdre == rang),
+                };
+
+                // LES NOTIONS D AUTRES ANNÉES D ABORD, par ordre de niveau :
+                // ce sont les acquis les plus anciens, et les voir en tête
+                // donne à l enfant le sentiment d une base sous ses pieds
+                // avant la liste de ce qui reste.
+                foreach (var co in groupe
+                    .OrderBy(x => x.NiveauOrdre)
+                    .ThenBy(x => x.Domaine)
+                    .ThenBy(x => x.Ordre))
+                {
+                    parCompetence.TryGetValue(co.Id, out var m);
+
+                    var score = m?.Score ?? 0;
+
+                    // QUATRE ÉTATS, PARCE QUE TROIS EN CONFONDAIENT DEUX.
+                    //
+                    // « À découvrir » et « fragile » se ressemblent — un score
+                    // bas dans les deux cas — mais ne disent pas du tout la même
+                    // chose à l'enfant : l'une n'a jamais été ouverte, l'autre a
+                    // été travaillée sans encore tenir. Les afficher pareil
+                    // revenait à dire « tu n'as pas encore travaillé ça » à un
+                    // élève qui venait d'y passer quatre séances.
+                    //
+                    // C'est l'EXISTENCE de la ligne de maîtrise qui tranche, pas
+                    // le score : une notion jamais observée n'en a aucune.
+                    var etat = m is null ? "a-decouvrir"
+                        : score >= SeuilAcquis ? "acquise"
+                        : score >= SeuilEnCours ? "en-cours"
+                        : "fragile";
+
+                    var vue = new CompetenceVue
+                    {
+                        Id = co.Id,
+                        Libelle = co.Libelle,
+                        Domaine = co.Domaine,
+                        Matiere = groupe.Key.MatiereLibelle,
+                        Etat = etat,
+                        Niveau = co.NiveauLibelle,
+
+                        // AU RANG, ET NON À LA LIGNE DE NIVEAU. Pour un élève
+                        // de première professionnelle, une compétence de
+                        // première générale est de SON année — la signaler
+                        // comme un rattrapage serait faux, et vexant.
+                        AutreNiveau = co.NiveauOrdre != rang,
+                        NiveauOrdre = co.NiveauOrdre,
+                    };
+
+                    matiere.Competences.Add(vue);
+
+                    if (etat != "acquise") continue;
+
+                    // Acquise DE SON ANNÉE d'un côté, rattrapage de l'autre :
+                    // les deux se comptent, jamais dans le même total.
+                    if (co.NiveauOrdre == rang) matiere.Acquises += 1;
+                    else progression.AcquisesAutresAnnees += 1;
+
+                    // NOUVELLE DEPUIS LA DERNIÈRE VISITE.
+                    //
+                    // Première ouverture (`vueLe` nul) : TOUT ce qui est déjà
+                    // acquis compte comme nouveau. C'est la bonne première
+                    // impression — pas un écran vide sur des mois de travail.
+                    if (vueLe is null || m?.DerniereEvaluation > vueLe)
+                    {
+                        progression.Nouvelles.Add(vue);
+                    }
+                }
+
+                progression.Acquises += matiere.Acquises;
+                progression.Total += matiere.Total;
+
+                progression.Matieres.Add(matiere);
+            }
+
+            // LA DATE N EST AVANCÉE QUE SI C EST L ENFANT QUI REGARDE.
+            //
+            // Le parent consulte la même carte ; si sa visite consommait les
+            // victoires, l'enfant ne les verrait jamais — et le seul moment de
+            // récompense du produit serait volé par quelqu un qui ne le
+            // cherchait même pas.
+            if (marquerVue && progression.Nouvelles.Count > 0)
+            {
+                eleve.ProgressionVueLe = DateTime.UtcNow;
+                await _context.SaveChangesAsync(ct);
+            }
+
+            return progression;
+        }
     }
 }

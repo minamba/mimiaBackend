@@ -14,6 +14,18 @@ namespace SchoolWebApp.Dal.Entities
         /// <summary>Pilote le contenu : programme, exercices, compétences attendues.</summary>
         public int NiveauScolaireId { get; set; }
 
+        /// <summary>
+        /// Quand l enfant a regardé sa carte de progression pour la dernière
+        /// fois. Nulle tant qu il ne l a jamais ouverte.
+        ///
+        /// C EST LA FRONTIÈRE QUI REND LA RÉCOMPENSE POSSIBLE. La maîtrise est
+        /// recalculée par un observateur qui tourne APRÈS la séance : on ne
+        /// peut donc rien célébrer pendant le cours. Cette date dit ce qui a
+        /// été acquis depuis la dernière visite — c est-à-dire ce qui mérite
+        /// d être annoncé.
+        /// </summary>
+        public DateTime? ProgressionVueLe { get; set; }
+
         public string? Prenom { get; set; }
 
         /// <summary>Administratif : sert à distinguer deux homonymes côté admin.</summary>

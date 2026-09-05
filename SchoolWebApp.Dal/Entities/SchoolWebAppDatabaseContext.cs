@@ -50,6 +50,9 @@ namespace SchoolWebApp.Dal.Entities
 
         public virtual DbSet<MailBanni> MailsBannis { get; set; }
 
+        /// <summary>Les annees scolaires passees chez nous, en intervalles.</summary>
+        public virtual DbSet<HistoriqueClasseEleve> HistoriquesClasse { get; set; }
+
         /// <summary>
         /// Une VUE, pas une table : la règle du forfait vit en SQL, où il
         /// n'en existe qu'un exemplaire. Voir `ForfaitAbonnement`.
@@ -147,6 +150,7 @@ namespace SchoolWebApp.Dal.Entities
                 entity.Property(e => e.Id).HasColumnName("id");
                 entity.Property(e => e.ParentId).HasColumnName("parent_id");
                 entity.Property(e => e.NiveauScolaireId).HasColumnName("niveau_scolaire_id");
+                entity.Property(e => e.ProgressionVueLe).HasColumnName("progression_vue_le");
                 entity.Property(e => e.Prenom).HasMaxLength(100).HasColumnName("prenom");
                 entity.Property(e => e.Nom).HasMaxLength(100).HasColumnName("nom");
                 entity.Property(e => e.Age).HasColumnName("age");
@@ -289,6 +293,14 @@ namespace SchoolWebApp.Dal.Entities
                 entity.Property(e => e.DerniereEvaluation).HasColumnName("derniere_evaluation");
                 entity.Property(e => e.ProchaineRevision).HasColumnName("prochaine_revision");
                 entity.Property(e => e.Source).HasMaxLength(50).HasColumnName("source");
+                entity.Property(e => e.NiveauScolaireId).HasColumnName("niveau_scolaire_id");
+                // NoAction : un niveau scolaire est une donnee de reference,
+                // il ne se supprime pas. La contrainte interdit un identifiant
+                // fantaisiste, elle ne propage rien.
+                entity.HasOne(e => e.NiveauScolaire)
+                      .WithMany()
+                      .HasForeignKey(e => e.NiveauScolaireId)
+                      .OnDelete(DeleteBehavior.NoAction);
 
                 entity.HasOne(e => e.Eleve)
                       .WithMany(el => el.Maitrises)
@@ -324,6 +336,14 @@ namespace SchoolWebApp.Dal.Entities
                 entity.Property(e => e.DatePurge).HasColumnName("date_purge");
                 entity.Property(e => e.DateDerniereObservation).HasColumnName("date_derniere_observation");
                 entity.Property(e => e.DateSortie).HasColumnName("date_sortie");
+                entity.Property(e => e.NiveauScolaireId).HasColumnName("niveau_scolaire_id");
+                // NoAction : un niveau scolaire est une donnee de reference,
+                // il ne se supprime pas. La contrainte interdit un identifiant
+                // fantaisiste, elle ne propage rien.
+                entity.HasOne(e => e.NiveauScolaire)
+                      .WithMany()
+                      .HasForeignKey(e => e.NiveauScolaireId)
+                      .OnDelete(DeleteBehavior.NoAction);
 
                 entity.HasOne(e => e.Eleve)
                       .WithMany(el => el.Conversations)
@@ -508,11 +528,21 @@ namespace SchoolWebApp.Dal.Entities
                 // questions avec les réponses de l'élève dépasse 4000 caractères.
                 entity.Property(e => e.Detail).HasColumnName("detail");
                 entity.Property(e => e.DateCreation).HasColumnName("date_creation");
+                entity.Property(e => e.NiveauScolaireId).HasColumnName("niveau_scolaire_id");
 
                 entity.HasOne(e => e.Eleve)
                       .WithMany(el => el.Evaluations)
                       .HasForeignKey(e => e.EleveId)
                       .OnDelete(DeleteBehavior.Cascade);
+
+                // NoAction, et pas seulement pour éviter une cascade de plus :
+                // un niveau scolaire ne se supprime pas, il est de référence.
+                // La contrainte sert à empêcher un identifiant fantaisiste, pas
+                // à propager une suppression qui n'arrivera jamais.
+                entity.HasOne(e => e.NiveauScolaire)
+                      .WithMany()
+                      .HasForeignKey(e => e.NiveauScolaireId)
+                      .OnDelete(DeleteBehavior.NoAction);
 
                 // Restrict et non Cascade : trois chemins de suppression
                 // convergeraient sinon vers Evaluation (élève, matière,
@@ -900,6 +930,37 @@ namespace SchoolWebApp.Dal.Entities
                 // bannissement qu'on lève à moitié.
                 entity.HasIndex(e => e.Mail).IsUnique();
             });
+
+            // ---------------------------------------------------------------
+            // HistoriqueClasseEleve
+            // ---------------------------------------------------------------
+            modelBuilder.Entity<HistoriqueClasseEleve>(entity =>
+            {
+                entity.ToTable("HistoriqueClasseEleve");
+                entity.HasKey(e => e.Id);
+
+                entity.Property(e => e.Id).HasColumnName("id");
+                entity.Property(e => e.EleveId).HasColumnName("eleve_id");
+                entity.Property(e => e.NiveauScolaireId).HasColumnName("niveau_scolaire_id");
+                entity.Property(e => e.Debut).HasColumnName("debut");
+                entity.Property(e => e.Fin).HasColumnName("fin");
+
+                // L'ELEVE ET SA DATE : c'est la seule question posee a cette
+                // table — « dans quelle classe etait-il le jour ou ce message a
+                // ete ecrit ? ». Elle est posee pour chaque bloc de la fiche.
+                entity.HasIndex(e => new { e.EleveId, e.Debut });
+
+                entity.HasOne(e => e.Eleve)
+                      .WithMany()
+                      .HasForeignKey(e => e.EleveId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(e => e.NiveauScolaire)
+                      .WithMany()
+                      .HasForeignKey(e => e.NiveauScolaireId)
+                      .OnDelete(DeleteBehavior.NoAction);
+            });
+
 
             modelBuilder.Entity<BandeauPromo>(entity =>
             {
