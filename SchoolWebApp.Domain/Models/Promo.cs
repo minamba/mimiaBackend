@@ -23,6 +23,23 @@ namespace SchoolWebApp.Domain.Models
 
         public bool Actif { get; set; }
 
+        /// <summary>Le visuel court-il d'un bord à l'autre de l'écran ?</summary>
+        public bool PleineLargeur { get; set; }
+
+        /// <summary>Le type MIME du média large — `image/png`, `video/mp4`…</summary>
+        public string TypeMimeLarge { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Le média est-il une vidéo ? DÉDUIT DU TYPE MIME, jamais stocké.
+        ///
+        /// Une colonne `est_video` aurait été une seconde source de vérité :
+        /// le jour où elle contredit le type MIME — téléversement mal
+        /// étiqueté, correction faite d'un seul côté — l'écran choisit la
+        /// mauvaise balise et le bandeau ne montre plus rien.
+        /// </summary>
+        public bool EstVideo =>
+            TypeMimeLarge.StartsWith("video/", StringComparison.OrdinalIgnoreCase);
+
         /// <summary>
         /// Y a-t-il une version téléphone ? Faux, l'affichage retombe sur
         /// l'image large — l'écran a besoin de le savoir pour choisir sa

@@ -23,6 +23,7 @@ namespace SchoolWebApp.IdentityServer.Controllers
         private readonly IConfiguration _configuration;
         private readonly IServiceEmail _email;
         private readonly IModeTestService _modeTest;
+        private readonly IBannissementService _bannissements;
         private readonly ILogger<AccountController> _logger;
 
         public AccountController(
@@ -31,6 +32,7 @@ namespace SchoolWebApp.IdentityServer.Controllers
             IConfiguration configuration,
             IServiceEmail email,
             IModeTestService modeTest,
+            IBannissementService bannissements,
             ILogger<AccountController> logger)
         {
             _userManager = userManager ?? throw new ArgumentNullException(nameof(userManager));
@@ -38,6 +40,8 @@ namespace SchoolWebApp.IdentityServer.Controllers
             _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
             _email = email ?? throw new ArgumentNullException(nameof(email));
             _modeTest = modeTest ?? throw new ArgumentNullException(nameof(modeTest));
+            _bannissements = bannissements
+                ?? throw new ArgumentNullException(nameof(bannissements));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
@@ -85,6 +89,29 @@ namespace SchoolWebApp.IdentityServer.Controllers
             // incrémenterait le compteur de tentatives, et un parent qui
             // insiste pendant une maintenance verrouillerait son propre compte
             // pour un quart d'heure — après la fin des travaux.
+            // LE BANNISSEMENT EST VÉRIFIÉ AVANT LE MOT DE PASSE.
+            //
+            // Pour la même raison que la maintenance et le compte de
+            // démonstration juste en dessous : passer par Identity
+            // incrémenterait le compteur de tentatives, et quelqu'un qui
+            // insiste verrouillerait un compte qu'on voudra peut-être
+            // rouvrir demain.
+            //
+            // LE MESSAGE NE DIT PAS « BANNI », et ce n'est pas de la
+            // pudeur : l'annoncer confirmerait que l'adresse existe, et
+            // donnerait à qui cherche une cible valide. Il invite à écrire
+            // au support, seul chemin qui mène à une décision humaine.
+            if (await _bannissements.EstBanniAsync(model.Email))
+            {
+                _logger.LogWarning("Connexion refusee : adresse bannie.");
+
+                ModelState.AddModelError(string.Empty,
+                    "Ce compte n'est plus accessible. Si vous pensez qu'il s'agit "
+                    + "d'une erreur, écrivez-nous depuis la page Contact.");
+
+                return View(model);
+            }
+
             if (await MaintenanceBloqueAsync(model.Email))
             {
                 _logger.LogInformation(
@@ -200,6 +227,30 @@ namespace SchoolWebApp.IdentityServer.Controllers
 
             if (!ModelState.IsValid)
             {
+                return View(model);
+            }
+
+            // C'EST ICI QUE LA LISTE PREND TOUT SON SENS.
+            //
+            // Quelqu'un qu'on bannit supprime souvent son compte dans la
+            // foulée, puis revient le lendemain avec la même adresse. Le
+            // compte n'existe plus, aucun drapeau ne subsiste — seule la
+            // liste se souvient, et elle est le dernier endroit d'où le
+            // refus peut encore parler.
+            //
+            // Vérifié APRÈS la validation du formulaire : un banni ne doit
+            // pas apprendre par un refus immédiat que son adresse est
+            // spéciale, alors que les autres passent d'abord par les règles
+            // ordinaires.
+            if (await _bannissements.EstBanniAsync(model.Email))
+            {
+                _logger.LogWarning("Inscription refusee : adresse bannie.");
+
+                ModelState.AddModelError(string.Empty,
+                    "Cette adresse ne peut pas être utilisée pour créer un compte. "
+                    + "Si vous pensez qu'il s'agit d'une erreur, écrivez-nous depuis "
+                    + "la page Contact.");
+
                 return View(model);
             }
 
@@ -594,6 +645,24 @@ namespace SchoolWebApp.IdentityServer.Controllers
             // rattachés.
             var emailExterne = info.Principal.FindFirst(
                 System.Security.Claims.ClaimTypes.Email)?.Value;
+
+            // LA TROISIÈME PORTE, ET ELLE S'OUVRE SANS MOT DE PASSE.
+            //
+            // Un banni qui trouve la connexion par Google entrerait sans jamais
+            // croiser le formulaire — la garde du mot de passe ne protège que
+            // le chemin qui en demande un. Posée ICI, au même endroit que la
+            // maintenance et pour la même raison : avant la branche qui ouvre
+            // la session d'un compte déjà rattaché.
+            if (await _bannissements.EstBanniAsync(emailExterne))
+            {
+                _logger.LogWarning("Connexion externe refusee : adresse bannie.");
+
+                TempData["ErreurExterne"] =
+                    "Ce compte n'est plus accessible. Si vous pensez qu'il s'agit "
+                    + "d'une erreur, écrivez-nous depuis la page Contact.";
+
+                return RedirectToAction(nameof(Login), new { returnUrl });
+            }
 
             if (await MaintenanceBloqueAsync(emailExterne))
             {

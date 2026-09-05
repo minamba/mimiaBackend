@@ -65,9 +65,33 @@ namespace SchoolWebApp.Dal.Entities
         /// </summary>
         public bool Actif { get; set; }
 
+        /// <summary>
+        /// Le visuel s'étend-il d'un bord à l'autre de l'écran ?
+        ///
+        /// Faux : une bulle arrondie, à la largeur de la colonne du site,
+        /// qui parle la même langue que les cartes autour. Vrai : une bande
+        /// pleine, qui frappe plus fort mais qui n'appartient plus tout à
+        /// fait à la page.
+        ///
+        /// PAR BANDEAU ET NON PAR SITE, parce que le bon choix dépend du
+        /// visuel : une affiche léchée gagne à couvrir la largeur, un
+        /// message sobre gagne à rester dans la colonne. C'est en le voyant
+        /// qu'on tranche, pas avant.
+        /// </summary>
+        public bool PleineLargeur { get; set; }
+
         // ------------------------------------------------------ les visuels
 
-        /// <summary>L'image large, pour un écran d'ordinateur.</summary>
+        /// <summary>
+        /// Le média large, pour un écran d'ordinateur : une image ou une
+        /// vidéo.
+        ///
+        /// LE NOM DIT « IMAGE » ET GARDE UN SENS. Les octets d'une vidéo
+        /// sont des octets ; c'est `TypeMimeLarge` qui dit ce qu'ils sont,
+        /// et lui seul. Renommer la colonne aurait coûté une migration de
+        /// données pour un gain de vocabulaire — et laissé, le temps du
+        /// déploiement, une base dont le code ne connaît pas le schéma.
+        /// </summary>
         public byte[] ImageLarge { get; set; } = Array.Empty<byte>();
 
         public string TypeMimeLarge { get; set; } = string.Empty;

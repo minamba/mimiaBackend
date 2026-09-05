@@ -283,6 +283,10 @@ builder.Services.AddScoped<IServiceEmail, ServiceEmail>();
 // viderait a chaque affichage de page.
 builder.Services.AddSingleton<IModeTestService, ModeTestService>();
 
+// Sans état ni cache : voir la note du service. Une instance unique suffit,
+// elle ne fait qu'ouvrir une connexion par appel.
+builder.Services.AddSingleton<IBannissementService, BannissementService>();
+
 // Le rôle d'administrateur délégué, lu dans la base métier au moment d'émettre
 // le jeton. Voir RolesDelegues : ce rôle-là est accordé depuis le tableau de
 // bord, donc par l'API, qui n'a pas la base d'identité.

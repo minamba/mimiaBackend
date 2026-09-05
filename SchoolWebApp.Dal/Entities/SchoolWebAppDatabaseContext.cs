@@ -48,6 +48,14 @@ namespace SchoolWebApp.Dal.Entities
 
         public virtual DbSet<BandeauPromo> BandeauxPromo { get; set; }
 
+        public virtual DbSet<MailBanni> MailsBannis { get; set; }
+
+        /// <summary>
+        /// Une VUE, pas une table : la règle du forfait vit en SQL, où il
+        /// n'en existe qu'un exemplaire. Voir `ForfaitAbonnement`.
+        /// </summary>
+        public virtual DbSet<ForfaitAbonnement> ForfaitsAbonnement { get; set; }
+
         public virtual DbSet<MesureVoix> MesuresVoix { get; set; }
 
         /// <summary>Les appels au modèle qui ne sont pas des tours de dialogue.</summary>
@@ -848,6 +856,51 @@ namespace SchoolWebApp.Dal.Entities
                       .OnDelete(DeleteBehavior.Cascade);
             });
 
+            modelBuilder.Entity<ForfaitAbonnement>(entity =>
+            {
+                // `ToView` ET NON `ToTable` : sans lui, EF générerait une
+                // migration créant une table du même nom, qui écraserait la
+                // vue au premier démarrage.
+                entity.ToView("vw_ForfaitAbonnement");
+
+                // SANS CLÉ, donc jamais suivie : chaque lecture repart de la
+                // base. Un total mis en cache dans le suivi resterait celui
+                // d'avant l'achat d'une recharge.
+                entity.HasNoKey();
+
+                entity.Property(e => e.AbonnementId).HasColumnName("abonnement_id");
+                entity.Property(e => e.MinutesForfait).HasColumnName("minutes_forfait");
+                entity.Property(e => e.MinutesRecharge).HasColumnName("minutes_recharge");
+                entity.Property(e => e.MinutesAllouees).HasColumnName("minutes_allouees");
+                entity.Property(e => e.MinutesPlafondEnfant)
+                      .HasColumnName("minutes_plafond_enfant");
+            });
+
+            modelBuilder.Entity<MailBanni>(entity =>
+            {
+                entity.ToTable("MailBanni");
+
+                entity.HasKey(e => e.Id);
+
+                entity.Property(e => e.Id).HasColumnName("id");
+
+                entity.Property(e => e.Mail)
+                      .HasMaxLength(256).IsRequired().HasColumnName("mail");
+
+                entity.Property(e => e.Motif)
+                      .HasMaxLength(300).HasColumnName("motif");
+
+                entity.Property(e => e.DateCreation).HasColumnName("date_creation");
+
+                entity.Property(e => e.BanniPar)
+                      .HasMaxLength(256).HasColumnName("banni_par");
+
+                // UNIQUE : la question est « cette adresse est-elle bannie ? »,
+                // pas « combien de fois ». Deux lignes feraient un
+                // bannissement qu'on lève à moitié.
+                entity.HasIndex(e => e.Mail).IsUnique();
+            });
+
             modelBuilder.Entity<BandeauPromo>(entity =>
             {
                 entity.ToTable("BandeauPromo");
@@ -866,6 +919,9 @@ namespace SchoolWebApp.Dal.Entities
 
                 entity.Property(e => e.Actif)
                       .HasDefaultValue(false).HasColumnName("actif");
+
+                entity.Property(e => e.PleineLargeur)
+                      .HasDefaultValue(false).HasColumnName("pleine_largeur");
 
                 entity.Property(e => e.ImageLarge)
                       .IsRequired().HasColumnName("image_large");

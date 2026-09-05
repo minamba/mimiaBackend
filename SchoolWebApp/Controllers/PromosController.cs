@@ -36,6 +36,24 @@ namespace SchoolWebApp.Api.Controllers
         private const int TailleMax = 5 * 1024 * 1024;
 
         /// <summary>
+        /// Le poids maximal d'une VIDÉO. Quatre fois celui d'une image, et
+        /// pas davantage.
+        ///
+        /// LA VRAIE CONTRAINTE N'EST PAS LE TÉLÉVERSEMENT, C'EST LA BASE.
+        /// Les octets vivent dans `BandeauPromo`, et SQL Server Express
+        /// plafonne à 10 Go — au-delà, il refuse d'écrire et l'application
+        /// s'arrête. Une bibliothèque de dix vidéos à 20 Mo pèse 200 Mo :
+        /// tenable. À 200 Mo la vidéo, c'est un cinquième du plafond pour un
+        /// seul bandeau.
+        ///
+        /// C'EST AUSSI CE QUE LE VISITEUR TÉLÉCHARGE avant de voir la page.
+        /// Vingt mégaoctets sur un réseau mobile, ce sont plusieurs secondes
+        /// d'attente pour un ornement — et la promotion arrive après que le
+        /// visiteur a fini de lire.
+        /// </summary>
+        private const int TailleMaxVideo = 20 * 1024 * 1024;
+
+        /// <summary>
         /// Les formats acceptés.
         ///
         /// PAS DE SVG, contrairement aux planches. Une planche est un schéma
@@ -47,6 +65,25 @@ namespace SchoolWebApp.Api.Controllers
         /// </summary>
         private static readonly string[] TypesAcceptes =
             ["image/jpeg", "image/png", "image/webp", "image/gif"];
+
+        /// <summary>
+        /// Les formats vidéo acceptés.
+        ///
+        /// MP4 D'ABORD : c'est le seul que lisent à la fois Safari, Chrome,
+        /// Firefox et les téléphones. WebM est meilleur à poids égal mais
+        /// Safari ne l'a jamais pris en charge partout — une promotion
+        /// invisible sur iPhone serait invisible pour la moitié du trafic.
+        ///
+        /// PAS DE MOV NI D'AVI : ce sont des conteneurs d'export, pas des
+        /// formats de diffusion. Ils pèsent dix fois plus et ne se lisent pas
+        /// dans un navigateur.
+        /// </summary>
+        private static readonly string[] TypesVideoAcceptes =
+            ["video/mp4", "video/webm"];
+
+        private static bool EstVideo(string? typeMime) =>
+            typeMime is not null
+            && typeMime.StartsWith("video/", StringComparison.OrdinalIgnoreCase);
 
         private readonly IPromoRepository _promos;
         private readonly ILogger<PromosController> _logger;
@@ -85,6 +122,13 @@ namespace SchoolWebApp.Api.Controllers
                     promo.TexteAlternatif,
                     promo.Lien,
                     promo.AvecImageMobile,
+                    promo.PleineLargeur,
+
+                    // L'écran doit choisir entre `<picture>` et `<video>`
+                    // AVANT de demander les octets : les deux balises ne se
+                    // remplacent pas, et une vidéo posée dans un `<img>` ne
+                    // montre rien du tout.
+                    promo.EstVideo,
 
                     // La version part avec : c'est elle que l'écran met dans
                     // l'adresse des images, pour qu'un visuel remplacé
@@ -135,7 +179,16 @@ namespace SchoolWebApp.Api.Controllers
             Response.Headers.ETag = etiquette;
             Response.Headers.CacheControl = "public, max-age=0, must-revalidate";
 
-            return File(image.Donnees, image.TypeMime);
+            // LES REQUÊTES PAR PLAGE SONT INDISPENSABLES À LA VIDÉO.
+            //
+            // Un lecteur vidéo ne télécharge pas le fichier entier puis le
+            // joue : il demande les premiers octets, lit l'en-tête, puis
+            // réclame des morceaux. Sans `Accept-Ranges`, Safari refuse
+            // simplement de lire — c'est un silence, pas une erreur.
+            //
+            // Activé pour tout, image comprise : une image n'en demandera
+            // jamais, et le seul coût est un en-tête de plus.
+            return File(image.Donnees, image.TypeMime, enableRangeProcessing: true);
         }
 
         // --------------------------------------------------- administration
@@ -152,13 +205,14 @@ namespace SchoolWebApp.Api.Controllers
         /// </summary>
         [HttpPost]
         [Authorize(Policy = "EstSuperAdmin")]
-        [RequestSizeLimit(2 * TailleMax + 16384)]
+        [RequestSizeLimit(2 * TailleMaxVideo + 16384)]
         [SwaggerResponse(201, "Le bandeau créé.")]
         [SwaggerResponse(400, "Fichier manquant, trop lourd ou d'un format refusé.")]
         public async Task<IActionResult> Creer(
             [FromForm] string titre,
             [FromForm] string texteAlternatif,
             [FromForm] string? lien,
+            [FromForm] bool pleineLargeur,
             IFormFile imageLarge,
             IFormFile? imageMobile,
             CancellationToken ct)
@@ -184,6 +238,7 @@ namespace SchoolWebApp.Api.Controllers
                 imageLarge.ContentType,
                 imageMobile is null ? null : await LireAsync(imageMobile, ct),
                 imageMobile?.ContentType,
+                pleineLargeur,
                 ct);
 
             _logger.LogInformation("Bandeau promotionnel {Id} cree : {Titre}.", promo.Id, promo.Titre);
@@ -201,7 +256,7 @@ namespace SchoolWebApp.Api.Controllers
         /// </summary>
         [HttpPut("{id:int}")]
         [Authorize(Policy = "EstSuperAdmin")]
-        [RequestSizeLimit(2 * TailleMax + 16384)]
+        [RequestSizeLimit(2 * TailleMaxVideo + 16384)]
         [SwaggerResponse(200, "Le bandeau modifié.")]
         [SwaggerResponse(404, "Bandeau introuvable.")]
         public async Task<IActionResult> Modifier(
@@ -209,6 +264,7 @@ namespace SchoolWebApp.Api.Controllers
             [FromForm] string titre,
             [FromForm] string texteAlternatif,
             [FromForm] string? lien,
+            [FromForm] bool pleineLargeur,
             IFormFile? imageLarge,
             IFormFile? imageMobile,
             CancellationToken ct)
@@ -228,6 +284,7 @@ namespace SchoolWebApp.Api.Controllers
                 imageLarge?.ContentType,
                 imageMobile is null ? null : await LireAsync(imageMobile, ct),
                 imageMobile?.ContentType,
+                pleineLargeur,
                 ct);
 
             return promo is null ? NotFound() : Ok(Decrire(promo));
@@ -272,6 +329,8 @@ namespace SchoolWebApp.Api.Controllers
             p.TexteAlternatif,
             p.Lien,
             p.Actif,
+            p.PleineLargeur,
+            p.EstVideo,
             p.AvecImageMobile,
             p.TailleLarge,
             p.TailleMobile,
@@ -322,18 +381,36 @@ namespace SchoolWebApp.Api.Controllers
                 + "« https:// » pour un site extérieur.";
         }
 
+        /// <summary>
+        /// Les règles du fichier : format, puis poids.
+        ///
+        /// DANS CET ORDRE, ET IL COMPTE. Le plafond dépend du format — une
+        /// vidéo a droit à quatre fois plus qu'une image. Mesurer avant de
+        /// savoir ce qu'on tient obligerait à prendre le plus grand des deux
+        /// plafonds, et laisserait passer une image de 18 Mo.
+        /// </summary>
         private static string? VerifierFichier(IFormFile? fichier, string quoi)
         {
             if (fichier is null || fichier.Length == 0) return null;
 
-            if (fichier.Length > TailleMax)
+            var video = EstVideo(fichier.ContentType);
+
+            var accepte = video
+                ? TypesVideoAcceptes.Contains(fichier.ContentType, StringComparer.OrdinalIgnoreCase)
+                : TypesAcceptes.Contains(fichier.ContentType, StringComparer.OrdinalIgnoreCase);
+
+            if (!accepte)
             {
-                return $"{quoi} dépasse {TailleMax / (1024 * 1024)} Mo.";
+                return $"{quoi} doit être une image (JPEG, PNG, WebP, GIF) ou "
+                     + "une vidéo MP4 ou WebM.";
             }
 
-            return TypesAcceptes.Contains(fichier.ContentType, StringComparer.OrdinalIgnoreCase)
-                ? null
-                : $"{quoi} doit être au format JPEG, PNG, WebP ou GIF.";
+            var plafond = video ? TailleMaxVideo : TailleMax;
+
+            return fichier.Length > plafond
+                ? $"{quoi} pèse {fichier.Length / (1024 * 1024)} Mo : la limite est de "
+                  + $"{plafond / (1024 * 1024)} Mo pour {(video ? "une vidéo" : "une image")}."
+                : null;
         }
 
         private static async Task<byte[]> LireAsync(IFormFile fichier, CancellationToken ct)

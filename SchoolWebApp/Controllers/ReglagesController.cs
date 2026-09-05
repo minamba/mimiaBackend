@@ -202,6 +202,49 @@ namespace SchoolWebApp.Api.Controllers
         /// </summary>
         public const string OffreLancementBandeau = "OFFRE_LANCEMENT_BANDEAU";
 
+        /// <summary>
+        /// Combien de MINUTES sont offertes.
+        ///
+        /// UN NOMBRE, ET SURTOUT PAS UN CODE DE PACK.
+        /// -----------------------------------------
+        /// La première version pointait un pack du catalogue des heures
+        /// supplémentaires, pour pouvoir annoncer « valeur 14,90 € ». Deux
+        /// défauts, et le second est rédhibitoire :
+        ///
+        ///   1. Ce prix n'est affiché NULLE PART sur le site. L'argument ne
+        ///      tenait que dans l'écran de réglage.
+        ///
+        ///   2. Le catalogue sert à VENDRE : ses packs sont poussés chez
+        ///      Stripe. Offrir cinq heures aurait donc exigé de créer un
+        ///      produit Stripe à cinq heures — un objet marchand pour un
+        ///      cadeau qui ne se vend pas — et l'offre serait tombée le jour
+        ///      où ce pack aurait été désactivé.
+        ///
+        /// Un cadeau est un nombre de minutes. Rien de plus.
+        ///
+        /// EN MINUTES ET NON EN HEURES : la table des consommations, les
+        /// forfaits et les recharges comptent tous en minutes. Introduire une
+        /// seconde unité ici obligerait à convertir quelque part, et c'est
+        /// toujours là que les arrondis se perdent.
+        /// </summary>
+        public const string OffreLancementMinutes = "OFFRE_LANCEMENT_MINUTES";
+
+        /// <summary>
+        /// Les formules concernées, séparées par des virgules : « SOLO »,
+        /// « SOLO,DUO »…
+        ///
+        /// PLUSIEURS ET NON UNE SEULE, parce qu'une campagne porte souvent
+        /// sur plus d'une formule — et qu'un réglage à choix unique aurait
+        /// obligé à en refaire un le jour où on veut les deux.
+        ///
+        /// DES CODES ET NON DES IDENTIFIANTS. Un identifiant numérique
+        /// changerait d'une base à l'autre : le réglage exporté depuis le
+        /// développement désignerait une autre formule en production. Le
+        /// code, lui, est le même partout — c'est déjà lui qui voyage dans
+        /// les étiquettes Stripe.
+        /// </summary>
+        public const string OffreLancementFormules = "OFFRE_LANCEMENT_FORMULES";
+
         /// <summary>Le texte du badge ne doit pas déborder de la carte.</summary>
         private const int LongueurTexteLancementMax = 40;
 
@@ -285,7 +328,8 @@ namespace SchoolWebApp.Api.Controllers
 
                     // Ni promotion : promettre un cadeau qu'on n'est pas sûr
                     // de pouvoir tenir est pire que de ne rien promettre.
-                    offreLancement = new OffreLancement(false, string.Empty, null, false),
+                    offreLancement =
+                        new OffreLancement(false, string.Empty, null, false, 0, [], string.Empty),
                 });
             }
         }
@@ -293,7 +337,8 @@ namespace SchoolWebApp.Api.Controllers
         [HttpGet]
         [Authorize(Policy = "EstAdmin")]
         [SwaggerResponse(200, "Tous les réglages.")]
-        public async Task<IActionResult> Tous(CancellationToken ct) =>
+        public async Task<IActionResult> Tous(
+            [FromServices] IAbonnementRepository formules, CancellationToken ct) =>
             Ok(new
             {
                 modeTest = await _reglages.EstActifAsync(ModeTest, false, ct),
@@ -335,6 +380,20 @@ namespace SchoolWebApp.Api.Controllers
 
                 offreLancementBandeau =
                     await _reglages.EstActifAsync(OffreLancementBandeau, true, ct),
+
+                offreLancementMinutes =
+                    await _reglages.LireAsync(OffreLancementMinutes, ct) ?? string.Empty,
+
+                offreLancementFormules =
+                    await _reglages.LireAsync(OffreLancementFormules, ct) ?? string.Empty,
+
+                // LE CATALOGUE PART AVEC : l'écran coche des formules réelles
+                // plutôt que de faire taper des codes qui n'existent peut-être
+                // pas. Les essais en sont exclus — on ne fait pas de
+                // promotion sur ce qui est déjà gratuit.
+                formulesDisponibles = (await formules.GetOffresAsync(ct))
+                    .Where(o => !o.EstEssai)
+                    .Select(o => new { o.Code, o.Libelle }),
             });
 
         /// <summary>
@@ -431,6 +490,42 @@ namespace SchoolWebApp.Api.Controllers
         {
             var texte = (requete?.Texte ?? string.Empty).Trim();
             var fin = (requete?.Fin ?? string.Empty).Trim();
+            // UN CHAMP ABSENT NE VAUT PAS ZÉRO, ET ÇA A COÛTÉ UNE OFFRE ÉTEINTE
+            // EN SILENCE LE 05/09/2026.
+            //
+            // Un navigateur resté sur une version antérieure de la page
+            // n'envoyait pas encore ces deux champs. Lus en  et ,
+            // ils ont écrit zéro heure et aucune formule : l'offre s'est
+            // éteinte toute seule, sans erreur, et l'écran continuait
+            // d'afficher ses valeurs par défaut comme si tout allait bien.
+            //
+            // ABSENT VEUT DONC DIRE « NE TOUCHE PAS », et il n'y a que le type
+            // nullable pour le distinguer d'un choix. Une liste VIDE, elle,
+            // reste une décision : l'administrateur a décoché toutes les
+            // formules.
+            //
+            // Même règle que pour les visuels d'un bandeau promo, où une image
+            // absente ne remplace pas celle en place.
+            if (requete?.Minutes is int m)
+            {
+                // Borné : le plafond empêche une faute de frappe d'offrir mille
+                // heures à chaque souscription.
+                await _reglages.EcrireAsync(
+                    OffreLancementMinutes, Math.Clamp(m, 0, 100 * 60).ToString(), ct);
+            }
+
+            if (requete?.Formules is not null)
+            {
+                // NORMALISÉES ET DÉDOUBLONNÉES ICI, une fois. Le service qui les
+                // relit compare des codes en majuscules ; laisser passer
+                // « solo » ferait une offre réglée qui ne s'applique à rien.
+                var liste = string.Join(",", requete.Formules
+                    .Select(f => (f ?? string.Empty).Trim().ToUpperInvariant())
+                    .Where(f => f.Length > 0)
+                    .Distinct());
+
+                await _reglages.EcrireAsync(OffreLancementFormules, liste, ct);
+            }
 
             if (texte.Length > LongueurTexteLancementMax)
             {
@@ -454,9 +549,13 @@ namespace SchoolWebApp.Api.Controllers
             await _reglages.EcrireAsync(OffreLancementTexte, texte, ct);
             await _reglages.EcrireAsync(OffreLancementFin, fin, ct);
 
+
             _logger.LogWarning(
-                "Offre de lancement reglee : « {Texte} », fin {Fin}.",
-                texte, fin.Length == 0 ? "sans terme" : fin);
+                "Offre de lancement reglee : « {Texte} », fin {Fin}, {Minutes} min, {Formules}.",
+                texte,
+                fin.Length == 0 ? "sans terme" : fin,
+                requete?.Minutes?.ToString() ?? "(inchange)",
+                requete?.Formules is null ? "(inchange)" : string.Join(",", requete.Formules));
 
             return NoContent();
         }
@@ -468,6 +567,12 @@ namespace SchoolWebApp.Api.Controllers
 
             /// <summary>ISO 8601 avec fuseau. Vide = offre sans terme.</summary>
             public string? Fin { get; set; }
+
+            /// <summary>Les minutes offertes. Zéro = aucun cadeau.</summary>
+            public int? Minutes { get; set; }
+
+            /// <summary>Les codes des formules concernées. Vide = aucune.</summary>
+            public string[]? Formules { get; set; }
         }
 
         // LES MODES SONT RÉSERVÉS AU SUPER-ADMINISTRATEUR. Le mode test et

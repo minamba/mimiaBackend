@@ -1145,6 +1145,158 @@ namespace SchoolWebApp.Api.Controllers
             }
         }
 
+        // ------------------------------------------------------------------
+        // Bannissement
+        //
+        // LA LISTE PORTE DES ADRESSES, PAS DES COMPTES, et c'est tout
+        // l'intérêt. Quelqu'un qu'on met dehors supprime souvent son compte
+        // dans la foulée, puis se réinscrit le lendemain avec la même
+        // adresse. Un drapeau posé sur `Parent` disparaîtrait avec lui —
+        // précisément au moment où il devient utile.
+        //
+        // LE REFUS TOMBE AILLEURS. Ces routes tiennent la liste ; c'est le
+        // SERVEUR D'IDENTITÉ qui refuse la connexion et l'inscription, en la
+        // lisant directement par sa connexion à la base métier. La
+        // séparation est celle des responsabilités : l'API administre, le
+        // serveur d'identité authentifie.
+        // ------------------------------------------------------------------
+        [HttpGet("bannis")]
+        [SwaggerResponse(200, "Les adresses bannies.")]
+        public async Task<IActionResult> Bannis(
+            [FromServices] IBannissementRepository bannissements, CancellationToken ct) =>
+            Ok(await bannissements.GetTousAsync(ct));
+
+        /// <summary>
+        /// Bannit un parent depuis sa fiche. Son compte n'est PAS supprimé.
+        ///
+        /// DEUX GESTES DISTINCTS, ET IL FAUT QUE ÇA LE RESTE. Bannir ferme la
+        /// porte ; supprimer efface la personne. On peut vouloir l'un sans
+        /// l'autre — mettre dehors sans détruire l'historique d'un litige en
+        /// cours, par exemple. Les fondre aurait rendu le bannissement
+        /// irréversible dans les faits.
+        /// </summary>
+        [HttpPost("parents/{id:int}/bannir")]
+        [SwaggerResponse(200, "Le parent est banni.")]
+        [SwaggerResponse(403, "Le compte super-administrateur ne se bannit pas.")]
+        [SwaggerResponse(404, "Compte inexistant.")]
+        public async Task<IActionResult> BannirParent(
+            int id,
+            [FromBody] BannirRequest? requete,
+            [FromServices] IBannissementRepository bannissements,
+            [FromServices] IVerrouBannissement verrou,
+            CancellationToken ct)
+        {
+            // LA MÊME GARDE QUE LA SUPPRESSION. Se bannir soi-même fermerait
+            // l'administration à clé, de l'intérieur, sans aucun moyen de
+            // revenir : la liste ne se lève que depuis un écran auquel on
+            // n'aurait plus accès.
+            var refus = await RefuserSiCompteProtegeAsync(id, "bannissement");
+            if (refus is not null) return refus;
+
+            var mail = await _adminService.MailDuParentAsync(id);
+
+            if (string.IsNullOrWhiteSpace(mail)) return NotFound();
+
+            await bannissements.BannirAsync(mail, requete?.Motif, MailAppelant(), ct);
+
+            // COUPE NET : sans cet oubli, la session en cours du banni
+            // survivrait jusqu'a l expiration de l instantane. C est ce qui
+            // rend le bannissement immediat plutot que differe.
+            verrou.Oublier();
+
+            _logger.LogWarning(
+                "Parent {ParentId} banni par un administrateur. Motif : {Motif}.",
+                id, string.IsNullOrWhiteSpace(requete?.Motif) ? "(aucun)" : requete!.Motif);
+
+            return Ok(new { mail });
+        }
+
+        /// <summary>
+        /// Ajoute une adresse à la main, sans passer par un compte.
+        ///
+        /// C'EST LE SEUL CHEMIN QUAND LE COMPTE N'EXISTE PLUS, ou n'a jamais
+        /// existé : on peut fermer la porte à quelqu'un avant qu'il entre.
+        /// </summary>
+        [HttpPost("bannis")]
+        [SwaggerResponse(204, "Adresse bannie.")]
+        [SwaggerResponse(400, "Adresse absente ou protégée.")]
+        public async Task<IActionResult> AjouterBanni(
+            [FromBody] BannirRequest requete,
+            [FromServices] IBannissementRepository bannissements,
+            [FromServices] IVerrouBannissement verrou,
+            CancellationToken ct)
+        {
+            var mail = (requete?.Mail ?? string.Empty).Trim();
+
+            if (mail.Length == 0 || !mail.Contains('@'))
+            {
+                return BadRequest(new { message = "Adresse électronique invalide." });
+            }
+
+            // MÊME GARDE QUE PAR L'IDENTIFIANT. Sans elle, la protection du
+            // super-administrateur se contournerait en tapant son adresse
+            // dans le champ libre — et le verrou ne serait plus un verrou.
+            if (_comptesProteges.Protege(mail))
+            {
+                _logger.LogWarning("Tentative de bannissement du super-administrateur, refusee.");
+
+                return BadRequest(new
+                {
+                    message = "Le compte super-administrateur ne peut pas être banni.",
+                });
+            }
+
+            await bannissements.BannirAsync(mail, requete?.Motif, MailAppelant(), ct);
+            verrou.Oublier();
+
+            _logger.LogWarning("Adresse bannie a la main par un administrateur.");
+
+            return NoContent();
+        }
+
+        /// <summary>
+        /// Lève un bannissement. La ligne est effacée, pas datée.
+        /// </summary>
+        [HttpDelete("bannis")]
+        [SwaggerResponse(204, "Bannissement levé.")]
+        [SwaggerResponse(404, "Cette adresse n'était pas bannie.")]
+        public async Task<IActionResult> LeverBanni(
+            [FromQuery] string mail,
+            [FromServices] IBannissementRepository bannissements,
+            [FromServices] IVerrouBannissement verrou,
+            CancellationToken ct)
+        {
+            var leve = await bannissements.LeverAsync(mail, ct);
+
+            // AUSSI IMPORTANT QUE POUR LE BANNISSEMENT, et dans l autre sens :
+            // sans cet oubli, quelqu un a qui on vient de rouvrir la porte
+            // resterait refuse une demi-minute, reessaierait, echouerait.
+            verrou.Oublier();
+
+            if (leve) _logger.LogWarning("Bannissement leve par un administrateur.");
+
+            return leve ? NoContent() : NotFound();
+        }
+
+        public class BannirRequest
+        {
+            /// <summary>Requise pour un ajout à la main, ignorée depuis une fiche.</summary>
+            public string? Mail { get; set; }
+
+            public string? Motif { get; set; }
+        }
+
+        /// <summary>
+        /// L'adresse de l'administrateur qui agit, pour la tracer.
+        ///
+        /// Nulle si le jeton ne la porte pas : une trace absente vaut mieux
+        /// qu'un bannissement refusé parce qu'on n'a pas su qui le posait.
+        /// </summary>
+        private string? MailAppelant() =>
+            User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value
+            ?? User.FindFirst("email")?.Value
+            ?? User.Identity?.Name;
+
         [HttpDelete("eleves/{id:int}")]
         [SwaggerResponse(204, "Profil supprimé.")]
         [SwaggerResponse(404, "Profil inexistant.")]

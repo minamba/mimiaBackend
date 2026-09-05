@@ -26,6 +26,7 @@ namespace SchoolWebApp.IdentityServer.Controllers
         private readonly IOpenIddictApplicationManager _applicationManager;
         private readonly IOpenIddictScopeManager _scopeManager;
         private readonly IModeTestService _modeTest;
+        private readonly IBannissementService _bannissements;
         private readonly IRolesDelegues _rolesDelegues;
 
         public AuthorizationController(
@@ -34,6 +35,7 @@ namespace SchoolWebApp.IdentityServer.Controllers
             IOpenIddictApplicationManager applicationManager,
             IOpenIddictScopeManager scopeManager,
             IModeTestService modeTest,
+            IBannissementService bannissements,
             IRolesDelegues rolesDelegues)
         {
             _userManager = userManager ?? throw new ArgumentNullException(nameof(userManager));
@@ -41,6 +43,8 @@ namespace SchoolWebApp.IdentityServer.Controllers
             _applicationManager = applicationManager ?? throw new ArgumentNullException(nameof(applicationManager));
             _scopeManager = scopeManager ?? throw new ArgumentNullException(nameof(scopeManager));
             _modeTest = modeTest ?? throw new ArgumentNullException(nameof(modeTest));
+            _bannissements = bannissements
+                ?? throw new ArgumentNullException(nameof(bannissements));
             _rolesDelegues = rolesDelegues ?? throw new ArgumentNullException(nameof(rolesDelegues));
         }
 
@@ -133,6 +137,25 @@ namespace SchoolWebApp.IdentityServer.Controllers
 
             var user = await _userManager.GetUserAsync(result.Principal)
                 ?? throw new InvalidOperationException("Le compte utilisateur est introuvable.");
+
+            // LA DERNIERE PORTE, ET LA PLUS DISCRETE.
+            //
+            // Refuser la connexion ne suffit pas : le navigateur d un parent
+            // deja entre renouvelle son jeton en silence, par ce point de
+            // terminaison, sans jamais repasser par le formulaire. Sa session
+            // au serveur d identite tient des semaines. Sans cette garde, un
+            // banni resterait servi tant qu il ne ferme pas son onglet.
+            //
+            // On DECONNECTE avant de refuser : laisser la session ouverte
+            // ferait boucler le navigateur, qui redemanderait un jeton a
+            // chaque essai.
+            if (await _bannissements.EstBanniAsync(user.Email))
+            {
+                await _signInManager.SignOutAsync();
+
+                return Forbid(
+                    authenticationSchemes: OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
+            }
 
             var identity = await BuildIdentityAsync(user, request.GetScopes());
 

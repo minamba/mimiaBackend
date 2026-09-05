@@ -48,6 +48,7 @@ namespace SchoolWebApp.Domain.Repositories
             string typeMimeLarge,
             byte[]? imageMobile,
             string? typeMimeMobile,
+            bool pleineLargeur,
             CancellationToken ct = default);
 
         /// <summary>
@@ -67,6 +68,7 @@ namespace SchoolWebApp.Domain.Repositories
             string? typeMimeLarge,
             byte[]? imageMobile,
             string? typeMimeMobile,
+            bool pleineLargeur,
             CancellationToken ct = default);
 
         /// <summary>

@@ -324,6 +324,8 @@ builder.Services.AddScoped<IMaitriseService, MaitriseService>();
 builder.Services.AddScoped<IAdminService, AdminService>();
 builder.Services.AddScoped<IAvisRepository, AvisRepository>();
 builder.Services.AddScoped<IPromoRepository, PromoRepository>();
+builder.Services.AddScoped<IBannissementRepository, BannissementRepository>();
+builder.Services.AddScoped<IVerrouBannissement, VerrouBannissement>();
 builder.Services.AddScoped<IOffreLancementService, OffreLancementService>();
 builder.Services.AddSingleton<SchoolWebApp.Api.Services.ComptesProteges>();
 
@@ -741,6 +743,10 @@ app.Use(async (contexte, suivant) =>
 app.UseWebSockets();
 app.UseAuthentication();
 app.UseAuthorization();
+
+// APRES L AUTHENTIFICATION : le verrou a besoin de savoir QUI appelle.
+// Avant les points de terminaison : un banni ne doit atteindre aucun d eux.
+app.UseMiddleware<SchoolWebApp.Api.Middleware.VerrouBannissementMiddleware>();
 // ---------------------------------------------------------------------------
 // Le site React, servi depuis wwwroot/ — le contenu de `npm run build`.
 //

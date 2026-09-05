@@ -985,28 +985,23 @@ FROM sys.database_files;";
                             .Sum(c => c.SecondesConsommees) / 60))
                         .FirstOrDefault(),
 
+                    // LE FORFAIT VIENT DE LA VUE, PAS D UN CALCUL REFAIT ICI.
+                    //
+                    // La regle — quelles recharges comptent — etait ecrite deux
+                    // fois : la, et dans AbonnementRepository pour l ecran du
+                    // parent. Elles ont diverge DEUX FOIS, chaque fois dans un
+                    // sens different : 18 h contre 14, puis 9 h contre 12.
+                    //
+                    // Elle vit maintenant dans vw_ForfaitAbonnement, ou il n en
+                    // existe qu un exemplaire. Ajouter une formule ou vendre un
+                    // nouveau pack ne demande plus rien ici.
                     MinutesPot = p.Abonnements
                         .Where(a => a.Statut == "Actif")
                         .OrderByDescending(a => a.PeriodeDebut)
-                        .Select(a => (int?)(
-                            a.Offre!.MinutesPotMensuel
-                            + a.Recharges
-                                .Where(r => r.PeriodeDebut == a.PeriodeDebut
-
-                                            // LES HEURES REMBOURSÉES NE COMPTENT PAS.
-                                            //
-                                            // La même règle que dans
-                                            // `AbonnementRepository.MinutesRechargeAsync`, et
-                                            // c'est bien le problème : elle est écrite DEUX
-                                            // FOIS. Corrigée là-bas et oubliée ici, elle a fait
-                                            // afficher 18 h en administration pour un parent qui
-                                            // en voyait 14 — l'écran de l'exploitant comptait des
-                                            // heures rendues.
-                                            //
-                                            // Si un jour cette condition change, elle doit
-                                            // changer aux deux endroits.
-                                            && r.DateRemboursement == null)
-                                .Sum(r => r.Minutes)))
+                        .Select(a => _context.ForfaitsAbonnement
+                            .Where(f => f.AbonnementId == a.Id)
+                            .Select(f => (int?)f.MinutesAllouees)
+                            .FirstOrDefault())
                         .FirstOrDefault(),
 
                 })

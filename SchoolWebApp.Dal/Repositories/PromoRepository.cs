@@ -34,6 +34,8 @@ namespace SchoolWebApp.Dal.Repositories
                 TexteAlternatif = b.TexteAlternatif,
                 Lien = b.Lien,
                 Actif = b.Actif,
+                PleineLargeur = b.PleineLargeur,
+                TypeMimeLarge = b.TypeMimeLarge,
 
                 // `!= null` plutôt que `.Length > 0` : traduit en SQL, le
                 // second lirait la colonne pour en mesurer la taille.
@@ -122,6 +124,7 @@ namespace SchoolWebApp.Dal.Repositories
             string typeMimeLarge,
             byte[]? imageMobile,
             string? typeMimeMobile,
+            bool pleineLargeur,
             CancellationToken ct = default)
         {
             var ligne = new BandeauPromo
@@ -129,6 +132,7 @@ namespace SchoolWebApp.Dal.Repositories
                 Titre = titre,
                 TexteAlternatif = texteAlternatif,
                 Lien = lien,
+                PleineLargeur = pleineLargeur,
 
                 // ÉTEINT À LA CRÉATION : on regarde le visuel dans la
                 // bibliothèque avant de le mettre sur la page d'accueil.
@@ -160,6 +164,7 @@ namespace SchoolWebApp.Dal.Repositories
             string? typeMimeLarge,
             byte[]? imageMobile,
             string? typeMimeMobile,
+            bool pleineLargeur,
             CancellationToken ct = default)
         {
             var ligne = await _context.BandeauxPromo.FirstOrDefaultAsync(b => b.Id == id, ct);
@@ -168,6 +173,7 @@ namespace SchoolWebApp.Dal.Repositories
             ligne.Titre = titre;
             ligne.TexteAlternatif = texteAlternatif;
             ligne.Lien = lien;
+            ligne.PleineLargeur = pleineLargeur;
 
             // UNE IMAGE ABSENTE VEUT DIRE « NE TOUCHE PAS », jamais « efface ».
             // Corriger une faute dans le texte alternatif ne doit pas obliger
@@ -257,6 +263,8 @@ namespace SchoolWebApp.Dal.Repositories
             TexteAlternatif = b.TexteAlternatif,
             Lien = b.Lien,
             Actif = b.Actif,
+            PleineLargeur = b.PleineLargeur,
+            TypeMimeLarge = b.TypeMimeLarge,
             AvecImageMobile = b.ImageMobile is { Length: > 0 },
             TailleLarge = b.TailleLarge,
             TailleMobile = b.TailleMobile,

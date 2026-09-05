@@ -226,12 +226,15 @@ namespace SchoolWebApp.Api.Services.Paiement
         /// remboursement d'abonnement reprend les heures de la recharge qui
         /// porte son paiement. Un cadeau ne se reprend pas comme un achat.
         ///
-        /// ET IL EST ENREGISTRÉ À ZÉRO EURO. `OffrirPackAsync` plutôt que
+        /// ET IL EST ENREGISTRÉ À ZÉRO EURO. `OffrirMinutesAsync` plutôt que
         /// `RechargerApresPaiementAsync` : la seconde inscrit le prix du
         /// catalogue, ce qui est juste pour un achat et faux pour un cadeau.
-        /// Au tarif du pack, chaque bénéficiaire aurait ajouté 14,90 € au
-        /// chiffre d'affaires de l'administration — sur l'écran même qui
-        /// sert à décider des prix.
+        /// Chaque bénéficiaire aurait ajouté un chiffre d'affaires fictif à
+        /// l'administration — sur l'écran même qui sert à décider des prix.
+        ///
+        /// DES MINUTES ET NON UN PACK, aussi. Le catalogue des packs sert à
+        /// VENDRE : ses entrées sont poussées chez Stripe. Offrir cinq heures
+        /// n'a pas à passer par la création d'un produit marchand.
         /// </summary>
         private async Task OffrirLancementAsync(
             Session session, int parentId, string codeOffre,
@@ -250,21 +253,33 @@ namespace SchoolWebApp.Api.Services.Paiement
             // fait déjà l'ouverture de l'abonnement juste au-dessus.
             if (PeriodiciteAbonnement.EstAnnuel(periodicite)) return;
 
-            if (!string.Equals(
-                    codeOffre, OffreLancementService.OffreConcernee,
-                    StringComparison.OrdinalIgnoreCase))
-            {
-                return;
-            }
 
             // RELUE MAINTENANT, au moment d'encaisser — pas à l'ouverture de
             // la caisse. C'est la lecture qui fait foi : une offre éteinte
             // entre le clic et le paiement ne doit plus rien offrir.
-            if (!await _lancement.EstVivanteAsync(ct)) return;
+            // RELUE MAINTENANT, ET C'EST ELLE QUI DIT QUEL PACK OFFRIR.
+            //
+            // Le pack est réglé dans l'onglet Modes, pas écrit ici : offrir
+            // dix heures au lieu de trois ne demande aucun déploiement. Et
+            // c'est LA MÊME lecture qui a servi à l'annoncer sur la page des
+            // tarifs — les deux ne peuvent pas désigner des packs différents.
+            var offre = await _lancement.LireAsync(ct);
 
-            var etat = await _abonnements.OffrirPackAsync(
+            if (!offre.Active) return;
+
+            // LA FORMULE EST-ELLE CONCERNÉE ? Vérifié APRÈS la lecture, et
+            // sur la MÊME lecture que celle qui a servi à l'annoncer : la
+            // page des tarifs et ce webhook ne peuvent pas viser des
+            // formules différentes.
+            if (!offre.Formules.Contains(codeOffre, StringComparer.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+
+            var etat = await _abonnements.OffrirMinutesAsync(
                 parentId,
-                OffreLancementService.PackOffert,
+                offre.MinutesOffertes,
                 $"lancement:{session.Id}",
                 "Offre de lancement",
                 ct);
@@ -275,13 +290,14 @@ namespace SchoolWebApp.Api.Services.Paiement
                 // l'un ni l'autre n'autorise à recréditer.
                 _logger.LogWarning(
                     "Offre de lancement non creditee au parent {ParentId} (session {Session}) : "
-                    + "pack inconnu ou session deja traitee.", parentId, session.Id);
+                    + "essai en cours, sans abonnement, ou session deja traitee.",
+                    parentId, session.Id);
                 return;
             }
 
             _logger.LogWarning(
-                "Offre de lancement : {Pack} offert au parent {ParentId} (session {Session}).",
-                OffreLancementService.PackOffert, parentId, session.Id);
+                "Offre de lancement : {Minutes} min offertes au parent {ParentId} "
+                + "(session {Session}).", offre.MinutesOffertes, parentId, session.Id);
         }
 
         /// <summary>

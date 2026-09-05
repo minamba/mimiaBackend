@@ -216,7 +216,7 @@ namespace SchoolWebApp.Domain.Repositories
             string? paiementStripeId, CancellationToken ct = default);
 
         /// <summary>
-        /// Offre un pack, sans encaissement, une seule fois par clé.
+        /// Offre des heures, sans encaissement, une seule fois par clé.
         /// </summary>
         /// <param name="cleUnicite">
         /// Ce qui garantit qu'on n'offre pas deux fois. Pour l'offre de
@@ -231,9 +231,14 @@ namespace SchoolWebApp.Domain.Repositories
         /// seule méthode avec un booléen aurait laissé le choix du prix à
         /// l'appelant — et le premier qui l'oublie gonfle le chiffre
         /// d'affaires de l'administration sans que rien ne le signale.
+        ///
+        /// DES MINUTES ET NON UN CODE DE PACK. Un cadeau n'a rien à voir avec
+        /// le catalogue des heures vendues : accrocher les deux obligerait à
+        /// créer un produit Stripe pour offrir, et rendrait l'offre
+        /// dépendante d'un pack qu'on pourrait désactiver sans y penser.
         /// </remarks>
-        Task<EtatQuota?> OffrirPackAsync(
-            int parentId, string codeRecharge, string cleUnicite, string motif,
+        Task<EtatQuota?> OffrirMinutesAsync(
+            int parentId, int minutes, string cleUnicite, string motif,
             CancellationToken ct = default);
 
         /// <summary>

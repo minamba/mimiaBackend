@@ -518,6 +518,70 @@ namespace SchoolWebApp.Dal.Migrations
                         });
                 });
 
+            modelBuilder.Entity("SchoolWebApp.Dal.Entities.ForfaitAbonnement", b =>
+                {
+                    b.Property<int>("AbonnementId")
+                        .HasColumnType("int")
+                        .HasColumnName("abonnement_id");
+
+                    b.Property<int>("MinutesAllouees")
+                        .HasColumnType("int")
+                        .HasColumnName("minutes_allouees");
+
+                    b.Property<int>("MinutesForfait")
+                        .HasColumnType("int")
+                        .HasColumnName("minutes_forfait");
+
+                    b.Property<int>("MinutesPlafondEnfant")
+                        .HasColumnType("int")
+                        .HasColumnName("minutes_plafond_enfant");
+
+                    b.Property<int>("MinutesRecharge")
+                        .HasColumnType("int")
+                        .HasColumnName("minutes_recharge");
+
+                    b.ToTable((string)null);
+
+                    b.ToView("vw_ForfaitAbonnement", (string)null);
+                });
+
+            modelBuilder.Entity("SchoolWebApp.Dal.Entities.MailBanni", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasColumnName("id");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("BanniPar")
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)")
+                        .HasColumnName("banni_par");
+
+                    b.Property<DateTime>("DateCreation")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("date_creation");
+
+                    b.Property<string>("Mail")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)")
+                        .HasColumnName("mail");
+
+                    b.Property<string>("Motif")
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)")
+                        .HasColumnName("motif");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Mail")
+                        .IsUnique();
+
+                    b.ToTable("MailBanni");
+                });
+
             modelBuilder.Entity("SchoolWebApp.Dal.Entities.BandeauPromo", b =>
                 {
                     b.Property<int>("Id")
@@ -554,6 +618,12 @@ namespace SchoolWebApp.Dal.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)")
                         .HasColumnName("lien");
+
+                    b.Property<bool>("PleineLargeur")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false)
+                        .HasColumnName("pleine_largeur");
 
                     b.Property<int>("TailleLarge")
                         .HasColumnType("int")

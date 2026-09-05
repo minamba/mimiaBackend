@@ -52,7 +52,30 @@ namespace SchoolWebApp.Api.Services
     /// qu'un site marchand puisse faire. La dépendance est écrite ici, une
     /// fois, plutôt que laissée à chaque écran qui l'afficherait.
     /// </param>
-    public record OffreLancement(bool Active, string Texte, DateTime? Fin, bool Bandeau);
+    /// <param name="MinutesOffertes">
+    /// Ce qui est offert à la souscription. Zéro éteint le cadeau — la
+    /// mention et le décompte disparaissent avec lui, puisqu'ils
+    /// n'annonceraient plus rien.
+    /// </param>
+    /// <param name="Formules">
+    /// Les codes concernés. VIDE ÉTEINT L'OFFRE : une promotion qui ne
+    /// s'applique à aucune formule ne promet rien, et la laisser « active »
+    /// afficherait une mention sur des cartes qui ne changent pas.
+    /// </param>
+    /// <param name="FormulesTexte">
+    /// Les mêmes, écrites pour un humain : « Solo », « Solo et Duo »,
+    /// « Solo, Duo et Famille ». Composée ICI parce que le serveur est le
+    /// seul à connaître les libellés — le compte à rebours de la page
+    /// d'accueil, lui, ne charge pas le catalogue des formules.
+    /// </param>
+    public record OffreLancement(
+        bool Active,
+        string Texte,
+        DateTime? Fin,
+        bool Bandeau,
+        int MinutesOffertes,
+        IReadOnlyList<string> Formules,
+        string FormulesTexte);
 
     public class OffreLancementService : IOffreLancementService
     {
@@ -62,10 +85,23 @@ namespace SchoolWebApp.Api.Services
         /// 14,90 € » avec un prix que le parent peut vérifier lui-même sur la
         /// page des tarifs.
         /// </summary>
-        public const string PackOffert = "PACK3H";
+        /// <summary>
+        /// Ce qu'on offre quand rien n'a été réglé : trois heures.
+        ///
+        /// UN DÉFAUT ET NON UNE FATALITÉ — le nombre saisi dans l'onglet
+        /// Modes l'emporte. Celui-ci ne sert qu'à une base où le réglage n'a
+        /// jamais été posé.
+        /// </summary>
+        public const int MinutesParDefaut = 180;
 
-        /// <summary>La seule formule concernée.</summary>
-        public const string OffreConcernee = "SOLO";
+        /// <summary>
+        /// La formule concernée quand rien n'a été réglé.
+        ///
+        /// Solo, parce que c'est l'entrée de gamme : une promotion sert à
+        /// faire franchir la première marche, pas à remercier ceux qui ont
+        /// déjà pris la plus chère.
+        /// </summary>
+        public const string FormuleParDefaut = "SOLO";
 
         /// <summary>
         /// Ce qui s'affiche si personne n'a rien écrit. Pas de chaîne vide :
@@ -75,12 +111,16 @@ namespace SchoolWebApp.Api.Services
         private const string TexteParDefaut = "OFFRE LANCEMENT";
 
         private readonly IReglageRepository _reglages;
+        private readonly IAbonnementRepository _formules;
         private readonly ILogger<OffreLancementService> _logger;
 
         public OffreLancementService(
-            IReglageRepository reglages, ILogger<OffreLancementService> logger)
+            IReglageRepository reglages,
+            IAbonnementRepository formules,
+            ILogger<OffreLancementService> logger)
         {
             _reglages = reglages ?? throw new ArgumentNullException(nameof(reglages));
+            _formules = formules ?? throw new ArgumentNullException(nameof(formules));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
@@ -97,9 +137,22 @@ namespace SchoolWebApp.Api.Services
                 var texte = await _reglages.LireAsync(ReglagesController.OffreLancementTexte, ct);
                 var fin = Echeance(await _reglages.LireAsync(ReglagesController.OffreLancementFin, ct));
 
+                // AUCUNE MINUTE, AUCUNE OFFRE. Un réglage à zéro éteint le
+                // cadeau : la carte cesserait sinon de promettre quoi que ce
+                // soit tout en restant marquée « offre de lancement ».
+                var brut = await _reglages.LireAsync(
+                    ReglagesController.OffreLancementMinutes, ct);
+
+                var minutes = int.TryParse(brut, out var lu) ? lu : MinutesParDefaut;
+
+                var codes = await FormulesAsync(ct);
+
                 // `> DateTime.UtcNow` et non `>=` : l'échéance est le dernier
                 // instant où l'offre vaut. Une seconde après, elle est morte.
-                var vivante = allumee && (fin is null || fin > DateTime.UtcNow);
+                var vivante = allumee
+                    && minutes > 0
+                    && codes.Count > 0
+                    && (fin is null || fin > DateTime.UtcNow);
 
                 // ALLUMÉ PAR DÉFAUT, et jamais sans offre vivante derrière.
                 var bandeau = vivante && await _reglages.EstActifAsync(
@@ -109,7 +162,10 @@ namespace SchoolWebApp.Api.Services
                     vivante,
                     string.IsNullOrWhiteSpace(texte) ? TexteParDefaut : texte.Trim(),
                     fin,
-                    bandeau);
+                    bandeau,
+                    minutes,
+                    codes,
+                    await EnToutesLettresAsync(codes, ct));
             }
             catch (Exception ex)
             {
@@ -118,8 +174,62 @@ namespace SchoolWebApp.Api.Services
                 // un cadeau qu'on ne donnera pas, ni le donner sans l'avoir
                 // promis.
                 _logger.LogError(ex, "Lecture de l'offre de lancement impossible.");
-                return new OffreLancement(false, TexteParDefaut, null, false);
+                return new OffreLancement(
+                    false, TexteParDefaut, null, false, 0, [], string.Empty);
             }
+        }
+
+        /// <summary>
+        /// Les codes réglés, ou le défaut si rien ne l'a jamais été.
+        /// </summary>
+        private async Task<IReadOnlyList<string>> FormulesAsync(CancellationToken ct)
+        {
+            var brut = await _reglages.LireAsync(
+                ReglagesController.OffreLancementFormules, ct);
+
+            // JAMAIS RÉGLÉ ET EXPLICITEMENT VIDÉ NE SE CONFONDENT PAS. Le
+            // premier retombe sur le défaut ; le second est une décision —
+            // l'administrateur a décoché toutes les formules, et l'offre ne
+            // doit alors porter sur rien.
+            if (brut is null) return [FormuleParDefaut];
+
+            return brut
+                .Split(',', StringSplitOptions.RemoveEmptyEntries
+                            | StringSplitOptions.TrimEntries)
+                .Select(c => c.ToUpperInvariant())
+                .Distinct()
+                .ToList();
+        }
+
+        /// <summary>
+        /// « Solo », « Solo et Duo », « Solo, Duo et Famille ».
+        ///
+        /// COMPOSÉE CÔTÉ SERVEUR parce qu'il est le seul à connaître les
+        /// libellés. Le compte à rebours de la page d'accueil ne charge pas
+        /// le catalogue des formules — lui faire deviner « SOLO » → « Solo »
+        /// aurait marché jusqu'au premier code qui ne s'écrit pas comme son
+        /// nom.
+        /// </summary>
+        private async Task<string> EnToutesLettresAsync(
+            IReadOnlyList<string> codes, CancellationToken ct)
+        {
+            if (codes.Count == 0) return string.Empty;
+
+            var catalogue = await _formules.GetOffresAsync(ct);
+
+            var noms = codes
+                .Select(code => catalogue
+                    .FirstOrDefault(o => string.Equals(
+                        o.Code, code, StringComparison.OrdinalIgnoreCase))?.Libelle
+
+                    // Le code brut si la formule a disparu du catalogue :
+                    // moins beau, mais toujours vrai.
+                    ?? code)
+                .ToList();
+
+            if (noms.Count == 1) return noms[0];
+
+            return string.Join(", ", noms.Take(noms.Count - 1)) + " et " + noms[^1];
         }
 
         /// <summary>

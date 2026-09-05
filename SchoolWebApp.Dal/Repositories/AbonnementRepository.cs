@@ -515,8 +515,16 @@ namespace SchoolWebApp.Dal.Repositories
 
             var (consommeesPot, consommeesEnfant) = await ConsommationAsync(abonnement, eleveId, ct);
 
-            var recharge = await MinutesRechargeAsync(abonnement, ct);
-            var alloueesPot = offre.MinutesPotMensuel + recharge;
+            // LES DEUX NOMBRES VIENNENT DE LA VUE, pas de calculs faits ici.
+            //
+            // `vw_ForfaitAbonnement` sait quelles recharges comptent, et
+            // ajoute déjà leur total au forfait comme au plafond. Refaire
+            // l'addition en C# rouvrirait la porte par laquelle cette règle
+            // a divergé deux fois entre cet écran et celui de
+            // l'administration.
+            var forfait = await ForfaitAsync(abonnement, offre, ct);
+
+            var alloueesPot = forfait.MinutesAllouees;
 
             // LES RECHARGES LÈVENT AUSSI LE PLAFOND INDIVIDUEL.
             //
@@ -532,7 +540,7 @@ namespace SchoolWebApp.Dal.Repositories
             // débloquer quelqu'un : la refuser à celui qu'elle vise vide le
             // geste de son sens. Sur Duo et Famille, elle ne dérègle rien —
             // le pot reste le vrai frein, et il est commun.
-            var plafondEnfant = offre.MinutesPlafondEnfant + recharge;
+            var plafondEnfant = forfait.MinutesPlafondEnfant;
 
             // Le pot d'abord : c'est lui qui borne le coût. Le plafond ensuite,
             // qui protège la fratrie plutôt que la facture — d'où deux motifs
@@ -797,10 +805,11 @@ namespace SchoolWebApp.Dal.Repositories
         /// d'appeler cette méthode depuis un webhook, que Stripe réémet
         /// tant qu'il n'a pas reçu de 200.
         /// </summary>
-        public async Task<EtatQuota?> OffrirPackAsync(
-            int parentId, string codeRecharge, string cleUnicite, string motif,
+        public async Task<EtatQuota?> OffrirMinutesAsync(
+            int parentId, int minutes, string cleUnicite, string motif,
             CancellationToken ct = default)
         {
+            if (minutes <= 0) return null;
             if (string.IsNullOrWhiteSpace(cleUnicite)) return null;
             if (string.IsNullOrWhiteSpace(motif)) return null;
 
@@ -814,13 +823,57 @@ namespace SchoolWebApp.Dal.Repositories
 
             try
             {
-                return await CrediterPackAsync(
-                    parentId, codeRecharge, cleUnicite, null, motif.Trim(), ct);
+                return await CrediterMinutesAsync(
+                    parentId, minutes, cleUnicite, motif.Trim(), ct);
             }
             catch (DbUpdateException)
             {
                 return null;
             }
+        }
+
+        /// <summary>
+        /// Écrit les heures offertes. Le jumeau de `CrediterPackAsync`, sans
+        /// catalogue ni prix.
+        ///
+        /// LES MÊMES GARDES QU'UN PACK PAYÉ, et il le faut : un cadeau posé
+        /// sur un essai expirerait avec lui, et un cadeau sans abonnement
+        /// n'aurait rien où se rattacher.
+        /// </summary>
+        private async Task<EtatQuota?> CrediterMinutesAsync(
+            int parentId, int minutes, string cleUnicite, string motif, CancellationToken ct)
+        {
+            var abonnement = await Courant(parentId).FirstOrDefaultAsync(ct);
+            if (abonnement is null) return null;
+
+            // ON N'OFFRE PAS D'HEURES SUR UN ESSAI. Elles expireraient avec
+            // lui — sept jours — et il n'y a pas d'abonnement derrière pour
+            // en profiter ensuite.
+            if (abonnement.Offre!.EstEssai) return null;
+
+            await RafraichirAsync(abonnement, ct);
+
+            _context.Recharges.Add(new Recharge
+            {
+                AbonnementId = abonnement.Id,
+                PeriodeDebut = abonnement.PeriodeDebut,
+                Minutes = minutes,
+
+                // ZÉRO EURO : rien n'a été encaissé. Le porter à un prix
+                // fausserait le chiffre d'affaires lu en administration, et
+                // montrerait au parent une ligne qu'il n'a jamais payée.
+                PrixCentimes = 0,
+                Motif = motif,
+
+                DateAchat = DateTime.UtcNow,
+                StripeSessionId = cleUnicite,
+            });
+
+            abonnement.AlerteQuotaEnvoyee = false;
+
+            await _context.SaveChangesAsync(ct);
+
+            return await ComposerAsync(abonnement, ct);
         }
 
         /// <param name="motif">
@@ -1138,19 +1191,86 @@ namespace SchoolWebApp.Dal.Repositories
             return occupants.Count < maximum;
         }
 
-        private Task<int> MinutesRechargeAsync(Abonnement abonnement, CancellationToken ct) =>
-            _context.Recharges
-                .Where(r => r.AbonnementId == abonnement.Id
-                            && r.PeriodeDebut == abonnement.PeriodeDebut
+        /// <summary>
+        /// Les minutes rechargées valables sur la période en cours.
+        ///
+        /// L'ÉGALITÉ DE DATE NE SUFFIT PAS, ET ÇA A COÛTÉ TROIS HEURES EN
+        /// PRODUCTION LE 04/09/2026.
+        /// ------------------------------------------------------------------
+        /// Une recharge portait la `PeriodeDebut` de l'abonnement au moment
+        /// de l'achat, et le rattachement se faisait par égalité stricte.
+        /// Sauf que cette date est RÉÉCRITE quelques instants plus tard :
+        /// Stripe envoie `invoice.paid` juste après `checkout.session.completed`,
+        /// et `ReporterPeriodeAsync` remplace la période par celle de la
+        /// facture — un horodatage à la seconde entière, donc voisin mais
+        /// jamais identique au nôtre.
+        ///
+        /// L'égalité tombait, la somme rendait zéro, et les heures créditées
+        /// disparaissaient de la vue SANS disparaître de la base. Le parent
+        /// voyait 9 h là où la ligne existait bel et bien.
+        ///
+        /// CE N'ÉTAIT PAS PROPRE À L'OFFRE DE LANCEMENT : n'importe quel
+        /// pack acheté dans la minute qui suit une souscription se perdait de
+        /// la même façon. On vendait 14,90 € des heures qui devenaient
+        /// invisibles.
+        ///
+        /// LA DATE D'ACHAT EST LE VRAI CRITÈRE. Une recharge appartient à la
+        /// période PENDANT LAQUELLE elle a été achetée. `PeriodeDebut` était
+        /// une tentative d'enregistrer ce fait ; la fenêtre le mesure
+        /// directement, et rien ne peut la redater sous nos pieds.
+        ///
+        /// L'ANCIENNE RÈGLE EST GARDÉE EN PREMIÈRE BRANCHE, et ce n'est pas
+        /// de la timidité : elle est juste, elle couvre tout ce qui
+        /// fonctionne aujourd'hui, et la seconde branche ne fait que
+        /// rattraper ce qu'elle rate. Ensemble elles ne peuvent pas ramener
+        /// une recharge d'une AUTRE période — celles du mois passé ont une
+        /// date d'achat antérieure au début de la période en cours, et un
+        /// horodatage qui ne correspond plus.
+        ///
+        /// AUCUNE MIGRATION DE DONNÉES : les recharges déjà orphelines
+        /// redeviennent visibles au premier redémarrage.
+        /// </summary>
+        /// <summary>
+        /// Ce que ce compte a le droit de consommer, lu dans la vue.
+        ///
+        /// UN REPLI EN DUR SI LA VUE NE RÉPOND PAS. Elle ne peut manquer
+        /// qu'entre le déploiement du code et l'application de la migration
+        /// — quelques secondes au démarrage. Pendant ce laps, mieux vaut
+        /// rendre le forfait de base qu'échouer : le parent voit ses heures
+        /// de formule, sans ses recharges, plutôt qu'une erreur.
+        /// </summary>
+        private async Task<ForfaitAbonnement> ForfaitAsync(
+            Abonnement abonnement, Offre offre, CancellationToken ct)
+        {
+            var id = abonnement.Id;
 
-                            // LES HEURES REMBOURSÉES NE COMPTENT PLUS.
-                            //
-                            // C'est le seul endroit à connaître cette règle :
-                            // la ligne reste en base pour l'historique, elle
-                            // sort simplement du pot. Un `DELETE` aurait été
-                            // plus court et aurait effacé la preuve de l'achat.
-                            && r.DateRemboursement == null)
-                .SumAsync(r => r.Minutes, ct);
+            var lu = await _context.ForfaitsAbonnement
+                .AsNoTracking()
+                .FirstOrDefaultAsync(f => f.AbonnementId == id, ct);
+
+            return lu ?? new ForfaitAbonnement
+            {
+                AbonnementId = id,
+                MinutesForfait = offre.MinutesPotMensuel,
+                MinutesRecharge = 0,
+                MinutesAllouees = offre.MinutesPotMensuel,
+                MinutesPlafondEnfant = offre.MinutesPlafondEnfant,
+            };
+        }
+
+        private Task<int> MinutesRechargeAsync(Abonnement abonnement, CancellationToken ct)
+        {
+            var id = abonnement.Id;
+
+            // ZÉRO SI LA VUE NE RÉPOND PAS : voir `ForfaitAsync`. Cette
+            // somme sert à borner un ajustement, jamais à autoriser une
+            // consommation — un zéro y est prudent, pas dangereux.
+            return _context.ForfaitsAbonnement
+                .AsNoTracking()
+                .Where(f => f.AbonnementId == id)
+                .Select(f => f.MinutesRecharge)
+                .FirstOrDefaultAsync(ct);
+        }
 
         /// <summary>Minutes consommées : par la fratrie, et par cet enfant.</summary>
         private async Task<(int Pot, int Enfant)> ConsommationAsync(
