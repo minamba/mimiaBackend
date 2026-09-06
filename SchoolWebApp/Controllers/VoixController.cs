@@ -72,7 +72,7 @@ namespace SchoolWebApp.Api.Controllers
 
                 await _synthese.CopierAudioAsync(
                     requete.Texte!, requete.Avatar, requete.Age, Response.Body,
-                    requete.Dictee, ct);
+                    requete.Dictee, requete.Anglais, ct);
 
                 return new EmptyResult();
             }
@@ -117,6 +117,22 @@ namespace SchoolWebApp.Api.Controllers
             /// contraire de ne pas ralentir à partir du collège.
             /// </summary>
             public bool Dictee { get; set; }
+
+            /// <summary>
+            /// Ce passage se prononce EN ANGLAIS.
+            ///
+            /// Le professeur d'anglais explique en français et fait pratiquer en
+            /// anglais. Sa consigne lui interdisait jusqu'ici de prononcer le
+            /// moindre mot d'anglais — la voix lisant en français, un mot
+            /// anglais y devenait une fausse prononciation apprise.
+            ///
+            /// L'interdit rendait la compréhension orale impossible : une
+            /// compétence d'écoute par niveau, du CP à la terminale, restait
+            /// grise faute de pouvoir être travaillée. Le drapeau lève la règle
+            /// PHRASE PAR PHRASE, sur les seuls passages que le professeur borne
+            /// lui-même — l'annonce et la consigne restent en français.
+            /// </summary>
+            public bool Anglais { get; set; }
         }
     }
 }

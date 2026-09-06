@@ -125,17 +125,18 @@ namespace SchoolWebApp.Api.Services.Voix
         public bool Disponible => !string.IsNullOrWhiteSpace(_options.ApiKey);
 
         public async Task<byte[]> SynthetiserAsync(
-            string texte, string? avatar, int age, bool dictee = false, CancellationToken ct = default)
+            string texte, string? avatar, int age, bool dictee = false,
+            bool anglais = false, CancellationToken ct = default)
         {
-            using var reponse = await AppelerAsync(texte, avatar, age, dictee, ct);
+            using var reponse = await AppelerAsync(texte, avatar, age, dictee, anglais, ct);
             return await reponse.Content.ReadAsByteArrayAsync(ct);
         }
 
         public async Task CopierAudioAsync(
             string texte, string? avatar, int age, Stream destination,
-            bool dictee = false, CancellationToken ct = default)
+            bool dictee = false, bool anglais = false, CancellationToken ct = default)
         {
-            using var reponse = await AppelerAsync(texte, avatar, age, dictee, ct);
+            using var reponse = await AppelerAsync(texte, avatar, age, dictee, anglais, ct);
             await using var flux = await reponse.Content.ReadAsStreamAsync(ct);
 
             // Petit tampon et vidange explicite : avec les 81 920 octets par
@@ -159,7 +160,7 @@ namespace SchoolWebApp.Api.Services.Voix
         /// tout le bénéfice de la recopie au fil de l'eau.
         /// </summary>
         private async Task<HttpResponseMessage> AppelerAsync(
-            string texte, string? avatar, int age, bool dictee, CancellationToken ct)
+            string texte, string? avatar, int age, bool dictee, bool anglais, CancellationToken ct)
         {
             if (!Disponible)
             {
@@ -195,7 +196,7 @@ namespace SchoolWebApp.Api.Services.Voix
                 model = _options.Modele,
                 input = propre,
                 voice = ChoisirVoix(avatar, false),
-                instructions = Jeu(age, dictee),
+                instructions = Jeu(age, dictee, anglais),
                 // PCM brut : ni en-tête, ni encodage.
                 //
                 // Le MP3 pose une amorce de silence en tête et en queue de
@@ -299,8 +300,41 @@ namespace SchoolWebApp.Api.Services.Voix
             de ton de présentateur.
             """;
 
-        private static string Jeu(int age, bool dictee) =>
-            dictee ? Dictee : Naturel + "\n\n" + Registre(age);
+        private static string Jeu(int age, bool dictee, bool anglais) =>
+            dictee ? Dictee
+            : anglais ? Anglais
+            : Naturel + "\n\n" + Registre(age);
+
+        /// <summary>
+        /// La consigne d'un passage prononcé EN ANGLAIS.
+        ///
+        /// ELLE REMPLACE LE RESTE, comme celle de la dictée et pour la même
+        /// raison : le registre lié à l'âge est écrit en français et pour du
+        /// français. Les superposer donnerait au modèle deux ordres dans deux
+        /// langues, et il en choisirait un.
+        ///
+        /// LA DICTÉE L'EMPORTE quand les deux se présentent. Une dictée
+        /// d'anglais reste avant tout une dictée : c'est le débit qui porte
+        /// l'exercice, et mieux vaut un mot dit à la française qu'un texte
+        /// débité trop vite pour être écrit. Le cas est rare, mais l'ordre des
+        /// branches le tranche plutôt que de le laisser au hasard.
+        ///
+        /// L'ACCENT EST DEMANDÉ EXPLICITEMENT. Sans consigne, le modèle lit
+        /// l'anglais avec l'accent de la voix choisie — française, ici — et
+        /// c'est précisément la fausse prononciation qu'on cherche à éviter.
+        /// C'était la raison pour laquelle le professeur d'anglais avait
+        /// interdiction de prononcer le moindre mot d'anglais.
+        /// </summary>
+        private const string Anglais = """
+            Lis ce passage EN ANGLAIS, avec la prononciation naturelle d'un
+            locuteur natif. N'imite pas un accent français.
+
+            Débit posé, un peu plus lent qu'une conversation : l'élève écoute
+            pour comprendre, dans une langue qui n'est pas la sienne. Articule
+            les fins de mots. Marque les groupes de sens par de courtes pauses.
+
+            Ton neutre et bienveillant, sans emphase de présentateur.
+            """;
 
         /// <summary>
         /// La consigne de jeu d'une DICTÉE.

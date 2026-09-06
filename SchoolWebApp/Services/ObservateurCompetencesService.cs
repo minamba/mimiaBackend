@@ -126,7 +126,8 @@ namespace SchoolWebApp.Api.Services
             if (!Exploitable(seance)) return 0;
 
             var candidates = (await _maitrises.GetCandidatesAsync(
-                seance.MatiereId, seance.NiveauOrdre, MargeAmont, MargeAval, ct)).ToList();
+                seance.MatiereId, seance.NiveauOrdre, MargeAmont, MargeAval,
+                seance.NiveauCode, ct)).ToList();
 
             if (candidates.Count == 0)
             {

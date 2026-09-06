@@ -28,7 +28,8 @@ namespace SchoolWebApp.Domain.Repositories
         /// en 6e vient souvent d'une notion de CM1.
         /// </summary>
         Task<IEnumerable<CompetenceCandidate>> GetCandidatesAsync(
-            int matiereId, int niveauOrdre, int margeAmont, int margeAval, CancellationToken ct = default);
+            int matiereId, int niveauOrdre, int margeAmont, int margeAval,
+            string? codeNiveau, CancellationToken ct = default);
 
         /// <summary>
         /// Intègre des observations et met à jour la maîtrise. Les codes

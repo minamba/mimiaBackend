@@ -83,7 +83,8 @@ namespace SchoolWebApp.Dal.Repositories
         private const double Apprentissage = 0.12;
 
         public async Task<IEnumerable<CompetenceCandidate>> GetCandidatesAsync(
-            int matiereId, int niveauOrdre, int margeAmont, int margeAval, CancellationToken ct = default)
+            int matiereId, int niveauOrdre, int margeAmont, int margeAval,
+            string? codeNiveau, CancellationToken ct = default)
         {
             // On propose le niveau de l'élève ET les précédents : c'est tout
             // l'intérêt du graphe. Un élève de 6e qui bute sur les fractions
@@ -91,7 +92,7 @@ namespace SchoolWebApp.Dal.Repositories
             var min = niveauOrdre - margeAmont;
             var max = niveauOrdre + margeAval;
 
-            return await _context.Competences
+            var candidates = await _context.Competences
                 .AsNoTracking()
                 .Where(c => c.MatiereId == matiereId
                             && c.NiveauScolaire!.Ordre >= min
@@ -105,9 +106,26 @@ namespace SchoolWebApp.Dal.Repositories
                     Libelle = c.Libelle,
                     Domaine = c.Domaine,
                     NiveauLibelle = c.NiveauScolaire!.Libelle,
+                    NiveauCode = c.NiveauScolaire.Code,
                     NiveauOrdre = c.NiveauScolaire.Ordre,
                 })
                 .ToListAsync(ct);
+
+            // LE RANG NE SUFFIT PLUS AU LYCÉE.
+            //
+            // Trois classes partagent le rang 12 et n'ont pas le même
+            // programme de mathématiques. Sans ce filtre, une séance d'un élève
+            // de terminale professionnelle se ferait rattacher aux compétences
+            // de la spécialité de terminale générale — un programme qu'il ne
+            // suit pas.
+            //
+            // Le repli laisse l'héritage par rang intact partout où sa voie n'a
+            // pas de référentiel propre : la règle est dans `VoiesScolaires`.
+            return VoiesScolaires.RetenirPourLaVoie(
+                candidates,
+                codeNiveau,
+                c => c.NiveauCode,
+                c => (matiereId, c.NiveauOrdre));
         }
 
         public async Task<int> AppliquerObservationsAsync(
@@ -376,12 +394,37 @@ namespace SchoolWebApp.Dal.Repositories
                     co.MatiereId,
                     co.NiveauScolaireId,
                     NiveauLibelle = co.NiveauScolaire!.Libelle,
+                    NiveauCode = co.NiveauScolaire!.Code,
                     NiveauOrdre = co.NiveauScolaire!.Ordre,
                     MatiereLibelle = co.Matiere!.Libelle,
                     MatiereCouleur = co.Matiere!.ProfCouleur,
                 })
                 .ToListAsync(ct);
 
+            // LE RANG DONNE L'ANNÉE, PAS LE PROGRAMME.
+            //
+            // Au lycée, trois classes partagent le rang et suivent des
+            // programmes différents. Un élève de terminale professionnelle
+            // verrait sinon, dans sa carte, les notions de la spécialité de
+            // mathématiques de terminale générale.
+            //
+            // On ne retire JAMAIS une notion qu'il a déjà travaillée : elle
+            // est à lui, quelle que soit la voie où elle est écrite. C'est
+            // aussi ce qui protège l'élève qui a changé d'orientation en cours
+            // de scolarité — ce qu'il a acquis avant reste affiché.
+            var pourSaVoie = VoiesScolaires
+                .RetenirPourLaVoie(
+                    competences,
+                    eleve.NiveauScolaire!.Code,
+                    co => co.NiveauCode,
+                    co => (co.MatiereId, co.NiveauOrdre))
+                .Select(co => co.Id)
+                .ToHashSet();
+
+            competences = competences
+                .Where(co => pourSaVoie.Contains(co.Id) || parCompetence.ContainsKey(co.Id))
+
+                .ToList();
             // AUCUNE COMPÉTENCE N EST UNE CARTE VIDE, PAS UNE ERREUR.
             //
             // Six niveaux du référentiel n en ont aucune : 3e prépa-métiers,

@@ -110,5 +110,94 @@ namespace SchoolWebApp.Domain.Models
             return !NiveauxExclus(matiere.Code)
                 .Contains(niveau.Code, StringComparer.OrdinalIgnoreCase);
         }
+
+        /// <summary>
+        /// Les voies auxquelles appartient une classe de lycée.
+        ///
+        /// La seconde est GÉNÉRALE ET TECHNOLOGIQUE : une seule classe pour
+        /// deux voies, la séparation n'ayant lieu qu'en première. Elle porte
+        /// donc les deux lettres, et c'est la seule.
+        ///
+        /// Les classes absentes de cette table — du CP à la troisième — sont
+        /// le tronc commun : elles ne relèvent d'aucune voie, et leurs
+        /// compétences concernent tout le monde.
+        /// </summary>
+        private static readonly IReadOnlyDictionary<string, string[]> VoiesDuNiveau =
+            new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["SECONDE"]          = ["G", "T"],
+                ["PREMIERE"]         = ["G"],
+                ["TERMINALE"]        = ["G"],
+                ["PREMIERE_TECHNO"]  = ["T"],
+                ["TERMINALE_TECHNO"] = ["T"],
+                ["SECONDE_PRO"]      = ["P"],
+                ["PREMIERE_PRO"]     = ["P"],
+                ["TERMINALE_PRO"]    = ["P"],
+            };
+
+        /// <summary>
+        /// Une compétence écrite pour telle classe concerne-t-elle un élève de
+        /// telle autre classe ?
+        ///
+        /// Répond OUI dès qu'un doute subsiste : hors du lycée il n'y a pas de
+        /// voie, et un élève de troisième qui regarde le rang au-dessus n'a
+        /// encore choisi ni la voie générale, ni la professionnelle.
+        /// </summary>
+        public static bool NiveauConcerne(string? codeEleve, string? codeCompetence)
+        {
+            if (codeCompetence is null
+                || !VoiesDuNiveau.TryGetValue(codeCompetence, out var voiesCompetence))
+                return true;
+
+            if (codeEleve is null
+                || !VoiesDuNiveau.TryGetValue(codeEleve, out var voiesEleve))
+                return true;
+
+            return voiesCompetence.Intersect(voiesEleve, StringComparer.OrdinalIgnoreCase).Any();
+        }
+
+        /// <summary>
+        /// Ne garder que les compétences qui concernent la voie de l'élève —
+        /// AVEC REPLI SUR L'HÉRITAGE PAR RANG.
+        ///
+        /// POURQUOI UN REPLI, ET NON UN FILTRE SEC.
+        /// ----------------------------------------
+        /// Le référentiel est écrit pour les classes générales, et les autres
+        /// voies en héritent par le rang d'année : c'est ce qui donne un
+        /// programme à une première professionnelle sans qu'on ait rien écrit
+        /// pour elle. Filtrer sèchement sur la voie viderait sa carte de tout
+        /// ce dont elle vit aujourd'hui.
+        ///
+        /// La règle est donc : SI la voie de l'élève a son propre référentiel
+        /// pour cette matière et ce rang, il remplace l'héritage ; SINON
+        /// l'héritage continue de s'appliquer, inchangé.
+        ///
+        /// Concrètement, un élève de terminale professionnelle reçoit les
+        /// mathématiques du bac pro — écrites pour lui — et continue de
+        /// recevoir la philosophie de terminale générale, faute de mieux.
+        ///
+        /// L'ordre d'entrée est conservé : les appelants trient par rang puis
+        /// par ordre avant d'appeler, et ce tri ne doit pas être défait.
+        /// </summary>
+        public static List<T> RetenirPourLaVoie<T>(
+            IEnumerable<T> competences,
+            string? codeNiveauEleve,
+            Func<T, string?> codeNiveau,
+            Func<T, (int Matiere, int Rang)> groupe)
+        {
+            var liste = competences as IList<T> ?? competences.ToList();
+
+            // Les couples (matière, rang) où la voie de l'élève a écrit le
+            // sien. Là, et seulement là, l'héritage s'efface.
+            var specialises = liste
+                .Where(c => NiveauConcerne(codeNiveauEleve, codeNiveau(c)))
+                .Select(groupe)
+                .ToHashSet();
+
+            return liste
+                .Where(c => !specialises.Contains(groupe(c))
+                            || NiveauConcerne(codeNiveauEleve, codeNiveau(c)))
+                .ToList();
+        }
     }
 }

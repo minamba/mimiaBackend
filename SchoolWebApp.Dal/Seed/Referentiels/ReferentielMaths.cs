@@ -462,6 +462,196 @@ namespace SchoolWebApp.Dal.Seed.Referentiels
                 ("TERMINALE", "MATH_TLE_LOGIQUE_NECESSAIRE", "Analyse", "Distinguer condition nécessaire et condition suffisante", 23),
 
                 ("TERMINALE", "MATH_TLE_ALGO_SIMULATION","Algorithmique", "Écrire un programme de simulation ou de calcul approché", 21),
+
+                // ================================================================
+                // VOIE TECHNOLOGIQUE ET VOIE PROFESSIONNELLE
+                // ================================================================
+                //
+                // POURQUOI CES CINQ CLASSES ONT DÉSORMAIS LEUR PROPRE PROGRAMME.
+                //
+                // Le référentiel était écrit pour les classes générales, et les
+                // autres voies en héritaient par le RANG d'année. Un élève de
+                // terminale professionnelle recevait donc les 23 compétences de
+                // la SPÉCIALITÉ de terminale générale — récurrence, logarithme
+                // népérien, équations différentielles, produit scalaire dans
+                // l'espace. Il n'en étudie aucune, et son propre programme de
+                // mathématiques, lui, n'existait nulle part.
+                //
+                // Les mathématiques sont OBLIGATOIRES dans ces deux voies, pour
+                // tous les élèves, ce qui n'est plus le cas en voie générale
+                // depuis 2019. C'est donc là que l'erreur touchait le plus de
+                // monde.
+                //
+                // `VoiesScolaires.RetenirPourLaVoie` fait le tri : ces
+                // compétences-ci ne partent qu'aux élèves de la voie concernée,
+                // et l'héritage par rang continue de s'appliquer partout où une
+                // voie n'a pas de référentiel propre.
+                //
+                // SOURCES, vérifiées le 6 septembre 2026 :
+                //   Seconde pro      arrêté du 03/04/2019, BO spécial n° 5 du
+                //                    11/04/2019 — en vigueur.
+                //   1re et Tle pro   arrêté du 03/02/2020, BO spécial n° 1 du
+                //                    06/02/2020, annexes 1 et 2 — en vigueur.
+                //   1re techno       arrêté du 26/02/2026, BO n° 14 du
+                //                    02/04/2026 — EN VIGUEUR DEPUIS LA RENTRÉE
+                //                    2026. Le programme de 2019 est périmé.
+                //   Tle techno       arrêté du 19/07/2019, BO spécial n° 8 —
+                //                    encore en vigueur cette année. Son
+                //                    remplaçant (arrêté du 26/02/2026) entre en
+                //                    application à la RENTRÉE 2027 : repasser
+                //                    ici à ce moment-là.
+                //
+                // Le programme du bac pro est découpé en groupements de
+                // spécialités (A, B, C). La base ne connaît pas la spécialité de
+                // l'élève : comme pour la physique-chimie, on retient le tronc
+                // commun des trois groupements et on ajoute les modules propres
+                // à un seul — mieux vaut proposer à tous que retirer à ceux qui
+                // l'ont.
+
+                // --- Seconde professionnelle : statistique et probabilités ---
+                ("SECONDE_PRO", "MATH_2PRO_STAT_ORGANISER",   "Statistiques et probabilités", "Recueillir et organiser des données statistiques par classes", 1),
+                ("SECONDE_PRO", "MATH_2PRO_STAT_REPRESENTER", "Statistiques et probabilités", "Représenter une série statistique par le diagramme adapté", 2),
+                ("SECONDE_PRO", "MATH_2PRO_STAT_EXTRAIRE",    "Statistiques et probabilités", "Extraire une information de la représentation d'une série", 3),
+                ("SECONDE_PRO", "MATH_2PRO_STAT_POSITION",    "Statistiques et probabilités", "Comparer des séries à l'aide d'indicateurs de position", 4),
+                ("SECONDE_PRO", "MATH_2PRO_STAT_DISPERSION",  "Statistiques et probabilités", "Comparer des séries à l'aide d'indicateurs de dispersion", 5),
+                ("SECONDE_PRO", "MATH_2PRO_STAT_BOITE",       "Statistiques et probabilités", "Construire et interpréter un diagramme en boîte à moustaches", 6),
+                ("SECONDE_PRO", "MATH_2PRO_PROB_FLUCTUATION", "Statistiques et probabilités", "Observer la fluctuation d'une fréquence selon les échantillons", 7),
+                ("SECONDE_PRO", "MATH_2PRO_PROB_SIMULATION",  "Statistiques et probabilités", "Réaliser une simulation informatique d'un échantillonnage", 8),
+                ("SECONDE_PRO", "MATH_2PRO_PROB_ESTIMER",     "Statistiques et probabilités", "Estimer une probabilité à partir des fréquences observées", 9),
+                ("SECONDE_PRO", "MATH_2PRO_PROB_CALCULER",    "Statistiques et probabilités", "Calculer la probabilité d'un événement dans une situation simple", 10),
+
+                // --- Seconde professionnelle : algèbre et analyse ---
+                ("SECONDE_PRO", "MATH_2PRO_ALG_EQUATION",     "Algèbre et analyse", "Résoudre algébriquement une équation du premier degré", 11),
+                ("SECONDE_PRO", "MATH_2PRO_ALG_INEQUATION",   "Algèbre et analyse", "Résoudre une inéquation du premier degré et représenter ses solutions", 12),
+                ("SECONDE_PRO", "MATH_2PRO_ALG_GRAPHIQUE",    "Algèbre et analyse", "Résoudre graphiquement un problème du premier degré", 13),
+                ("SECONDE_PRO", "MATH_2PRO_ALG_MODELISER",    "Algèbre et analyse", "Traduire une situation professionnelle par une équation", 14),
+                ("SECONDE_PRO", "MATH_2PRO_PROP_COMMERCE",    "Algèbre et analyse", "Calculer un prix, un coût, une marge, une taxe ou une remise", 15),
+                ("SECONDE_PRO", "MATH_2PRO_PROP_FACTURE",     "Algèbre et analyse", "Compléter une facture, un bon de commande ou un devis", 16),
+                ("SECONDE_PRO", "MATH_2PRO_PROP_INTERET",     "Algèbre et analyse", "Calculer un intérêt simple et une valeur acquise", 17),
+                ("SECONDE_PRO", "MATH_2PRO_PROP_PLACEMENT",   "Algèbre et analyse", "Déterminer un taux, une durée ou un capital de placement", 18),
+
+                // --- Seconde professionnelle : géométrie ---
+                ("SECONDE_PRO", "MATH_2PRO_GEO_GRANDEURS",    "Géométrie", "Calculer des longueurs, des aires et des volumes", 19),
+                ("SECONDE_PRO", "MATH_2PRO_GEO_THEOREMES",    "Géométrie", "Utiliser Pythagore, Thalès et la trigonométrie du triangle rectangle", 20),
+                ("SECONDE_PRO", "MATH_2PRO_GEO_ESPACE",       "Géométrie", "Lire et produire la représentation d'un solide de l'espace", 21),
+
+                // --- Seconde professionnelle : algorithmique et logique ---
+                ("SECONDE_PRO", "MATH_2PRO_ALGO_FONCTION",    "Algorithmique et programmation", "Écrire et utiliser une fonction dans un programme", 22),
+                ("SECONDE_PRO", "MATH_2PRO_ALGO_BOUCLE",      "Algorithmique et programmation", "Utiliser une boucle et une instruction conditionnelle", 23),
+                ("SECONDE_PRO", "MATH_2PRO_LOGIQUE_INTERVALLE", "Algorithmique et programmation", "Utiliser le vocabulaire ensembliste et les intervalles", 24),
+
+                // --- Première professionnelle : statistique et probabilités ---
+                ("PREMIERE_PRO", "MATH_1PRO_STAT_NUAGE",       "Statistiques et probabilités", "Représenter un nuage de points", 1),
+                ("PREMIERE_PRO", "MATH_1PRO_STAT_AJUSTEMENT",  "Statistiques et probabilités", "Déterminer l'équation réduite d'une droite d'ajustement", 2),
+                ("PREMIERE_PRO", "MATH_1PRO_STAT_INTERPOLER",  "Statistiques et probabilités", "Interpoler ou extrapoler une valeur à partir d'un ajustement", 3),
+                ("PREMIERE_PRO", "MATH_1PRO_STAT_PERTINENCE",  "Statistiques et probabilités", "Évaluer la pertinence d'un ajustement affine", 4),
+                ("PREMIERE_PRO", "MATH_1PRO_PROB_ARBRE",       "Statistiques et probabilités", "Calculer une probabilité à l'aide d'un arbre pondéré ou d'un tableau", 5),
+                ("PREMIERE_PRO", "MATH_1PRO_PROB_CONDITION",   "Statistiques et probabilités", "Calculer une probabilité conditionnelle", 6),
+
+                // --- Première professionnelle : algèbre et analyse ---
+                ("PREMIERE_PRO", "MATH_1PRO_SUITE_RECONNAITRE", "Algèbre et analyse", "Reconnaître une suite arithmétique ou géométrique", 7),
+                ("PREMIERE_PRO", "MATH_1PRO_SUITE_TERME",      "Algèbre et analyse", "Calculer un terme d'une suite et déterminer son sens de variation", 8),
+                ("PREMIERE_PRO", "MATH_1PRO_SUITE_MODELISER",  "Algèbre et analyse", "Modéliser une évolution par une suite", 9),
+                ("PREMIERE_PRO", "MATH_1PRO_POLY_FACTORISER",  "Algèbre et analyse", "Factoriser un polynôme de degré 2", 10),
+                ("PREMIERE_PRO", "MATH_1PRO_POLY_RACINES",     "Algèbre et analyse", "Déterminer les racines et le signe d'un polynôme de degré 2", 11),
+                ("PREMIERE_PRO", "MATH_1PRO_POLY_ETUDIER",     "Algèbre et analyse", "Étudier une fonction polynôme de degré 2", 12),
+                ("PREMIERE_PRO", "MATH_1PRO_DERIV_CALCULER",   "Algèbre et analyse", "Calculer la fonction dérivée d'une fonction de référence", 13),
+                ("PREMIERE_PRO", "MATH_1PRO_DERIV_VARIATIONS", "Algèbre et analyse", "Dresser un tableau de variations à partir du signe de la dérivée", 14),
+                ("PREMIERE_PRO", "MATH_1PRO_DERIV_EXTREMUM",   "Algèbre et analyse", "Déterminer un extremum et l'interpréter dans son contexte", 15),
+
+                // --- Première professionnelle : géométrie ---
+                ("PREMIERE_PRO", "MATH_1PRO_VECT_COORD",       "Géométrie", "Utiliser les coordonnées d'un vecteur du plan", 16),
+                ("PREMIERE_PRO", "MATH_1PRO_VECT_COLINEAIRE",  "Géométrie", "Reconnaître deux vecteurs colinéaires", 17),
+                ("PREMIERE_PRO", "MATH_1PRO_TRIGO_CERCLE",     "Géométrie", "Utiliser le cercle trigonométrique, le cosinus et le sinus", 18),
+                ("PREMIERE_PRO", "MATH_1PRO_GEO_ESPACE",       "Géométrie", "Calculer des grandeurs dans un solide de l'espace", 19),
+
+                // --- Première professionnelle : algorithmique et logique ---
+                ("PREMIERE_PRO", "MATH_1PRO_ALGO_LISTE",       "Algorithmique et programmation", "Écrire un programme utilisant une liste", 20),
+                ("PREMIERE_PRO", "MATH_1PRO_LOGIQUE",          "Algorithmique et programmation", "Employer le vocabulaire ensembliste et les connecteurs logiques", 21),
+
+                // --- Terminale professionnelle : statistique et probabilités ---
+                ("TERMINALE_PRO", "MATH_TPRO_STAT_AJUSTEMENT", "Statistiques et probabilités", "Ajuster un nuage de points par une droite ou une courbe", 1),
+                ("TERMINALE_PRO", "MATH_TPRO_STAT_EXPLOITER",  "Statistiques et probabilités", "Exploiter un ajustement pour estimer une valeur", 2),
+
+                // --- Terminale professionnelle : algèbre et analyse ---
+                ("TERMINALE_PRO", "MATH_TPRO_SUITE_COMPORT",   "Algèbre et analyse", "Étudier le comportement d'une suite arithmétique ou géométrique", 3),
+                ("TERMINALE_PRO", "MATH_TPRO_SUITE_SOMME",     "Algèbre et analyse", "Calculer la somme des termes d'une suite", 4),
+                ("TERMINALE_PRO", "MATH_TPRO_POLY3_DERIVEE",   "Algèbre et analyse", "Calculer la dérivée d'une fonction polynôme de degré 3", 5),
+                ("TERMINALE_PRO", "MATH_TPRO_POLY3_VARIATIONS", "Algèbre et analyse", "Dresser le tableau de variations d'une fonction polynôme de degré 3", 6),
+                ("TERMINALE_PRO", "MATH_TPRO_POLY3_EXPLOITER", "Algèbre et analyse", "Exploiter un tableau de variations pour résoudre un problème", 7),
+                ("TERMINALE_PRO", "MATH_TPRO_EXPO_FONCTION",   "Algèbre et analyse", "Utiliser une fonction exponentielle de base q", 8),
+                ("TERMINALE_PRO", "MATH_TPRO_EXPO_TAUX",       "Algèbre et analyse", "Calculer un taux d'évolution moyen", 9),
+                ("TERMINALE_PRO", "MATH_TPRO_LOG_DECIMAL",     "Algèbre et analyse", "Utiliser le logarithme décimal et ses propriétés", 10),
+                ("TERMINALE_PRO", "MATH_TPRO_LOG_EQUATION",    "Algèbre et analyse", "Résoudre une équation où l'inconnue est un exposant", 11),
+                ("TERMINALE_PRO", "MATH_TPRO_LOG_DUREE",       "Algèbre et analyse", "Déterminer la durée d'un placement à taux fixe", 12),
+
+                // --- Terminale professionnelle : géométrie ---
+                ("TERMINALE_PRO", "MATH_TPRO_TRIGO_TRIANGLE",  "Géométrie", "Résoudre un triangle quelconque", 13),
+                ("TERMINALE_PRO", "MATH_TPRO_VECT_SCALAIRE",   "Géométrie", "Utiliser le produit scalaire de deux vecteurs", 14),
+
+                // --- Terminale professionnelle : algorithmique et logique ---
+                ("TERMINALE_PRO", "MATH_TPRO_ALGO",            "Algorithmique et programmation", "Écrire un programme pour résoudre un problème", 15),
+                ("TERMINALE_PRO", "MATH_TPRO_LOGIQUE",         "Algorithmique et programmation", "Employer le vocabulaire ensembliste et les connecteurs logiques", 16),
+
+                // --- Première technologique : analyse ---
+                ("PREMIERE_TECHNO", "MATH_1TEC_SUITE_RECONNAITRE", "Analyse", "Reconnaître une suite arithmétique ou géométrique", 1),
+                ("PREMIERE_TECHNO", "MATH_1TEC_SUITE_TERME",      "Analyse", "Calculer un terme et une somme de termes d'une suite", 2),
+                ("PREMIERE_TECHNO", "MATH_1TEC_SUITE_MODELISER",  "Analyse", "Modéliser une évolution discrète par une suite", 3),
+                ("PREMIERE_TECHNO", "MATH_1TEC_POLY_CANONIQUE",   "Analyse", "Utiliser la forme canonique d'un polynôme de degré 2", 4),
+                ("PREMIERE_TECHNO", "MATH_1TEC_POLY_RACINES",     "Analyse", "Déterminer les racines et le signe d'un polynôme de degré 2", 5),
+                ("PREMIERE_TECHNO", "MATH_1TEC_POLY_EQUATION",    "Analyse", "Résoudre une équation du second degré", 6),
+                ("PREMIERE_TECHNO", "MATH_1TEC_DERIV_NOMBRE",     "Analyse", "Déterminer un nombre dérivé et l'équation d'une tangente", 7),
+                ("PREMIERE_TECHNO", "MATH_1TEC_DERIV_CALCULER",   "Analyse", "Calculer la fonction dérivée d'une fonction usuelle", 8),
+                ("PREMIERE_TECHNO", "MATH_1TEC_DERIV_VARIATIONS", "Analyse", "Étudier les variations d'une fonction à partir du signe de sa dérivée", 9),
+                ("PREMIERE_TECHNO", "MATH_1TEC_DERIV_EXTREMUM",   "Analyse", "Déterminer un extremum et l'interpréter", 10),
+
+                // --- Première technologique : statistiques et probabilités ---
+                ("PREMIERE_TECHNO", "MATH_1TEC_STAT_NUAGE",       "Statistiques et probabilités", "Représenter un nuage de points et l'ajuster par une droite", 11),
+                ("PREMIERE_TECHNO", "MATH_1TEC_STAT_INTERPOLER",  "Statistiques et probabilités", "Interpoler ou extrapoler une valeur à partir d'un ajustement", 12),
+                ("PREMIERE_TECHNO", "MATH_1TEC_PROB_CONDITION",   "Statistiques et probabilités", "Calculer une probabilité conditionnelle", 13),
+                ("PREMIERE_TECHNO", "MATH_1TEC_PROB_INDEPENDANCE", "Statistiques et probabilités", "Reconnaître deux événements indépendants", 14),
+                ("PREMIERE_TECHNO", "MATH_1TEC_PROB_TOTALES",     "Statistiques et probabilités", "Utiliser un arbre pondéré et la formule des probabilités totales", 15),
+                ("PREMIERE_TECHNO", "MATH_1TEC_PROB_REPETITION",  "Statistiques et probabilités", "Modéliser la répétition d'épreuves identiques et indépendantes", 16),
+                ("PREMIERE_TECHNO", "MATH_1TEC_VA_LOI",           "Statistiques et probabilités", "Déterminer la loi d'une variable aléatoire", 17),
+                ("PREMIERE_TECHNO", "MATH_1TEC_VA_ESPERANCE",     "Statistiques et probabilités", "Calculer l'espérance, la variance et l'écart type d'une variable aléatoire", 18),
+
+                // --- Première technologique : algorithmique et automatismes ---
+                ("PREMIERE_TECHNO", "MATH_1TEC_ALGO_FONCTION",    "Algorithmique et programmation", "Structurer un programme à l'aide de fonctions", 19),
+                ("PREMIERE_TECHNO", "MATH_1TEC_ALGO_LISTE",       "Algorithmique et programmation", "Générer et parcourir une liste dans un programme", 20),
+                ("PREMIERE_TECHNO", "MATH_1TEC_ALGO_BERNOULLI",   "Algorithmique et programmation", "Simuler une loi de Bernoulli de paramètre p", 21),
+                ("PREMIERE_TECHNO", "MATH_1TEC_AUTO_EVOLUTION",   "Automatismes", "Calculer un taux d'évolution, successif ou réciproque", 22),
+                ("PREMIERE_TECHNO", "MATH_1TEC_AUTO_ALGEBRE",     "Automatismes", "Développer, factoriser et déterminer le signe d'une expression", 23),
+                ("PREMIERE_TECHNO", "MATH_1TEC_AUTO_GRAPHIQUE",   "Automatismes", "Lire graphiquement une équation, un signe ou un tableau de variations", 24),
+                ("PREMIERE_TECHNO", "MATH_1TEC_LOGIQUE",          "Automatismes", "Employer le vocabulaire ensembliste et les connecteurs logiques", 25),
+
+                // --- Terminale technologique : analyse ---
+                ("TERMINALE_TECHNO", "MATH_TTEC_SUITE_ARITH",     "Analyse", "Étudier une suite arithmétique et calculer la somme de ses termes", 1),
+                ("TERMINALE_TECHNO", "MATH_TTEC_SUITE_GEO",       "Analyse", "Étudier une suite géométrique à termes positifs", 2),
+                ("TERMINALE_TECHNO", "MATH_TTEC_SUITE_SEUIL",     "Analyse", "Résoudre un problème de seuil à l'aide d'une suite", 3),
+                ("TERMINALE_TECHNO", "MATH_TTEC_EXPO_VARIATION",  "Analyse", "Déterminer le sens de variation d'une fonction exponentielle de base a", 4),
+                ("TERMINALE_TECHNO", "MATH_TTEC_EXPO_ALGEBRE",    "Analyse", "Utiliser les propriétés algébriques des fonctions exponentielles", 5),
+                ("TERMINALE_TECHNO", "MATH_TTEC_EXPO_TAUX_MOYEN", "Analyse", "Calculer un taux d'évolution moyen équivalent à des évolutions successives", 6),
+                ("TERMINALE_TECHNO", "MATH_TTEC_LOG_DEFINITION",  "Analyse", "Utiliser le logarithme décimal et son sens de variation", 7),
+                ("TERMINALE_TECHNO", "MATH_TTEC_LOG_EQUATION",    "Analyse", "Résoudre une équation ou une inéquation à l'aide du logarithme décimal", 8),
+                ("TERMINALE_TECHNO", "MATH_TTEC_LOG_ALGEBRE",     "Analyse", "Utiliser les propriétés algébriques du logarithme décimal", 9),
+                ("TERMINALE_TECHNO", "MATH_TTEC_INVERSE",         "Analyse", "Étudier la fonction inverse et l'utiliser dans un problème", 10),
+
+                // --- Terminale technologique : statistique et probabilités ---
+                ("TERMINALE_TECHNO", "MATH_TTEC_STAT_NUAGE",      "Statistiques et probabilités", "Représenter un nuage de points et rechercher un ajustement pertinent", 11),
+                ("TERMINALE_TECHNO", "MATH_TTEC_STAT_AJUSTEMENT", "Statistiques et probabilités", "Interpoler ou extrapoler à partir d'un ajustement, affine ou non", 12),
+                ("TERMINALE_TECHNO", "MATH_TTEC_PROB_CONDITION",  "Statistiques et probabilités", "Calculer une probabilité conditionnelle", 13),
+                ("TERMINALE_TECHNO", "MATH_TTEC_PROB_INDEPEND",   "Statistiques et probabilités", "Reconnaître l'indépendance de deux événements", 14),
+                ("TERMINALE_TECHNO", "MATH_TTEC_VA_LOI",          "Statistiques et probabilités", "Déterminer la loi d'une variable aléatoire discrète finie", 15),
+                ("TERMINALE_TECHNO", "MATH_TTEC_VA_BINOMIALE",    "Statistiques et probabilités", "Reconnaître et utiliser une loi binomiale", 16),
+                ("TERMINALE_TECHNO", "MATH_TTEC_VA_ESPERANCE",    "Statistiques et probabilités", "Calculer l'espérance et l'écart type d'une loi binomiale", 17),
+
+                // --- Terminale technologique : algorithmique et automatismes ---
+                ("TERMINALE_TECHNO", "MATH_TTEC_ALGO_FONCTION",   "Algorithmique et programmation", "Structurer un programme à l'aide de fonctions", 18),
+                ("TERMINALE_TECHNO", "MATH_TTEC_ALGO_LISTE",      "Algorithmique et programmation", "Générer, parcourir et manipuler une liste", 19),
+                ("TERMINALE_TECHNO", "MATH_TTEC_ALGO_DONNEES",    "Algorithmique et programmation", "Traiter un fichier de données pour en extraire une information", 20),
+                ("TERMINALE_TECHNO", "MATH_TTEC_AUTO_PROPORTION", "Automatismes", "Calculer et exprimer une proportion sous ses différentes formes", 21),
+                ("TERMINALE_TECHNO", "MATH_TTEC_AUTO_EVOLUTION",  "Automatismes", "Passer d'une formulation additive à une formulation multiplicative d'une évolution", 22),
+                ("TERMINALE_TECHNO", "MATH_TTEC_LOGIQUE",         "Automatismes", "Employer le vocabulaire ensembliste et les connecteurs logiques", 23),
             };
 
         public static (string Competence, string Prerequis, int Poids)[] Prerequis =>

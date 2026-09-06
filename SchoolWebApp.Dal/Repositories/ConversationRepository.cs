@@ -198,6 +198,7 @@ namespace SchoolWebApp.Dal.Repositories
                         MatiereLibelle = c.Matiere!.Libelle,
                         NiveauLibelle = c.Eleve.NiveauScolaire!.Libelle,
                         NiveauOrdre = c.Eleve.NiveauScolaire.Ordre,
+                        NiveauCode = c.Eleve.NiveauScolaire.Code,
                         Jusqua = c.DateDernierMessage!.Value,
                     },
                     Depuis = c.DateDerniereObservation,

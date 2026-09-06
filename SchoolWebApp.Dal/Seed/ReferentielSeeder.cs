@@ -60,10 +60,15 @@ namespace SchoolWebApp.Dal.Seed
     ///                              en mai-juin 2026 — À SURVEILLER
     ///
     ///   Lycée général et technologique (toutes matières)
-    ///     2de, 1re, Tle            programmes de 2019, en vigueur en
-    ///                              2026-2027. Un nouveau programme de maths
-    ///                              de terminale entre en application à la
-    ///                              rentrée 2027 — À FAIRE AVANT.
+    ///     2de, 1re, Tle            programmes de 2019 pour l'essentiel,
+    ///                              en vigueur en 2026-2027. TROIS
+    ///                              EXCEPTIONS DÉJÀ BASCULÉES : maths de
+    ///                              2de GT, spécialité de 1re générale et
+    ///                              maths de 1re TECHNOLOGIQUE suivent les
+    ///                              arrêtés du 26/02/2026. La spécialité de
+    ///                              Tle générale et les maths de Tle
+    ///                              technologique basculent à la rentrée
+    ///                              2027 — À FAIRE AVANT.
     ///
     ///   (*) Ces niveaux suivent ENCORE le programme précédent cette année.
     ///       Les compétences du nouveau texte y ont malgré tout été ajoutées
@@ -141,6 +146,63 @@ namespace SchoolWebApp.Dal.Seed
     /// les compétences ajoutées lors de ces deux passes n'ont PAS de
     /// prérequis — elles s'affichent, mais le diagnostic remontant ne
     /// les traverse pas encore — et aucun professeur ne les a relues.
+    ///
+    /// ---------------------------------------------------------------
+    ///
+    /// TROISIÈME PASSE, LE 6 SEPTEMBRE 2026 : LES VOIES TECHNOLOGIQUE ET
+    /// PROFESSIONNELLE N'AVAIENT PAS DE PROGRAMME DE MATHÉMATIQUES.
+    ///
+    /// Le référentiel était écrit pour les classes GÉNÉRALES, et les
+    /// autres voies en héritaient par le rang d'année — un choix assumé,
+    /// qui donnait un programme à six classes sans rien écrire pour
+    /// elles. Il tient tant que les classes d'un même rang étudient la
+    /// même chose. En mathématiques, elles ne l'étudient pas :
+    ///
+    ///   — un élève de terminale PROFESSIONNELLE recevait les 23
+    ///     compétences de la SPÉCIALITÉ de terminale générale —
+    ///     récurrence, logarithme népérien, équations différentielles,
+    ///     produit scalaire dans l'espace. Il n'en étudie aucune ;
+    ///   — un élève de terminale TECHNOLOGIQUE recevait les mêmes ;
+    ///   — et leurs propres programmes, tous deux OBLIGATOIRES et
+    ///     évalués au baccalauréat, n'existaient nulle part.
+    ///
+    /// Ce cas touchait plus d'élèves que celui de la spécialité de maths
+    /// en voie générale : les maths y sont obligatoires pour TOUS, alors
+    /// qu'elles ont quitté le tronc commun général en 2019.
+    ///
+    /// 109 compétences ont été ajoutées, et `VoiesScolaires` sait
+    /// désormais à quelle voie une classe appartient. La règle a un
+    /// REPLI : l'héritage par rang continue de s'appliquer partout où une
+    /// voie n'a pas de référentiel propre, faute de quoi ces six classes
+    /// auraient tout perdu ailleurs qu'en mathématiques.
+    ///
+    /// UN PIÈGE DE DATE, ÉVITÉ DE JUSTESSE. Le BO n° 14 du 2 avril 2026
+    /// porte SEPT programmes de mathématiques, et ils n'entrent pas tous
+    /// en vigueur la même année :
+    ///
+    ///   rentrée 2026 (maintenant)  2de GT, spécialité de 1re générale,
+    ///                              maths dans l'enseignement scientifique
+    ///                              de 1re, et 1re TECHNOLOGIQUE ;
+    ///   rentrée 2027               spécialité de Tle générale, maths
+    ///                              complémentaires, et Tle TECHNOLOGIQUE.
+    ///
+    /// La première technologique suit donc le texte de 2026 ; la terminale
+    /// technologique suit ENCORE celui de 2019. Prendre le même BO pour
+    /// les deux aurait donné un programme d'avance à la terminale.
+    ///
+    /// CE QUI RESTE À FAIRE SUR CE SUJET :
+    ///
+    ///   — les MATHS COMPLÉMENTAIRES de terminale générale (option 3 h,
+    ///     ouverte à tout élève ne présentant pas la spécialité au bac,
+    ///     qu'il l'ait suivie ou non en première) n'ont aucune compétence.
+    ///     Un terminale général sans spécialité voit donc encore le
+    ///     programme de la spécialité. Il faudra pour cela savoir, ÉLÈVE
+    ///     PAR ÉLÈVE, s'il l'a gardée — la voie ne suffit plus, c'est un
+    ///     choix. Même besoin pour la LV2 ;
+    ///   — le PROGRAMME COMPLÉMENTAIRE de terminale professionnelle,
+    ///     destiné à la poursuite d'études, n'a pas été dépouillé ;
+    ///   — les 109 compétences ajoutées ici n'ont pas de prérequis, et
+    ///     aucun professeur ne les a relues.
     /// </summary>
     public static class ReferentielSeeder
     {

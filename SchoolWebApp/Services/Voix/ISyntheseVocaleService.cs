@@ -18,8 +18,16 @@ namespace SchoolWebApp.Api.Services.Voix
         /// l'âge — celui du collégien dit « ne ralentis pas », ce qui est
         /// exactement l'inverse de ce qu'il faut ici.
         /// </param>
+        /// <param name="anglais">
+        /// Vrai quand le passage se prononce EN ANGLAIS. Le professeur
+        /// d'anglais explique en francais et fait pratiquer en anglais : seuls
+        /// les passages qu'il borne lui-meme portent ce drapeau, phrase par
+        /// phrase. Sans lui, la synthese lit tout en francais et un mot anglais
+        /// y devient une fausse prononciation apprise.
+        /// </param>
         Task<byte[]> SynthetiserAsync(
-            string texte, string? avatar, int age, bool dictee = false, CancellationToken ct = default);
+            string texte, string? avatar, int age, bool dictee = false,
+            bool anglais = false, CancellationToken ct = default);
 
         /// <summary>
         /// Même chose, mais recopiée vers <paramref name="destination"/> au fil
@@ -32,6 +40,6 @@ namespace SchoolWebApp.Api.Services.Voix
         /// </summary>
         Task CopierAudioAsync(
             string texte, string? avatar, int age, Stream destination,
-            bool dictee = false, CancellationToken ct = default);
+            bool dictee = false, bool anglais = false, CancellationToken ct = default);
     }
 }

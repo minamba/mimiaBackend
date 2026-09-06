@@ -28,6 +28,13 @@ namespace SchoolWebApp.Domain.Models
 
         public string? NiveauLibelle { get; set; }
 
+        /// <summary>
+        /// Code de la classe à laquelle la compétence est rattachée
+        /// (TERMINALE, TERMINALE_PRO...). Le rang ne suffit pas à distinguer
+        /// les voies : elles le partagent.
+        /// </summary>
+        public string? NiveauCode { get; set; }
+
         public int NiveauOrdre { get; set; }
     }
 
@@ -53,6 +60,13 @@ namespace SchoolWebApp.Domain.Models
 
         /// <summary>Rang du niveau (1 = CP … 12 = Terminale) : sert à borner les candidats.</summary>
         public int NiveauOrdre { get; set; }
+
+        /// <summary>
+        /// Code de la classe de l'élève. Le rang borne les candidats ; le code
+        /// dit de quelle VOIE ils doivent venir, puisque trois classes se
+        /// partagent le même rang au lycée.
+        /// </summary>
+        public string? NiveauCode { get; set; }
 
         /// <summary>Date du dernier message analysé, à repousser après traitement.</summary>
         public DateTime Jusqua { get; set; }
