@@ -276,18 +276,37 @@ builder.Services.AddScoped<IReferentielRepository, ReferentielRepository>();
 builder.Services.AddScoped<IParentService, ParentService>();
 builder.Services.AddScoped<IEleveService, EleveService>();
 builder.Services.AddScoped<IReferentielService, ReferentielService>();
+builder.Services.AddScoped<ISignalementService, SignalementService>();
 
 builder.Services.AddScoped<IConversationRepository, ConversationRepository>();
 builder.Services.AddScoped<IMaitriseRepository, MaitriseRepository>();
+builder.Services.AddScoped<IEcheanceReferentielRepository, EcheanceReferentielRepository>();
+builder.Services.AddScoped<IProgrammeScolaireRepository, ProgrammeScolaireRepository>();
 builder.Services.AddScoped<IEvaluationRepository, EvaluationRepository>();
 builder.Services.AddScoped<IRapportRepository, RapportRepository>();
 builder.Services.AddScoped<IFicheRepository, FicheRepository>();
+builder.Services.AddScoped<IDicteeRepository, DicteeRepository>();
+// L ARCHIVE AUDIO EST UN SINGLETON : elle ne porte qu une racine de chemin,
+// relue a chaque appel depuis le disque. Rien a etendre par requete.
+builder.Services.AddSingleton<SchoolWebApp.Domain.Services.IArchiveAudio,
+    SchoolWebApp.Dal.Stockage.ArchiveAudioDisque>();
+
+builder.Services.AddScoped<IComprehensionOraleRepository, ComprehensionOraleRepository>();
+builder.Services.AddScoped<IEvaluationPrevueRepository, EvaluationPrevueRepository>();
+builder.Services.AddScoped<IControleScolaireRepository, ControleScolaireRepository>();
+builder.Services.AddScoped<IExamenRepository, ExamenRepository>();
+builder.Services.AddScoped<ISignalementRepository, SignalementRepository>();
 builder.Services.AddScoped<IPlancheRepository, PlancheRepository>();
 builder.Services.AddScoped<ISessionEleveRepository, SessionEleveRepository>();
 
 // AddMemoryCache est idempotent (TryAdd) : il est appelé ici parce que le
 // service des planches en dépend et que rien d'autre ne garantit sa présence.
 builder.Services.AddMemoryCache();
+
+// Les QR codes du scanner de séance : dix minutes de vie, en mémoire. Singleton
+// par nécessité — le jeton créé par l'ordinateur doit être retrouvé par la
+// requête du téléphone. Voir JetonsScanMobile pour la limite d'instance unique.
+builder.Services.AddSingleton<SchoolWebApp.Api.Services.ScanMobile.JetonsScanMobile>();
 
 // L'identification d'une planche par son empreinte, auprès de Wikimedia.
 // Un client nommé plutôt qu'un `new HttpClient()` : c'est lui qui porte l'agent
@@ -441,11 +460,24 @@ builder.Services.AddHostedService<BilanHebdomadaireWorker>();
 // attendre de plus qu'elle n'attend déjà.
 // ---------------------------------------------------------------------------
 builder.Services.AddScoped<IObservateurCompetencesService, ObservateurCompetencesService>();
+builder.Services.AddScoped<IPlanificateurControleService, PlanificateurControleService>();
 
 // Singleton : la file traverse les requêtes. Un contrôleur y dépose, le
 // worker y puise.
 builder.Services.AddSingleton<IFileObservation, FileObservation>();
 builder.Services.AddHostedService<ObservationWorker>();
+
+// Même recette pour les séances quittées avant l'heure : « Quitter le
+// cours » dépose une demande de conclusion, le worker s'en charge hors de
+// la requête HTTP — voir ChatViewModelBuilder.MarquerSortieAsync.
+builder.Services.AddSingleton<IFileConclusion, FileConclusion>();
+builder.Services.AddHostedService<ConclusionAnticipeeWorker>();
+
+// Singleton : la liste des onglets d'administration abonnés doit survivre
+// entre les requêtes, et être la MÊME pour tout le monde qui publie.
+builder.Services.AddSingleton<
+    SchoolWebApp.Api.Services.Notifications.IEvenementsAdminHub,
+    SchoolWebApp.Api.Services.Notifications.EvenementsAdminHub>();
 
 // Alertes de quota : la file est un singleton (elle traverse les requêtes), le
 // service qui envoie le mail est scopé comme le DbContext dont il dépend.
@@ -454,6 +486,28 @@ builder.Services.AddHostedService<ObservationWorker>();
 // mais personne ne l'appliquait — la base portait une promesse que rien ne
 // tenait, et la politique de confidentialité s'apprêtait à la publier.
 builder.Services.AddHostedService<PurgeConversationsWorker>();
+
+// Le calendrier scolaire officiel (data.education.gouv.fr), resynchronisé
+// une fois par jour — voir CalendrierScolaireSyncWorker pour ce que ça
+// remplace : la ressaisie annuelle à la main, oubliée à coup sûr un été.
+builder.Services.AddHttpClient<ICalendrierScolaireApiService, CalendrierScolaireApiService>(client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(20);
+    client.DefaultRequestHeaders.UserAgent.ParseAdd(
+        "Mimia-Calendrier/1.0 (https://mimia.fr; contact@mimia.fr)");
+});
+builder.Services.AddHostedService<CalendrierScolaireSyncWorker>();
+
+// UN VRAI USER-AGENT, PAS CELUI PAR DÉFAUT DE .NET : un site gouvernemental
+// peut bloquer un client anonyme sans le dire — un timeout ou un refus
+// silencieux serait alors pris pour « la page a disparu », à tort.
+builder.Services.AddHttpClient<IVeilleReferentielService, VeilleReferentielService>(client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(20);
+    client.DefaultRequestHeaders.UserAgent.ParseAdd(
+        "Mimia-VeilleReferentiel/1.0 (https://mimia.fr; contact@mimia.fr)");
+});
+builder.Services.AddHostedService<EcheanceReferentielWorker>();
 
 // La transcription tourne AVANT la purge des octets, et c'est vital : le
 // dépôt refuse d'effacer un document non transcrit, donc un worker absent ne
@@ -482,6 +536,16 @@ builder.Services.AddHostedService(sp => sp.GetRequiredService<DescriptionPlanche
 builder.Services.AddSingleton<IFileAlertesQuota, FileAlertesQuota>();
 builder.Services.AddScoped<IAlerteQuotaService, AlerteQuotaService>();
 builder.Services.AddHostedService<AlerteQuotaWorker>();
+
+// L'onglet « Anthropic / OpenAI » : un essai minuscule chez chaque fournisseur,
+// toutes les trente minutes, et un courriel quand l'un des deux refuse.
+// L'état est un singleton parce que le worker l'écrit et que l'écran le lit.
+builder.Services.AddSingleton<SchoolWebApp.Api.Services.Fournisseurs.EtatFournisseurs>();
+builder.Services.AddHttpClient<SchoolWebApp.Api.Services.Fournisseurs.SurveillanceFournisseurs>(client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(20);
+});
+builder.Services.AddHostedService<SchoolWebApp.Api.Workers.SurveillanceFournisseursWorker>();
 
 var app = builder.Build();
 
@@ -568,8 +632,41 @@ using (var scope = app.Services.CreateScope())
             // Référentiel (niveaux, matières, graphe de compétences).
             // Idempotent : n'insère que ce qui manque, donc sûr à chaque démarrage.
             await ReferentielSeeder.SeedAsync(db);
+            await EcheanceReferentielSeeder.SeedAsync(db);
+            await ExamenSeeder.SeedAsync(db);
             await OffresSeeder.SeedAsync(db);
             Console.WriteLine("Referentiel et grille tarifaire verifies.");
+
+            // LES CARTES D'EXAMEN, VÉRIFIÉES À CHAQUE DÉMARRAGE : une faute de
+            // frappe dans une partie retenue vide une carte sans rien faire
+            // planter. Le relevé complet est dans l'administration, onglet
+            // « Programme scolaire ».
+            try
+            {
+                var verification = await scope.ServiceProvider
+                    .GetRequiredService<SchoolWebApp.Domain.Repositories.IExamenRepository>()
+                    .VerifierAsync();
+
+                var cartes = verification.Sum(e => e.Epreuves.Count);
+                var problemes = verification.Sum(e => e.NombreProblemes);
+
+                Console.WriteLine($"Cartes d'examen verifiees : {cartes} cartes, {problemes} probleme(s).");
+
+                foreach (var examen in verification)
+                {
+                    foreach (var probleme in examen.Problemes)
+                        Console.WriteLine($"  [{examen.Code}] {probleme}");
+
+                    foreach (var epreuve in examen.Epreuves)
+                        foreach (var probleme in epreuve.Problemes)
+                            Console.WriteLine($"  [{epreuve.Code}] {probleme}");
+                }
+            }
+            catch (Exception ex)
+            {
+                // Un relevé qui échoue ne doit jamais empêcher le serveur de démarrer.
+                Console.WriteLine($"Verification des cartes d'examen impossible : {ex.Message}");
+            }
 
             // Trace la configuration Claude effective : c'est la première chose
             // qu'on veut vérifier quand une facture surprend.

@@ -19,6 +19,20 @@ namespace SchoolWebApp.Domain.Models
         /// <summary>Moment où l'élève a explicitement quitté le cours.</summary>
         public DateTime? DateSortie { get; set; }
 
+        /// <summary>
+        /// La durée choisie pour la séance en cours (15/25/35/45 min). Décrit
+        /// la séance qui vient de commencer, pas la conversation entière —
+        /// voir le commentaire complet sur l'entité.
+        /// </summary>
+        public int? DureeChoisieMinutes { get; set; }
+
+        /// <summary>D'où vient l'élève pour la séance en cours — voir <see cref="ModesSeance"/>.</summary>
+        public string? ModeSeance { get; set; }
+
+        public int? ModeControleId { get; set; }
+
+        public string? ModeEpreuveCode { get; set; }
+
         public string? MatiereCode { get; set; }
 
         public string? MatiereLibelle { get; set; }

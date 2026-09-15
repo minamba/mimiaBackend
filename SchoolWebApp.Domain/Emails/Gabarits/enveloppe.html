@@ -27,11 +27,15 @@
         <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0"
                style="width:600px; max-width:100%; background-color:#ffffff; border-radius:20px; overflow:hidden; box-shadow:0 2px 18px rgba(22,35,58,0.07);">
 
-          <!-- en-tête -->
+          <!-- en-tête : la bannière en pleine largeur, jusqu'aux coins arrondis
+               de la carte (`overflow:hidden` posé plus haut). Elle porte son
+               propre fond sombre — d'où le padding à zéro : un padding ici
+               laisserait un liseré blanc tout autour, et « bannière » n'en
+               serait plus une. -->
           <tr>
-            <td align="center" style="padding:34px 32px 8px 32px;">
-              <img src="cid:logoMimia" alt="Mimia" width="168"
-                   style="display:block; width:168px; max-width:60%; height:auto; border:0;" />
+            <td align="center" style="padding:0; line-height:0; font-size:0;">
+              <img src="cid:logoMimia" alt="Mimia — mimia.fr" width="600" height="197"
+                   style="display:block; width:100%; max-width:600px; height:auto; border:0;" />
             </td>
           </tr>
 

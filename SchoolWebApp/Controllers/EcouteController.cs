@@ -35,10 +35,24 @@ namespace SchoolWebApp.Api.Controllers
 
         /// <summary>
         /// Profondeur de la file entre la réception et l'émission vers le
-        /// fournisseur. Bornée : si la liaison sortante ralentit, on préfère
-        /// perdre du son ancien plutôt que de gonfler la mémoire du serveur.
+        /// fournisseur. Bornée, pour que la mémoire du serveur ne gonfle pas.
+        ///
+        /// ELLE NE JETTE PLUS RIEN — relevé par Camara le 13/09/2026 : cinquante
+        /// secondes de parole dites pendant une coupure, gardées par la mémoire
+        /// tampon du navigateur, puis perdues à l'arrivée. La file valait 64
+        /// blocs — un tiers de seconde — et jetait le son le plus ANCIEN quand
+        /// elle débordait. Or elle ne commence à se vider qu'une fois la
+        /// session du fournisseur ouverte : le navigateur, qui renvoyait d'un
+        /// coup tout ce qu'il avait gardé, la remplissait en quelques
+        /// millisecondes, et tout sauf la dernière syllabe partait à la
+        /// poubelle. Sans un mot.
+        ///
+        /// Pleine, elle fait désormais ATTENDRE la réception : le son en trop
+        /// reste dans le navigateur, qui le garde de toute façon, et part dès
+        /// qu'il y a de la place. La mémoire du serveur reste bornée — c'était
+        /// la raison du plafond — et plus une syllabe ne se perd pour la tenir.
         /// </summary>
-        private const int ProfondeurFile = 64;
+        private const int ProfondeurFile = 1024;
 
         private readonly ITranscriptionTempsReelService _transcription;
         private readonly IChatViewModelBuilder _chatBuilder;
@@ -91,7 +105,8 @@ namespace SchoolWebApp.Api.Controllers
             var file = Channel.CreateBounded<BlocAudio>(
                 new BoundedChannelOptions(ProfondeurFile)
                 {
-                    FullMode = BoundedChannelFullMode.DropOldest,
+                    // ATTENDRE, JAMAIS JETER : voir ProfondeurFile.
+                    FullMode = BoundedChannelFullMode.Wait,
                     SingleReader = true,
                     SingleWriter = true,
                 });

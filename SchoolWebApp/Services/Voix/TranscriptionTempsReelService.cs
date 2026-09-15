@@ -125,8 +125,7 @@ namespace SchoolWebApp.Api.Services.Voix
 
             await fournisseur.ConnectAsync(new Uri(_options.UrlTempsReel), ct);
             var vocabulaire = VocabulaireTranscription.Pour(matiereCode);
-            await ConfigurerSessionAsync(
-                fournisseur, vocabulaire, VocabulaireTranscription.Langue(matiereCode), ct);
+            await ConfigurerSessionAsync(fournisseur, vocabulaire, matiereCode, ct);
 
             // Les deux sens tournent en parallèle : l'élève parle pendant que
             // les transcriptions reviennent. Les enchaîner ajouterait la latence
@@ -155,18 +154,22 @@ namespace SchoolWebApp.Api.Services.Voix
         /// réponse : le cerveau, c'est Claude, et lui seul.
         /// </summary>
         private async Task ConfigurerSessionAsync(
-            ClientWebSocket socket, string vocabulaire, string? langue, CancellationToken ct)
+            ClientWebSocket socket, string vocabulaire, string? matiereCode, CancellationToken ct)
         {
+            // LE MODÈLE DÉPEND DE LA MATIÈRE, et de rien d'autre : seuls les
+            // cours de langue ont besoin d'un transcripteur qui sache écouter
+            // deux langues à la fois. Voir OptionsVoix.ModeleTranscriptionLangues.
+            var modele = VocabulaireTranscription.Modele(
+                matiereCode, _options.ModeleTranscription, _options.ModeleTranscriptionLangues);
+
             // LE CHAMP EST OMIS, PAS MIS À NULL.
             //
-            // En cours de langue, l'élève parle le français ET la langue
-            // étudiée, souvent dans le même tour, et aucun code ISO ne dit les
-            // deux. Un dictionnaire plutôt qu'un objet anonyme : c'est la seule
-            // façon de ne pas envoyer la clé du tout — envoyer « null » n'est
+            // Un dictionnaire plutôt qu'un objet anonyme : c'est la seule
+            // façon de ne pas envoyer une clé du tout — envoyer « null » n'est
             // pas la même chose que se taire, et le fournisseur le refuse.
             var transcription = new Dictionary<string, object>
             {
-                ["model"] = _options.ModeleTranscription,
+                ["model"] = modele,
 
                 // Le vocabulaire attendu. Voir VocabulaireTranscription :
                 // « pluriel » était rendu « la pupille féminin », faute de
@@ -174,7 +177,30 @@ namespace SchoolWebApp.Api.Services.Voix
                 ["prompt"] = vocabulaire,
             };
 
-            if (langue is not null) transcription["language"] = langue;
+            // CE QU'ON N'ENVOIE QU'AUX MODÈLES QUI SAVENT L'ENTENDRE.
+            //
+            // Le modèle ordinaire REFUSE ces deux champs, et un refus ferme la
+            // session — donc un élève sans micro. La condition porte sur le
+            // MODÈLE et non sur la matière : reposer l'ancien modèle dans la
+            // configuration suffit alors à tout désactiver, sans toucher au code.
+            var langues = VocabulaireTranscription.Langues(matiereCode);
+            var motsCles = VocabulaireTranscription.MotsCles(matiereCode);
+
+            if (VocabulaireTranscription.AccepteLesIndicesRiches(modele))
+            {
+                // « français OU anglais », ce qu'aucun code ISO seul ne dit.
+                if (langues is not null) transcription["languages"] = langues;
+
+                if (motsCles is not null) transcription["keywords"] = motsCles;
+            }
+
+            // Hors cours de langue — ou sur un modèle qui ignore la liste — on
+            // retombe sur la langue unique, comprise partout.
+            var langue = VocabulaireTranscription.Langue(matiereCode);
+            if (langue is not null && !transcription.ContainsKey("languages"))
+            {
+                transcription["language"] = langue;
+            }
 
             var configuration = new
             {

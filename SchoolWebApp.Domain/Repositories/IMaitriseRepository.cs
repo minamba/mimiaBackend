@@ -32,6 +32,17 @@ namespace SchoolWebApp.Domain.Repositories
             string? codeNiveau, CancellationToken ct = default);
 
         /// <summary>
+        /// Les notions du programme d une classe précise, dans une matière.
+        ///
+        /// PAS DE MARGE NI DE RÈGLE DE VOIE, contrairement aux candidates de
+        /// l observateur : l identifiant de niveau désigne déjà LA classe, pas
+        /// un rang que trois classes de lycée se partagent. Il n y a donc rien
+        /// à départager.
+        /// </summary>
+        Task<IEnumerable<CompetenceCandidate>> GetNotionsDuNiveauAsync(
+            int matiereId, int niveauScolaireId, CancellationToken ct = default);
+
+        /// <summary>
         /// Intègre des observations et met à jour la maîtrise. Les codes
         /// inconnus du référentiel sont ignorés. Retourne le nombre appliqué.
         /// </summary>

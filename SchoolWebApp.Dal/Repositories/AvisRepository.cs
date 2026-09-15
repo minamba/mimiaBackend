@@ -57,7 +57,11 @@ namespace SchoolWebApp.Dal.Repositories
                     a.Commentaire,
                     a.DateCreation,
                     a.Parent!.Prenom,
-                    a.Parent.Nom,
+                    a.EleveId,
+
+                    // null si c'est le parent qui a écrit : c'est CE prénom-là
+                    // que la signature doit reprendre, pas celui du parent.
+                    EleveePrenom = a.Eleve == null ? null : a.Eleve.Prenom,
 
                     // Le « achat vérifié » des sites marchands : au moins un
                     // abonnement payant en cours. Lu à l'affichage et non figé à
@@ -85,27 +89,38 @@ namespace SchoolWebApp.Dal.Repositories
                     Titre = a.Titre,
                     Commentaire = a.Commentaire,
                     Date = a.DateCreation,
-                    Auteur = Signature(a.Prenom, a.Nom),
+                    Auteur = Signature(a.Prenom, a.EleveId, a.EleveePrenom),
                     Abonne = a.Abonne,
                 }).ToList(),
             };
         }
 
         /// <summary>
-        /// « Marie C. » — le prénom, puis l'initiale du nom.
+        /// « Marie (Parent) », « Bilal (Étudiant) » — le prénom de qui a
+        /// vraiment rédigé cette version de l'avis, suivi de son rôle.
         ///
-        /// Le nom entier n'apporte rien au lecteur et expose une famille sur une
-        /// page publique, indexée par les moteurs. L'initiale suffit à donner un
-        /// visage à l'avis.
+        /// PAS LE NOM DE FAMILLE. Il n'apporte rien au lecteur et expose une
+        /// famille sur une page publique, indexée par les moteurs — le
+        /// prénom suffit à donner un visage à l'avis.
+        ///
+        /// LE PRÉNOM DE L'ENFANT, PAS UN « ÉTUDIANT » ANONYME SOUS CELUI DU
+        /// PARENT. Un foyer a souvent plusieurs enfants ; `eleveId` non nul
+        /// dit lequel a tenu la plume cette fois (voir le commentaire sur
+        /// `AvisClient.EleveId`) — c'est SON prénom qui doit apparaître, pas
+        /// celui du parent avec juste l'étiquette qui change.
+        ///
+        /// `eleveId`, PAS `eleveePrenom`, DÉCIDE DU RÔLE. Un enfant sans
+        /// prénom renseigné (donnée incomplète, rare mais possible) resterait
+        /// sinon étiqueté « Parent » alors que c'est bien lui qui a écrit —
+        /// le rôle affiché doit rester vrai même quand le prénom, lui, manque.
         /// </summary>
-        private static string Signature(string? prenom, string? nom)
+        private static string Signature(string? prenom, int? eleveId, string? eleveePrenom)
         {
-            var p = (prenom ?? string.Empty).Trim();
-            var n = (nom ?? string.Empty).Trim();
+            var deposeParEnfant = eleveId is not null;
+            var p = ((deposeParEnfant ? eleveePrenom : prenom) ?? string.Empty).Trim();
+            var role = deposeParEnfant ? "Étudiant" : "Parent";
 
-            if (p.Length == 0) return "Un parent";
-
-            return n.Length == 0 ? p : p + " " + char.ToUpperInvariant(n[0]) + ".";
+            return p.Length == 0 ? $"Un {role.ToLowerInvariant()}" : $"{p} ({role})";
         }
 
         public Task<MonAvis?> GetMonAvisAsync(int parentId, CancellationToken ct = default) =>
@@ -123,7 +138,8 @@ namespace SchoolWebApp.Dal.Repositories
                 .FirstOrDefaultAsync(ct);
 
         public async Task<MonAvis> DeposerAsync(
-            int parentId, int note, string? titre, string? commentaire, CancellationToken ct = default)
+            int parentId, int note, string? titre, string? commentaire, int? eleveId,
+            CancellationToken ct = default)
         {
             var avis = await _context.AvisClients.FirstOrDefaultAsync(a => a.ParentId == parentId, ct);
             var maintenant = DateTime.UtcNow;
@@ -141,6 +157,15 @@ namespace SchoolWebApp.Dal.Repositories
             avis.Note = note;
             avis.Titre = Vide(titre);
             avis.Commentaire = Vide(commentaire);
+
+            // L'AUTEUR SUIT LA DERNIÈRE MAIN QUI A ÉCRIT, ENTIÈREMENT —
+            // remplacé, jamais complété. Si le parent réécrit par-dessus
+            // l'avis de son enfant, `eleveId` retombe à null ici : le texte
+            // ET la signature reviennent au parent, rien de l'enfant ne
+            // reste accroché à la nouvelle version. Symétrique dans l'autre
+            // sens : un enfant qui modifie l'avis du parent se l'approprie
+            // tout autant.
+            avis.EleveId = eleveId;
 
             // REPASSE EN ATTENTE À CHAQUE ÉCRITURE, même si l'avis était déjà
             // publié. Sans cette ligne, il suffirait de faire valider une phrase
@@ -191,9 +216,10 @@ namespace SchoolWebApp.Dal.Repositories
                     a.DateCreation,
                     a.DateModification,
                     a.Publie,
+                    a.EleveId,
+                    EleveePrenom = a.Eleve == null ? null : a.Eleve.Prenom,
                     a.Parent!.Mail,
                     a.Parent.Prenom,
-                    a.Parent.Nom,
                     Abonne = a.Parent.Abonnements.Any(
                         ab => ab.Statut == "Actif" && !ab.Offre!.EstEssai),
                 })
@@ -211,7 +237,7 @@ namespace SchoolWebApp.Dal.Repositories
                 DateModification = a.DateModification,
                 Publie = a.Publie,
                 Mail = a.Mail,
-                Auteur = Signature(a.Prenom, a.Nom),
+                Auteur = Signature(a.Prenom, a.EleveId, a.EleveePrenom),
                 Abonne = a.Abonne,
             }).ToList();
         }

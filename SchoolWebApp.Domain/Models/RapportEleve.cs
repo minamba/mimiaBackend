@@ -33,6 +33,28 @@ namespace SchoolWebApp.Domain.Models
 
         public string? ARevoir { get; set; }
 
+        /// <summary>
+        /// La durée choisie par l'élève pour cette séance (15/25/35/45 min).
+        /// Null pour tout ce qui a été enregistré avant l'existence de ce
+        /// champ, ou si le professeur l'a conclue sans que l'accueil ait pu
+        /// la transmettre.
+        /// </summary>
+        public int? DureeChoisieMinutes { get; set; }
+
+        /// <summary>
+        /// La dictée écrite ou corrigée pendant CETTE séance, s'il y en a eu
+        /// une. Null la plupart du temps — la dictée n'est qu'une matière
+        /// parmi d'autres.
+        ///
+        /// Faute d'identifiant de séance en base (voir le commentaire sur
+        /// l'unicité dans <c>RapportRepository.EnregistrerAsync</c>), le
+        /// rapprochement se fait sur le même principe qu'ailleurs dans ce
+        /// fichier : deux écritures qui se suivent de quelques secondes,
+        /// pour le même élève et la même matière, appartiennent à la même
+        /// conclusion de séance.
+        /// </summary>
+        public int? DicteeId { get; set; }
+
         public DateTime DateCreation { get; set; }
 
         // ------------------------------------------- l'élève, pour l'en-tête

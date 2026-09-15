@@ -23,6 +23,7 @@ namespace SchoolWebApp.Dal.Repositories
             double? noteRevision,
             string? remarque,
             string? aRevoir,
+            int? dureeChoisieMinutes = null,
             CancellationToken ct = default)
         {
             // La matière vient de la conversation, jamais du texte du modèle :
@@ -74,6 +75,7 @@ namespace SchoolWebApp.Dal.Repositories
             rapport.NoteRevision = Borner(noteRevision);
             rapport.Remarque = Tronquer(remarque, 2000);
             rapport.ARevoir = Tronquer(aRevoir, 1000);
+            rapport.DureeChoisieMinutes = dureeChoisieMinutes;
             rapport.DateCreation = DateTime.UtcNow;
 
             await _context.SaveChangesAsync(ct);
@@ -192,29 +194,30 @@ namespace SchoolWebApp.Dal.Repositories
             await _context.RapportsSeance
                 .AsNoTracking()
                 .Where(r => r.Id == rapportId && r.EleveId == eleveId)
-                .Select(r => new RapportEleve
-                {
-                    Id = r.Id,
-                    MatiereId = r.MatiereId,
-                    MatiereLibelle = r.Matiere!.Libelle,
-                    ProfPrenom = r.Matiere.ProfPrenom,
-                    ProfAvatar = r.Matiere.ProfAvatar,
-                    ProfCouleur = r.Matiere.ProfCouleur,
-                    Travaille = r.Travaille,
-                    NoteComprehension = r.NoteComprehension,
-                    NoteRevision = r.NoteRevision,
-                    Remarque = r.Remarque,
-                    ARevoir = r.ARevoir,
-                    DateCreation = r.DateCreation,
-                    ElevePrenom = r.Eleve!.Prenom,
-                    EleveNom = r.Eleve.Nom,
-                    EleveNiveau = r.Eleve.NiveauScolaire!.Libelle,
-                })
+                .Select(DetailProjection)
                 .FirstOrDefaultAsync(ct);
 
         /// <summary>
         /// Projection commune aux listes. Déclarée une fois : trois requêtes
         /// divergentes finiraient par ne plus renvoyer les mêmes champs.
+        ///
+        /// LE RAPPROCHEMENT ENTRE UN RAPPORT ET SA DICTÉE — voir
+        /// <see cref="RapportEleve.DicteeId"/>.
+        ///
+        /// Une sous-requête corrélée, pas une jointure : la correspondance
+        /// n'est pas une égalité, c'est une fenêtre de temps autour de
+        /// l'instant où CE rapport a été écrit. La même matière, et une
+        /// dictée créée OU corrigée à quelques secondes de là — jamais à
+        /// plusieurs minutes, ce qui signerait une séance différente. Même
+        /// principe que la fenêtre de doublon dans `EnregistrerAsync`
+        /// ci-dessus, pour la même raison : aucun identifiant de séance
+        /// n'existe en base.
+        ///
+        /// `DateMiseAJour` compte au même titre que `DateCreation` : une
+        /// dictée archivée « en_attente » lors d'une séance peut être
+        /// corrigée plusieurs séances plus tard, et c'est alors LA SÉANCE DE
+        /// LA CORRECTION qui doit porter le bouton, pas seulement celle de
+        /// la dictée initiale.
         /// </summary>
         private static readonly Expression<Func<RapportSeance, RapportEleve>> Projection =
             r => new RapportEleve
@@ -230,7 +233,45 @@ namespace SchoolWebApp.Dal.Repositories
                 NoteRevision = r.NoteRevision,
                 Remarque = r.Remarque,
                 ARevoir = r.ARevoir,
+                DureeChoisieMinutes = r.DureeChoisieMinutes,
                 DateCreation = r.DateCreation,
+                DicteeId = r.Eleve!.Dictees
+                    .Where(d => d.MatiereId == r.MatiereId
+                        && ((d.DateCreation >= r.DateCreation.AddMinutes(-2)
+                                && d.DateCreation <= r.DateCreation.AddMinutes(2))
+                            || (d.DateMiseAJour >= r.DateCreation.AddMinutes(-2)
+                                && d.DateMiseAJour <= r.DateCreation.AddMinutes(2))))
+                    .Select(d => (int?)d.Id)
+                    .FirstOrDefault(),
+            };
+
+        private static readonly Expression<Func<RapportSeance, RapportEleve>> DetailProjection =
+            r => new RapportEleve
+            {
+                Id = r.Id,
+                MatiereId = r.MatiereId,
+                MatiereLibelle = r.Matiere!.Libelle,
+                ProfPrenom = r.Matiere.ProfPrenom,
+                ProfAvatar = r.Matiere.ProfAvatar,
+                ProfCouleur = r.Matiere.ProfCouleur,
+                Travaille = r.Travaille,
+                NoteComprehension = r.NoteComprehension,
+                NoteRevision = r.NoteRevision,
+                Remarque = r.Remarque,
+                ARevoir = r.ARevoir,
+                DureeChoisieMinutes = r.DureeChoisieMinutes,
+                DateCreation = r.DateCreation,
+                ElevePrenom = r.Eleve!.Prenom,
+                EleveNom = r.Eleve.Nom,
+                EleveNiveau = r.Eleve.NiveauScolaire!.Libelle,
+                DicteeId = r.Eleve.Dictees
+                    .Where(d => d.MatiereId == r.MatiereId
+                        && ((d.DateCreation >= r.DateCreation.AddMinutes(-2)
+                                && d.DateCreation <= r.DateCreation.AddMinutes(2))
+                            || (d.DateMiseAJour >= r.DateCreation.AddMinutes(-2)
+                                && d.DateMiseAJour <= r.DateCreation.AddMinutes(2))))
+                    .Select(d => (int?)d.Id)
+                    .FirstOrDefault(),
             };
 
         private static double? Borner(double? note) =>

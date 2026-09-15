@@ -17,6 +17,38 @@ namespace SchoolWebApp.Dal.Seed.Referentiels
     /// physique-chimie n'est suivie que par les élèves qui l'ont choisie, et le
     /// niveau d'exigence change d'un cran. Le référentiel suit le programme de
     /// spécialité, qui est celui sur lequel ils sont évalués au baccalauréat.
+    ///
+    /// PROVENANCE DU LYCÉE — AUDIT DU 14/09/2026
+    /// ----------------------------------------
+    /// 1re : arrêté du 17/01/2019, NOR MENE1901635A, BO spécial n° 1 du
+    /// 22/01/2019, en vigueur depuis la rentrée 2019. Tle : arrêté du
+    /// 19/07/2019, NOR MENE1921249A, BO spécial n° 8 du 25/07/2019, en
+    /// vigueur depuis la rentrée 2020. Aucun texte plus récent trouvé au
+    /// 14/09/2026 : ces programmes valent en 2026-2027 et pour le bac 2027,
+    /// qui porte sur toute la terminale (MENE2323020N).
+    ///
+    /// L'audit mesurait une couverture d'environ 62 % en 1re et 65 % en Tle.
+    /// Il a conduit à :
+    ///   — AJOUTER 15 lignes de 1re (quantité de matière et absorbance,
+    ///     avancement, Lewis et polarité, chimie organique et spectre IR,
+    ///     rendement, Coulomb et champs, Mariotte et statique des fluides,
+    ///     théorème de l'énergie cinétique, source réelle, lentille mince,
+    ///     couleurs, niveaux d'énergie) et 19 de Tle (dosages par lois
+    ///     physiques, spectroscopies, prédominance, équilibre, électrolyse,
+    ///     radioactivité, formule topologique, polymères, accélération,
+    ///     Archimède, gaz parfait, bilan Terre-atmosphère, loi de Newton,
+    ///     effet photoélectrique, condensateur, circuit RC, capteur capacitif,
+    ///     incertitude composée) ;
+    ///   — DÉPLACER EN TERMINALE, code gardé, trois lignes de 1re absentes du
+    ///     programme de 1re : PC_1RE_CHIM_ACIDE_BASE, PC_1RE_ENER_PREMIER et
+    ///     PC_1RE_ONDES_LUNETTE. Le préfixe ment, le code ne se renomme pas :
+    ///     les maîtrises des élèves y sont rattachées ;
+    ///   — RÉÉCRIRE PC_TLE_ENER_BILAN (le « système ouvert » n'est pas au
+    ///     programme) et préciser PC_TLE_CHIM_SYNTHESE (optimisation) et
+    ///     PC_TLE_MAT_SYNTHESE (multi-étapes), qui se doublaient ;
+    ///   — HARMONISER les domaines du lycée : « Mouvement et interactions »,
+    ///     « Constitution de la matière », « Transformations de la matière ».
+    /// Libellés ajoutés rédigés d'après les textes, non relus par un professeur.
     /// </summary>
     public static class ReferentielPhysiqueChimie
     {
@@ -116,24 +148,38 @@ namespace SchoolWebApp.Dal.Seed.Referentiels
                 ("PREMIERE", "PC_1RE_CHIM_DOSAGE",   "Constitution de la matière", "Réaliser et exploiter un titrage colorimétrique", 2),
                 ("PREMIERE", "PC_1RE_CHIM_COHESION", "Constitution de la matière", "Relier la cohésion d'un solide aux interactions entre entités", 3),
                 ("PREMIERE", "PC_1RE_CHIM_SOLUBILITE","Constitution de la matière", "Prévoir la solubilité d'une espèce selon la polarité du solvant", 4),
-                ("PREMIERE", "PC_1RE_CHIM_ACIDE_BASE","Transformations de la matière", "Identifier un couple acide-base et écrire la réaction associée", 5),
-                ("PREMIERE", "PC_1RE_CHIM_OXYDO",    "Transformations de la matière", "Écrire les demi-équations d'une réaction d'oxydoréduction", 6),
-                ("PREMIERE", "PC_1RE_CHIM_ENERGIE",  "Transformations de la matière", "Estimer l'énergie libérée par une combustion", 7),
-                ("PREMIERE", "PC_1RE_MOUV_VECTEURS", "Mouvement et interactions", "Déterminer les vecteurs vitesse et variation de vitesse", 8),
-                ("PREMIERE", "PC_1RE_MOUV_NEWTON",   "Mouvement et interactions", "Relier la variation du vecteur vitesse à la somme des forces", 9),
-                ("PREMIERE", "PC_1RE_ENER_TRAVAIL",  "L'énergie", "Calculer le travail d'une force constante", 10),
-                ("PREMIERE", "PC_1RE_ENER_MECANIQUE","L'énergie", "Établir un bilan d'énergie mécanique et repérer sa conservation", 11),
-                ("PREMIERE", "PC_1RE_ENER_ELECTRIQUE","L'énergie", "Analyser les transferts d'énergie dans un circuit électrique", 12),
-                ("PREMIERE", "PC_1RE_ENER_PREMIER",  "L'énergie", "Appliquer le premier principe à un système incompressible", 13),
-                ("PREMIERE", "PC_1RE_ONDES_MECANIQUES","Ondes et signaux", "Relier célérité, retard et distance pour une onde mécanique", 14),
-                ("PREMIERE", "PC_1RE_ONDES_PERIODIQUES","Ondes et signaux", "Relier longueur d'onde, célérité et fréquence", 15),
-                ("PREMIERE", "PC_1RE_ONDES_LUNETTE", "Ondes et signaux", "Modéliser une lunette astronomique et calculer son grossissement", 16),
-                ("PREMIERE", "PC_1RE_ONDES_PHOTON",  "Ondes et signaux", "Relier énergie d'un photon et longueur d'onde", 17),
-                ("PREMIERE", "PC_1RE_METH_CALCUL",   "Méthode", "Mener un calcul littéral avant l'application numérique", 18),
-                ("PREMIERE", "PC_1RE_METH_INCERTITUDE","Méthode", "Évaluer une incertitude et comparer un résultat à une valeur de référence", 19),
-                ("PREMIERE", "PC_1RE_METH_PYTHON",   "Méthode", "Exploiter un programme Python de traitement de mesures", 20),
+                ("PREMIERE", "PC_1RE_CHIM_OXYDO",    "Transformations de la matière", "Écrire les demi-équations d'une réaction d'oxydoréduction", 5),
+                ("PREMIERE", "PC_1RE_CHIM_ENERGIE",  "Transformations de la matière", "Estimer l'énergie libérée par une combustion", 6),
+                ("PREMIERE", "PC_1RE_MOUV_VECTEURS", "Mouvement et interactions", "Déterminer les vecteurs vitesse et variation de vitesse", 7),
+                ("PREMIERE", "PC_1RE_MOUV_NEWTON",   "Mouvement et interactions", "Relier la variation du vecteur vitesse à la somme des forces", 8),
+                ("PREMIERE", "PC_1RE_ENER_TRAVAIL",  "L'énergie", "Calculer le travail d'une force constante", 9),
+                ("PREMIERE", "PC_1RE_ENER_MECANIQUE","L'énergie", "Établir un bilan d'énergie mécanique et repérer sa conservation", 10),
+                ("PREMIERE", "PC_1RE_ENER_ELECTRIQUE","L'énergie", "Analyser les transferts d'énergie dans un circuit électrique", 11),
+                ("PREMIERE", "PC_1RE_ONDES_MECANIQUES","Ondes et signaux", "Relier célérité, retard et distance pour une onde mécanique", 12),
+                ("PREMIERE", "PC_1RE_ONDES_PERIODIQUES","Ondes et signaux", "Relier longueur d'onde, célérité et fréquence", 13),
+                ("PREMIERE", "PC_1RE_ONDES_PHOTON",  "Ondes et signaux", "Relier énergie d'un photon et longueur d'onde", 14),
+                ("PREMIERE", "PC_1RE_METH_CALCUL",   "Méthode", "Mener un calcul littéral avant l'application numérique", 15),
+                ("PREMIERE", "PC_1RE_METH_INCERTITUDE","Méthode", "Évaluer une incertitude et comparer un résultat à une valeur de référence", 16),
+                ("PREMIERE", "PC_1RE_METH_PYTHON",   "Méthode", "Exploiter un programme Python de traitement de mesures", 17),
 
-                ("PREMIERE", "PC_1RE_MOUV_FLUIDE", "Mouvements et interactions", "Décrire un fluide au repos et calculer une pression", 21),
+                ("PREMIERE", "PC_1RE_MOUV_FLUIDE", "Mouvement et interactions", "Décrire un fluide au repos et calculer une pression", 18),
+
+                // Compléments de l'audit du 14/09/2026 (MENE1901635A).
+                ("PREMIERE", "PC_1RE_CHIM_COMPOSITION",   "Constitution de la matière", "Déterminer une quantité de matière à partir d'une masse, d'un volume de gaz ou d'une absorbance", 19),
+                ("PREMIERE", "PC_1RE_CHIM_AVANCEMENT",    "Transformations de la matière", "Établir un tableau d'avancement et distinguer transformation totale et non totale", 20),
+                ("PREMIERE", "PC_1RE_CHIM_LEWIS",         "Constitution de la matière", "Établir le schéma de Lewis d'une molécule ou d'un ion et prévoir sa géométrie", 21),
+                ("PREMIERE", "PC_1RE_CHIM_POLARITE",      "Constitution de la matière", "Prévoir la polarité d'une liaison et d'une entité à partir de l'électronégativité", 22),
+                ("PREMIERE", "PC_1RE_CHIM_ORGANIQUE",     "Constitution de la matière", "Reconnaître groupes caractéristiques et familles fonctionnelles, et relier nom et formule", 23),
+                ("PREMIERE", "PC_1RE_CHIM_SPECTRE_IR",    "Constitution de la matière", "Identifier un groupe caractéristique à partir d'un spectre infrarouge", 24),
+                ("PREMIERE", "PC_1RE_CHIM_RENDEMENT",     "Transformations de la matière", "Suivre les étapes d'une synthèse organique et calculer son rendement", 25),
+                ("PREMIERE", "PC_1RE_MOUV_COULOMB",       "Mouvement et interactions", "Utiliser la loi de Coulomb et la comparer à l'interaction gravitationnelle", 26),
+                ("PREMIERE", "PC_1RE_MOUV_CHAMPS",        "Mouvement et interactions", "Exploiter les champs de gravitation et électrostatique", 27),
+                ("PREMIERE", "PC_1RE_MOUV_STATIQUE",      "Mouvement et interactions", "Exploiter la loi de Mariotte et la loi fondamentale de la statique des fluides", 28),
+                ("PREMIERE", "PC_1RE_ENER_CINETIQUE",     "L'énergie", "Énoncer et exploiter le théorème de l'énergie cinétique", 29),
+                ("PREMIERE", "PC_1RE_ENER_SOURCE",        "L'énergie", "Modéliser une source réelle de tension et calculer le rendement d'un convertisseur", 30),
+                ("PREMIERE", "PC_1RE_ONDES_LENTILLE",     "Ondes et signaux", "Exploiter les relations de conjugaison et de grandissement d'une lentille mince convergente", 31),
+                ("PREMIERE", "PC_1RE_ONDES_COULEURS",     "Ondes et signaux", "Prévoir une couleur perçue par synthèse additive, soustractive ou absorption", 32),
+                ("PREMIERE", "PC_1RE_ONDES_NIVEAUX",      "Ondes et signaux", "Exploiter un diagramme de niveaux d'énergie pour interpréter un spectre", 33),
 
                 // --- Terminale : spécialité ---
                 ("TERMINALE", "PC_TLE_CHIM_PH",      "Constitution de la matière", "Relier pH, concentration et constante d'acidité", 1),
@@ -143,24 +189,52 @@ namespace SchoolWebApp.Dal.Seed.Referentiels
                 ("TERMINALE", "PC_TLE_CHIM_MECANISME","Transformations de la matière", "Analyser un mécanisme réactionnel et ses étapes", 5),
                 ("TERMINALE", "PC_TLE_CHIM_SPONTANE","Transformations de la matière", "Prévoir le sens d'évolution spontanée d'un système", 6),
                 ("TERMINALE", "PC_TLE_CHIM_PILE",    "Transformations de la matière", "Décrire le fonctionnement d'une pile et d'une électrolyse", 7),
-                ("TERMINALE", "PC_TLE_CHIM_SYNTHESE","Transformations de la matière", "Optimiser une synthèse organique et calculer un rendement", 8),
+                ("TERMINALE", "PC_TLE_CHIM_SYNTHESE","Transformations de la matière", "Optimiser une étape de synthèse organique : vitesse de formation et rendement", 8),
                 ("TERMINALE", "PC_TLE_MOUV_NEWTON",  "Mouvement et interactions", "Appliquer la deuxième loi de Newton à un système", 9),
                 ("TERMINALE", "PC_TLE_MOUV_CHAMP",   "Mouvement et interactions", "Étudier un mouvement dans un champ de pesanteur uniforme", 10),
                 ("TERMINALE", "PC_TLE_MOUV_ELECTRIQUE","Mouvement et interactions", "Étudier un mouvement dans un champ électrique uniforme", 11),
                 ("TERMINALE", "PC_TLE_MOUV_KEPLER",  "Mouvement et interactions", "Appliquer les lois de Kepler à un mouvement orbital", 12),
                 ("TERMINALE", "PC_TLE_ENER_PREMIER", "L'énergie", "Appliquer le premier principe de la thermodynamique", 13),
                 ("TERMINALE", "PC_TLE_ENER_THERMIQUE","L'énergie", "Modéliser un transfert thermique et une résistance thermique", 14),
-                ("TERMINALE", "PC_TLE_ENER_BILAN",   "L'énergie", "Établir un bilan énergétique sur un système ouvert ou fermé", 15),
+                ("TERMINALE", "PC_TLE_ENER_BILAN",   "L'énergie", "Établir le bilan énergétique d'un système défini entre un état initial et un état final", 15),
                 ("TERMINALE", "PC_TLE_ONDES_INTENSITE","Ondes et signaux", "Relier intensité sonore et niveau d'intensité en décibels", 16),
                 ("TERMINALE", "PC_TLE_ONDES_DOPPLER","Ondes et signaux", "Exploiter l'effet Doppler pour déterminer une vitesse", 17),
                 ("TERMINALE", "PC_TLE_ONDES_DIFFRACTION","Ondes et signaux", "Exploiter la figure de diffraction d'une fente", 18),
                 ("TERMINALE", "PC_TLE_ONDES_INTERFERENCES","Ondes et signaux", "Interpréter une figure d'interférences", 19),
                 ("TERMINALE", "PC_TLE_ONDES_DUALITE","Ondes et signaux", "Choisir entre modèle ondulatoire et modèle particulaire", 20),
                 ("TERMINALE", "PC_TLE_METH_ANALYSE", "Méthode", "Résoudre un problème ouvert en explicitant sa démarche", 21),
-                ("TERMINALE", "PC_TLE_MOUV_ECOULEMENT", "Mouvements et interactions", "Modéliser l’écoulement d’un fluide incompressible", 23),
-                ("TERMINALE", "PC_TLE_MAT_SYNTHESE", "Constitution et transformations de la matière", "Élaborer une stratégie de synthèse organique", 24),
-
                 ("TERMINALE", "PC_TLE_METH_PYTHON",  "Méthode", "Écrire ou compléter un programme Python de simulation", 22),
+
+                ("TERMINALE", "PC_TLE_MOUV_ECOULEMENT", "Mouvement et interactions", "Modéliser l’écoulement d’un fluide incompressible", 23),
+                ("TERMINALE", "PC_TLE_MAT_SYNTHESE", "Transformations de la matière", "Élaborer une stratégie de synthèse multi-étapes, avec protection et déprotection", 24),
+
+                // Rangées en première jusqu'au 14/09/2026 : notions de terminale
+                // (MENE1921249A). Le préfixe PC_1RE_ est faux, le code est gardé :
+                // les maîtrises des élèves y sont rattachées.
+                ("TERMINALE", "PC_1RE_CHIM_ACIDE_BASE","Constitution de la matière", "Identifier un couple acide-base de Brønsted, une espèce amphotère, et écrire la réaction associée", 25),
+                ("TERMINALE", "PC_1RE_ENER_PREMIER",  "L'énergie", "Appliquer le premier principe à un système incompressible à partir de sa capacité thermique", 26),
+                ("TERMINALE", "PC_1RE_ONDES_LUNETTE", "Ondes et signaux", "Modéliser une lunette astronomique afocale et calculer son grossissement", 27),
+
+                // Compléments de l'audit du 14/09/2026 (MENE1921249A).
+                ("TERMINALE", "PC_TLE_CHIM_LOIS_PHYS",    "Constitution de la matière", "Déterminer une concentration par la loi de Beer-Lambert, de Kohlrausch ou des gaz parfaits", 28),
+                ("TERMINALE", "PC_TLE_CHIM_SPECTRO",      "Constitution de la matière", "Identifier une espèce chimique par spectroscopie infrarouge ou UV-visible", 29),
+                ("TERMINALE", "PC_TLE_CHIM_PREDOMINANCE", "Constitution de la matière", "Exploiter un diagramme de prédominance ou de distribution et choisir un indicateur coloré", 30),
+                ("TERMINALE", "PC_TLE_CHIM_EQUILIBRE",    "Transformations de la matière", "Calculer un quotient de réaction, une constante d'équilibre et un taux d'avancement final", 31),
+                ("TERMINALE", "PC_TLE_CHIM_ELECTROLYSE",  "Transformations de la matière", "Relier durée, intensité du courant et quantités de matière formées lors d'une électrolyse", 32),
+                ("TERMINALE", "PC_TLE_NUCL_EQUATION",     "Transformations de la matière", "Écrire l'équation d'une réaction nucléaire et identifier le type de radioactivité", 33),
+                ("TERMINALE", "PC_TLE_NUCL_DECROISSANCE", "Transformations de la matière", "Exploiter la loi de décroissance radioactive pour dater un événement", 34),
+                ("TERMINALE", "PC_TLE_CHIM_TOPOLOGIQUE",  "Constitution de la matière", "Nommer une espèce organique, écrire sa formule topologique et ses isomères de constitution", 35),
+                ("TERMINALE", "PC_TLE_CHIM_POLYMERES",    "Constitution de la matière", "Identifier le motif d'un polymère et citer des polymères naturels et synthétiques", 36),
+                ("TERMINALE", "PC_TLE_MOUV_ACCELERATION", "Mouvement et interactions", "Établir les vecteurs vitesse et accélération par dérivation, y compris dans le repère de Frenet", 37),
+                ("TERMINALE", "PC_TLE_MOUV_ARCHIMEDE",    "Mouvement et interactions", "Exploiter l'expression vectorielle de la poussée d'Archimède", 38),
+                ("TERMINALE", "PC_TLE_ENER_GAZ_PARFAIT",  "L'énergie", "Exploiter l'équation d'état du gaz parfait et en identifier les limites", 39),
+                ("TERMINALE", "PC_TLE_ENER_TERRE",        "L'énergie", "Estimer la température terrestre moyenne par un bilan d'énergie et discuter albédo et effet de serre", 40),
+                ("TERMINALE", "PC_TLE_ENER_LOI_NEWTON",   "L'énergie", "Établir l'évolution de la température d'un système au contact d'un thermostat", 41),
+                ("TERMINALE", "PC_TLE_ONDES_PHOTOELEC",   "Ondes et signaux", "Interpréter l'effet photoélectrique et déterminer le rendement d'une cellule photovoltaïque", 42),
+                ("TERMINALE", "PC_TLE_ELEC_CONDENSATEUR", "Ondes et signaux", "Relier charge, tension et capacité d'un condensateur", 43),
+                ("TERMINALE", "PC_TLE_ELEC_RC",           "Ondes et signaux", "Établir et résoudre l'équation différentielle de la charge et de la décharge d'un circuit RC", 44),
+                ("TERMINALE", "PC_TLE_ELEC_CAPTEUR",      "Ondes et signaux", "Expliquer le principe de fonctionnement d'un capteur capacitif", 45),
+                ("TERMINALE", "PC_TLE_METH_INCERTITUDES", "Méthode", "Évaluer une incertitude-type composée et comparer un résultat à une valeur de référence", 46),
             };
 
         /// <summary>
@@ -241,7 +315,6 @@ namespace SchoolWebApp.Dal.Seed.Referentiels
                 ("PC_1RE_CHIM_SUIVI",        "PC_2DE_CHIM_TABLEAU",      3),
                 ("PC_1RE_CHIM_COHESION",     "PC_2DE_CHIM_ENTITES",      3),
                 ("PC_1RE_CHIM_SOLUBILITE",   "PC_1RE_CHIM_COHESION",     3),
-                ("PC_1RE_CHIM_ACIDE_BASE",   "PC_3E_MAT_PH",             2),
                 ("PC_1RE_CHIM_OXYDO",        "PC_2DE_CHIM_ENTITES",      3),
                 ("PC_1RE_MOUV_VECTEURS",     "PC_2DE_MOUV_VITESSE",      3),
                 ("PC_1RE_MOUV_NEWTON",       "PC_2DE_MOUV_INERTIE",      3),
@@ -251,10 +324,13 @@ namespace SchoolWebApp.Dal.Seed.Referentiels
                 ("PC_1RE_ENER_MECANIQUE",    "PC_1RE_ENER_TRAVAIL",      3),
                 ("PC_1RE_ENER_ELECTRIQUE",   "PC_2DE_SIG_ELECTRIQUE",    3),
                 ("PC_1RE_ONDES_PERIODIQUES", "PC_2DE_SIG_SON",           3),
-                ("PC_1RE_ONDES_LUNETTE",     "PC_2DE_SIG_LENTILLE",      3),
                 ("PC_1RE_METH_INCERTITUDE",  "PC_2DE_METH_INCERTITUDE",  3),
 
                 // Première → terminale
+                // Codes PC_1RE_CHIM_ACIDE_BASE, PC_1RE_ENER_PREMIER et
+                // PC_1RE_ONDES_LUNETTE : rangés en terminale depuis le 14/09/2026.
+                ("PC_1RE_CHIM_ACIDE_BASE",   "PC_3E_MAT_PH",             2),
+                ("PC_1RE_ONDES_LUNETTE",     "PC_2DE_SIG_LENTILLE",      3),
                 ("PC_TLE_CHIM_PH",           "PC_1RE_CHIM_ACIDE_BASE",   3),
                 ("PC_TLE_CHIM_FORCE",        "PC_TLE_CHIM_PH",           3),
                 ("PC_TLE_CHIM_DOSAGE",       "PC_1RE_CHIM_DOSAGE",       3),
@@ -266,7 +342,9 @@ namespace SchoolWebApp.Dal.Seed.Referentiels
                 ("PC_TLE_MOUV_CHAMP",        "PC_TLE_MOUV_NEWTON",       3),
                 ("PC_TLE_MOUV_ELECTRIQUE",   "PC_TLE_MOUV_CHAMP",        3),
                 ("PC_TLE_MOUV_KEPLER",       "PC_2DE_MOUV_GRAVITATION",  3),
-                ("PC_TLE_ENER_PREMIER",      "PC_1RE_ENER_PREMIER",      3),
+                // Inversée le 14/09/2026 : les deux lignes sont de terminale, et le
+                // système incompressible est un cas du premier principe.
+                ("PC_1RE_ENER_PREMIER",      "PC_TLE_ENER_PREMIER",      3),
                 ("PC_TLE_ENER_THERMIQUE",    "PC_TLE_ENER_PREMIER",      3),
                 ("PC_TLE_ONDES_DOPPLER",     "PC_1RE_ONDES_PERIODIQUES", 3),
                 ("PC_TLE_ONDES_DIFFRACTION", "PC_1RE_ONDES_PERIODIQUES", 3),

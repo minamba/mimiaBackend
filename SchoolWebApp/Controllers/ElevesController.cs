@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SchoolWebApp.Api.Builders;
 using SchoolWebApp.Api.Request;
+using SchoolWebApp.Api.Services;
 using SchoolWebApp.Api.Utils;
 using SchoolWebApp.Api.ViewModels;
 using SchoolWebApp.Domain.Models;
@@ -71,6 +72,475 @@ namespace SchoolWebApp.Api.Controllers
                 id, utilisateur.EleveId is not null, ct);
 
             return progression is null ? NotFound() : Ok(progression);
+        }
+
+        /// <summary>
+        /// Le calendrier de l'élève : ses vacances, ses séances par matière,
+        /// ses évaluations passées, et celles qui restent à venir.
+        ///
+        /// UNE ROUTE MINCE : la donnée la plus difficile — quel jour l'élève
+        /// a eu cours, dans quelle matière — existe déjà via
+        /// <see cref="IRapportRepository.GetEntreAsync"/>, écrite à chaque
+        /// séance. Rien de neuf à construire là-dessus.
+        /// </summary>
+        [HttpGet("{id:int}/calendrier")]
+        [SchoolWebApp.Api.Auth.AutoriseEleve]
+        [SwaggerResponse(200, "Le calendrier.", typeof(CalendrierEleveViewModel))]
+        [SwaggerResponse(404, "Profil inexistant ou n'appartenant pas à ce compte.")]
+        public async Task<IActionResult> GetCalendrier(
+            int id,
+            [FromQuery] int annee,
+            [FromQuery] int mois,
+            [FromServices] IChatContexteResolver resolveur,
+            [FromServices] IReferentielService referentiel,
+            [FromServices] IRapportRepository rapports,
+            [FromServices] IEvaluationRepository evaluations,
+            [FromServices] IControleScolaireRepository controles,
+            CancellationToken ct)
+        {
+            if (mois < 1 || mois > 12) return BadRequest();
+
+            try
+            {
+                var eleve = await resolveur.ResoudreEleveAsync(id);
+                if (eleve is null) return NotFound();
+
+                var debutMois = new DateTime(annee, mois, 1, 0, 0, 0, DateTimeKind.Utc);
+                var finMoisExclusif = debutMois.AddMonths(1);
+
+                var vacances = await referentiel.GetPeriodesVacancesAsync(eleve.Zone, debutMois, finMoisExclusif);
+
+                // Pas bornée au mois affiché, à dessein : le décompte sous
+                // « Retour » doit rester juste qu'on regarde le mois en
+                // cours ou celui d'après.
+                var prochaineVacances = await referentiel.GetProchainePeriodeVacancesAsync(eleve.Zone, DateTime.UtcNow.Date);
+
+                var seances = await rapports.GetEntreAsync(id, debutMois, finMoisExclusif, ct);
+                var evaluationsDuMois = await evaluations.GetEntreAsync(id, debutMois, finMoisExclusif, ct);
+                var controlesDuMois = await controles.GetEntreAsync(id, debutMois, finMoisExclusif, ct);
+
+                return Ok(new CalendrierEleveViewModel
+                {
+                    Zone = eleve.Zone,
+                    Vacances = vacances.Select(v => new PeriodeVacancesViewModel
+                    {
+                        Libelle = v.Libelle,
+                        DateDebut = v.DateDebut,
+                        DateFin = v.DateFin,
+                    }),
+                    ProchaineVacances = prochaineVacances is null ? null : new PeriodeVacancesViewModel
+                    {
+                        Libelle = prochaineVacances.Libelle,
+                        DateDebut = prochaineVacances.DateDebut,
+                        DateFin = prochaineVacances.DateFin,
+                    },
+                    Seances = seances.Select(s => new SeanceJourViewModel
+                    {
+                        Date = s.DateCreation,
+                        MatiereId = s.MatiereId,
+                        MatiereLibelle = s.MatiereLibelle,
+                        ProfCouleur = s.ProfCouleur,
+                        DureeChoisieMinutes = s.DureeChoisieMinutes,
+                    }),
+                    Evaluations = evaluationsDuMois.Select(e => new EvaluationJourViewModel
+                    {
+                        Date = e.DateCreation,
+                        MatiereId = e.MatiereId,
+                        MatiereLibelle = e.MatiereLibelle,
+                        Note = e.Note,
+                    }),
+                    Controles = controlesDuMois.Select(c => new ControleViewModel
+                    {
+                        Id = c.Id,
+                        MatiereId = c.MatiereId,
+                        MatiereLibelle = c.MatiereLibelle,
+                        ProfCouleur = c.ProfCouleur,
+                        Sujet = c.Sujet,
+                        DateControle = c.DateControle,
+                        HeureControle = c.HeureControle,
+                    }),
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Erreur lors du chargement du calendrier de l'eleve {EleveId}.", id);
+                return StatusCode(500, new { message = "Une erreur est survenue, veuillez réessayer." });
+            }
+        }
+
+        /// <summary>
+        /// Pose un contrôle depuis le calendrier — par le parent ou l'enfant,
+        /// hors séance.
+        ///
+        /// MATIÈRE VALIDÉE CONTRE LE RÉFÉRENTIEL DE L'ÉLÈVE, jamais reçue en
+        /// confiance : même garde que côté prompt, où la matière vient
+        /// toujours de la conversation, jamais du texte libre.
+        /// </summary>
+        [HttpPost("{id:int}/controles")]
+        [SchoolWebApp.Api.Auth.AutoriseEleve]
+        [SwaggerResponse(200, "Le contrôle enregistré.", typeof(ControleViewModel))]
+        [SwaggerResponse(400, "Matière absente de l'emploi du temps de l'élève, ou date invalide.")]
+        [SwaggerResponse(404, "Profil inexistant ou n'appartenant pas à ce compte.")]
+        public async Task<IActionResult> CreerControle(
+            int id,
+            [FromBody] SchoolWebApp.Api.Request.CreerControleRequest request,
+            [FromServices] IChatContexteResolver resolveur,
+            [FromServices] IControleScolaireRepository controles,
+            [FromServices] IPlanificateurControleService planificateur,
+            [FromServices] SchoolWebApp.Api.Utils.ICurrentUserAccessor utilisateur,
+            CancellationToken ct)
+        {
+            if (!ModelState.IsValid) return BadRequest(ModelState);
+
+            try
+            {
+                var eleve = await resolveur.ResoudreEleveAsync(id);
+                if (eleve is null) return NotFound();
+
+                var matieres = await _eleveBuilder.GetMatieresDeLEleveAsync(id);
+                if (matieres is null) return NotFound();
+
+                if (!matieres.Any(m => m.Id == request.MatiereId)) return BadRequest();
+
+                var posePar = utilisateur.EleveId is not null ? "ELEVE" : "PARENT";
+
+                var enregistre = await controles.EnregistrerDepuisCalendrierAsync(
+                    id, request.MatiereId, posePar, request.Sujet,
+                    request.DateControle, request.HeureControle, ct);
+
+                if (enregistre is null) return BadRequest();
+
+                // LE PROGRAMME SE DÉDUIT DU SUJET, TOUT DE SUITE.
+                //
+                // Un contrôle posé depuis le calendrier n'a vu aucun
+                // professeur : sans ça, sa barre restait à zéro et « on ne
+                // sait pas ce qu'il y a dessus » jusqu'à une hypothétique
+                // séance de préparation. Or le programme de la classe est
+                // connu — « Thalès », ce n'est pas un milliard de notions.
+                //
+                // Silencieux en cas d'échec : un contrôle sans programme
+                // reste utilisable, et le professeur le complétera. On ne
+                // refuse jamais la création pour ça.
+                try
+                {
+                    await planificateur.PoserProgrammeAsync(
+                        id, enregistre.Id, request.MatiereId, eleve.NiveauScolaireId,
+                        request.Sujet, ct);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex,
+                        "Echec de la deduction du programme du controle {ControleId}.", enregistre.Id);
+                }
+
+                return Ok(new ControleViewModel
+                {
+                    MatiereId = enregistre.MatiereId,
+                    MatiereLibelle = enregistre.MatiereLibelle,
+                    ProfCouleur = enregistre.ProfCouleur,
+                    Sujet = enregistre.Sujet,
+                    DateControle = enregistre.DateControle,
+                    HeureControle = enregistre.HeureControle,
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Erreur lors de la creation d'un controle pour l'eleve {EleveId}.", id);
+                return StatusCode(500, new { message = "Une erreur est survenue, veuillez réessayer." });
+            }
+        }
+
+        /// <summary>
+        /// Les contrôles de l'élève, à venir ou passés, avec l'état de leur
+        /// préparation.
+        ///
+        /// LE DÉLAI EST CALCULÉ ICI, en heure de Paris : le navigateur ne
+        /// recalcule jamais « dans 3 jours » lui-même, sans quoi deux horloges
+        /// donneraient deux réponses.
+        /// </summary>
+        [HttpGet("{id:int}/controles")]
+        [SchoolWebApp.Api.Auth.AutoriseEleve]
+        [SwaggerResponse(200, "Les contrôles.", typeof(IEnumerable<ControleEleveViewModel>))]
+        [SwaggerResponse(404, "Profil inexistant ou n'appartenant pas à ce compte.")]
+        public async Task<IActionResult> GetControles(
+            int id,
+            [FromQuery] string statut,
+            [FromQuery] int limite,
+            [FromServices] IChatContexteResolver resolveur,
+            [FromServices] IControleScolaireRepository controles,
+            CancellationToken ct)
+        {
+            try
+            {
+                var eleve = await resolveur.ResoudreEleveAsync(id);
+                if (eleve is null) return NotFound();
+
+                var maintenant = HeureFrance.Locale(DateTime.UtcNow);
+                var plafond = limite is > 0 and <= 100 ? limite : 20;
+
+                var liste = string.Equals(statut, "passes", StringComparison.OrdinalIgnoreCase)
+                    ? await controles.GetPassesAsync(id, maintenant, plafond, ct)
+                    : await controles.GetAVenirAsync(id, maintenant, plafond, ct);
+
+                var lignes = liste.ToList();
+
+                // Une seule requête de préparation pour toute la liste : une
+                // par contrôle serait un N+1 sur l'écran d'accueil.
+                var preparations = await controles.GetPreparationsAsync(
+                    id, lignes.Select(c => c.Id), ct);
+
+                return Ok(lignes.Select(c => Projeter(c, maintenant, preparations)));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Erreur lors du chargement des controles de l'eleve {EleveId}.", id);
+                return StatusCode(500, new { message = "Une erreur est survenue, veuillez réessayer." });
+            }
+        }
+
+        [HttpGet("{id:int}/controles/{controleId:int}")]
+        [SchoolWebApp.Api.Auth.AutoriseEleve]
+        [SwaggerResponse(200, "La fiche du contrôle.", typeof(ControleEleveViewModel))]
+        [SwaggerResponse(404, "Contrôle inexistant ou n'appartenant pas à cet élève.")]
+        public async Task<IActionResult> GetControle(
+            int id,
+            int controleId,
+            [FromServices] IChatContexteResolver resolveur,
+            [FromServices] IControleScolaireRepository controles,
+            CancellationToken ct)
+        {
+            try
+            {
+                var eleve = await resolveur.ResoudreEleveAsync(id);
+                if (eleve is null) return NotFound();
+
+                var controle = await controles.GetAsync(id, controleId, ct);
+
+                // 404 plutôt que 403 : ne pas révéler qu'un contrôle existe
+                // chez quelqu'un d'autre.
+                if (controle is null) return NotFound();
+
+                var maintenant = HeureFrance.Locale(DateTime.UtcNow);
+                var preparations = await controles.GetPreparationsAsync(id, [controleId], ct);
+
+                return Ok(Projeter(controle, maintenant, preparations));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Erreur lors du chargement du controle {ControleId}.", controleId);
+                return StatusCode(500, new { message = "Une erreur est survenue, veuillez réessayer." });
+            }
+        }
+
+        /// <summary>
+        /// LA PRÉPARATION À L'EXAMEN DE L'ÉLÈVE — la section sous « Mes
+        /// contrôles ». `examen` vaut null quand sa classe n'a pas d'examen
+        /// cette année : un objet enveloppe plutôt qu'un 204, pour que le
+        /// navigateur n'ait pas à distinguer « rien » d'« échec ».
+        /// </summary>
+        [HttpGet("{id:int}/examen")]
+        [SchoolWebApp.Api.Auth.AutoriseEleve]
+        [SwaggerResponse(200, "La préparation à l'examen, ou null.")]
+        [SwaggerResponse(404, "Profil inexistant ou n'appartenant pas à ce compte.")]
+        public async Task<IActionResult> GetExamen(
+            int id,
+            [FromServices] IChatContexteResolver resolveur,
+            [FromServices] IExamenRepository examens,
+            CancellationToken ct)
+        {
+            try
+            {
+                var eleve = await resolveur.ResoudreEleveAsync(id);
+                if (eleve is null) return NotFound();
+
+                var preparation = await examens.GetPreparationExamenAsync(id, eleve.NiveauCode, ct);
+                return Ok(new { examen = preparation });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Erreur lors du chargement de l'examen de l'eleve {EleveId}.", id);
+                return StatusCode(500, new { message = "Une erreur est survenue, veuillez réessayer." });
+            }
+        }
+
+        [HttpGet("{id:int}/examen/epreuves/{code}")]
+        [SchoolWebApp.Api.Auth.AutoriseEleve]
+        [SwaggerResponse(200, "L'épreuve, avec ses notions.")]
+        [SwaggerResponse(404, "Épreuve inexistante ou ne concernant pas cet élève.")]
+        public async Task<IActionResult> GetEpreuve(
+            int id,
+            string code,
+            [FromServices] IChatContexteResolver resolveur,
+            [FromServices] IExamenRepository examens,
+            CancellationToken ct)
+        {
+            try
+            {
+                var eleve = await resolveur.ResoudreEleveAsync(id);
+                if (eleve is null) return NotFound();
+
+                var epreuve = await examens.GetPreparationEpreuveAsync(id, eleve.NiveauCode, code, ct);
+                return epreuve is null ? NotFound() : Ok(epreuve);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Erreur lors du chargement de l'epreuve {Code}.", code);
+                return StatusCode(500, new { message = "Une erreur est survenue, veuillez réessayer." });
+            }
+        }
+
+        /// <summary>
+        /// Modifie un contrôle. CHANGER DE MATIÈRE VIDE SON PÉRIMÈTRE — des
+        /// notions de français n'ont aucun sens dans un contrôle de maths.
+        /// </summary>
+        [HttpPut("{id:int}/controles/{controleId:int}")]
+        [SchoolWebApp.Api.Auth.AutoriseEleve]
+        [SwaggerResponse(200, "Le contrôle modifié.", typeof(ControleViewModel))]
+        [SwaggerResponse(400, "Matière absente de l'emploi du temps de l'élève, ou date invalide.")]
+        [SwaggerResponse(404, "Contrôle inexistant ou n'appartenant pas à cet élève.")]
+        public async Task<IActionResult> ModifierControle(
+            int id,
+            int controleId,
+            [FromBody] SchoolWebApp.Api.Request.ModifierControleRequest request,
+            [FromServices] IChatContexteResolver resolveur,
+            [FromServices] IControleScolaireRepository controles,
+            [FromServices] IPlanificateurControleService planificateur,
+            CancellationToken ct)
+        {
+            if (!ModelState.IsValid) return BadRequest(ModelState);
+
+            try
+            {
+                var eleve = await resolveur.ResoudreEleveAsync(id);
+                if (eleve is null) return NotFound();
+
+                // Ce qu'il était AVANT : c'est la comparaison qui dit s'il
+                // faut redéduire le programme. Relancer un appel au modèle
+                // parce que l'heure a bougé de dix minutes serait payé pour
+                // rien.
+                var avant = await controles.GetAsync(id, controleId, ct);
+                if (avant is null) return NotFound();
+
+                // LA MATIÈRE N'EST PAS MODIFIABLE : celle de la requête est
+                // ignorée, et c'est celle du contrôle qui vaut. Un contrôle
+                // déplacé de matière perdrait son programme et laisserait ses
+                // séances de préparation rattachées au mauvais professeur.
+                var modifie = await controles.ModifierAsync(
+                    id, controleId, request.Sujet,
+                    request.DateControle, request.HeureControle, ct);
+
+                if (modifie is null) return NotFound();
+
+                // LE PROGRAMME SE REFAIT QUAND LE SUJET CHANGE.
+                //
+                // C'est le cas courant : l'enfant crée « contrôle de maths »
+                // sans savoir, puis revient compléter quand son professeur a
+                // annoncé le chapitre. Sans ça, sa fiche resterait vide alors
+                // même qu'il vient de dire ce qu'il y avait dessus.
+                if (!string.Equals(modifie.Sujet, avant.Sujet, StringComparison.Ordinal))
+                {
+                    try
+                    {
+                        await planificateur.PoserProgrammeAsync(
+                            id, controleId, modifie.MatiereId, eleve.NiveauScolaireId,
+                            request.Sujet, ct);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex,
+                            "Echec de la rededuction du programme du controle {ControleId}.", controleId);
+                    }
+                }
+
+                return Ok(new ControleViewModel
+                {
+                    Id = modifie.Id,
+                    MatiereId = modifie.MatiereId,
+                    MatiereLibelle = modifie.MatiereLibelle,
+                    ProfCouleur = modifie.ProfCouleur,
+                    Sujet = modifie.Sujet,
+                    DateControle = modifie.DateControle,
+                    HeureControle = modifie.HeureControle,
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Erreur lors de la modification du controle {ControleId}.", controleId);
+                return StatusCode(500, new { message = "Une erreur est survenue, veuillez réessayer." });
+            }
+        }
+
+        [HttpDelete("{id:int}/controles/{controleId:int}")]
+        [SchoolWebApp.Api.Auth.AutoriseEleve]
+        [SwaggerResponse(204, "Contrôle supprimé.")]
+        [SwaggerResponse(404, "Contrôle inexistant ou n'appartenant pas à cet élève.")]
+        public async Task<IActionResult> SupprimerControle(
+            int id,
+            int controleId,
+            [FromServices] IChatContexteResolver resolveur,
+            [FromServices] IControleScolaireRepository controles,
+            CancellationToken ct)
+        {
+            try
+            {
+                var eleve = await resolveur.ResoudreEleveAsync(id);
+                if (eleve is null) return NotFound();
+
+                return await controles.SupprimerAsync(id, controleId, ct)
+                    ? NoContent()
+                    : NotFound();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Erreur lors de la suppression du controle {ControleId}.", controleId);
+                return StatusCode(500, new { message = "Une erreur est survenue, veuillez réessayer." });
+            }
+        }
+
+        private static ControleEleveViewModel Projeter(
+            ControleScolaireEleve controle,
+            DateTime maintenant,
+            IReadOnlyDictionary<int, PreparationControle> preparations)
+        {
+            preparations.TryGetValue(controle.Id, out var preparation);
+
+            return new ControleEleveViewModel
+            {
+                Id = controle.Id,
+                MatiereId = controle.MatiereId,
+                MatiereLibelle = controle.MatiereLibelle,
+                ProfCouleur = controle.ProfCouleur,
+                Sujet = controle.Sujet,
+                DateControle = controle.DateControle,
+                HeureControle = controle.HeureControle,
+                JoursRestants = (controle.DateControle.Date - maintenant.Date).Days,
+                DernierePreparationLe = controle.DernierePreparationLe,
+                NombrePreparations = controle.NombrePreparations,
+                Note = controle.Note,
+                Ressenti = controle.Ressenti,
+                BilanLe = controle.BilanLe,
+                BilanClos = controle.BilanClos,
+                Preparation = preparation is null ? null : new PreparationViewModel
+                {
+                    Pourcent = preparation.Pourcent,
+                    PerimetreConnu = preparation.PerimetreConnu,
+                    Total = preparation.Total,
+                    Acquises = preparation.Acquises,
+                    PretStatut = preparation.PretStatut,
+                    PretObservation = preparation.PretObservation,
+                    PretLe = preparation.PretLe,
+                    Notions = preparation.Notions.Select(n => new NotionControleViewModel
+                    {
+                        Id = n.Id,
+                        Libelle = n.Libelle,
+                        Etat = n.Etat,
+                        TravailleeLe = n.TravailleeLe,
+                        Resultat = n.Resultat,
+                        Pourcent = n.Pourcent,
+                        ValideeParMesure = n.ValideeParMesure,
+                    }),
+                },
+            };
         }
 
         [HttpGet("{id:int}/fiche")]
@@ -246,6 +716,211 @@ namespace SchoolWebApp.Api.Controllers
             {
                 _logger.LogError(ex,
                     "Erreur lors du marquage de la fiche {FicheId} de l'eleve {EleveId}.", ficheId, id);
+                return StatusCode(500, new { message = "Une erreur est survenue, veuillez réessayer." });
+            }
+        }
+
+        /// <summary>
+        /// Les dictées corrigées d'un enfant dans une matière.
+        ///
+        /// Sans `matiereId`, renvoie le NOMBRE de dictées par matière — même
+        /// principe que <see cref="GetFiches"/>, pour la même raison.
+        /// </summary>
+        [HttpGet("{id:int}/dictees")]
+        [SchoolWebApp.Api.Auth.AutoriseEleve]
+        [SwaggerResponse(200, "Les dictées, ou leur nombre par matière.")]
+        [SwaggerResponse(404, "Profil inexistant ou n'appartenant pas à ce compte.")]
+        public async Task<IActionResult> GetDictees(
+            int id,
+            [FromQuery] int? matiereId,
+            [FromServices] IDicteeRepository dictees)
+        {
+            try
+            {
+                var eleve = await _eleveBuilder.GetEleveByIdAsync(id);
+                if (eleve is null) return NotFound();
+
+                if (matiereId is null) return Ok(await dictees.CompterParMatiereAsync(id));
+
+                return Ok(await dictees.GetParMatiereAsync(id, matiereId.Value));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Erreur lors du chargement des dictees de l'eleve {EleveId}.", id);
+                return StatusCode(500, new { message = "Une erreur est survenue, veuillez réessayer." });
+            }
+        }
+
+        /// <summary>Une dictée corrigée complète.</summary>
+        [HttpGet("{id:int}/dictees/{dicteeId:int}")]
+        [SchoolWebApp.Api.Auth.AutoriseEleve]
+        [SwaggerResponse(200, "La dictée.", typeof(DicteeEleve))]
+        [SwaggerResponse(404, "Dictee inexistante, ou enfant n'appartenant pas à ce compte.")]
+        public async Task<IActionResult> GetDictee(
+            int id, int dicteeId, [FromServices] IDicteeRepository dictees)
+        {
+            try
+            {
+                var eleve = await _eleveBuilder.GetEleveByIdAsync(id);
+                if (eleve is null) return NotFound();
+
+                var dictee = await dictees.GetDetailAsync(dicteeId, id);
+                return dictee is null ? NotFound() : Ok(dictee);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex,
+                    "Erreur lors du chargement de la dictee {DicteeId} de l'eleve {EleveId}.", dicteeId, id);
+                return StatusCode(500, new { message = "Une erreur est survenue, veuillez réessayer." });
+            }
+        }
+
+        /// <summary>
+        /// L'élève vient d'ouvrir la dictée : la pastille « à consulter »
+        /// s'éteint.
+        /// </summary>
+        [HttpPost("{id:int}/dictees/{dicteeId:int}/vue")]
+        [SchoolWebApp.Api.Auth.AutoriseEleve]
+        [SwaggerResponse(204, "C'est noté.")]
+        [SwaggerResponse(404, "Dictee inexistante, ou enfant n'appartenant pas à ce compte.")]
+        public async Task<IActionResult> MarquerDicteeVue(
+            int id, int dicteeId, [FromServices] IDicteeRepository dictees)
+        {
+            try
+            {
+                var eleve = await _eleveBuilder.GetEleveByIdAsync(id);
+                if (eleve is null) return NotFound();
+
+                return await dictees.MarquerVueAsync(dicteeId, id) ? NoContent() : NotFound();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex,
+                    "Erreur lors du marquage de la dictee {DicteeId} de l'eleve {EleveId}.", dicteeId, id);
+                return StatusCode(500, new { message = "Une erreur est survenue, veuillez réessayer." });
+            }
+        }
+
+        /// <summary>
+        /// Les compréhensions orales d'un enfant dans une matière.
+        ///
+        /// Sans `matiereId`, renvoie le NOMBRE de compréhensions orales par
+        /// matière — même principe que <see cref="GetDictees"/>.
+        /// </summary>
+        [HttpGet("{id:int}/comprehensions-orales")]
+        [SchoolWebApp.Api.Auth.AutoriseEleve]
+        [SwaggerResponse(200, "Les compréhensions orales, ou leur nombre par matière.")]
+        [SwaggerResponse(404, "Profil inexistant ou n'appartenant pas à ce compte.")]
+        public async Task<IActionResult> GetComprehensionsOrales(
+            int id,
+            [FromQuery] int? matiereId,
+            [FromServices] IComprehensionOraleRepository comprehensionsOrales)
+        {
+            try
+            {
+                var eleve = await _eleveBuilder.GetEleveByIdAsync(id);
+                if (eleve is null) return NotFound();
+
+                if (matiereId is null) return Ok(await comprehensionsOrales.CompterParMatiereAsync(id));
+
+                return Ok(await comprehensionsOrales.GetParMatiereAsync(id, matiereId.Value));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex,
+                    "Erreur lors du chargement des comprehensions orales de l'eleve {EleveId}.", id);
+                return StatusCode(500, new { message = "Une erreur est survenue, veuillez réessayer." });
+            }
+        }
+
+        /// <summary>Une compréhension orale complète (sans l'audio — voir la route dédiée).</summary>
+        [HttpGet("{id:int}/comprehensions-orales/{comprehensionOraleId:int}")]
+        [SchoolWebApp.Api.Auth.AutoriseEleve]
+        [SwaggerResponse(200, "La compréhension orale.", typeof(ComprehensionOraleEleve))]
+        [SwaggerResponse(404, "Compréhension orale inexistante, ou enfant n'appartenant pas à ce compte.")]
+        public async Task<IActionResult> GetComprehensionOrale(
+            int id, int comprehensionOraleId,
+            [FromServices] IComprehensionOraleRepository comprehensionsOrales)
+        {
+            try
+            {
+                var eleve = await _eleveBuilder.GetEleveByIdAsync(id);
+                if (eleve is null) return NotFound();
+
+                var comprehensionOrale = await comprehensionsOrales.GetDetailAsync(comprehensionOraleId, id);
+                return comprehensionOrale is null ? NotFound() : Ok(comprehensionOrale);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex,
+                    "Erreur lors du chargement de la comprehension orale {ComprehensionOraleId} "
+                    + "de l'eleve {EleveId}.", comprehensionOraleId, id);
+                return StatusCode(500, new { message = "Une erreur est survenue, veuillez réessayer." });
+            }
+        }
+
+        /// <summary>
+        /// L'audio du passage, tel que régénéré à l'archivage. 404 si la
+        /// synthèse a échoué à l'époque, ou si la fiche n'appartient pas à
+        /// ce compte.
+        /// </summary>
+        [HttpGet("{id:int}/comprehensions-orales/{comprehensionOraleId:int}/audio")]
+        [SchoolWebApp.Api.Auth.AutoriseEleve]
+        [SwaggerResponse(200, "L'audio du passage.")]
+        [SwaggerResponse(404, "Audio indisponible, ou enfant n'appartenant pas à ce compte.")]
+        public async Task<IActionResult> GetComprehensionOraleAudio(
+            int id, int comprehensionOraleId,
+            [FromServices] IComprehensionOraleRepository comprehensionsOrales)
+        {
+            try
+            {
+                var eleve = await _eleveBuilder.GetEleveByIdAsync(id);
+                if (eleve is null) return NotFound();
+
+                var audio = await comprehensionsOrales.GetAudioAsync(comprehensionOraleId, id);
+                if (audio is null) return NotFound();
+
+                // Privé : la voix du professeur pour cet enfant précisément.
+                // Un cache partagé ne doit jamais la garder. Un an côté
+                // navigateur en revanche — le contenu ne change jamais.
+                Response.Headers.CacheControl = "private, max-age=31536000, immutable";
+
+                return File(audio, "audio/wav");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex,
+                    "Erreur lors du chargement de l'audio de la comprehension orale "
+                    + "{ComprehensionOraleId} de l'eleve {EleveId}.", comprehensionOraleId, id);
+                return StatusCode(500, new { message = "Une erreur est survenue, veuillez réessayer." });
+            }
+        }
+
+        /// <summary>
+        /// L'élève vient d'ouvrir la compréhension orale : la pastille « à
+        /// consulter » s'éteint.
+        /// </summary>
+        [HttpPost("{id:int}/comprehensions-orales/{comprehensionOraleId:int}/vue")]
+        [SchoolWebApp.Api.Auth.AutoriseEleve]
+        [SwaggerResponse(204, "C'est noté.")]
+        [SwaggerResponse(404, "Compréhension orale inexistante, ou enfant n'appartenant pas à ce compte.")]
+        public async Task<IActionResult> MarquerComprehensionOraleVue(
+            int id, int comprehensionOraleId,
+            [FromServices] IComprehensionOraleRepository comprehensionsOrales)
+        {
+            try
+            {
+                var eleve = await _eleveBuilder.GetEleveByIdAsync(id);
+                if (eleve is null) return NotFound();
+
+                return await comprehensionsOrales.MarquerVueAsync(comprehensionOraleId, id)
+                    ? NoContent() : NotFound();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex,
+                    "Erreur lors du marquage de la comprehension orale {ComprehensionOraleId} "
+                    + "de l'eleve {EleveId}.", comprehensionOraleId, id);
                 return StatusCode(500, new { message = "Une erreur est survenue, veuillez réessayer." });
             }
         }

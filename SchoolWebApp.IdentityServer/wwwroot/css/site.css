@@ -1,13 +1,24 @@
+/* LA PALETTE DU SITE, ET NON PLUS UN GRIS NEUTRE — Camara, le 15/09/2026 :
+   « le style de la page de connexion n'a rien à voir avec le site ». Elle
+   suivait `prefers-color-scheme` sur des gris génériques ; le site, lui, est
+   SOMBRE PAR DÉFAUT sur son bleu nuit, quel que soit le système. Mêmes
+   valeurs que les jetons de `App.css` : papier #0b1a35, surface #102546,
+   trait #223d63, encre #eef2f8, encre douce #9aa8bd.
+
+   Le choix « thème clair » d'un parent est mémorisé sur le domaine du site,
+   que ce serveur ne peut pas lire : la connexion reste donc en sombre, le
+   thème par défaut du produit. */
 :root {
-    --bg: #f5f6f8;
-    --card: #ffffff;
-    --ink: #1a1d21;
-    --ink-soft: #5c6470;
-    --line: #e2e5ea;
-    /* Le contour d'un bouton n'est pas un filet de séparation : mesuré, le
-       trait était à 1,31 de contraste, là où il en faut 3,0 pour qu'un
-       contour d'interface se voie. Celui-ci est à 3,03. */
-    --line-bouton: #91949e;
+    color-scheme: dark;
+    --bg: #0b1a35;
+    --card: #102546;
+    --champ: #0b1a35;
+    --ink: #eef2f8;
+    --ink-soft: #9aa8bd;
+    --line: #223d63;
+    --grille: rgba(255, 255, 255, 0.045);
+    /* 3,29:1 sur la carte : un contour d'interface demande 3,0. */
+    --line-bouton: #5b7bab;
 
     /* Le corail de Mimia, et non plus un bleu générique. Un parent qui arrive
        du site et tombe sur un bouton bleu se demande une seconde s'il est au
@@ -21,57 +32,39 @@
        de la carte. */
     --accent: #d63f1c;
     --accent-survol: #bf3313;
-    --accent-texte: #bf3313;
+    /* Le corail clair du site : 7,1:1 sur le bleu nuit. */
+    --accent-texte: #ff7d5e;
     --accent-ink: #ffffff;
-    /* LE BLEU DES ÉLÈVES.
-       Le corail est la couleur des parents ; deux boutons pleins de la même
-       teinte se disputeraient la première place. Mesuré : blanc sur ce bleu
-       tient 4,88:1, au-delà des 4,5 exigés pour du texte. */
-    --eleve: #2f6fd0;
-    --eleve-fond: #eaf1fc;
-    /* Le TEXTE demande 4,5:1 là où une bordure se contente de 3,0. Le bleu
-       vif tenait 4,29 sur le fond bleu clair : assombri juste ce qu il faut,
-       il passe à 4,54 sans changer la teinte perçue. */
-    --eleve-texte: #2b6bcb;
+    /* LE BLEU DES ÉLÈVES — `--action-code` du site, le bleu du geste « code ».
+       Le corail est la couleur des parents ; deux portes du même corail se
+       disputeraient la première place. */
+    --eleve: #5590f3;
+    --eleve-fond: color-mix(in srgb, #5590f3 12%, #102546);
+    --eleve-texte: #7fadf7;
 
-    --danger: #c0392b;
-    --danger-bg: #fdeceb;
-    --radius: 12px;
-}
+    --danger: #ff8a7a;
+    --danger-bg: #3a2320;
+    --radius: 22px;
 
-@media (prefers-color-scheme: dark) {
-    :root {
-        --bg: #14171b;
-        --card: #1c2026;
-        --ink: #eef1f5;
-        --ink-soft: #9aa4b1;
-        --line: #2c323a;
-        --line-bouton: #626874; /* 3,02 sur la carte sombre. */
-
-        /* L'aplat ne bouge pas : son contraste se mesure contre le blanc du
-           libellé, qui ne change pas de thème. Le texte des liens, si — le
-           corail foncé tomberait à 1,8:1 sur la carte sombre. */
-        --accent: #d63f1c;
-        --accent-survol: #bf3313;
-        --accent-texte: #ff7d5e;
-        --eleve: #4f8fe8;
-        --eleve-fond: #172436;
-        --eleve-texte: #4f8fe8; /* 4,79 sur le fond sombre : rien à corriger. */
-
-        --danger: #ff8a7a;
-        --danger-bg: #37211f;
-    }
+    --display: 'Fraunces', Georgia, 'Times New Roman', serif;
+    --sans: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
 * { box-sizing: border-box; }
 
+/* Le quadrillage du site : deux jeux de lignes discrètes sur le bleu nuit. */
 body {
     margin: 0;
-    background: var(--bg);
+    background-color: var(--bg);
+    background-image:
+        linear-gradient(var(--grille) 1px, transparent 1px),
+        linear-gradient(90deg, var(--grille) 1px, transparent 1px);
+    background-size: 28px 28px;
     color: var(--ink);
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-family: var(--sans);
     font-size: 15px;
     line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
 }
 
 .auth-shell {
@@ -91,6 +84,8 @@ body {
     border: 1px solid var(--line);
     border-radius: var(--radius);
     padding: 32px;
+    /* L'ombre des cartes du site en sombre. */
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.28);
 }
 
 .auth-brand {
@@ -101,16 +96,32 @@ body {
 }
 
 /* Hauteur fixe, largeur libre : le logo garde ses proportions. */
-.auth-brand__logo { display: block; height: 30px; width: auto; }
-.auth-brand__logo--sombre { display: none; }
-
-@media (prefers-color-scheme: dark) {
-    .auth-brand__logo--clair { display: none; }
-    .auth-brand__logo--sombre { display: block; }
+/* Le logo est un lien vers l'accueil : la zone cliquable colle au dessin,
+   pas à toute la largeur de la carte. */
+a.auth-brand {
+    width: fit-content;
+    border-radius: 8px;
+    text-decoration: none;
+    transition: opacity 0.15s ease;
 }
 
+a.auth-brand:hover { opacity: 0.85; }
+
+a.auth-brand:focus-visible {
+    outline: 2px solid #ff7d5e;
+    outline-offset: 4px;
+}
+
+/* Toujours le logo pour fond sombre : la page l'est dans tous les cas. */
+.auth-brand__logo { display: block; height: 30px; width: auto; }
+.auth-brand__logo--clair { display: none; }
+
+/* Le serif des titres du site. */
 h1 {
-    font-size: 20px;
+    font-family: var(--display);
+    font-size: 24px;
+    font-weight: 600;
+    letter-spacing: -0.015em;
     margin: 0 0 4px;
 }
 
@@ -133,19 +144,33 @@ h1 {
 .field input[type="password"],
 .field input[type="text"] {
     width: 100%;
-    padding: 10px 12px;
+    padding: 12px 14px;
     border: 1px solid var(--line);
-    border-radius: 8px;
-    background: var(--bg);
+    border-radius: 10px;
+    background: var(--champ);
     color: var(--ink);
     font-size: 15px;
     font-family: inherit;
 }
 
+/* Le focus du site : un liseré corail et un halo doux, pas un contour épais. */
 .field input:focus {
-    outline: 2px solid var(--accent);
-    outline-offset: -1px;
-    border-color: transparent;
+    outline: none;
+    border-color: #ff7d5e;
+    box-shadow: 0 0 0 3px color-mix(in srgb, #ff7d5e 16%, transparent);
+}
+
+/* LE REMPLISSAGE AUTOMATIQUE REPEIGNAIT LES CHAMPS EN BLANC BLEUTÉ — le
+   navigateur y pose son propre fond, qu'aucun `background` ne remplace. Seule
+   une ombre intérieure pleine le recouvre. */
+.field input:-webkit-autofill,
+.field input:-webkit-autofill:hover,
+.field input:-webkit-autofill:focus {
+    -webkit-text-fill-color: var(--ink);
+    caret-color: var(--ink);
+    -webkit-box-shadow: 0 0 0 1000px var(--champ) inset;
+    box-shadow: 0 0 0 1000px var(--champ) inset;
+    transition: background-color 9999s ease-out;
 }
 
 /* ---------------------------------------- champ de mot de passe, avec l'œil */
@@ -212,14 +237,10 @@ h1 {
     font-weight: 700;
 }
 
-.regles-mdp__ok { color: #2e7d32; }
+.regles-mdp__ok { color: #7fc47f; }
 .regles-mdp__ok::before { content: "✓"; }
 
 .regles-mdp__ko::before { content: "·"; }
-
-@media (prefers-color-scheme: dark) {
-    .regles-mdp__ok { color: #7fc47f; }
-}
 
 .field-row {
     display: flex;
@@ -242,15 +263,17 @@ h1 {
 .btn {
     display: block;
     width: 100%;
-    padding: 11px 16px;
+    padding: 13px 16px;
     border: 0;
-    border-radius: 8px;
+    border-radius: 10px;
     background: var(--accent);
     color: var(--accent-ink);
     font-size: 15px;
     font-weight: 600;
     font-family: inherit;
     cursor: pointer;
+    /* La lueur corail des boutons principaux du site. */
+    box-shadow: 0 8px 22px -8px color-mix(in srgb, var(--accent) 70%, transparent);
 }
 
 /* Un corail assombri plutôt qu'un filtre de luminosité : `brightness`
@@ -264,9 +287,9 @@ h1 {
     justify-content: center;
     gap: 10px;
     width: 100%;
-    padding: 11px 16px;
-    border: 1px solid var(--line);
-    border-radius: 8px;
+    padding: 12px 16px;
+    border: 1px solid var(--line-bouton);
+    border-radius: 10px;
     background: var(--card);
     color: var(--ink);
     font-size: 15px;
@@ -347,6 +370,9 @@ h1 {
     border-radius: 999px;
     background: color-mix(in srgb, var(--accent) 10%, transparent);
     color: var(--accent-texte);
+    /* Le badge vit DANS le titre, qui est en serif : sans ce rappel, il en
+       hériterait et « Accès privé » s'écrirait en Fraunces. */
+    font-family: var(--sans);
     font-size: 11.5px;
     font-weight: 600;
     letter-spacing: 0.03em;
@@ -401,8 +427,23 @@ h1 {
     font-size: 22px;
 }
 
+/* Le sac déborde un peu de sa pastille : un dessin qui « sort » du carré se
+   lit mieux qu'une icône enfermée dedans. */
+.entree-eleve-carte__sac {
+    display: block;
+    width: 52px;
+    height: 52px;
+    object-fit: contain;
+    filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.3));
+}
+
 .entree-eleve-carte__texte { display: grid; gap: 2px; min-width: 0; }
-.entree-eleve-carte__texte strong { font-size: 16px; color: var(--eleve-texte); }
+/* « Tu es élève ? » en CORAL — Camara, le 15/09/2026 : la couleur de la
+   marque sur la question qui arrête l'œil de l'enfant. La carte garde son
+   bleu : c'est lui qui la distingue de la porte des parents. `--accent-texte`
+   est le corail lisible en texte (7,1:1 sur le bleu nuit, et sa variante en
+   Blue Sky). */
+.entree-eleve-carte__texte strong { font-size: 16px; color: var(--accent-texte); }
 .entree-eleve-carte__texte span { font-size: 13px; color: var(--ink-soft); line-height: 1.45; }
 
 .entree-eleve-carte__fleche {
@@ -434,4 +475,83 @@ h1 {
 @media (max-width: 420px) {
     .entree-eleve-carte { padding: 14px; gap: 12px; }
     .entree-eleve-carte__illu { width: 38px; height: 38px; font-size: 19px; }
+    .entree-eleve-carte__sac { width: 46px; height: 46px; }
 }
+
+
+/* ================================================================== */
+/* BLUE SKY                                                            */
+/*                                                                     */
+/* Le style testé par Camara le 15/09/2026 sur tout le site : fond     */
+/* bleu de marque (big_bg.png), carte en verre dépoli, accents corail. */
+/* Posé par la classe `blue-sky` sur <html> (_Layout.cshtml), lue du   */
+/* réglage BLUE_SKY. Éteint, rien de ceci ne s'applique et la page     */
+/* reste exactement celle d'avant.                                     */
+/*                                                                     */
+/* Sombre dans les deux thèmes du système, comme le reste du site en   */
+/* Blue Sky. Sur ce bleu : blanc et corail vif, jamais de sarcelle.    */
+/* ================================================================== */
+
+html.blue-sky {
+    color-scheme: dark;
+    --bg: rgba(255, 255, 255, 0.06);
+    --champ: rgba(255, 255, 255, 0.06);
+    --grille: transparent;
+    --card: rgba(4, 20, 50, 0.62);
+    --ink: #ffffff;
+    --ink-soft: #a9bddb;
+    --line: rgba(122, 184, 255, 0.24);
+    --line-bouton: rgba(169, 189, 219, 0.55);
+    --accent-texte: #ff7a5c;
+    /* Le bleu des élèves se confondrait avec le fond : sa version claire. */
+    --eleve: #7ab8f0;
+    --eleve-fond: rgba(122, 184, 255, 0.12);
+    --eleve-texte: #9fcbff;
+    --danger: #ff8a7a;
+    --danger-bg: rgba(255, 138, 122, 0.14);
+}
+
+/* Le même voile noir que sur le reste du site en Blue Sky : le fond un peu
+   plus foncé, sans toucher à la netteté des dessins. */
+html.blue-sky body {
+    background:
+        linear-gradient(rgba(0, 0, 0, 0.28), rgba(0, 0, 0, 0.28)) fixed,
+        #002d61 url('../img/big_bg.png') center top / cover no-repeat fixed;
+}
+
+/* Sur téléphone, `fixed` est ignoré ou saccadé : le dégradé de marque. */
+@media (max-width: 700px), (hover: none) {
+    html.blue-sky body {
+        background-color: #002d61;
+        background-image:
+            linear-gradient(rgba(0, 0, 0, 0.28), rgba(0, 0, 0, 0.28)),
+            radial-gradient(ellipse 70% 90% at 50% 0%, rgba(0, 88, 194, 0.55), transparent 70%),
+            linear-gradient(180deg, #011d43 0%, #002d61 55%, #013e79 100%);
+        background-attachment: scroll;
+    }
+}
+
+html.blue-sky .auth-card {
+    border-radius: 24px;
+    -webkit-backdrop-filter: blur(16px) saturate(1.2);
+    backdrop-filter: blur(16px) saturate(1.2);
+    box-shadow: 0 30px 80px rgba(0, 8, 30, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+/* Toujours le logo pour fond sombre : la carte reste sur le bleu de marque. */
+html.blue-sky .auth-brand__logo--clair { display: none; }
+html.blue-sky .auth-brand__logo--sombre { display: block; }
+
+html.blue-sky h1 { text-shadow: 0 2px 24px rgba(0, 88, 194, 0.55); }
+
+html.blue-sky .field input:focus { outline-color: #ff7a5c; }
+
+html.blue-sky .regles-mdp__ok { color: #7ee2a1; }
+
+html.blue-sky .badge-beta {
+    border-color: rgba(255, 122, 92, 0.4);
+    background: rgba(255, 122, 92, 0.14);
+    color: #ffc2b3;
+}
+
+html.blue-sky .auth-footnote { color: #a9bddb; }

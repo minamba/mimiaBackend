@@ -8,6 +8,9 @@ namespace SchoolWebApp.Domain.Services
 
         Task<Parent?> GetParentByIdAsync(int id);
 
+        /// <summary>Sert à l'admin, qui pense en adresse et non en identifiant.</summary>
+        Task<Parent?> GetParentByMailAsync(string mail);
+
         Task<Parent?> GetParentByIdentityUserIdAsync(string identityUserId);
 
         /// <summary>

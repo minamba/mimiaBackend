@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using System.Runtime.CompilerServices;
 using System.Text;
 using Anthropic;
@@ -577,6 +578,86 @@ namespace SchoolWebApp.Api.Services
             // l'agent doit l'utiliser pour le ton, jamais la mentionner à l'élève.
             contexte.AppendLine();
 
+            // SA SÉRIE TECHNOLOGIQUE, POUR TOUS SES PROFESSEURS — la professeure
+            // de maths d'un élève de STMG comme son professeur de management.
+            // Ici et non dans la spécialité : elle change d'un élève à l'autre.
+            if (PromptsSeriesTechnologiques.ContexteSerie(eleve.NiveauCode) is { } serie)
+            {
+                contexte.AppendLine(serie);
+                contexte.AppendLine();
+            }
+
+            // SES SPÉCIALITÉS DE VOIE GÉNÉRALE, POUR LA MÊME RAISON : la
+            // professeure de maths d'un élève de première doit savoir sur quel
+            // programme porte son épreuve anticipée.
+            if (PromptsSpecialitesGenerales.ContexteSpecialites(eleve.NiveauCode, eleve.Specialites) is { } specialites)
+            {
+                contexte.AppendLine(specialites);
+                contexte.AppendLine();
+            }
+
+            // LV2 ET LLCER D'ESPAGNOL CHEZ LE MÊME ÉLÈVE : deux cours, une professeure.
+            if (PromptsEspagnol.ContexteDeuxCours(conversation.MatiereCode, eleve.Lv2Espagnol, eleve.Specialites) is { } deuxCours)
+            {
+                contexte.AppendLine(deuxCours);
+                contexte.AppendLine();
+            }
+
+            // Même chose en anglais, avec la LLCER anglais ou l'AMC.
+            if (PromptsSpecialitesGenerales.ContexteDeuxCoursAnglais(conversation.MatiereCode, eleve.Specialites) is { } deuxCoursAnglais)
+            {
+                contexte.AppendLine(deuxCoursAnglais);
+                contexte.AppendLine();
+            }
+
+            // LES NOMS DU PROGRAMME, AVANT LES NOTIONS DE L ELEVE.
+            //
+            // Le professeur nomme ses fiches. Sans cette liste il n avait sous
+            // les yeux que les notions DEJA mesurees chez cet enfant — rien sur
+            // une notion neuve — et il inventait alors un titre. Les seize
+            // premieres fiches en portent la trace : « Utiliser le theoreme de
+            // Thales » a cote de « Division decimale », le libelle du programme
+            // a cote d un titre de chapitre. Or les fiches sont regroupees par
+            // libelle EXACT : deux noms pour une meme notion, ce sont deux
+            // fiches la ou l enfant devrait en enrichir une seule.
+            //
+            // C est ecrit ici, dans le contexte commun a tous les professeurs :
+            // celui d espagnol qu on ajoutera demain en heritera sans qu on ait
+            // rien a reecrire.
+            var programme = (await _maitriseService.GetNotionsDuProgrammeAsync(
+                conversation.MatiereId, eleve.NiveauScolaireId)).ToList();
+
+            if (programme.Count > 0)
+            {
+                contexte.AppendLine("## Les notions du programme, a son niveau");
+                contexte.AppendLine();
+
+                foreach (var groupe in programme.GroupBy(n => n.Domaine))
+                {
+                    contexte.AppendLine($"### {groupe.Key}");
+                    foreach (var notion in groupe)
+                    {
+                        contexte.AppendLine($"- {notion.Libelle}");
+                    }
+                }
+
+                contexte.AppendLine();
+                contexte.AppendLine(
+                    "QUAND TU ECRIS UNE FICHE, prends le `notion:` et le `domaine:` " +
+                    "dans cette liste, au mot pres, des que la notion travaillee y " +
+                    "figure. C est ce qui rattache la fiche a ce qui est mesure, et " +
+                    "ce qui fait qu on enrichit la fiche existante au lieu d en " +
+                    "creer une deuxieme a cote. Si ce que tu as travaille n y est " +
+                    "vraiment pas, choisis un titre court et garde-le a l identique " +
+                    "les fois suivantes.");
+                contexte.AppendLine();
+                contexte.AppendLine(
+                    "Cette liste ne dicte PAS la seance : l eleve arrive avec son " +
+                    "besoin, et son besoin passe avant. Elle sert a nommer, pas a " +
+                    "programmer. Ne la recite jamais.");
+                contexte.AppendLine();
+            }
+
             var lacunes = (await _maitriseService.GetLacunesAsync(eleve.Id, conversation.MatiereId, 8)).ToList();
             var acquises = (await _maitriseService.GetAcquisesAsync(eleve.Id, conversation.MatiereId, 5)).ToList();
 
@@ -746,7 +827,23 @@ namespace SchoolWebApp.Api.Services
                 PieceJointe? piece = null;
                 piecesHistorique?.TryGetValue(utiles[i].Id, out piece);
 
-                var blocs = ConstruireBlocs(utiles[i].Contenu, piece, marquerCache: dernier);
+                // UN MARQUEUR DE SUPPORT NE VAUT QUE POUR SON TOUR.
+                //
+                // L ecran joint au message de l eleve un constat — sa copie
+                // est au cahier, ou elle vient d arriver au clavier. C est
+                // vrai a cet instant-la, et faux des le tour suivant.
+                //
+                // Releve le 11/09/2026 : l eleve rafraichit sa page en pleine
+                // dictee, repart au clavier, et le professeur lui reclame une
+                // photo. Onze messages de son historique portaient encore
+                // « DICTEE AU CAHIER » — dont un de l avant-veille. Il ne
+                // lisait pas l etat du moment, il lisait celui d hier.
+                //
+                // Ils partent donc de TOUT l historique. Le seul marqueur qui
+                // subsiste est celui du tour courant, ajoute plus bas avec le
+                // message de l eleve.
+                var contenu = SansMarqueurDeSupport(utiles[i].Contenu);
+                var blocs = ConstruireBlocs(contenu, piece, marquerCache: dernier);
 
                 // Le marqueur de cache se pose sur le DERNIER message de
                 // l'historique et sur lui seul : le préfixe mis en cache doit
@@ -757,7 +854,7 @@ namespace SchoolWebApp.Api.Services
                 // tour tant qu'elle est dans la fenêtre ; relue depuis le
                 // cache, elle est facturée un dixième.
                 messages.Add(blocs.Count == 1 && !dernier && piece is null
-                    ? new MessageParam { Role = role, Content = utiles[i].Contenu! }
+                    ? new MessageParam { Role = role, Content = contenu! }
                     : new MessageParam { Role = role, Content = blocs });
             }
 
@@ -769,6 +866,23 @@ namespace SchoolWebApp.Api.Services
 
             return messages;
         }
+
+        /// <summary>
+        /// Retire le constat de support joint par l ecran au message.
+        ///
+        /// Il dit ou en est la copie AU MOMENT DU TOUR : sur un cahier et pas
+        /// encore recue, ou tapee et deja entiere. Garde dans l historique, il
+        /// affirme au tour suivant quelque chose qui n est plus vrai.
+        /// </summary>
+        private static string? SansMarqueurDeSupport(string? contenu) =>
+            string.IsNullOrEmpty(contenu)
+                ? contenu
+                : MarqueurDeSupport().Replace(contenu, string.Empty).TrimEnd();
+
+        [GeneratedRegex(@"
+?[[^]]*(?:AU CAHIER|AU CLAVIER)[^]]*]",
+            RegexOptions.IgnoreCase)]
+        private static partial Regex MarqueurDeSupport();
 
         /// <summary>
         /// Le contenu d'un tour : son texte, et le document qui l'accompagne.

@@ -38,7 +38,8 @@ namespace SchoolWebApp.Domain.Repositories
         Task<int> CompterVisiteursAsync(DateTime debut, DateTime fin);
 
         /// <summary>Note une venue, au plus une par visiteur et par heure.</summary>
-        Task EnregistrerVisiteAsync(string visiteur, DateTime quand);
+        /// <summary>Vrai si une ligne a vraiment été écrite — faux si ce visiteur était déjà connu.</summary>
+        Task<bool> EnregistrerVisiteAsync(string visiteur, DateTime quand);
 
         Task<IEnumerable<PointSerie>> GetSerieParentsAsync(
             Granularite granularite, DateTime debut, DateTime fin);
@@ -88,6 +89,8 @@ namespace SchoolWebApp.Domain.Repositories
         /// <summary>Fiche complète d'un élève, ou null s'il n'existe pas.</summary>
         Task<FicheEleve?> GetFicheEleveAsync(int eleveId, int? niveauScolaireId = null);
 
-        Task<EleveAdmin?> ModifierEleveAsync(int id, string? prenom, string? nom, int? age, int? niveauScolaireId, Sexe? sexe);
+        Task<EleveAdmin?> ModifierEleveAsync(
+            int id, string? prenom, string? nom, int? age, int? niveauScolaireId, Sexe? sexe,
+            int? academieId = null);
     }
 }

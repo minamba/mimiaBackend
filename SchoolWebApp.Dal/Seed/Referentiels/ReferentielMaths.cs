@@ -10,7 +10,7 @@ namespace SchoolWebApp.Dal.Seed.Referentiels
     /// Voir <see cref="ReferentielSeeder"/> pour le tableau complet des sources
     /// et des dates d'entrée en vigueur, toutes matières confondues.
     ///
-    ///   CP, CE1, CE2   arrêté du 25/10/2024, BO spécial n° 40 du 31/10/2024,
+    ///   CP, CE1, CE2   arrêté du 22/10/2024, BO n° 41 du 31/10/2024,
     ///                  annexe 4 — en vigueur depuis la rentrée 2025.
     ///   CM1, CM2, 6e   arrêté publié au BO n° 16 du 17/04/2025 — CM1 et 6e
     ///                  depuis la rentrée 2025, CM2 depuis la rentrée 2026.
@@ -18,14 +18,35 @@ namespace SchoolWebApp.Dal.Seed.Referentiels
     ///                  rentrée 2026, 4e à la rentrée 2027, 3e à la rentrée 2028.
     ///                  Les niveaux 4e et 3e suivent donc ENCORE le programme
     ///                  précédent cette année.
-    ///   1re générale   arrêté du 26/02/2026 pour les mathématiques intégrées
-    ///                  à l'ENSEIGNEMENT SCIENTIFIQUE — en vigueur depuis la
-    ///                  rentrée 2026. C'est le seul cours de maths des élèves
-    ///                  qui n'ont pas pris la spécialité.
-    ///   Lycée GT       pour le reste, programmes de 2019, toujours en vigueur
-    ///                  en 2026-2027. Le nouveau programme de la spécialité de
-    ///                  terminale (arrêté du 26/02/2026) entre en application à
-    ///                  la rentrée 2027 : il faudra repasser ici.
+    ///   Première      trois arrêtés du 26/02/2026, JO du 27/03/2026, BO n° 14
+    ///                 du 02/04/2026. Art. 2 de chacun : « Les dispositions du
+    ///                 présent arrêté entrent en application à la rentrée
+    ///                 scolaire 2026-2027. » Textes et annexes relus le
+    ///                 14/09/2026, lignes PREMIERE et PREMIERE_TECHNO réécrites
+    ///                 d'après eux ce jour-là.
+    ///     1re générale, spécialité     NOR MENE2602917A — remplace l'annexe
+    ///                                  de l'arrêté du 17/01/2019.
+    ///     1re générale, maths de       NOR MENE2602916A — remplace l'annexe
+    ///     l'enseignement scientifique  de l'arrêté du 06/07/2022. Seul cours
+    ///                                  de maths des élèves sans la spécialité
+    ///                                  (lignes du domaine « Enseignement
+    ///                                  scientifique »).
+    ///     1re technologique            NOR MENE2602918A — remplace l'annexe
+    ///                                  de l'arrêté du 17/01/2019 modifié.
+    ///   Terminale     ce qui reste de 2019, en vigueur en 2026-2027 pour la
+    ///                 dernière année : spécialité, arrêté du 19/07/2019, NOR
+    ///                 MENE1921246A, BO spécial n° 8 du 25/07/2019 ; voie
+    ///                 technologique, NOR MENE1921242A, même BO. Leurs
+    ///                 remplaçants (arrêtés du 26/02/2026, MENE2602919A et
+    ///                 MENE2602921A) entrent en application à la rentrée
+    ///                 2027-2028 : il faudra repasser ici.
+    ///   Seconde       À VÉRIFIER. Un nouveau programme (arrêté du 26/02/2026,
+    ///                 NOR MENE2602914A, même BO n° 14) est en application à la
+    ///                 rentrée 2026-2027. Les lignes SECONDE ci-dessous n'ont
+    ///                 PAS été confrontées à ce texte.
+    ///
+    /// Les codes des lignes réécrites sont gardés quand la notion est la même,
+    /// même si le libellé change : les maîtrises des élèves y sont rattachées.
     ///
     /// La première version de ce fichier portait la mention « Le contenu vient
     /// d'Éduscol » sans référence, sans date, et sans que personne ait ouvert
@@ -382,58 +403,175 @@ namespace SchoolWebApp.Dal.Seed.Referentiels
                 ("SECONDE", "MATH_2DE_LOGIQUE_ENSEMBLES", "Nombres et calculs", "Employer le vocabulaire des ensembles : appartenance, inclusion, réunion, intersection", 23),
                 ("SECONDE", "MATH_2DE_LOGIQUE_RAISONNER", "Nombres et calculs", "Distinguer implication et équivalence, et réfuter par un contre-exemple", 24),
 
-                // --- Première : Algèbre ---
-                ("PREMIERE", "MATH_1RE_SUITES_NOTION",   "Algèbre", "Définir une suite de façon explicite ou par récurrence", 1),
-                ("PREMIERE", "MATH_1RE_SUITES_ARITH",    "Algèbre", "Reconnaître et utiliser une suite arithmétique", 2),
-                ("PREMIERE", "MATH_1RE_SUITES_GEO",      "Algèbre", "Reconnaître et utiliser une suite géométrique", 3),
-                ("PREMIERE", "MATH_1RE_TRINOME_FORME",   "Algèbre", "Utiliser les formes développée, canonique et factorisée", 4),
-                ("PREMIERE", "MATH_1RE_TRINOME_RACINES", "Algèbre", "Résoudre une équation du second degré", 5),
-                ("PREMIERE", "MATH_1RE_TRINOME_SIGNE",   "Algèbre", "Étudier le signe d'un trinôme et résoudre une inéquation", 6),
+                // --- Première générale, SPÉCIALITÉ — arrêté du 26/02/2026, NOR MENE2602917A ---
+                // Reprise des « Capacités attendues » de l'annexe, partie par
+                // partie. Les « Démonstrations », « Exemples d'algorithme » et
+                // « Approfondissements possibles » ne sont pas des attendus.
+                // Codes anciens gardés quand la notion est la même ; retiré :
+                // MATH_1RE_TRIGO_FONCTIONS (l'étude des fonctions sinus et
+                // cosinus relève du programme de terminale, voir plus bas).
 
-                // --- Première : Analyse ---
-                ("PREMIERE", "MATH_1RE_DERIV_NOMBRE",    "Analyse", "Calculer un nombre dérivé et une équation de tangente", 7),
-                ("PREMIERE", "MATH_1RE_DERIV_FONCTION",  "Analyse", "Dériver les fonctions usuelles et leurs opérations", 8),
-                ("PREMIERE", "MATH_1RE_DERIV_VARIATION", "Analyse", "Étudier les variations d'une fonction par sa dérivée", 9),
-                ("PREMIERE", "MATH_1RE_EXP",             "Analyse", "Utiliser la fonction exponentielle et ses propriétés", 10),
-                ("PREMIERE", "MATH_1RE_TRIGO_CERCLE",    "Analyse", "Utiliser le cercle trigonométrique et le radian", 11),
-                ("PREMIERE", "MATH_1RE_TRIGO_FONCTIONS", "Analyse", "Étudier les fonctions cosinus et sinus", 12),
+                // --- Première spécialité : vocabulaire ensembliste et logique ---
+                ("PREMIERE", "MATH_1RE_ENS_NOTATIONS",          "Vocabulaire ensembliste et logique", "Utiliser appartenance, inclusion, réunion, intersection, complémentaire et cardinal d'un ensemble fini", 1),
+                ("PREMIERE", "MATH_1RE_ENS_PRODUIT",            "Vocabulaire ensembliste et logique", "Reconnaître un couple et le produit cartésien de deux ensembles", 2),
+                ("PREMIERE", "MATH_1RE_LOG_CONNECTEURS",        "Vocabulaire ensembliste et logique", "Lire et écrire une proposition contenant les connecteurs « et », « ou »", 3),
+                ("PREMIERE", "MATH_1RE_LOG_CONTRE_EXEMPLE",     "Vocabulaire ensembliste et logique", "Montrer qu'une proposition est fausse à l'aide d'un contre-exemple", 4),
+                ("PREMIERE", "MATH_1RE_LOG_IMPLICATION",        "Vocabulaire ensembliste et logique", "Formuler une implication, sa réciproque, sa contraposée et une équivalence", 5),
+                ("PREMIERE", "MATH_1RE_LOG_NECESSAIRE",         "Vocabulaire ensembliste et logique", "Employer à bon escient « condition nécessaire » et « condition suffisante »", 6),
+                ("PREMIERE", "MATH_1RE_LOG_STATUT",             "Vocabulaire ensembliste et logique", "Distinguer identité et équation, et le statut d'une lettre : variable, inconnue, paramètre", 7),
+                ("PREMIERE", "MATH_1RE_LOGIQUE_QUANTIF",        "Vocabulaire ensembliste et logique", "Repérer les quantificateurs, même implicites, et formuler la négation d'une proposition quantifiée", 8),
+                ("PREMIERE", "MATH_1RE_LOGIQUE_CONTRAPOSEE",    "Vocabulaire ensembliste et logique", "Raisonner par disjonction des cas, par l'absurde ou par contraposée", 9),
 
-                // --- Première : Géométrie ---
-                ("PREMIERE", "MATH_1RE_SCAL_DEFINITION", "Géométrie", "Calculer un produit scalaire sous ses différentes formes", 13),
-                ("PREMIERE", "MATH_1RE_SCAL_ORTHOGONAL", "Géométrie", "Caractériser l'orthogonalité par le produit scalaire", 14),
-                ("PREMIERE", "MATH_1RE_SCAL_APPLICATION","Géométrie", "Calculer longueurs et angles par le produit scalaire", 15),
-                ("PREMIERE", "MATH_1RE_CERCLE_EQUATION", "Géométrie", "Déterminer une équation de cercle", 16),
+                // --- Première spécialité : algorithmique et programmation (notion de liste) ---
+                ("PREMIERE", "MATH_1RE_ALGO_LISTE_GENERER",     "Algorithmique et programmation", "Générer une liste en extension, par ajouts successifs ou en compréhension", 10),
+                ("PREMIERE", "MATH_1RE_ALGO_LISTE_MANIPULER",   "Algorithmique et programmation", "Ajouter ou supprimer des éléments d'une liste et utiliser leurs indices", 11),
+                ("PREMIERE", "MATH_1RE_ALGO_LISTE_PARCOURIR",   "Algorithmique et programmation", "Parcourir une liste et itérer sur ses éléments", 12),
 
-                // --- Première : Probabilités et statistiques ---
-                ("PREMIERE", "MATH_1RE_PROBA_COND",      "Statistiques et probabilités", "Calculer une probabilité conditionnelle", 17),
-                ("PREMIERE", "MATH_1RE_PROBA_ARBRE",     "Statistiques et probabilités", "Utiliser un arbre pondéré et la formule des probabilités totales", 18),
-                ("PREMIERE", "MATH_1RE_PROBA_INDEP",     "Statistiques et probabilités", "Reconnaître l'indépendance de deux événements", 19),
-                ("PREMIERE", "MATH_1RE_VA_LOI",          "Statistiques et probabilités", "Déterminer la loi d'une variable aléatoire", 20),
-                ("PREMIERE", "MATH_1RE_VA_ESPERANCE",    "Statistiques et probabilités", "Calculer espérance, variance et écart-type", 21),
-                ("PREMIERE", "MATH_1RE_ALGO_SEUIL",      "Algorithmique", "Écrire un algorithme de seuil sur une suite", 22),
+                // --- Première spécialité : automatismes (QCM de l'épreuve anticipée) ---
+                // Mot pour mot les mêmes que dans les deux autres programmes de
+                // première de 2026. Les lignes « Enseignement scientifique » ont
+                // leurs propres codes, pour les élèves sans la spécialité.
+                ("PREMIERE", "MATH_1RE_AUTO_TAUX_APPLIQUER",    "Automatismes", "Appliquer un taux d'évolution pour calculer une valeur finale ou initiale", 13),
+                ("PREMIERE", "MATH_1RE_AUTO_TAUX_CALCULER",     "Automatismes", "Calculer un taux d'évolution et l'exprimer en pourcentage", 14),
+                ("PREMIERE", "MATH_1RE_AUTO_TAUX_SUCCESSIFS",   "Automatismes", "Calculer le taux d'évolution équivalent à plusieurs évolutions successives", 15),
+                ("PREMIERE", "MATH_1RE_AUTO_TAUX_RECIPROQUE",   "Automatismes", "Calculer un taux d'évolution réciproque", 16),
+                ("PREMIERE", "MATH_1RE_AUTO_PRODUIT_NUL",       "Automatismes", "Déterminer les solutions d'une équation produit nul", 17),
+                ("PREMIERE", "MATH_1RE_AUTO_SIGNE",             "Automatismes", "Déterminer le signe d'une expression du premier degré ou d'une expression factorisée du second degré", 18),
+                ("PREMIERE", "MATH_1RE_AUTO_CALCUL_LITTERAL",   "Automatismes", "Développer, factoriser et réduire une expression algébrique simple", 19),
+                ("PREMIERE", "MATH_1RE_AUTO_GRAPH_EQUATION",    "Automatismes", "Résoudre graphiquement une équation ou une inéquation du type f(x) = k ou f(x) < k", 20),
+                ("PREMIERE", "MATH_1RE_AUTO_GRAPH_SIGNE",       "Automatismes", "Déterminer graphiquement le signe d'une fonction ou son tableau de variations", 21),
+                ("PREMIERE", "MATH_1RE_AUTO_DROITE_TRACER",     "Automatismes", "Tracer une droite donnée par son équation réduite ou par un point et son coefficient directeur", 22),
+                ("PREMIERE", "MATH_1RE_AUTO_DROITE_LIRE",       "Automatismes", "Lire graphiquement l'équation réduite d'une droite", 23),
+                ("PREMIERE", "MATH_1RE_AUTO_COEFF_DIRECTEUR",   "Automatismes", "Déterminer le coefficient directeur d'une droite à partir des coordonnées de deux de ses points", 24),
+                ("PREMIERE", "MATH_1RE_AUTO_STAT_LIRE",         "Automatismes", "Lire un graphique, un histogramme, un diagramme en barres, circulaire ou en boîte (origine, unités, échelles)", 25),
+                ("PREMIERE", "MATH_1RE_AUTO_STAT_DONNEES",      "Automatismes", "Passer d'un graphique aux données et inversement", 26),
+                ("PREMIERE", "MATH_1RE_AUTO_STAT_INDICATEURS",  "Automatismes", "Calculer et interpréter les indicateurs statistiques d'une série", 27),
+                ("PREMIERE", "MATH_1RE_PROBA_COND",             "Automatismes", "Calculer une probabilité conditionnelle à partir d'un tableau croisé d'effectifs ou d'un arbre pondéré", 28),
+                ("PREMIERE", "MATH_1RE_AUTO_PROBA_NOTATIONS",   "Automatismes", "Distinguer P(A ∩ B), P_A(B) et P_B(A)", 29),
 
-                ("PREMIERE", "MATH_1RE_ES_TAUX_APPLIQUER", "Enseignement scientifique", "Appliquer un taux d’évolution pour trouver une valeur initiale ou finale", 23),
-                ("PREMIERE", "MATH_1RE_ES_TAUX_CALCULER", "Enseignement scientifique", "Calculer un taux d’évolution et l’exprimer en pourcentage", 24),
-                ("PREMIERE", "MATH_1RE_ES_TAUX_SUCCESSIFS", "Enseignement scientifique", "Calculer le taux équivalent à plusieurs évolutions successives", 25),
-                ("PREMIERE", "MATH_1RE_ES_TAUX_RECIPROQUE", "Enseignement scientifique", "Calculer un taux d’évolution réciproque", 26),
-                ("PREMIERE", "MATH_1RE_ES_GRAPH_SIGNE", "Enseignement scientifique", "Lire graphiquement le signe et les variations d’une fonction", 27),
-                ("PREMIERE", "MATH_1RE_ES_GRAPH_DROITE", "Enseignement scientifique", "Lire et tracer une droite à partir de son équation réduite", 28),
-                ("PREMIERE", "MATH_1RE_ES_GRAPH_DONNEES", "Enseignement scientifique", "Lire un graphique ou un diagramme et revenir aux données", 29),
-                ("PREMIERE", "MATH_1RE_ES_TABLEUR", "Enseignement scientifique", "Représenter des données avec un tableur", 30),
-                ("PREMIERE", "MATH_1RE_ES_AJUSTEMENT", "Enseignement scientifique", "Utiliser un ajustement affine pour interpoler ou extrapoler", 31),
-                ("PREMIERE", "MATH_1RE_ES_PROBA_COND", "Enseignement scientifique", "Calculer une probabilité conditionnelle avec un tableau croisé ou un arbre", 32),
-                ("PREMIERE", "MATH_1RE_ES_BERNOULLI", "Enseignement scientifique", "Représenter par un arbre la répétition d’épreuves identiques et indépendantes", 33),
-                ("PREMIERE", "MATH_1RE_ES_LINEAIRE", "Enseignement scientifique", "Reconnaître et modéliser une croissance linéaire", 34),
-                ("PREMIERE", "MATH_1RE_ES_ARITHMETIQUE", "Enseignement scientifique", "Calculer un terme d’une suite arithmétique et résoudre un problème de seuil", 35),
-                ("PREMIERE", "MATH_1RE_ES_QUADRATIQUE", "Enseignement scientifique", "Associer une parabole à une expression du second degré et trouver ses racines", 36),
-                ("PREMIERE", "MATH_1RE_ES_EXPONENTIELLE", "Enseignement scientifique", "Reconnaître et modéliser une croissance ou une décroissance exponentielle", 37),
-                ("PREMIERE", "MATH_1RE_ES_TAUX_MOYEN", "Enseignement scientifique", "Calculer un taux d’évolution moyen", 38),
-                ("PREMIERE", "MATH_1RE_ES_SEUIL_EXPO", "Enseignement scientifique", "Résoudre un problème de seuil en croissance exponentielle", 39),
+                // --- Première spécialité : algèbre — suites numériques, modèles discrets ---
+                ("PREMIERE", "MATH_1RE_SUITES_NOTION",          "Algèbre", "Définir une suite de façon explicite, par une relation de récurrence, par un algorithme ou par un motif", 30),
+                ("PREMIERE", "MATH_1RE_SUITES_REGISTRES",       "Algèbre", "Passer du langage naturel au registre algébrique ou graphique pour étudier une suite", 31),
+                ("PREMIERE", "MATH_1RE_SUITES_MOTIF",           "Algèbre", "Trouver une relation explicite ou de récurrence pour une suite issue d'un motif ou d'un dénombrement", 32),
+                ("PREMIERE", "MATH_1RE_SUITES_TERMES",          "Algèbre", "Calculer des termes d'une suite définie explicitement, par récurrence ou par un algorithme", 33),
+                ("PREMIERE", "MATH_1RE_SUITES_ARITH",           "Algèbre", "Calculer le terme général d'une suite arithmétique et la somme 1 + 2 + … + n", 34),
+                ("PREMIERE", "MATH_1RE_SUITES_GEO",             "Algèbre", "Calculer le terme général d'une suite géométrique et la somme 1 + q + … + qⁿ", 35),
+                ("PREMIERE", "MATH_1RE_SUITES_VARIATION",       "Algèbre", "Déterminer le sens de variation d'une suite, notamment arithmétique ou géométrique", 36),
+                ("PREMIERE", "MATH_1RE_SUITES_MODELE",          "Algèbre", "Modéliser une croissance linéaire par une suite arithmétique, exponentielle par une suite géométrique", 37),
+                ("PREMIERE", "MATH_1RE_ALGO_SEUIL",             "Algèbre", "Écrire un algorithme calculant des termes, une somme de termes ou un seuil", 38),
+                ("PREMIERE", "MATH_1RE_SUITES_LIMITE",          "Algèbre", "Conjecturer, dans des cas simples, la limite éventuelle d'une suite", 39),
 
-                ("PREMIERE", "MATH_1RE_LOGIQUE_QUANTIF", "Algèbre", "Employer les quantificateurs et formuler la négation d’une proposition", 40),
-                ("PREMIERE", "MATH_1RE_LOGIQUE_CONTRAPOSEE", "Algèbre", "Raisonner par contraposée ou par l’absurde", 41),
+                // --- Première spécialité : algèbre — équations, fonctions polynômes du second degré ---
+                // « Le calcul effectif de la forme canonique dans le cas général
+                // n'est pas un attendu du programme » : d'où « choisir » la forme.
+                ("PREMIERE", "MATH_1RE_TRINOME_SIGNE",          "Algèbre", "Étudier le signe d'une fonction polynôme du second degré, sous forme factorisée ou à l'aide du discriminant", 40),
+                ("PREMIERE", "MATH_1RE_TRINOME_DEUX_RACINES",   "Algèbre", "Déterminer les fonctions polynômes du second degré s'annulant en deux réels distincts donnés", 41),
+                ("PREMIERE", "MATH_1RE_TRINOME_FACTORISER",     "Algèbre", "Factoriser un trinôme par racine évidente, somme et produit des racines, identité remarquable ou formules", 42),
+                ("PREMIERE", "MATH_1RE_TRINOME_RACINES",        "Algèbre", "Résoudre une équation du second degré à l'aide du discriminant", 43),
+                ("PREMIERE", "MATH_1RE_TRINOME_FORME",          "Algèbre", "Choisir la forme développée, canonique ou factorisée adaptée à une équation, une inéquation ou une optimisation", 44),
+
+                // --- Première spécialité : analyse — dérivation ---
+                ("PREMIERE", "MATH_1RE_DERIV_TAUX",             "Analyse", "Calculer un taux de variation et la pente d'une sécante", 45),
+                ("PREMIERE", "MATH_1RE_DERIV_INTERPRETER",      "Analyse", "Interpréter un nombre dérivé en contexte : pente de tangente, vitesse instantanée, coût marginal", 46),
+                ("PREMIERE", "MATH_1RE_DERIV_GRAPHIQUE",        "Analyse", "Lire graphiquement un nombre dérivé et construire la tangente connaissant le nombre dérivé", 47),
+                ("PREMIERE", "MATH_1RE_DERIV_NOMBRE",           "Analyse", "Déterminer l'équation de la tangente en un point à la courbe représentative d'une fonction", 48),
+                ("PREMIERE", "MATH_1RE_DERIV_APPROX",           "Analyse", "Calculer une valeur approchée de f(a + h) par l'approximation affine f(a) + f'(a)h", 49),
+                ("PREMIERE", "MATH_1RE_DERIV_REFERENCE",        "Analyse", "Dériver les fonctions carré, cube, inverse, racine carrée et x ↦ xⁿ pour n entier relatif", 50),
+                ("PREMIERE", "MATH_1RE_DERIV_FONCTION",         "Analyse", "Calculer une fonction dérivée à l'aide des opérations : somme, produit, inverse, quotient", 51),
+                ("PREMIERE", "MATH_1RE_DERIV_NON_DERIVABLE",    "Analyse", "Étudier la dérivabilité en 0 de la fonction valeur absolue et de la fonction racine carrée", 52),
+
+                // --- Première spécialité : analyse — variations et courbes représentatives ---
+                ("PREMIERE", "MATH_1RE_FONC_PARITE",            "Analyse", "Reconnaître algébriquement et graphiquement une fonction paire ou impaire", 53),
+                ("PREMIERE", "MATH_1RE_DERIV_VARIATION",        "Analyse", "Étudier les variations d'une fonction et déterminer ses extrémums par le signe de sa dérivée", 54),
+                ("PREMIERE", "MATH_1RE_DERIV_OPTIMISATION",     "Analyse", "Résoudre un problème d'optimisation", 55),
+                ("PREMIERE", "MATH_1RE_DERIV_INEGALITE",        "Analyse", "Établir une inégalité ou la position relative de deux courbes à l'aide des variations", 56),
+                ("PREMIERE", "MATH_1RE_TRINOME_DERIVATION",     "Analyse", "Étudier par dérivation un polynôme du second degré : variations, extrémum, allure selon le signe de a", 57),
+
+                // --- Première spécialité : analyse — fonction exponentielle ---
+                ("PREMIERE", "MATH_1RE_EXP",                    "Analyse", "Transformer une expression avec les propriétés algébriques de la fonction exponentielle", 58),
+                ("PREMIERE", "MATH_1RE_EXP_ETUDE",              "Analyse", "Connaître le signe, le sens de variation et la courbe de la fonction exponentielle", 59),
+                ("PREMIERE", "MATH_1RE_EXP_DERIVEE",            "Analyse", "Dériver la fonction t ↦ e^(at) pour a réel", 60),
+                ("PREMIERE", "MATH_1RE_EXP_MODELE",             "Analyse", "Modéliser une croissance ou une décroissance exponentielle et représenter t ↦ e^(kt) et t ↦ e^(–kt)", 61),
+
+                // --- Première spécialité : analyse — trigonométrie ---
+                ("PREMIERE", "MATH_1RE_TRIGO_CERCLE",           "Analyse", "Placer sur le cercle trigonométrique le point image d'un réel (radian, longueur d'arc)", 62),
+                ("PREMIERE", "MATH_1RE_TRIGO_VALEURS",          "Analyse", "Lire sur le cercle le cosinus et le sinus des valeurs remarquables et des angles associés", 63),
+
+                // --- Première spécialité : géométrie — calcul vectoriel et produit scalaire ---
+                ("PREMIERE", "MATH_1RE_SCAL_DEFINITION",        "Géométrie", "Calculer un produit scalaire par projection orthogonale, coordonnées, normes et angle, ou normes seules", 64),
+                ("PREMIERE", "MATH_1RE_SCAL_ORTHOGONAL",        "Géométrie", "Démontrer une orthogonalité à l'aide du produit scalaire", 65),
+                ("PREMIERE", "MATH_1RE_SCAL_APPLICATION",       "Géométrie", "Calculer un angle ou une longueur dans le plan par le produit scalaire ou la formule d'Al-Kashi", 66),
+                ("PREMIERE", "MATH_1RE_SCAL_PROPRIETES",        "Géométrie", "Utiliser la bilinéarité, la symétrie et le développement de ‖u + v‖² et ‖u – v‖²", 67),
+                ("PREMIERE", "MATH_1RE_SCAL_MA_MB",             "Géométrie", "Transformer MA·MB et déterminer l'ensemble des points M tels que MA·MB = 0", 68),
+
+                // --- Première spécialité : géométrie — géométrie repérée ---
+                ("PREMIERE", "MATH_1RE_REP_VECTEUR_NORMAL",     "Géométrie", "Déterminer une équation cartésienne de droite connaissant un point et un vecteur normal", 69),
+                ("PREMIERE", "MATH_1RE_REP_PROJETE",            "Géométrie", "Déterminer les coordonnées du projeté orthogonal d'un point sur une droite", 70),
+                ("PREMIERE", "MATH_1RE_CERCLE_EQUATION",        "Géométrie", "Écrire l'équation d'un cercle de centre et rayon donnés, et retrouver centre et rayon d'une équation", 71),
+                ("PREMIERE", "MATH_1RE_REP_CONFIGURATION",      "Géométrie", "Utiliser un repère orthonormé pour étudier une configuration", 72),
+
+                // --- Première spécialité : probabilités conditionnelles et indépendance ---
+                ("PREMIERE", "MATH_1RE_PROBA_ARBRE",            "Statistiques et probabilités", "Calculer une probabilité à l'aide de la formule des probabilités totales", 73),
+                ("PREMIERE", "MATH_1RE_PROBA_INDEP",            "Statistiques et probabilités", "Utiliser ou justifier l'indépendance de deux événements", 74),
+                ("PREMIERE", "MATH_1RE_PROBA_DEUX_EPREUVES",    "Statistiques et probabilités", "Représenter la succession de deux épreuves indépendantes par un arbre ou un tableau", 75),
+                ("PREMIERE", "MATH_1RE_PROBA_BERNOULLI",        "Statistiques et probabilités", "Calculer des probabilités sur l'arbre de n ≤ 4 épreuves de Bernoulli indépendantes et identiques", 76),
+
+                // --- Première spécialité : variables aléatoires réelles ---
+                ("PREMIERE", "MATH_1RE_VA_NOTATIONS",           "Statistiques et probabilités", "Interpréter et utiliser les notations {X = a}, {X ≤ a}, P(X = a), P(X ≤ a)", 77),
+                ("PREMIERE", "MATH_1RE_VA_LOI",                 "Statistiques et probabilités", "Modéliser une situation par une variable aléatoire et déterminer sa loi de probabilité", 78),
+                ("PREMIERE", "MATH_1RE_VA_ESPERANCE",           "Statistiques et probabilités", "Calculer l'espérance, la variance et l'écart type d'une variable aléatoire", 79),
+                ("PREMIERE", "MATH_1RE_VA_LINEARITE",           "Statistiques et probabilités", "Utiliser la linéarité de l'espérance et la formule de König-Huygens", 80),
+                ("PREMIERE", "MATH_1RE_VA_PROBLEME",            "Statistiques et probabilités", "Utiliser l'espérance pour résoudre un problème, par exemple fixer la mise d'un jeu équitable", 81),
+
+                // --- Première spécialité : expérimentations ---
+                ("PREMIERE", "MATH_1RE_SIMUL_VA",               "Statistiques et probabilités", "Simuler une variable aléatoire avec Python ou un tableur", 82),
+                ("PREMIERE", "MATH_1RE_SIMUL_MOYENNE",          "Statistiques et probabilités", "Lire, comprendre et écrire une fonction Python renvoyant la moyenne d'un échantillon de taille n", 83),
+                ("PREMIERE", "MATH_1RE_SIMUL_ECART",            "Statistiques et probabilités", "Simuler N échantillons et calculer la proportion de moyennes à au plus 2σ/√n de l'espérance", 84),
+
+                // --- Première générale, maths de l'ENSEIGNEMENT SCIENTIFIQUE — arrêté du 26/02/2026, NOR MENE2602916A ---
+                ("PREMIERE", "MATH_1RE_ES_TAUX_APPLIQUER", "Enseignement scientifique", "Appliquer un taux d’évolution pour trouver une valeur initiale ou finale", 85),
+                ("PREMIERE", "MATH_1RE_ES_TAUX_CALCULER", "Enseignement scientifique", "Calculer un taux d’évolution et l’exprimer en pourcentage", 86),
+                ("PREMIERE", "MATH_1RE_ES_TAUX_SUCCESSIFS", "Enseignement scientifique", "Calculer le taux équivalent à plusieurs évolutions successives", 87),
+                ("PREMIERE", "MATH_1RE_ES_TAUX_RECIPROQUE", "Enseignement scientifique", "Calculer un taux d’évolution réciproque", 88),
+                ("PREMIERE", "MATH_1RE_ES_GRAPH_SIGNE", "Enseignement scientifique", "Lire graphiquement le signe et les variations d’une fonction", 89),
+                ("PREMIERE", "MATH_1RE_ES_GRAPH_DROITE", "Enseignement scientifique", "Lire et tracer une droite à partir de son équation réduite", 90),
+                ("PREMIERE", "MATH_1RE_ES_GRAPH_DONNEES", "Enseignement scientifique", "Lire un graphique ou un diagramme et revenir aux données", 91),
+                ("PREMIERE", "MATH_1RE_ES_TABLEUR", "Enseignement scientifique", "Représenter des données avec un tableur", 92),
+                ("PREMIERE", "MATH_1RE_ES_AJUSTEMENT", "Enseignement scientifique", "Utiliser un ajustement affine pour interpoler ou extrapoler", 93),
+                ("PREMIERE", "MATH_1RE_ES_PROBA_COND", "Enseignement scientifique", "Calculer une probabilité conditionnelle avec un tableau croisé ou un arbre", 94),
+                ("PREMIERE", "MATH_1RE_ES_BERNOULLI", "Enseignement scientifique", "Représenter par un arbre la répétition d’épreuves identiques et indépendantes", 95),
+                ("PREMIERE", "MATH_1RE_ES_LINEAIRE", "Enseignement scientifique", "Reconnaître et modéliser une croissance linéaire", 96),
+                ("PREMIERE", "MATH_1RE_ES_ARITHMETIQUE", "Enseignement scientifique", "Calculer un terme d’une suite arithmétique et résoudre un problème de seuil", 97),
+                ("PREMIERE", "MATH_1RE_ES_QUADRATIQUE", "Enseignement scientifique", "Associer une parabole à une expression du second degré et trouver ses racines", 98),
+                ("PREMIERE", "MATH_1RE_ES_EXPONENTIELLE", "Enseignement scientifique", "Reconnaître et modéliser une croissance ou une décroissance exponentielle", 99),
+                ("PREMIERE", "MATH_1RE_ES_TAUX_MOYEN", "Enseignement scientifique", "Calculer un taux d’évolution moyen", 100),
+                ("PREMIERE", "MATH_1RE_ES_SEUIL_EXPO", "Enseignement scientifique", "Résoudre un problème de seuil en croissance exponentielle", 101),
+
+                // Compléments du 14/09/2026 : capacités attendues de l'annexe
+                // MENE2602916A qui n'avaient aucune ligne (automatismes évalués au
+                // QCM de l'épreuve anticipée, information chiffrée, phénomènes
+                // aléatoires, variations linéaire, quadratique et exponentielle).
+                ("PREMIERE", "MATH_1RE_ES_PRODUIT_NUL", "Enseignement scientifique", "Déterminer les solutions d'une équation produit nul", 102),
+                ("PREMIERE", "MATH_1RE_ES_SIGNE_EXPRESSION", "Enseignement scientifique", "Déterminer le signe d'une expression du premier degré ou d'une expression factorisée du second degré", 103),
+                ("PREMIERE", "MATH_1RE_ES_CALCUL_LITTERAL", "Enseignement scientifique", "Développer, factoriser et réduire une expression algébrique simple", 104),
+                ("PREMIERE", "MATH_1RE_ES_GRAPH_EQUATION", "Enseignement scientifique", "Résoudre graphiquement une équation ou une inéquation du type f(x) = k ou f(x) < k", 105),
+                ("PREMIERE", "MATH_1RE_ES_COEFF_DIRECTEUR", "Enseignement scientifique", "Déterminer le coefficient directeur d'une droite à partir des coordonnées de deux de ses points", 106),
+                ("PREMIERE", "MATH_1RE_ES_DROITE_LIRE", "Enseignement scientifique", "Lire graphiquement l'équation réduite d'une droite", 107),
+                ("PREMIERE", "MATH_1RE_ES_STAT_INDICATEURS", "Enseignement scientifique", "Calculer et interpréter les indicateurs statistiques d'une série", 108),
+                ("PREMIERE", "MATH_1RE_ES_PROBA_NOTATIONS", "Enseignement scientifique", "Distinguer P(A ∩ B), P_A(B) et P_B(A)", 109),
+                ("PREMIERE", "MATH_1RE_ES_TABLEAU_CROISE", "Enseignement scientifique", "Analyser deux caractères qualitatifs à l'aide d'un tableau croisé d'effectifs", 110),
+                ("PREMIERE", "MATH_1RE_ES_POINT_MOYEN", "Enseignement scientifique", "Calculer les coordonnées du point moyen d'un nuage de points", 111),
+                ("PREMIERE", "MATH_1RE_ES_INDEPENDANCE", "Enseignement scientifique", "Utiliser ou justifier l'indépendance de deux événements", 112),
+                ("PREMIERE", "MATH_1RE_ES_GRAPH_LINEAIRE", "Enseignement scientifique", "Réaliser et exploiter la représentation graphique d'une suite arithmétique ou d'une fonction affine", 113),
+                ("PREMIERE", "MATH_1RE_ES_PARABOLE_ELEMENTS", "Enseignement scientifique", "Déterminer sans formule l'axe de symétrie, le sommet et les variations de x ↦ ax² + bx + c", 114),
+                ("PREMIERE", "MATH_1RE_ES_GEOMETRIQUE", "Enseignement scientifique", "Calculer un terme de rang donné d'une suite géométrique définie par une relation fonctionnelle ou de récurrence", 115),
+                ("PREMIERE", "MATH_1RE_ES_GRAPH_EXPO", "Enseignement scientifique", "Réaliser et exploiter la représentation graphique d'une suite géométrique ou d'une fonction x ↦ aˣ", 116),
+                ("PREMIERE", "MATH_1RE_ES_ORDRE_GRANDEUR", "Enseignement scientifique", "Estimer l'ordre de grandeur d'une quantité en croissance ou décroissance exponentielle", 117),
 
                 // --- Terminale : Analyse ---
+                // Programme de spécialité de 2019 (NOR MENE1921246A), en vigueur
+                // en 2026-2027. MATH_TLE_LOGIQUE_RECURRENCE retirée : doublon de
+                // MATH_TLE_RECURRENCE, le code le plus ancien, gardé.
                 ("TERMINALE", "MATH_TLE_RECURRENCE",     "Analyse", "Démontrer par récurrence", 1),
                 ("TERMINALE", "MATH_TLE_SUITES_LIMITE",  "Analyse", "Déterminer la limite d'une suite", 2),
                 ("TERMINALE", "MATH_TLE_SUITES_CONV",    "Analyse", "Utiliser les théorèmes de convergence et de comparaison", 3),
@@ -441,27 +579,40 @@ namespace SchoolWebApp.Dal.Seed.Referentiels
                 ("TERMINALE", "MATH_TLE_CONTINUITE",     "Analyse", "Utiliser la continuité et le théorème des valeurs intermédiaires", 5),
                 ("TERMINALE", "MATH_TLE_DERIV_COMPOSEE", "Analyse", "Dériver une fonction composée", 6),
                 ("TERMINALE", "MATH_TLE_LOG",            "Analyse", "Utiliser la fonction logarithme népérien", 7),
-                ("TERMINALE", "MATH_TLE_CONVEXITE",      "Analyse", "Étudier la convexité d'une fonction", 8),
-                ("TERMINALE", "MATH_TLE_PRIMITIVES",     "Analyse", "Déterminer les primitives d'une fonction", 9),
-                ("TERMINALE", "MATH_TLE_INTEGRALE",      "Analyse", "Calculer une intégrale et une aire", 10),
-                ("TERMINALE", "MATH_TLE_EQ_DIFF",        "Analyse", "Résoudre une équation différentielle du premier ordre", 11),
+
+                // Section « Fonctions sinus et cosinus » du programme de 2019.
+                ("TERMINALE", "MATH_TLE_TRIGO_FONCTIONS", "Analyse", "Connaître les dérivées, les variations et les courbes représentatives des fonctions sinus et cosinus", 8),
+                ("TERMINALE", "MATH_TLE_TRIGO_EQUATION", "Analyse", "Résoudre une équation cos(x) = a ou une inéquation cos(x) ≤ a sur [–π, π]", 9),
+                ("TERMINALE", "MATH_TLE_TRIGO_ETUDE",    "Analyse", "Étudier une fonction simple définie à partir de sinus et cosinus pour déterminer ses variations ou un optimum", 10),
+
+                ("TERMINALE", "MATH_TLE_CONVEXITE",      "Analyse", "Étudier la convexité d'une fonction", 11),
+                ("TERMINALE", "MATH_TLE_PRIMITIVES",     "Analyse", "Déterminer les primitives d'une fonction", 12),
+                ("TERMINALE", "MATH_TLE_INTEGRALE",      "Analyse", "Calculer une intégrale et une aire", 13),
+                ("TERMINALE", "MATH_TLE_EQ_DIFF",        "Analyse", "Résoudre une équation différentielle du premier ordre", 14),
 
                 // --- Terminale : Géométrie dans l'espace ---
-                ("TERMINALE", "MATH_TLE_VECT_ESPACE",    "Géométrie", "Utiliser les vecteurs de l'espace et la colinéarité", 12),
-                ("TERMINALE", "MATH_TLE_DROITES_PLANS",  "Géométrie", "Étudier les positions relatives de droites et de plans", 13),
-                ("TERMINALE", "MATH_TLE_SCAL_ESPACE",    "Géométrie", "Utiliser le produit scalaire dans l'espace", 14),
-                ("TERMINALE", "MATH_TLE_PARAMETRIQUE",   "Géométrie", "Déterminer une représentation paramétrique de droite", 15),
-                ("TERMINALE", "MATH_TLE_PLAN_CARTESIEN", "Géométrie", "Déterminer une équation cartésienne de plan", 16),
-                ("TERMINALE", "MATH_TLE_ORTHOGONALITE",  "Géométrie", "Résoudre un problème d'orthogonalité et de distance", 17),
+                ("TERMINALE", "MATH_TLE_VECT_ESPACE",    "Géométrie", "Utiliser les vecteurs de l'espace et la colinéarité", 15),
+                ("TERMINALE", "MATH_TLE_DROITES_PLANS",  "Géométrie", "Étudier les positions relatives de droites et de plans", 16),
+                ("TERMINALE", "MATH_TLE_SCAL_ESPACE",    "Géométrie", "Utiliser le produit scalaire dans l'espace", 17),
+                ("TERMINALE", "MATH_TLE_PARAMETRIQUE",   "Géométrie", "Déterminer une représentation paramétrique de droite", 18),
+                ("TERMINALE", "MATH_TLE_PLAN_CARTESIEN", "Géométrie", "Déterminer une équation cartésienne de plan", 19),
+                ("TERMINALE", "MATH_TLE_ORTHOGONALITE",  "Géométrie", "Résoudre un problème d'orthogonalité et de distance", 20),
+
+                // --- Terminale : Combinatoire et dénombrement (section du programme de 2019) ---
+                ("TERMINALE", "MATH_TLE_DENOMBR_REPRESENTER", "Combinatoire et dénombrement", "Choisir une représentation adaptée (ensembles, arbres, tableaux, diagrammes) et reconnaître les objets à dénombrer", 21),
+                ("TERMINALE", "MATH_TLE_DENOMBR_PRINCIPES", "Combinatoire et dénombrement", "Dénombrer par le principe additif (ensembles disjoints) et le principe multiplicatif (produit cartésien)", 22),
+                ("TERMINALE", "MATH_TLE_DENOMBR_KUPLETS", "Combinatoire et dénombrement", "Dénombrer les k-uplets d'un ensemble à n éléments et les parties d'un ensemble à n éléments", 23),
+                ("TERMINALE", "MATH_TLE_DENOMBR_PERMUTATIONS", "Combinatoire et dénombrement", "Dénombrer les k-uplets d'éléments distincts et les permutations d'un ensemble à n éléments à l'aide de n!", 24),
+                ("TERMINALE", "MATH_TLE_DENOMBR_COMBINAISONS", "Combinatoire et dénombrement", "Calculer le nombre de combinaisons de k éléments parmi n et l'interpréter en termes de mots ou de chemins", 25),
+                ("TERMINALE", "MATH_TLE_DENOMBR_PASCAL",  "Combinatoire et dénombrement", "Utiliser la symétrie des coefficients binomiaux, la relation et le triangle de Pascal", 26),
 
                 // --- Terminale : Probabilités ---
-                ("TERMINALE", "MATH_TLE_BINOMIALE",      "Statistiques et probabilités", "Utiliser la loi binomiale et les coefficients binomiaux", 18),
-                ("TERMINALE", "MATH_TLE_VA_SOMME",       "Statistiques et probabilités", "Calculer espérance et variance d'une somme de variables", 19),
-                ("TERMINALE", "MATH_TLE_CONCENTRATION",  "Statistiques et probabilités", "Utiliser l'inégalité de concentration et la loi des grands nombres", 20),
-                ("TERMINALE", "MATH_TLE_LOGIQUE_RECURRENCE", "Analyse", "Conduire un raisonnement par récurrence", 22),
-                ("TERMINALE", "MATH_TLE_LOGIQUE_NECESSAIRE", "Analyse", "Distinguer condition nécessaire et condition suffisante", 23),
+                ("TERMINALE", "MATH_TLE_BINOMIALE",      "Statistiques et probabilités", "Utiliser la loi binomiale et les coefficients binomiaux", 27),
+                ("TERMINALE", "MATH_TLE_VA_SOMME",       "Statistiques et probabilités", "Calculer espérance et variance d'une somme de variables", 28),
+                ("TERMINALE", "MATH_TLE_CONCENTRATION",  "Statistiques et probabilités", "Utiliser l'inégalité de concentration et la loi des grands nombres", 29),
 
-                ("TERMINALE", "MATH_TLE_ALGO_SIMULATION","Algorithmique", "Écrire un programme de simulation ou de calcul approché", 21),
+                ("TERMINALE", "MATH_TLE_ALGO_SIMULATION","Algorithmique", "Écrire un programme de simulation ou de calcul approché", 30),
+                ("TERMINALE", "MATH_TLE_LOGIQUE_NECESSAIRE", "Analyse", "Distinguer condition nécessaire et condition suffisante", 31),
 
                 // ================================================================
                 // VOIE TECHNOLOGIQUE ET VOIE PROFESSIONNELLE
@@ -492,9 +643,12 @@ namespace SchoolWebApp.Dal.Seed.Referentiels
                 //                    11/04/2019 — en vigueur.
                 //   1re et Tle pro   arrêté du 03/02/2020, BO spécial n° 1 du
                 //                    06/02/2020, annexes 1 et 2 — en vigueur.
-                //   1re techno       arrêté du 26/02/2026, BO n° 14 du
-                //                    02/04/2026 — EN VIGUEUR DEPUIS LA RENTRÉE
-                //                    2026. Le programme de 2019 est périmé.
+                //   1re techno       arrêté du 26/02/2026, NOR MENE2602918A,
+                //                    BO n° 14 du 02/04/2026 — EN VIGUEUR DEPUIS
+                //                    LA RENTRÉE 2026. Le programme de 2019 est
+                //                    périmé. Lignes réécrites d'après l'annexe
+                //                    le 14/09/2026 : les précédentes, bien que
+                //                    datées de 2026, suivaient encore 2019.
                 //   Tle techno       arrêté du 19/07/2019, BO spécial n° 8 —
                 //                    encore en vigueur cette année. Son
                 //                    remplaçant (arrêté du 26/02/2026) entre en
@@ -593,36 +747,105 @@ namespace SchoolWebApp.Dal.Seed.Referentiels
                 ("TERMINALE_PRO", "MATH_TPRO_ALGO",            "Algorithmique et programmation", "Écrire un programme pour résoudre un problème", 15),
                 ("TERMINALE_PRO", "MATH_TPRO_LOGIQUE",         "Algorithmique et programmation", "Employer le vocabulaire ensembliste et les connecteurs logiques", 16),
 
-                // --- Première technologique : analyse ---
-                ("PREMIERE_TECHNO", "MATH_1TEC_SUITE_RECONNAITRE", "Analyse", "Reconnaître une suite arithmétique ou géométrique", 1),
-                ("PREMIERE_TECHNO", "MATH_1TEC_SUITE_TERME",      "Analyse", "Calculer un terme et une somme de termes d'une suite", 2),
-                ("PREMIERE_TECHNO", "MATH_1TEC_SUITE_MODELISER",  "Analyse", "Modéliser une évolution discrète par une suite", 3),
-                ("PREMIERE_TECHNO", "MATH_1TEC_POLY_CANONIQUE",   "Analyse", "Utiliser la forme canonique d'un polynôme de degré 2", 4),
-                ("PREMIERE_TECHNO", "MATH_1TEC_POLY_RACINES",     "Analyse", "Déterminer les racines et le signe d'un polynôme de degré 2", 5),
-                ("PREMIERE_TECHNO", "MATH_1TEC_POLY_EQUATION",    "Analyse", "Résoudre une équation du second degré", 6),
-                ("PREMIERE_TECHNO", "MATH_1TEC_DERIV_NOMBRE",     "Analyse", "Déterminer un nombre dérivé et l'équation d'une tangente", 7),
-                ("PREMIERE_TECHNO", "MATH_1TEC_DERIV_CALCULER",   "Analyse", "Calculer la fonction dérivée d'une fonction usuelle", 8),
-                ("PREMIERE_TECHNO", "MATH_1TEC_DERIV_VARIATIONS", "Analyse", "Étudier les variations d'une fonction à partir du signe de sa dérivée", 9),
-                ("PREMIERE_TECHNO", "MATH_1TEC_DERIV_EXTREMUM",   "Analyse", "Déterminer un extremum et l'interpréter", 10),
+                // --- Première technologique — arrêté du 26/02/2026, NOR MENE2602918A ---
+                // Reprise des « Capacités attendues » de l'annexe. Codes anciens
+                // gardés quand la notion est la même. Retirés, absents du texte :
+                // MATH_1TEC_POLY_CANONIQUE (aucune occurrence de « canonique ») et
+                // MATH_1TEC_POLY_EQUATION (« le calcul des racines à l'aide du
+                // discriminant ne figure pas au programme »). MATH_1TEC_VA_ESPERANCE
+                // perd la variance et l'écart type, hors programme.
+                //
+                // L'épreuve anticipée (note MENE2515469N) ne porte que sur les
+                // domaines communs : ni « Algorithmique et programmation » ni
+                // « Activités géométriques » (STD2A). La base ne connaît pas la
+                // série : les deux blocs sont gardés pour tous.
 
-                // --- Première technologique : statistiques et probabilités ---
-                ("PREMIERE_TECHNO", "MATH_1TEC_STAT_NUAGE",       "Statistiques et probabilités", "Représenter un nuage de points et l'ajuster par une droite", 11),
-                ("PREMIERE_TECHNO", "MATH_1TEC_STAT_INTERPOLER",  "Statistiques et probabilités", "Interpoler ou extrapoler une valeur à partir d'un ajustement", 12),
-                ("PREMIERE_TECHNO", "MATH_1TEC_PROB_CONDITION",   "Statistiques et probabilités", "Calculer une probabilité conditionnelle", 13),
-                ("PREMIERE_TECHNO", "MATH_1TEC_PROB_INDEPENDANCE", "Statistiques et probabilités", "Reconnaître deux événements indépendants", 14),
-                ("PREMIERE_TECHNO", "MATH_1TEC_PROB_TOTALES",     "Statistiques et probabilités", "Utiliser un arbre pondéré et la formule des probabilités totales", 15),
-                ("PREMIERE_TECHNO", "MATH_1TEC_PROB_REPETITION",  "Statistiques et probabilités", "Modéliser la répétition d'épreuves identiques et indépendantes", 16),
-                ("PREMIERE_TECHNO", "MATH_1TEC_VA_LOI",           "Statistiques et probabilités", "Déterminer la loi d'une variable aléatoire", 17),
-                ("PREMIERE_TECHNO", "MATH_1TEC_VA_ESPERANCE",     "Statistiques et probabilités", "Calculer l'espérance, la variance et l'écart type d'une variable aléatoire", 18),
+                // --- Première techno : vocabulaire ensembliste et logique ---
+                ("PREMIERE_TECHNO", "MATH_1TEC_ENS_NOTATIONS",      "Vocabulaire ensembliste et logique", "Utiliser appartenance, inclusion, réunion, intersection, complémentaire et cardinal d'un ensemble fini", 1),
+                ("PREMIERE_TECHNO", "MATH_1TEC_LOGIQUE",            "Vocabulaire ensembliste et logique", "Utiliser correctement les connecteurs logiques « et », « ou »", 2),
+                ("PREMIERE_TECHNO", "MATH_1TEC_LOG_STATUT",         "Vocabulaire ensembliste et logique", "Identifier le statut d'une égalité et des lettres : variable, indéterminée, inconnue, paramètre", 3),
+                ("PREMIERE_TECHNO", "MATH_1TEC_LOG_CONTRE_EXEMPLE", "Vocabulaire ensembliste et logique", "Infirmer une proposition universelle à l'aide d'un contre-exemple", 4),
+                ("PREMIERE_TECHNO", "MATH_1TEC_LOG_RECIPROQUE",     "Vocabulaire ensembliste et logique", "Distinguer une proposition de sa réciproque et de sa contraposée", 5),
+                ("PREMIERE_TECHNO", "MATH_1TEC_LOG_NECESSAIRE",     "Vocabulaire ensembliste et logique", "Employer condition nécessaire, condition suffisante et équivalence logique", 6),
 
-                // --- Première technologique : algorithmique et automatismes ---
-                ("PREMIERE_TECHNO", "MATH_1TEC_ALGO_FONCTION",    "Algorithmique et programmation", "Structurer un programme à l'aide de fonctions", 19),
-                ("PREMIERE_TECHNO", "MATH_1TEC_ALGO_LISTE",       "Algorithmique et programmation", "Générer et parcourir une liste dans un programme", 20),
-                ("PREMIERE_TECHNO", "MATH_1TEC_ALGO_BERNOULLI",   "Algorithmique et programmation", "Simuler une loi de Bernoulli de paramètre p", 21),
-                ("PREMIERE_TECHNO", "MATH_1TEC_AUTO_EVOLUTION",   "Automatismes", "Calculer un taux d'évolution, successif ou réciproque", 22),
-                ("PREMIERE_TECHNO", "MATH_1TEC_AUTO_ALGEBRE",     "Automatismes", "Développer, factoriser et déterminer le signe d'une expression", 23),
-                ("PREMIERE_TECHNO", "MATH_1TEC_AUTO_GRAPHIQUE",   "Automatismes", "Lire graphiquement une équation, un signe ou un tableau de variations", 24),
-                ("PREMIERE_TECHNO", "MATH_1TEC_LOGIQUE",          "Automatismes", "Employer le vocabulaire ensembliste et les connecteurs logiques", 25),
+                // --- Première techno : algorithmique et programmation (toutes séries sauf STD2A ; hors épreuve anticipée) ---
+                ("PREMIERE_TECHNO", "MATH_1TEC_ALGO_BERNOULLI",     "Algorithmique et programmation", "Simuler une loi de Bernoulli de paramètre p avec un générateur de nombres aléatoires entre 0 et 1", 7),
+                ("PREMIERE_TECHNO", "MATH_1TEC_ALGO_COMPTEUR",      "Algorithmique et programmation", "Utiliser un compteur et un accumulateur pour calculer une somme ou un produit", 8),
+                ("PREMIERE_TECHNO", "MATH_1TEC_ALGO_FONCTION",      "Algorithmique et programmation", "Identifier les entrées et sorties d'une fonction et structurer un programme en fonctions", 9),
+                ("PREMIERE_TECHNO", "MATH_1TEC_ALGO_LISTE",         "Algorithmique et programmation", "Générer une liste en extension, par ajouts successifs ou en compréhension", 10),
+                ("PREMIERE_TECHNO", "MATH_1TEC_ALGO_LISTE_MANIP",   "Algorithmique et programmation", "Manipuler les éléments d'une liste et leurs indices, et itérer sur ses éléments", 11),
+                ("PREMIERE_TECHNO", "MATH_1TEC_ALGO_DONNEES",       "Algorithmique et programmation", "Traiter un fichier de données réelles pour en extraire une information et l'analyser", 12),
+                ("PREMIERE_TECHNO", "MATH_1TEC_ALGO_TABLEAU_CROISE","Algorithmique et programmation", "Réaliser un tableau croisé de données sur deux critères à partir de données brutes", 13),
+
+                // --- Première techno : activités géométriques (série STD2A seulement ; hors épreuve anticipée) ---
+                ("PREMIERE_TECHNO", "MATH_1TEC_GEO_POLYGONES",      "Activités géométriques", "Construire un polygone régulier par un motif et des transformations, et calculer ses grandeurs", 14),
+                ("PREMIERE_TECHNO", "MATH_1TEC_GEO_FRISES",         "Activités géométriques", "Analyser une frise ou un pavage et en rechercher un motif élémentaire", 15),
+                ("PREMIERE_TECHNO", "MATH_1TEC_GEO_REPERE_ESPACE",  "Activités géométriques", "Repérer un point dans un repère orthonormal de l'espace et calculer une distance", 16),
+                ("PREMIERE_TECHNO", "MATH_1TEC_GEO_PERSPECTIVE",    "Activités géométriques", "Représenter un objet en perspective cavalière à partir d'un quadrillage ou d'un cube", 17),
+                ("PREMIERE_TECHNO", "MATH_1TEC_GEO_SECTIONS",       "Activités géométriques", "Construire et représenter les sections planes d'un cube ou d'un cylindre de révolution", 18),
+                ("PREMIERE_TECHNO", "MATH_1TEC_GEO_ELLIPSE",        "Activités géométriques", "Construire l'image perspective d'un cercle et un parallélogramme circonscrit à une ellipse", 19),
+
+                // --- Première techno : automatismes (QCM de l'épreuve anticipée) ---
+                ("PREMIERE_TECHNO", "MATH_1TEC_AUTO_TAUX_APPLIQUER", "Automatismes", "Appliquer un taux d'évolution pour calculer une valeur finale ou initiale", 20),
+                ("PREMIERE_TECHNO", "MATH_1TEC_AUTO_EVOLUTION",     "Automatismes", "Calculer un taux d'évolution et l'exprimer en pourcentage", 21),
+                ("PREMIERE_TECHNO", "MATH_1TEC_AUTO_TAUX_SUCCESSIFS","Automatismes", "Calculer le taux d'évolution équivalent à plusieurs évolutions successives", 22),
+                ("PREMIERE_TECHNO", "MATH_1TEC_AUTO_TAUX_RECIPROQUE","Automatismes", "Calculer un taux d'évolution réciproque", 23),
+                ("PREMIERE_TECHNO", "MATH_1TEC_AUTO_PRODUIT_NUL",   "Automatismes", "Résoudre une équation produit nul", 24),
+                ("PREMIERE_TECHNO", "MATH_1TEC_AUTO_SIGNE",         "Automatismes", "Déterminer le signe d'une expression du premier degré ou d'une expression factorisée du second degré", 25),
+                ("PREMIERE_TECHNO", "MATH_1TEC_AUTO_ALGEBRE",       "Automatismes", "Développer, factoriser et réduire une expression algébrique simple", 26),
+                ("PREMIERE_TECHNO", "MATH_1TEC_AUTO_GRAPHIQUE",     "Automatismes", "Résoudre graphiquement une équation ou une inéquation du type f(x) = k ou f(x) < k", 27),
+                ("PREMIERE_TECHNO", "MATH_1TEC_AUTO_GRAPH_SIGNE",   "Automatismes", "Déterminer graphiquement le signe d'une fonction ou son tableau de variations", 28),
+                ("PREMIERE_TECHNO", "MATH_1TEC_AUTO_DROITE_TRACER", "Automatismes", "Tracer une droite donnée par son équation réduite ou par un point et son coefficient directeur", 29),
+                ("PREMIERE_TECHNO", "MATH_1TEC_AUTO_DROITE_LIRE",   "Automatismes", "Lire graphiquement l'équation réduite d'une droite", 30),
+                ("PREMIERE_TECHNO", "MATH_1TEC_AUTO_COEFF_DIRECTEUR","Automatismes", "Déterminer le coefficient directeur d'une droite à partir des coordonnées de deux de ses points", 31),
+                ("PREMIERE_TECHNO", "MATH_1TEC_AUTO_STAT_LIRE",     "Automatismes", "Lire un graphique, un histogramme, un diagramme en barres, circulaire ou en boîte (origine, unités, échelles)", 32),
+                ("PREMIERE_TECHNO", "MATH_1TEC_AUTO_STAT_DONNEES",  "Automatismes", "Passer d'un graphique aux données et inversement", 33),
+                ("PREMIERE_TECHNO", "MATH_1TEC_AUTO_STAT_INDIC",    "Automatismes", "Calculer et interpréter les indicateurs statistiques d'une série", 34),
+                ("PREMIERE_TECHNO", "MATH_1TEC_PROB_CONDITION",     "Automatismes", "Calculer une probabilité conditionnelle à partir d'un tableau croisé d'effectifs ou d'un arbre pondéré", 35),
+                ("PREMIERE_TECHNO", "MATH_1TEC_AUTO_PROBA_NOTATIONS","Automatismes", "Distinguer P(A ∩ B), P_A(B) et P_B(A)", 36),
+
+                // --- Première techno : analyse — suites numériques ---
+                ("PREMIERE_TECHNO", "MATH_1TEC_SUITE_MODELISER",    "Analyse", "Modéliser une situation à l'aide d'une suite", 37),
+                ("PREMIERE_TECHNO", "MATH_1TEC_SUITE_RECONNAITRE",  "Analyse", "Reconnaître si une situation relève d'un modèle discret de variation linéaire ou exponentielle", 38),
+                ("PREMIERE_TECHNO", "MATH_1TEC_SUITE_TERME",        "Analyse", "Calculer un terme de rang donné d'une suite définie par une relation fonctionnelle ou de récurrence", 39),
+                ("PREMIERE_TECHNO", "MATH_1TEC_SUITE_GRAPHIQUE",    "Analyse", "Réaliser et exploiter la représentation graphique des termes d'une suite", 40),
+                ("PREMIERE_TECHNO", "MATH_1TEC_SUITE_CONJECTURE",   "Analyse", "Conjecturer graphiquement qu'une suite est arithmétique ou géométrique", 41),
+                ("PREMIERE_TECHNO", "MATH_1TEC_SUITE_DEMONTRER",    "Analyse", "Démontrer qu'une suite est arithmétique ou géométrique", 42),
+                ("PREMIERE_TECHNO", "MATH_1TEC_SUITE_VARIATION",    "Analyse", "Déterminer le sens de variation d'une suite arithmétique ou géométrique à l'aide de sa raison", 43),
+                ("PREMIERE_TECHNO", "MATH_1TEC_SUITE_ALGO",         "Analyse", "Calculer par programme un terme, une somme finie ou le rang où les termes franchissent un seuil", 44),
+
+                // --- Première techno : analyse — fonctions de la variable réelle ---
+                ("PREMIERE_TECHNO", "MATH_1TEC_FONC_MODELISER",     "Analyse", "Modéliser la dépendance entre deux grandeurs à l'aide d'une fonction", 45),
+                ("PREMIERE_TECHNO", "MATH_1TEC_FONC_TAUX",          "Analyse", "Calculer un taux de variation et l'interpréter comme pente d'une sécante", 46),
+                ("PREMIERE_TECHNO", "MATH_1TEC_FONC_MONOTONIE",     "Analyse", "Relier la monotonie d'une fonction sur un intervalle au signe de ses taux de variation", 47),
+                ("PREMIERE_TECHNO", "MATH_1TEC_PARABOLE_ASSOCIER",  "Analyse", "Associer une parabole à une expression de la forme ax², ax² + c ou a(x – x1)(x – x2)", 48),
+                ("PREMIERE_TECHNO", "MATH_1TEC_PARABOLE_ELEMENTS",  "Analyse", "Déterminer sans formule l'axe de symétrie, le sommet et les variations de x ↦ ax² + bx + c", 49),
+                ("PREMIERE_TECHNO", "MATH_1TEC_POLY_FACTORISER",    "Analyse", "Vérifier qu'une valeur est racine d'un polynôme de degré 2 et le factoriser connaissant une racine", 50),
+                ("PREMIERE_TECHNO", "MATH_1TEC_POLY_RACINES",       "Analyse", "Trouver les racines et le signe d'un polynôme de degré 2 donné sous forme factorisée", 51),
+                ("PREMIERE_TECHNO", "MATH_1TEC_FONC_BALAYAGE",      "Analyse", "Calculer par balayage une valeur approchée d'une solution d'équation", 52),
+
+                // --- Première techno : analyse — dérivation ---
+                ("PREMIERE_TECHNO", "MATH_1TEC_DERIV_NOMBRE",       "Analyse", "Interpréter le nombre dérivé comme coefficient directeur de la tangente", 53),
+                ("PREMIERE_TECHNO", "MATH_1TEC_DERIV_TANGENTE",     "Analyse", "Construire la tangente à une courbe en un point et déterminer son équation réduite", 54),
+                ("PREMIERE_TECHNO", "MATH_1TEC_DERIV_CALCULER",     "Analyse", "Calculer la dérivée d'une fonction polynôme de degré inférieur ou égal à 3", 55),
+                ("PREMIERE_TECHNO", "MATH_1TEC_DERIV_VARIATIONS",   "Analyse", "Déterminer le sens de variation d'une fonction polynôme de degré au plus 3 par le signe de sa dérivée", 56),
+                ("PREMIERE_TECHNO", "MATH_1TEC_DERIV_EXTREMUM",     "Analyse", "Déterminer les extrémums d'une fonction polynôme de degré au plus 3 et les interpréter", 57),
+
+                // --- Première techno : statistiques — séries à deux variables quantitatives ---
+                ("PREMIERE_TECHNO", "MATH_1TEC_STAT_NUAGE",         "Statistiques et probabilités", "Représenter le nuage de points d'une série statistique à deux variables quantitatives", 58),
+                ("PREMIERE_TECHNO", "MATH_1TEC_STAT_POINT_MOYEN",   "Statistiques et probabilités", "Calculer les coordonnées du point moyen d'un nuage", 59),
+                ("PREMIERE_TECHNO", "MATH_1TEC_STAT_INTERPOLER",    "Statistiques et probabilités", "Déterminer un ajustement affine et l'utiliser pour interpoler ou extrapoler", 60),
+                ("PREMIERE_TECHNO", "MATH_1TEC_STAT_PERTINENCE",    "Statistiques et probabilités", "Juger la pertinence d'un ajustement affine et les limites d'une extrapolation", 61),
+
+                // --- Première techno : probabilités ---
+                ("PREMIERE_TECHNO", "MATH_1TEC_PROB_INDEPENDANCE",  "Statistiques et probabilités", "Utiliser ou justifier l'indépendance de deux événements", 62),
+                ("PREMIERE_TECHNO", "MATH_1TEC_PROB_TOTALES",       "Statistiques et probabilités", "Calculer une probabilité à l'aide de la formule des probabilités totales", 63),
+                ("PREMIERE_TECHNO", "MATH_1TEC_PROB_REPETITION",    "Statistiques et probabilités", "Représenter par un arbre n ≤ 4 épreuves de Bernoulli identiques et indépendantes et calculer", 64),
+                ("PREMIERE_TECHNO", "MATH_1TEC_VA_LOI",             "Statistiques et probabilités", "Déterminer la loi d'une variable aléatoire discrète, interpréter {X = a}, {X ≤ a} et calculer leurs probabilités", 65),
+                ("PREMIERE_TECHNO", "MATH_1TEC_VA_ESPERANCE",       "Statistiques et probabilités", "Calculer et interpréter en contexte l'espérance d'une variable aléatoire discrète", 66),
+                ("PREMIERE_TECHNO", "MATH_1TEC_VA_BERNOULLI",       "Statistiques et probabilités", "Reconnaître une situation aléatoire modélisée par une loi de Bernoulli", 67),
+                ("PREMIERE_TECHNO", "MATH_1TEC_ECH_SIMULER",        "Statistiques et probabilités", "Simuler N échantillons de taille n d'une loi de Bernoulli et représenter les fréquences observées", 68),
+                ("PREMIERE_TECHNO", "MATH_1TEC_ECH_DISTANCE",       "Statistiques et probabilités", "Interpréter la distance à p de la fréquence observée des 1 dans un échantillon de taille n", 69),
 
                 // --- Terminale technologique : analyse ---
                 ("TERMINALE_TECHNO", "MATH_TTEC_SUITE_ARITH",     "Analyse", "Étudier une suite arithmétique et calculer la somme de ses termes", 1),

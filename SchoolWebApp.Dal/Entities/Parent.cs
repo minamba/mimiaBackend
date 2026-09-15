@@ -67,5 +67,7 @@ namespace SchoolWebApp.Dal.Entities
         public virtual ICollection<Eleve> Eleves { get; set; } = new List<Eleve>();
 
         public virtual ICollection<Abonnement> Abonnements { get; set; } = new List<Abonnement>();
+
+        public virtual ICollection<Signalement> Signalements { get; set; } = new List<Signalement>();
     }
 }

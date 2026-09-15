@@ -68,9 +68,70 @@ namespace SchoolWebApp.Domain.Models
         /// </summary>
         public string? NiveauCode { get; set; }
 
+        /// <summary>
+        /// D'où venait l'élève — voir <see cref="ModesSeance"/>. Le filet de
+        /// conclusion ne juge une préparation QUE sur une séance ouverte par le
+        /// bouton de ce contrôle ou de cette épreuve.
+        /// </summary>
+        public string? ModeSeance { get; set; }
+
+        public int? ModeControleId { get; set; }
+
+        public string? ModeEpreuveCode { get; set; }
+
         /// <summary>Date du dernier message analysé, à repousser après traitement.</summary>
         public DateTime Jusqua { get; set; }
 
         public List<MessageObserve> Messages { get; set; } = [];
+
+        /// <summary>
+        /// Les exercices notés archivés pendant cette séance : évaluations,
+        /// dictées, compréhensions orales.
+        ///
+        /// SÉPARÉS DES MESSAGES, ET POUR UNE RAISON DE FOND : l archive est la
+        /// source de vérité, le message ne l est pas. Relevé le 10/09/2026 en
+        /// base : quinze compréhensions orales archivées pour cinq blocs
+        /// présents dans les messages, deux dictées pour aucun bloc. Le
+        /// rattrapage reconstitue ce que le professeur a oublié de poser, et
+        /// c est très bien — mais lire les messages pour retrouver les
+        /// exercices notés en aurait raté les deux tiers.
+        /// </summary>
+        public List<ExerciceObserve> Exercices { get; set; } = [];
+    }
+
+    /// <summary>
+    /// Un exercice noté tel qu il a été archivé : ce qui était attendu, ce que
+    /// l élève a produit, et le verdict quand il y en a un.
+    ///
+    /// Une seule forme pour les trois genres, parce que l observateur en fait
+    /// la même chose : les rattacher à des compétences. Ce qui change d un
+    /// genre à l autre, c est quels champs sont remplis.
+    /// </summary>
+    public class ExerciceObserve
+    {
+        /// <summary>« évaluation », « dictée » ou « compréhension orale ».</summary>
+        public string Genre { get; set; } = "";
+
+        public string? Titre { get; set; }
+
+        /// <summary>Sur 20. Seule l évaluation en porte une.</summary>
+        public double? Note { get; set; }
+
+        /// <summary>Le texte dicté, ou le passage entendu. Vide pour une évaluation.</summary>
+        public string? Attendu { get; set; }
+
+        /// <summary>La copie de l élève, ou ce qu il a dit du passage.</summary>
+        public string? Production { get; set; }
+
+        /// <summary>Ce qui reste à revoir, ou ce que le professeur a retenu.</summary>
+        public string? Bilan { get; set; }
+
+        /// <summary>Code de langue d une compréhension orale. Null ailleurs.</summary>
+        public string? Langue { get; set; }
+
+        public DateTime Date { get; set; }
+
+        /// <summary>Le détail question par question d une évaluation.</summary>
+        public List<QuestionEvaluation> Questions { get; set; } = [];
     }
 }

@@ -346,17 +346,17 @@ namespace SchoolWebApp.Domain.Emails
                     TextBody = VersTexte(texte),
                 };
 
-                // LE LOGO, EN PIÈCE LIÉE ET NON EN BASE64.
+                // LA BANNIÈRE, EN PIÈCE LIÉE ET NON EN BASE64.
                 //
-                // Gmail et Outlook ignorent les images en `data:` — le logo
+                // Gmail et Outlook ignorent les images en `data:` — la bannière
                 // n'apparaîtrait tout simplement pas chez la moitié des
                 // parents, et l'entête du message resterait vide.
                 await using (var flux = typeof(MessagerieService).Assembly
-                    .GetManifestResourceStream("SchoolWebApp.Domain.Emails.Ressources.logo.png"))
+                    .GetManifestResourceStream("SchoolWebApp.Domain.Emails.Ressources.bann_mail.jpg"))
                 {
                     if (flux is not null)
                     {
-                        var image = corps.LinkedResources.Add("logo.png", flux);
+                        var image = corps.LinkedResources.Add("bann_mail.jpg", flux);
                         image.ContentId = "logoMimia";
                     }
                 }

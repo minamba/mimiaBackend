@@ -345,7 +345,8 @@ namespace SchoolWebApp.Dal.Repositories
         /// table enfle. Le comptage étant dédoublonné de toute façon, ces
         /// lignes-là n'apporteraient rien qu'un coût de stockage.
         /// </summary>
-        public async Task EnregistrerVisiteAsync(string visiteur, DateTime quand)
+        /// <summary>Vrai si une ligne a vraiment été écrite — faux si ce visiteur était déjà connu.</summary>
+        public async Task<bool> EnregistrerVisiteAsync(string visiteur, DateTime quand)
         {
             var depuis = quand.AddHours(-1);
 
@@ -353,10 +354,11 @@ namespace SchoolWebApp.Dal.Repositories
                 .AsNoTracking()
                 .AnyAsync(v => v.Visiteur == visiteur && v.Horodatage >= depuis);
 
-            if (dejaVu) return;
+            if (dejaVu) return false;
 
             _context.VisitesSite.Add(new VisiteSite { Visiteur = visiteur, Horodatage = quand });
             await _context.SaveChangesAsync();
+            return true;
         }
 
         /// <summary>
@@ -1289,6 +1291,8 @@ WHERE  role = 'assistant' AND date_creation >= {0}";
                     Sexe = e.Sexe,
                     NiveauLibelle = e.NiveauScolaire!.Libelle,
                     NiveauOrdre = e.NiveauScolaire.Ordre,
+                    AcademieId = e.AcademieId,
+                    AcademieLibelle = e.Academie!.Libelle,
                     ParentMail = e.Parent!.Mail,
                     DateCreation = e.DateCreation,
                     DerniereActivite = e.DerniereActivite,
@@ -1341,6 +1345,8 @@ WHERE  role = 'assistant' AND date_creation >= {0}";
                     NiveauLibelle = e.NiveauScolaire.Libelle,
                     NiveauOrdre = e.NiveauScolaire.Ordre,
                     NiveauCycle = e.NiveauScolaire.Cycle,
+                    Lv2Espagnol = e.Lv2Espagnol,
+                    Specialites = e.Specialites,
                     ParentId = e.ParentId,
                     ParentMail = e.Parent!.Mail,
                     ParentNomComplet = (e.Parent.Prenom ?? "") + " " + (e.Parent.Nom ?? ""),
@@ -1474,7 +1480,20 @@ WHERE  role = 'assistant' AND date_creation >= {0}";
                 {
                     MatiereId = g.Key,
                     Evaluees = g.Count(),
-                    Moyenne = g.Average(x => x.Score)
+
+                    // LA MOYENNE NE COMPTE QUE CE QUI A ETE VU DEUX FOIS.
+                    //
+                    // Elle portait sur toutes les competences observees, y
+                    // compris celles vues une seule fois : deux notions
+                    // effleurees a 85 % affichaient « 85 % de maitrise en
+                    // maths » a un parent, sur une matiere qui en compte",
+                    // cinquante. Le chiffre etait vrai au sens arithmetique et
+                    // faux au sens ou il etait lu.
+                    Moyenne = g.Where(x => x.NombreObservations >= SeuilsMaitrise.ObservationsPourTrancher)
+                        .Average(x => (double?)x.Score),
+
+                    // Ce que la moyenne recouvre vraiment, pour pouvoir le dire.
+                    Assises = g.Count(x => x.NombreObservations >= SeuilsMaitrise.ObservationsPourTrancher)
                 })
                 .ToListAsync();
 
@@ -1517,7 +1536,9 @@ WHERE  role = 'assistant' AND date_creation >= {0}";
                     {
                         Code = niveau.Code,
                         Ordre = niveau.Ordre,
-                    }))
+                    },
+                    fiche.Lv2Espagnol,
+                    Domain.Models.VoiesScolaires.LireSpecialites(fiche.Specialites)))
                 .Select(m => new StatMatiereEleve
                 {
                     MatiereId = m.Id,
@@ -1543,6 +1564,7 @@ WHERE  role = 'assistant' AND date_creation >= {0}";
                 if (m is not null)
                 {
                     matiere.CompetencesEvaluees = m.Evaluees;
+                    matiere.CompetencesAssises = m.Assises;
                     matiere.MaitriseMoyenne = m.Moyenne;
                 }
             }
@@ -1605,23 +1627,93 @@ WHERE  role = 'assistant' AND date_creation >= {0}";
                 })
                 .ToListAsync();
 
-            fiche.Lacunes = competences
-                .Where(c => c.Score < SeuilAcquis)
-                .OrderBy(c => c.Score)
-                .Take(10)
+            // RIEN DE CE QUE L ENFANT TRAVAILLE NE DOIT DISPARAITRE.
+            //
+            // Chaque liste s arretait a dix lignes, en silence. Avec douze
+            // notions sous le seuil, les dix places partaient aux scores les
+            // plus bas — et toute la comprehension orale, entre 40 et 65 %,
+            // tombait juste sous la ligne de flottaison. Six competences
+            // mesurees, a jour, jamais montrees au parent : il croyait
+            // qu on ne travaillait pas l oral.
+            //
+            // Une fiche compte quelques dizaines de competences, pas des
+            // milliers : il n y a rien a economiser ici, et le repli se decide
+            // a l affichage, ou il se voit et se deplie.
+
+            // UNE SEULE OBSERVATION NE TRANCHE RIEN.
+            //
+            // Une competence vue une fois affichait « 16 % » au parent comme
+            // un fait etabli. Elle attend desormais une seconde observation
+            // avant de rejoindre les fragiles ou les acquis — la confiance
+            // etait calculee depuis toujours, et n etait lue nulle part.
+            // UNE MESURE DE SEPTEMBRE N EST PAS UNE MESURE D HIER.
+            //
+            // Un score ne bouge qu a une observation : une notion montee a
+            // 85 % en septembre s affichait encore 85 % en juin, presentee au
+            // parent comme si elle venait d etre verifiee. Passe le delai de
+            // peremption, une ACQUISE rejoint « a confirmer » — on ne dit pas
+            // que l enfant a oublie, on dit qu on ne sait plus. Le score, lui,
+            // n est jamais retouche : voir SeuilsMaitrise.JoursAvantPeremption.
+            var maintenant = DateTime.UtcNow;
+
+            var tranchees = competences
+                .Where(c => c.NombreObservations >= SeuilsMaitrise.ObservationsPourTrancher)
+                .Where(c => !SeuilsMaitrise.Perimee(c.DerniereEvaluation, maintenant)
+                            || c.Score < SeuilsMaitrise.Acquis)
                 .ToList();
 
-            fiche.Acquises = competences
-                .Where(c => c.Score >= SeuilAcquis)
+            // Les acquises perimees : elles quittent leur colonne, mais ne
+            // quittent pas la fiche.
+            var aVerifier = competences
+                .Where(c => c.NombreObservations >= SeuilsMaitrise.ObservationsPourTrancher)
+                .Where(c => c.Score >= SeuilsMaitrise.Acquis
+                            && SeuilsMaitrise.Perimee(c.DerniereEvaluation, maintenant))
+                .ToList();
+
+            fiche.Lacunes = tranchees
+                .Where(c => c.Score < SeuilsMaitrise.Fragile)
+                .OrderBy(c => c.Score)
+                .ToList();
+
+            // « En cours » : commencees, pas encore tenues. Elles n avaient",
+            // leur place nulle part et disparaissaient de la fiche — or c est
+            // exactement la que se trouve un eleve qui travaille.
+            fiche.EnCours = tranchees
+                .Where(c => c.Score >= SeuilsMaitrise.Fragile && c.Score < SeuilsMaitrise.Acquis)
+                .OrderBy(c => c.Score)
+                .ToList();
+
+            fiche.Acquises = tranchees
+                .Where(c => c.Score >= SeuilsMaitrise.Acquis)
                 .OrderByDescending(c => c.Score)
-                .Take(10)
+                .ToList();
+
+            fiche.TotalFragiles = tranchees.Count(c => c.Score < SeuilsMaitrise.Fragile);
+
+            fiche.TotalEnCours = tranchees.Count(
+                c => c.Score >= SeuilsMaitrise.Fragile && c.Score < SeuilsMaitrise.Acquis);
+
+            fiche.TotalAcquises = tranchees.Count(c => c.Score >= SeuilsMaitrise.Acquis);
+
+            // DEUX FAMILLES, UNE SEULE COLONNE, ET LA MEME PHRASE : « ON NE
+            // SAIT PAS ENCORE ». Celle qu on n a vue qu une fois, et celle
+            // qu on a bien vue mais il y a trop longtemps. Les plus anciennes
+            // d abord : ce sont celles dont la verification presse.
+            var jamaisTranchees = competences
+                .Where(c => c.NombreObservations < SeuilsMaitrise.ObservationsPourTrancher)
+                .ToList();
+
+            fiche.TotalAConfirmer = jamaisTranchees.Count + aVerifier.Count;
+
+            fiche.AConfirmer = aVerifier
+                .OrderBy(c => c.DerniereEvaluation)
+                .Concat(jamaisTranchees.OrderBy(c => c.Score))
                 .ToList();
 
             return fiche;
         }
 
-        /// <summary>Au-dessus, la compétence est considérée acquise.</summary>
-        private const double SeuilAcquis = 0.75;
+        // Les seuils vivent desormais dans SeuilsMaitrise, partages par tout le produit.
 
         // ------------------------------------------------------------------
         // Modification / suppression
@@ -1648,7 +1740,8 @@ WHERE  role = 'assistant' AND date_creation >= {0}";
         }
 
         public async Task<EleveAdmin?> ModifierEleveAsync(
-            int id, string? prenom, string? nom, int? age, int? niveauScolaireId, Sexe? sexe)
+            int id, string? prenom, string? nom, int? age, int? niveauScolaireId, Sexe? sexe,
+            int? academieId = null)
         {
             var entite = await _context.Eleves.FirstOrDefaultAsync(e => e.Id == id);
             if (entite is null) return null;
@@ -1667,6 +1760,11 @@ WHERE  role = 'assistant' AND date_creation >= {0}";
             }
 
             if (sexe is not null and not Sexe.NonPrecise) entite.Sexe = sexe.Value;
+
+            // Facultative comme côté parent : null veut dire « pas de
+            // changement », jamais « à effacer » — même raison que
+            // NiveauScolaireId juste au-dessus.
+            if (academieId.HasValue) entite.AcademieId = academieId;
 
             await _context.SaveChangesAsync();
 

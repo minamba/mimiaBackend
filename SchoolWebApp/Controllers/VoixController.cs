@@ -72,7 +72,7 @@ namespace SchoolWebApp.Api.Controllers
 
                 await _synthese.CopierAudioAsync(
                     requete.Texte!, requete.Avatar, requete.Age, Response.Body,
-                    requete.Dictee, requete.Anglais, ct);
+                    requete.Dictee, requete.Langue, requete.Vitesse, ct);
 
                 return new EmptyResult();
             }
@@ -119,20 +119,37 @@ namespace SchoolWebApp.Api.Controllers
             public bool Dictee { get; set; }
 
             /// <summary>
-            /// Ce passage se prononce EN ANGLAIS.
+            /// Code de la langue dans laquelle CE passage se prononce — "en",
+            /// "es", "de", "it", "zh" — ou absent pour le registre habituel.
             ///
-            /// Le professeur d'anglais explique en français et fait pratiquer en
-            /// anglais. Sa consigne lui interdisait jusqu'ici de prononcer le
-            /// moindre mot d'anglais — la voix lisant en français, un mot
-            /// anglais y devenait une fausse prononciation apprise.
+            /// Un professeur de langue explique en français et fait pratiquer
+            /// dans la langue étudiée. Sa consigne lui interdisait jusqu'ici de
+            /// prononcer le moindre mot de cette langue — la voix lisant en
+            /// français, un mot étranger y devenait une fausse prononciation
+            /// apprise.
             ///
             /// L'interdit rendait la compréhension orale impossible : une
             /// compétence d'écoute par niveau, du CP à la terminale, restait
-            /// grise faute de pouvoir être travaillée. Le drapeau lève la règle
+            /// grise faute de pouvoir être travaillée. Ce champ lève la règle
             /// PHRASE PAR PHRASE, sur les seuls passages que le professeur borne
-            /// lui-même — l'annonce et la consigne restent en français.
+            /// lui-même — l'annonce et la consigne restent en français. UNE
+            /// BALISE PAR LANGUE, MÊME GABARIT POUR TOUTES : voir
+            /// `PromptsPedagogiques.EnseignerUneLangue`.
             /// </summary>
-            public bool Anglais { get; set; }
+            [StringLength(10)]
+            public string? Langue { get; set; }
+
+            /// <summary>
+            /// La vitesse choisie par l'élève avant un exercice d'écoute :
+            /// "tres_lent", "lent", "normal" ou "rapide" — absente partout
+            /// ailleurs. Voulu par Camara le 12/09/2026 : celui qui n'a rien
+            /// compris n'ose pas toujours demander qu'on ralentisse.
+            ///
+            /// Une valeur inconnue vaut "normal" : mieux vaut une lecture
+            /// ordinaire qu'une erreur au milieu d'un exercice.
+            /// </summary>
+            [StringLength(20)]
+            public string? Vitesse { get; set; }
         }
     }
 }

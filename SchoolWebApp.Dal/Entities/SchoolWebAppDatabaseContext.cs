@@ -17,11 +17,20 @@ namespace SchoolWebApp.Dal.Entities
         }
 
         public virtual DbSet<NiveauScolaire> NiveauxScolaires { get; set; }
+        public virtual DbSet<Academie> Academies { get; set; }
+        public virtual DbSet<PeriodeVacances> PeriodesVacances { get; set; }
         public virtual DbSet<Parent> Parents { get; set; }
         public virtual DbSet<Eleve> Eleves { get; set; }
         public virtual DbSet<Matiere> Matieres { get; set; }
         public virtual DbSet<Competence> Competences { get; set; }
         public virtual DbSet<CompetencePrerequis> CompetencesPrerequis { get; set; }
+        public virtual DbSet<EcheanceReferentiel> EcheancesReferentiel { get; set; }
+
+        /// <summary>Les examens nationaux par session, leurs épreuves, et la préparation de chaque élève.</summary>
+        public virtual DbSet<Examen> Examens { get; set; }
+        public virtual DbSet<EpreuveExamen> EpreuvesExamens { get; set; }
+        public virtual DbSet<PreparationEpreuve> PreparationsEpreuves { get; set; }
+
         public virtual DbSet<MaitriseEleve> MaitrisesEleves { get; set; }
         public virtual DbSet<Conversation> Conversations { get; set; }
         public virtual DbSet<Message> Messages { get; set; }
@@ -33,6 +42,11 @@ namespace SchoolWebApp.Dal.Entities
         public virtual DbSet<Evaluation> Evaluations { get; set; }
         public virtual DbSet<RapportSeance> RapportsSeance { get; set; }
         public virtual DbSet<FicheRevision> FichesRevision { get; set; }
+        public virtual DbSet<Dictee> Dictees { get; set; }
+        public virtual DbSet<ComprehensionOrale> ComprehensionsOrales { get; set; }
+        public virtual DbSet<EvaluationPrevue> EvaluationsPrevues { get; set; }
+        public virtual DbSet<ControleScolaire> ControlesScolaires { get; set; }
+        public virtual DbSet<ControleNotion> ControlesNotions { get; set; }
         public virtual DbSet<Offre> Offres { get; set; }
         public virtual DbSet<OffreRecharge> OffresRecharge { get; set; }
         public virtual DbSet<Abonnement> Abonnements { get; set; }
@@ -60,6 +74,9 @@ namespace SchoolWebApp.Dal.Entities
         public virtual DbSet<ForfaitAbonnement> ForfaitsAbonnement { get; set; }
 
         public virtual DbSet<MesureVoix> MesuresVoix { get; set; }
+
+        /// <summary>Les problèmes et suggestions déposés depuis le bouton « Signaler ».</summary>
+        public virtual DbSet<Signalement> Signalements { get; set; }
 
         /// <summary>Les appels au modèle qui ne sont pas des tours de dialogue.</summary>
         public virtual DbSet<AppelClaude> AppelsClaude { get; set; }
@@ -96,6 +113,40 @@ namespace SchoolWebApp.Dal.Entities
                 entity.Property(e => e.Ordre).HasColumnName("ordre");
 
                 entity.HasIndex(e => e.Code).IsUnique();
+            });
+
+            // ---------------------------------------------------------------
+            // Academie
+            // ---------------------------------------------------------------
+            modelBuilder.Entity<Academie>(entity =>
+            {
+                entity.ToTable("Academie");
+                entity.HasKey(e => e.Id);
+
+                entity.Property(e => e.Id).HasColumnName("id");
+                entity.Property(e => e.Code).IsRequired().HasMaxLength(30).HasColumnName("code");
+                entity.Property(e => e.Libelle).IsRequired().HasMaxLength(100).HasColumnName("libelle");
+                entity.Property(e => e.Zone).IsRequired().HasMaxLength(20).HasColumnName("zone");
+
+                entity.HasIndex(e => e.Code).IsUnique();
+            });
+
+            // ---------------------------------------------------------------
+            // PeriodeVacances
+            // ---------------------------------------------------------------
+            modelBuilder.Entity<PeriodeVacances>(entity =>
+            {
+                entity.ToTable("PeriodeVacances");
+                entity.HasKey(e => e.Id);
+
+                entity.Property(e => e.Id).HasColumnName("id");
+                entity.Property(e => e.Zone).IsRequired().HasMaxLength(20).HasColumnName("zone");
+                entity.Property(e => e.AnneeScolaire).IsRequired().HasMaxLength(10).HasColumnName("annee_scolaire");
+                entity.Property(e => e.Libelle).IsRequired().HasMaxLength(50).HasColumnName("libelle");
+                entity.Property(e => e.DateDebut).HasColumnName("date_debut");
+                entity.Property(e => e.DateFin).HasColumnName("date_fin");
+
+                entity.HasIndex(e => new { e.Zone, e.AnneeScolaire });
             });
 
             // ---------------------------------------------------------------
@@ -150,6 +201,7 @@ namespace SchoolWebApp.Dal.Entities
                 entity.Property(e => e.Id).HasColumnName("id");
                 entity.Property(e => e.ParentId).HasColumnName("parent_id");
                 entity.Property(e => e.NiveauScolaireId).HasColumnName("niveau_scolaire_id");
+                entity.Property(e => e.AcademieId).HasColumnName("academie_id");
                 entity.Property(e => e.ProgressionVueLe).HasColumnName("progression_vue_le");
                 entity.Property(e => e.Prenom).HasMaxLength(100).HasColumnName("prenom");
                 entity.Property(e => e.Nom).HasMaxLength(100).HasColumnName("nom");
@@ -161,6 +213,8 @@ namespace SchoolWebApp.Dal.Entities
                 entity.Property(e => e.AnonymiseLe).HasColumnName("anonymise_le");
                 entity.Property(e => e.CodeAcces).HasMaxLength(16).HasColumnName("code_acces");
                 entity.Property(e => e.AccesSuspenduLe).HasColumnName("acces_suspendu_le");
+                entity.Property(e => e.Lv2Espagnol).HasColumnName("lv2_espagnol").HasDefaultValue(false);
+                entity.Property(e => e.Specialites).HasMaxLength(200).HasColumnName("specialites");
 
                 // UN CODE NE DÉSIGNE QU'UN ENFANT, ET LA BASE LE GARANTIT.
                 //
@@ -180,6 +234,14 @@ namespace SchoolWebApp.Dal.Entities
                 entity.HasOne(e => e.NiveauScolaire)
                       .WithMany(n => n.Eleves)
                       .HasForeignKey(e => e.NiveauScolaireId)
+                      .OnDelete(DeleteBehavior.Restrict);
+
+                // Restrict, jamais Cascade : une académie est une donnée de
+                // référence, elle ne doit jamais entraîner la suppression
+                // d'un enfant.
+                entity.HasOne(e => e.Academie)
+                      .WithMany(a => a.Eleves)
+                      .HasForeignKey(e => e.AcademieId)
                       .OnDelete(DeleteBehavior.Restrict);
 
                 entity.HasIndex(e => e.ParentId);
@@ -233,6 +295,11 @@ namespace SchoolWebApp.Dal.Entities
                 entity.Property(e => e.Libelle).HasMaxLength(500).HasColumnName("libelle");
                 entity.Property(e => e.Description).HasMaxLength(2000).HasColumnName("description");
                 entity.Property(e => e.Ordre).HasColumnName("ordre");
+                entity.Property(e => e.DateDebutValidite).HasColumnName("date_debut_validite");
+                entity.Property(e => e.Actif).HasColumnName("actif").HasDefaultValue(true);
+                entity.Property(e => e.DateFinValidite).HasColumnName("date_fin_validite");
+                entity.Property(e => e.DateCreation).HasColumnName("date_creation");
+                entity.Property(e => e.DateModification).HasColumnName("date_modification");
 
                 entity.HasOne(e => e.Matiere)
                       .WithMany(m => m.Competences)
@@ -336,6 +403,10 @@ namespace SchoolWebApp.Dal.Entities
                 entity.Property(e => e.DatePurge).HasColumnName("date_purge");
                 entity.Property(e => e.DateDerniereObservation).HasColumnName("date_derniere_observation");
                 entity.Property(e => e.DateSortie).HasColumnName("date_sortie");
+                entity.Property(e => e.DureeChoisieMinutes).HasColumnName("duree_choisie_minutes");
+                entity.Property(e => e.ModeSeance).HasMaxLength(20).HasColumnName("mode_seance");
+                entity.Property(e => e.ModeControleId).HasColumnName("mode_controle_id");
+                entity.Property(e => e.ModeEpreuveCode).HasMaxLength(60).HasColumnName("mode_epreuve_code");
                 entity.Property(e => e.NiveauScolaireId).HasColumnName("niveau_scolaire_id");
                 // NoAction : un niveau scolaire est une donnee de reference,
                 // il ne se supprime pas. La contrainte interdit un identifiant
@@ -357,6 +428,28 @@ namespace SchoolWebApp.Dal.Entities
 
                 entity.HasIndex(e => new { e.EleveId, e.DateDernierMessage });
                 entity.HasIndex(e => e.DatePurge);
+
+                // LA FILE D OBSERVATION SE LISAIT EN BALAYANT TOUTE LA TABLE.
+                //
+                // Le worker cherche les seances inactives dont le marqueur
+                // d observation est en retard, les plus anciennes d abord.
+                // Aucun index ne portait DateDernierMessage en tete : le plan
+                // etait un balayage complet SUIVI D UN TRI, toutes les dix
+                // minutes. A treize conversations c est gratuit ; a cinquante
+                // mille, c est un tri de cinquante mille lignes pour en garder
+                // vingt.
+                //
+                // Avec cet index, la lecture part de la plus ancienne et
+                // s arrete des qu elle en a vingt.
+                //
+                // DateDerniereObservation est EMBARQUEE : le filtre compare
+                // les deux dates, et sans elle chaque ligne PARCOURUE — pas
+                // seulement chaque ligne retenue — rouvrirait la table.
+                // Mesure sur treize conversations : 2 lectures en balayage,
+                // 24 avec l index nu, parce que la lecture commence par les
+                // plus anciennes, qui sont justement les deja observees.
+                entity.HasIndex(e => e.DateDernierMessage)
+                      .IncludeProperties(e => e.DateDerniereObservation);
             });
 
             // ---------------------------------------------------------------
@@ -523,6 +616,8 @@ namespace SchoolWebApp.Dal.Entities
                 entity.Property(e => e.Note).HasColumnName("note");
                 entity.Property(e => e.Remarque).HasMaxLength(2000).HasColumnName("remarque");
                 entity.Property(e => e.ARevoir).HasMaxLength(1000).HasColumnName("a_revoir");
+                entity.Property(e => e.CorrectionReportee).HasColumnName("correction_reportee");
+                entity.Property(e => e.RelancesCorrection).HasColumnName("relances_correction");
 
                 // Pas de HasMaxLength : nvarchar(max). Un contrôle de six
                 // questions avec les réponses de l'élève dépasse 4000 caractères.
@@ -580,6 +675,7 @@ namespace SchoolWebApp.Dal.Entities
                 entity.Property(e => e.NoteRevision).HasColumnName("note_revision");
                 entity.Property(e => e.Remarque).HasMaxLength(2000).HasColumnName("remarque");
                 entity.Property(e => e.ARevoir).HasMaxLength(1000).HasColumnName("a_revoir");
+                entity.Property(e => e.DureeChoisieMinutes).HasColumnName("duree_choisie_minutes");
                 entity.Property(e => e.DateCreation).HasColumnName("date_creation");
 
                 entity.HasOne(e => e.Eleve)
@@ -665,6 +761,308 @@ namespace SchoolWebApp.Dal.Entities
                 entity.HasIndex(e => new { e.EleveId, e.MatiereId, e.Notion }).IsUnique();
 
                 entity.HasIndex(e => new { e.EleveId, e.MatiereId, e.DateMiseAJour });
+            });
+
+            // ---------------------------------------------------------------
+            // Dictee
+            // ---------------------------------------------------------------
+            modelBuilder.Entity<Dictee>(entity =>
+            {
+                entity.ToTable("Dictee");
+                entity.HasKey(e => e.Id);
+
+                entity.Property(e => e.Id).HasColumnName("id");
+                entity.Property(e => e.EleveId).HasColumnName("eleve_id");
+                entity.Property(e => e.MatiereId).HasColumnName("matiere_id");
+                entity.Property(e => e.ConversationId).HasColumnName("conversation_id");
+                entity.Property(e => e.Titre).HasMaxLength(300).HasColumnName("titre");
+
+                // nvarchar(max) : une dictée de plusieurs phrases, et sa copie,
+                // dépassent largement 4000 caractères à elles deux.
+                entity.Property(e => e.TexteDicte).IsRequired().HasColumnName("texte_dicte");
+                entity.Property(e => e.Copie).IsRequired().HasColumnName("copie");
+
+                entity.Property(e => e.Remarque).HasMaxLength(2000).HasColumnName("remarque");
+                entity.Property(e => e.Etat).HasMaxLength(20).HasColumnName("etat");
+                entity.Property(e => e.DateCreation).HasColumnName("date_creation");
+                entity.Property(e => e.DateMiseAJour).HasColumnName("date_mise_a_jour");
+                entity.Property(e => e.DateConsultation).HasColumnName("date_consultation");
+                entity.Property(e => e.NiveauScolaireId).HasColumnName("niveau_scolaire_id");
+
+                entity.HasOne(e => e.Eleve)
+                      .WithMany(el => el.Dictees)
+                      .HasForeignKey(e => e.EleveId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                // NoAction, comme sur Evaluation : un niveau scolaire est de
+                // référence, la contrainte empêche un identifiant fantaisiste
+                // sans jamais propager de suppression.
+                entity.HasOne(e => e.NiveauScolaire)
+                      .WithMany()
+                      .HasForeignKey(e => e.NiveauScolaireId)
+                      .OnDelete(DeleteBehavior.NoAction);
+
+                // Restrict, pas Cascade : trois chemins de suppression
+                // convergeraient sinon vers Dictee (élève, matière,
+                // conversation), et SQL Server refuse les cascades multiples.
+                entity.HasOne(e => e.Matiere)
+                      .WithMany(m => m.Dictees)
+                      .HasForeignKey(e => e.MatiereId)
+                      .OnDelete(DeleteBehavior.Restrict);
+
+                // NoAction : une conversation purgée au bout d'un an ne doit
+                // pas emporter la dictée. Le parent garde sa trace même quand
+                // le détail des échanges a disparu.
+                entity.HasOne(e => e.Conversation)
+                      .WithMany(c => c.Dictees)
+                      .HasForeignKey(e => e.ConversationId)
+                      .OnDelete(DeleteBehavior.NoAction);
+
+                entity.HasIndex(e => new { e.EleveId, e.MatiereId, e.DateCreation });
+                entity.HasIndex(e => new { e.EleveId, e.MatiereId, e.DateMiseAJour });
+            });
+
+            // ---------------------------------------------------------------
+            // ComprehensionOrale
+            // ---------------------------------------------------------------
+            modelBuilder.Entity<ComprehensionOrale>(entity =>
+            {
+                entity.ToTable("ComprehensionOrale");
+                entity.HasKey(e => e.Id);
+
+                entity.Property(e => e.Id).HasColumnName("id");
+                entity.Property(e => e.EleveId).HasColumnName("eleve_id");
+                entity.Property(e => e.MatiereId).HasColumnName("matiere_id");
+                entity.Property(e => e.ConversationId).HasColumnName("conversation_id");
+                entity.Property(e => e.Titre).HasMaxLength(300).HasColumnName("titre");
+                entity.Property(e => e.Langue).IsRequired().HasMaxLength(10).HasColumnName("langue");
+
+                // nvarchar(max) : un passage de compréhension orale dépasse
+                // vite 4000 caractères une fois la compréhension et la
+                // remarque ajoutées.
+                entity.Property(e => e.Passage).IsRequired().HasColumnName("passage");
+                entity.Property(e => e.ReponseEleve).IsRequired().HasColumnName("reponse_eleve");
+                entity.Property(e => e.Comprehension).IsRequired().HasColumnName("comprehension");
+
+                entity.Property(e => e.Remarque).HasMaxLength(2000).HasColumnName("remarque");
+                entity.Property(e => e.AudioDonnees).HasColumnName("audio_donnees");
+                entity.Property(e => e.AudioChemin).HasMaxLength(200).HasColumnName("audio_chemin");
+                entity.Property(e => e.AudioEffaceLe).HasColumnName("audio_efface_le");
+                entity.Property(e => e.DateCreation).HasColumnName("date_creation");
+                entity.Property(e => e.DateConsultation).HasColumnName("date_consultation");
+                entity.Property(e => e.NiveauScolaireId).HasColumnName("niveau_scolaire_id");
+
+                entity.HasOne(e => e.Eleve)
+                      .WithMany(el => el.ComprehensionsOrales)
+                      .HasForeignKey(e => e.EleveId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                // NoAction, comme sur Dictee : un niveau scolaire est de
+                // référence, la contrainte empêche un identifiant fantaisiste
+                // sans jamais propager de suppression.
+                entity.HasOne(e => e.NiveauScolaire)
+                      .WithMany()
+                      .HasForeignKey(e => e.NiveauScolaireId)
+                      .OnDelete(DeleteBehavior.NoAction);
+
+                // Restrict, pas Cascade : trois chemins de suppression
+                // convergeraient sinon vers ComprehensionOrale (élève,
+                // matière, conversation), et SQL Server refuse les cascades
+                // multiples.
+                entity.HasOne(e => e.Matiere)
+                      .WithMany(m => m.ComprehensionsOrales)
+                      .HasForeignKey(e => e.MatiereId)
+                      .OnDelete(DeleteBehavior.Restrict);
+
+                // NoAction : une conversation purgée au bout d'un an ne doit
+                // pas emporter l'archive. Le parent garde sa trace même
+                // quand le détail des échanges a disparu.
+                entity.HasOne(e => e.Conversation)
+                      .WithMany(c => c.ComprehensionsOrales)
+                      .HasForeignKey(e => e.ConversationId)
+                      .OnDelete(DeleteBehavior.NoAction);
+
+                entity.HasIndex(e => new { e.EleveId, e.MatiereId, e.DateCreation });
+            });
+
+            // ---------------------------------------------------------------
+            // EvaluationPrevue
+            // ---------------------------------------------------------------
+            modelBuilder.Entity<EvaluationPrevue>(entity =>
+            {
+                entity.ToTable("EvaluationPrevue");
+                entity.HasKey(e => e.Id);
+
+                entity.Property(e => e.Id).HasColumnName("id");
+                entity.Property(e => e.EleveId).HasColumnName("eleve_id");
+                entity.Property(e => e.MatiereId).HasColumnName("matiere_id");
+                entity.Property(e => e.ConversationId).HasColumnName("conversation_id");
+                entity.Property(e => e.Notion).HasMaxLength(300).HasColumnName("notion");
+                entity.Property(e => e.DateCreation).HasColumnName("date_creation");
+                entity.Property(e => e.ConsommeeLe).HasColumnName("consommee_le");
+
+                entity.HasOne(e => e.Eleve)
+                      .WithMany(el => el.EvaluationsPrevues)
+                      .HasForeignKey(e => e.EleveId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                // Restrict, même raison que sur Dictee : trois chemins de
+                // suppression convergeraient sinon vers cette table.
+                entity.HasOne(e => e.Matiere)
+                      .WithMany(m => m.EvaluationsPrevues)
+                      .HasForeignKey(e => e.MatiereId)
+                      .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasOne(e => e.Conversation)
+                      .WithMany(c => c.EvaluationsPrevues)
+                      .HasForeignKey(e => e.ConversationId)
+                      .OnDelete(DeleteBehavior.NoAction);
+
+                entity.HasIndex(e => new { e.EleveId, e.MatiereId, e.ConsommeeLe });
+            });
+
+            // ---------------------------------------------------------------
+            // ControleScolaire
+            // ---------------------------------------------------------------
+            modelBuilder.Entity<ControleScolaire>(entity =>
+            {
+                entity.ToTable("ControleScolaire");
+                entity.HasKey(e => e.Id);
+
+                entity.Property(e => e.Id).HasColumnName("id");
+                entity.Property(e => e.EleveId).HasColumnName("eleve_id");
+                entity.Property(e => e.MatiereId).HasColumnName("matiere_id");
+                entity.Property(e => e.ConversationId).HasColumnName("conversation_id");
+                entity.Property(e => e.NiveauScolaireId).HasColumnName("niveau_scolaire_id");
+                entity.Property(e => e.PosePar).IsRequired().HasMaxLength(20).HasColumnName("pose_par");
+                entity.Property(e => e.Sujet).HasMaxLength(300).HasColumnName("sujet");
+                entity.Property(e => e.DateControle).HasColumnName("date_controle");
+                entity.Property(e => e.HeureControle).HasColumnName("heure_controle");
+                entity.Property(e => e.DateCreation).HasColumnName("date_creation");
+                entity.Property(e => e.DateModification).HasColumnName("date_modification");
+                entity.Property(e => e.DernierePreparationLe).HasColumnName("derniere_preparation_le");
+                entity.Property(e => e.NombrePreparations).HasColumnName("nombre_preparations");
+                entity.Property(e => e.Note).HasColumnName("note");
+                entity.Property(e => e.Ressenti).HasMaxLength(500).HasColumnName("ressenti");
+                entity.Property(e => e.BilanLe).HasColumnName("bilan_le");
+                entity.Property(e => e.RelancesBilan).HasColumnName("relances_bilan");
+                entity.Property(e => e.CopieSeparee).HasColumnName("copie_separee");
+                entity.Property(e => e.CopieDemandeeLe).HasColumnName("copie_demandee_le");
+                entity.Property(e => e.EnoncePieceJointeId).HasColumnName("enonce_piece_jointe_id");
+                entity.Property(e => e.CopiePieceJointeId).HasColumnName("copie_piece_jointe_id");
+                entity.Property(e => e.CopieAnalyseeLe).HasColumnName("copie_analysee_le");
+                entity.Property(e => e.PretVerdict).HasMaxLength(20).HasColumnName("pret_verdict");
+                entity.Property(e => e.PretObservation).HasColumnName("pret_observation");
+                entity.Property(e => e.PretLe).HasColumnName("pret_le");
+
+                entity.HasOne(e => e.Eleve)
+                      .WithMany(el => el.ControlesScolaires)
+                      .HasForeignKey(e => e.EleveId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                // Restrict, même raison que sur ComprehensionOrale : trois
+                // chemins de suppression convergeraient sinon vers cette
+                // table (élève, matière, conversation).
+                entity.HasOne(e => e.Matiere)
+                      .WithMany(m => m.ControlesScolaires)
+                      .HasForeignKey(e => e.MatiereId)
+                      .OnDelete(DeleteBehavior.Restrict);
+
+                // NoAction, nullable : un contrôle posé depuis le calendrier
+                // n'a pas de conversation, et une conversation purgée au
+                // bout d'un an ne doit pas emporter le contrôle.
+                entity.HasOne(e => e.Conversation)
+                      .WithMany(c => c.ControlesScolaires)
+                      .HasForeignKey(e => e.ConversationId)
+                      .OnDelete(DeleteBehavior.NoAction);
+
+                entity.HasOne(e => e.NiveauScolaire)
+                      .WithMany()
+                      .HasForeignKey(e => e.NiveauScolaireId)
+                      .OnDelete(DeleteBehavior.NoAction);
+
+                // Sert la requête « prochain contrôle non dépassé pour cet
+                // élève et cette matière », appelée à chaque arrivée en
+                // séance.
+                entity.HasIndex(e => new { e.EleveId, e.MatiereId, e.DateControle });
+            });
+
+            // ---------------------------------------------------------------
+            // ControleNotion — le périmètre d'un contrôle
+            // ---------------------------------------------------------------
+            modelBuilder.Entity<ControleNotion>(entity =>
+            {
+                entity.ToTable("ControleNotion");
+                entity.HasKey(e => e.Id);
+
+                entity.Property(e => e.Id).HasColumnName("id");
+                entity.Property(e => e.ControleId).HasColumnName("controle_id");
+                entity.Property(e => e.CompetenceId).HasColumnName("competence_id");
+                entity.Property(e => e.Libelle).IsRequired().HasMaxLength(200).HasColumnName("libelle");
+                entity.Property(e => e.TravailleeLe).HasColumnName("travaillee_le");
+                entity.Property(e => e.Source).IsRequired().HasMaxLength(20).HasColumnName("source");
+                entity.Property(e => e.Resultat).HasMaxLength(20).HasColumnName("resultat");
+                entity.Property(e => e.DateCreation).HasColumnName("date_creation");
+
+                // Cascade, et c'est le seul chemin qui arrive ici : le
+                // périmètre n'a aucune vie hors de son contrôle.
+                entity.HasOne(e => e.Controle)
+                      .WithMany(c => c.Notions)
+                      .HasForeignKey(e => e.ControleId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                // NoAction : une compétence du référentiel n'est jamais
+                // supprimée, la contrainte interdit seulement un identifiant
+                // fantaisiste.
+                entity.HasOne(e => e.Competence)
+                      .WithMany()
+                      .HasForeignKey(e => e.CompetenceId)
+                      .OnDelete(DeleteBehavior.NoAction);
+
+                entity.HasIndex(e => e.ControleId);
+
+                // Une notion ne compte qu'une fois dans le pourcentage, même
+                // si le professeur la redéclare d'une séance à l'autre.
+                // Filtré : les lignes à libellé libre se dédoublonnent en C#.
+                entity.HasIndex(e => new { e.ControleId, e.CompetenceId })
+                      .IsUnique()
+                      .HasFilter("[competence_id] IS NOT NULL");
+            });
+
+            // ---------------------------------------------------------------
+            // Signalement — bouton « Signaler »
+            // ---------------------------------------------------------------
+            modelBuilder.Entity<Signalement>(entity =>
+            {
+                entity.ToTable("Signalement");
+                entity.HasKey(e => e.Id);
+
+                entity.Property(e => e.Id).HasColumnName("id");
+                entity.Property(e => e.ParentId).HasColumnName("parent_id");
+                entity.Property(e => e.EleveId).HasColumnName("eleve_id");
+                entity.Property(e => e.Categorie).HasMaxLength(30).HasColumnName("categorie");
+                entity.Property(e => e.Description).HasMaxLength(2000).HasColumnName("description");
+                entity.Property(e => e.Etat).HasMaxLength(20).IsRequired()
+                      .HasDefaultValue("nouveau").HasColumnName("etat");
+                entity.Property(e => e.DateCreation).HasColumnName("date_creation");
+                entity.Property(e => e.DateMiseAJour).HasColumnName("date_mise_a_jour");
+
+                entity.HasOne(e => e.Parent)
+                      .WithMany(p => p.Signalements)
+                      .HasForeignKey(e => e.ParentId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                // Restrict, et non Cascade : Parent -> Eleve cascade déjà vers
+                // cette table via ParentId. Un second chemin en cascade
+                // (Parent -> Eleve -> Signalement) ferait deux chemins de
+                // suppression convergents, que SQL Server refuse.
+                entity.HasOne(e => e.Eleve)
+                      .WithMany(el => el.Signalements)
+                      .HasForeignKey(e => e.EleveId)
+                      .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasIndex(e => e.Etat);
+                entity.HasIndex(e => e.ParentId);
             });
 
             // ---------------------------------------------------------------
@@ -870,6 +1268,8 @@ namespace SchoolWebApp.Dal.Entities
                 // `PendingModelChangesWarning`.
                 entity.Property(e => e.Publie).HasDefaultValue(false).HasColumnName("publie");
 
+                entity.Property(e => e.EleveId).HasColumnName("eleve_id");
+
                 // UN SEUL AVIS PAR FOYER, garanti par la base. Une règle
                 // tenue uniquement par le code céderait au premier
                 // double-clic sur « Envoyer ».
@@ -884,6 +1284,17 @@ namespace SchoolWebApp.Dal.Entities
                       .HasForeignKey(e => e.ParentId)
                       .HasConstraintName("FK_AvisClient_Parent")
                       .OnDelete(DeleteBehavior.Cascade);
+
+                // Restrict, et non Cascade : Parent -> Eleve cascade déjà vers
+                // cette table via ParentId. Un second chemin en cascade
+                // (Parent -> Eleve -> AvisClient) ferait deux chemins de
+                // suppression convergents, que SQL Server refuse — même
+                // recette que Signalement.EleveId.
+                entity.HasOne(e => e.Eleve)
+                      .WithMany()
+                      .HasForeignKey(e => e.EleveId)
+                      .HasConstraintName("FK_AvisClient_Eleve")
+                      .OnDelete(DeleteBehavior.Restrict);
             });
 
             modelBuilder.Entity<ForfaitAbonnement>(entity =>
@@ -1137,6 +1548,123 @@ namespace SchoolWebApp.Dal.Entities
                       .OnDelete(DeleteBehavior.Cascade);
 
                 entity.HasIndex(e => new { e.AbonnementId, e.PeriodeDebut });
+            });
+
+            // ---------------------------------------------------------------
+            // EcheanceReferentiel
+            // ---------------------------------------------------------------
+            modelBuilder.Entity<EcheanceReferentiel>(entity =>
+            {
+                entity.ToTable("EcheanceReferentiel");
+                entity.HasKey(e => e.Id);
+
+                entity.Property(e => e.Id).HasColumnName("id");
+                entity.Property(e => e.MatiereLibelle).IsRequired().HasMaxLength(200).HasColumnName("matiere_libelle");
+                entity.Property(e => e.NiveauxConcernes).IsRequired().HasMaxLength(200).HasColumnName("niveaux_concernes");
+                entity.Property(e => e.DateEcheance).HasColumnName("date_echeance");
+                entity.Property(e => e.DateConnue).HasColumnName("date_connue");
+                entity.Property(e => e.TexteOfficiel).HasMaxLength(300).HasColumnName("texte_officiel");
+                entity.Property(e => e.Url).HasMaxLength(500).HasColumnName("url");
+                entity.Property(e => e.DernierHashPage).HasMaxLength(100).HasColumnName("dernier_hash_page");
+                entity.Property(e => e.DernierStatutVeille).HasMaxLength(20).HasColumnName("dernier_statut_veille");
+                entity.Property(e => e.Sentinelle).HasColumnName("sentinelle").HasDefaultValue(false);
+                entity.Property(e => e.MatieresCodes).HasMaxLength(200).HasColumnName("matieres_codes");
+                entity.Property(e => e.NiveauxCodes).HasMaxLength(300).HasColumnName("niveaux_codes");
+                entity.Property(e => e.DernierePageVerifieeLe).HasColumnName("derniere_page_verifiee_le");
+                entity.Property(e => e.Notes).HasMaxLength(1000).HasColumnName("notes");
+                entity.Property(e => e.DateCreation).HasColumnName("date_creation");
+                entity.Property(e => e.DerniereAlerteLe).HasColumnName("derniere_alerte_le");
+                entity.Property(e => e.TraiteeLe).HasColumnName("traitee_le");
+
+                // Sert le balayage du worker : « en attente, la plus proche
+                // d'abord ». Voir la migration EcheancesReferentiel.
+                entity.HasIndex(e => new { e.TraiteeLe, e.DateEcheance })
+                      .HasDatabaseName("IX_EcheanceReferentiel_traitee_le_date_echeance");
+            });
+
+            // ---------------------------------------------------------------
+            // Examen, EpreuveExamen, PreparationEpreuve — préparation aux examens
+            // ---------------------------------------------------------------
+            modelBuilder.Entity<Examen>(entity =>
+            {
+                entity.ToTable("Examen");
+                entity.HasKey(e => e.Id);
+
+                entity.Property(e => e.Id).HasColumnName("id");
+                entity.Property(e => e.Code).IsRequired().HasMaxLength(40).HasColumnName("code");
+                entity.Property(e => e.Libelle).IsRequired().HasMaxLength(100).HasColumnName("libelle");
+                entity.Property(e => e.TitreSection).IsRequired().HasMaxLength(120).HasColumnName("titre_section");
+                entity.Property(e => e.Session).HasColumnName("session");
+                entity.Property(e => e.NiveauxCodes).IsRequired().HasMaxLength(200).HasColumnName("niveaux_codes");
+                entity.Property(e => e.Source).HasMaxLength(1000).HasColumnName("source");
+                entity.Property(e => e.Actif).HasColumnName("actif").HasDefaultValue(true);
+                entity.Property(e => e.DateCreation).HasColumnName("date_creation");
+
+                entity.HasIndex(e => e.Code).IsUnique();
+            });
+
+            modelBuilder.Entity<EpreuveExamen>(entity =>
+            {
+                entity.ToTable("EpreuveExamen");
+                entity.HasKey(e => e.Id);
+
+                entity.Property(e => e.Id).HasColumnName("id");
+                entity.Property(e => e.ExamenId).HasColumnName("examen_id");
+                entity.Property(e => e.Code).IsRequired().HasMaxLength(60).HasColumnName("code");
+                entity.Property(e => e.Libelle).IsRequired().HasMaxLength(120).HasColumnName("libelle");
+                entity.Property(e => e.MatieresCodes).IsRequired().HasMaxLength(200).HasColumnName("matieres_codes");
+                entity.Property(e => e.NiveauxProgrammeCodes).IsRequired().HasMaxLength(200).HasColumnName("niveaux_programme_codes");
+                entity.Property(e => e.Description).HasMaxLength(500).HasColumnName("description");
+                entity.Property(e => e.Remarque).HasMaxLength(500).HasColumnName("remarque");
+                entity.Property(e => e.Ordre).HasColumnName("ordre");
+                entity.Property(e => e.SpecialiteRequise).HasMaxLength(40).HasColumnName("specialite_requise");
+                entity.Property(e => e.SpecialiteExclue).HasMaxLength(40).HasColumnName("specialite_exclue");
+                entity.Property(e => e.DomainesInclus).HasMaxLength(200).HasColumnName("domaines_inclus");
+                entity.Property(e => e.DomainesExclus).HasMaxLength(200).HasColumnName("domaines_exclus");
+
+                entity.HasOne(e => e.Examen)
+                      .WithMany(x => x.Epreuves)
+                      .HasForeignKey(e => e.ExamenId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasIndex(e => e.Code).IsUnique();
+                entity.HasIndex(e => e.ExamenId);
+            });
+
+            modelBuilder.Entity<PreparationEpreuve>(entity =>
+            {
+                entity.ToTable("PreparationEpreuve");
+                entity.HasKey(e => e.Id);
+
+                entity.Property(e => e.Id).HasColumnName("id");
+                entity.Property(e => e.EleveId).HasColumnName("eleve_id");
+                entity.Property(e => e.EpreuveId).HasColumnName("epreuve_id");
+                entity.Property(e => e.MatiereId).HasColumnName("matiere_id");
+                entity.Property(e => e.NombrePreparations).HasColumnName("nombre_preparations").HasDefaultValue(0);
+                entity.Property(e => e.DernierePreparationLe).HasColumnName("derniere_preparation_le");
+                entity.Property(e => e.PretVerdict).HasMaxLength(20).HasColumnName("pret_verdict");
+                entity.Property(e => e.PretObservation).HasColumnName("pret_observation");
+                entity.Property(e => e.PretLe).HasColumnName("pret_le");
+                entity.Property(e => e.DateCreation).HasColumnName("date_creation");
+
+                entity.HasOne(e => e.Eleve)
+                      .WithMany()
+                      .HasForeignKey(e => e.EleveId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(e => e.Epreuve)
+                      .WithMany()
+                      .HasForeignKey(e => e.EpreuveId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(e => e.Matiere)
+                      .WithMany()
+                      .HasForeignKey(e => e.MatiereId)
+                      .OnDelete(DeleteBehavior.NoAction);
+
+                entity.HasIndex(e => new { e.EleveId, e.EpreuveId, e.MatiereId }).IsUnique();
+                entity.HasIndex(e => e.EpreuveId);
+                entity.HasIndex(e => e.MatiereId);
             });
         }
     }

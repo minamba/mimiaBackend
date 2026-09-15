@@ -34,6 +34,15 @@ namespace SchoolWebApp.Dal.Repositories
             return entity is null ? null : Map(entity);
         }
 
+        /// <summary>Sert à l'admin, qui pense en adresse et non en identifiant.</summary>
+        public async Task<DomainParent?> GetParentByMailAsync(string mail)
+        {
+            var entity = await _context.Parents.AsNoTracking()
+                .FirstOrDefaultAsync(p => p.Mail == mail);
+
+            return entity is null ? null : Map(entity);
+        }
+
         /// <summary>
         /// Combien de temps on laisse passer avant de renoter une venue.
         ///

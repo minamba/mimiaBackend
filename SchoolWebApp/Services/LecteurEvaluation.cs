@@ -4,12 +4,18 @@ using SchoolWebApp.Domain.Models;
 namespace SchoolWebApp.Api.Services
 {
     /// <summary>Une évaluation telle que le professeur l'a déclarée dans son message.</summary>
+    /// <param name="CorrectionReportee">
+    /// La note est donnée mais la correction orale attend le prochain cours,
+    /// faute de temps — voir <c>Evaluation.CorrectionReportee</c>. Faux par
+    /// défaut : un bloc qui ne dit rien est une correction faite sur-le-champ.
+    /// </param>
     public record EvaluationDeclaree(
         string? Notion,
         double Note,
         string? Remarque,
         string? ARevoir,
-        List<QuestionEvaluation> Questions);
+        List<QuestionEvaluation> Questions,
+        bool CorrectionReportee = false);
 
     /// <summary>
     /// Extrait le bloc [EVALUATION] d'un message du professeur.
@@ -40,12 +46,89 @@ namespace SchoolWebApp.Api.Services
             var note = LecteurBloc.Note(champs, "note");
             if (note is null) return null;
 
+            var questions = Questions(champs);
+
+            // `correction: reportee` — la note est donnée, la reprise des
+            // erreurs attend le prochain cours. Tolérant sur la forme
+            // (« reportée », « prochain cours », « plus tard »), fermé sur le
+            // fond : tout ce qui n'est pas explicitement un report compte comme
+            // une correction faite. Un doute ne doit pas rouvrir une copie à
+            // chaque cours.
+            var correction = LecteurBloc.Normaliser(LecteurBloc.Valeur(champs, "correction") ?? "");
+            var reportee = correction.Contains("report")
+                || correction.Contains("prochain")
+                || correction.Contains("plus tard");
+
             return new EvaluationDeclaree(
                 LecteurBloc.Valeur(champs, "notion"),
-                note.Value,
+                NoteCalculee(questions) ?? note.Value,
                 LecteurBloc.Valeur(champs, "remarque"),
                 LecteurBloc.Valeur(champs, "a_revoir", "arevoir"),
-                Questions(champs));
+                questions,
+                reportee);
+        }
+
+        /// <summary>
+        /// LA NOTE VIENT DES VERDICTS, JAMAIS DE CE QU'ÉCRIT LE PROFESSEUR EN
+        /// FACE DE `note:`.
+        ///
+        /// Relevé en production : une copie à deux questions fausses sur six,
+        /// « 4 juste, 2 faux » affiché noir sur blanc — notée 20 sur 20. Le
+        /// modèle avait écrit une note et des verdicts par question dans le
+        /// même bloc, sans que rien ne les rapproche l'un de l'autre ; les
+        /// deux se sont contredits, et c'est le chiffre qu'un parent regarde
+        /// en premier qui était faux.
+        ///
+        /// On calcule donc la note à partir des verdicts eux-mêmes — juste
+        /// vaut un point, partiel un demi, faux zéro, ramené sur 20 — plutôt
+        /// que de faire confiance à une arithmétique que le modèle vient de
+        /// démontrer peu fiable. Le professeur continue de DIRE une note à
+        /// l'oral ; c'est celle-ci, calculée, qui est enregistrée et qui
+        /// s'affiche sur la copie — les deux peuvent différer d'un cran sans
+        /// que personne ne l'entende, mais jamais la copie n'affichera une
+        /// note incohérente avec ses propres verdicts.
+        ///
+        /// Null — donc on retombe sur le mot du professeur — dès qu'UN SEUL
+        /// verdict manque ou n'est pas reconnu : calculer sur une question
+        /// sans verdict compterait une faute qui n'en est pas forcément une.
+        /// </summary>
+        private static double? NoteCalculee(List<QuestionEvaluation> questions)
+        {
+            if (questions.Count == 0) return null;
+
+            double poids = 0;
+            var comptees = 0;
+
+            foreach (var question in questions)
+            {
+                double? contribution = question.Verdict switch
+                {
+                    "juste" => 1.0,
+                    "partiel" => 0.5,
+                    "faux" => 0.0,
+                    _ => null,
+                };
+
+                // UNE QUESTION ILLISIBLE NE DOIT PAS EMPORTER LA NOTE ENTIERE.
+                //
+                // Le calcul renoncait des qu UN seul verdict n etait pas
+                // reconnu, et laissait alors la place au chiffre annonce par le
+                // professeur. Une evaluation de six questions dont cinq etaient
+                // parfaitement lisibles finissait donc notee a l estime. On
+                // ecarte desormais la question douteuse et on note sur les
+                // autres : mieux vaut une note assise sur cinq reponses
+                // verifiees que sur aucune.
+                if (contribution is null) continue;
+
+                poids += contribution.Value;
+                comptees++;
+            }
+
+            // Aucune question exploitable : la, et la seulement, on rend la
+            // main au chiffre du professeur.
+            if (comptees == 0) return null;
+
+            return Math.Round(20.0 * poids / comptees, 1);
         }
 
         /// <summary>
@@ -89,13 +172,32 @@ namespace SchoolWebApp.Api.Services
             var propre = Propre(brut)?.ToLowerInvariant();
             if (propre is null) return null;
 
-            if (propre.StartsWith("juste") || propre.StartsWith("correct") || propre.StartsWith("bon"))
+            // TROIS LISTES LARGES, ET C EST VOLONTAIRE.
+            //
+            // Le modele n ecrit pas toujours le mot attendu : « ok »,
+            // « reussi », « exact », « presque », « incomplet » revenaient
+            // souvent. Chacun de ces mots rendait le verdict illisible, la note
+            // calculee etait alors abandonnee, et c est le chiffre annonce par
+            // le professeur — 20, le plus souvent — qui etait enregistre.
+            // Elargir la reconnaissance, c est faire vivre le calcul.
+            if (propre.StartsWith("juste") || propre.StartsWith("correct")
+                || propre.StartsWith("bon") || propre.StartsWith("ok")
+                || propre.StartsWith("exact") || propre.StartsWith("vrai")
+                || propre.StartsWith("reussi") || propre.StartsWith("acquis")
+                || propre.StartsWith("oui"))
                 return "juste";
 
-            if (propre.StartsWith("partiel") || propre.StartsWith("moiti"))
+            if (propre.StartsWith("partiel") || propre.StartsWith("moiti")
+                || propre.StartsWith("incomplet") || propre.StartsWith("presque")
+                || propre.StartsWith("partielle") || propre.StartsWith("en partie")
+                || propre.StartsWith("approximatif") || propre.StartsWith("imprecis"))
                 return "partiel";
 
-            if (propre.StartsWith("faux") || propre.StartsWith("incorrect") || propre.StartsWith("mauvais"))
+            if (propre.StartsWith("faux") || propre.StartsWith("incorrect")
+                || propre.StartsWith("mauvais") || propre.StartsWith("non")
+                || propre.StartsWith("rate") || propre.StartsWith("erreur")
+                || propre.StartsWith("pas de reponse") || propre.StartsWith("sans reponse")
+                || propre.StartsWith("aucune"))
                 return "faux";
 
             return null;

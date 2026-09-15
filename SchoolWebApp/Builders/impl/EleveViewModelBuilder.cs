@@ -86,7 +86,7 @@ namespace SchoolWebApp.Api.Builders.impl
             var matieres = await _referentielService.GetMatieresAsync(activesSeulement: false);
 
             var siennes = matieres
-                .Where(m => VoiesScolaires.EstAuProgramme(m, niveau))
+                .Where(m => VoiesScolaires.EstAuProgramme(m, niveau, eleve.Lv2Espagnol, eleve.Specialites))
                 .ToList();
 
             return _mapper.Map<IEnumerable<MatiereViewModel>>(siennes);
@@ -102,9 +102,13 @@ namespace SchoolWebApp.Api.Builders.impl
         public async Task<EleveViewModel?> AddEleveAsync(EleveRequest model)
         {
             var niveau = await _referentielService.GetNiveauScolaireByIdAsync(model.NiveauScolaireId);
-            if (niveau is null)
+
+            // UNE CLASSE DE REGROUPEMENT NE SE CHOISIT PAS — « Terminale STMG
+            // (tronc commun) » porte des compétences, pas des élèves. Un élève
+            // créé là n'aurait aucune de ses spécialités.
+            if (niveau is null || !VoiesScolaires.EstSelectionnable(niveau.Code))
             {
-                _logger.LogWarning("Niveau scolaire {NiveauId} inexistant.", model.NiveauScolaireId);
+                _logger.LogWarning("Niveau scolaire {NiveauId} inexistant ou non selectionnable.", model.NiveauScolaireId);
                 return null;
             }
 
@@ -114,6 +118,7 @@ namespace SchoolWebApp.Api.Builders.impl
             eleve.Id = 0;
             eleve.ParentId = parent.Id;      // jamais depuis la requête
             eleve.DateCreation = DateTime.UtcNow;
+            eleve.Specialites = VoiesScolaires.SpecialitesRetenues(niveau.Code, model.Specialites);
 
             var cree = await _eleveService.AddEleveAsync(eleve);
 
@@ -130,14 +135,32 @@ namespace SchoolWebApp.Api.Builders.impl
             var existant = await _eleveService.GetEleveForParentAsync(model.Id, parent.Id);
             if (existant is null) return null;
 
+            var codeNiveau = existant.NiveauCode;
+
             if (model.NiveauScolaireId > 0)
             {
                 var niveau = await _referentielService.GetNiveauScolaireByIdAsync(model.NiveauScolaireId);
                 if (niveau is null) return null;
+
+                codeNiveau = niveau.Code;
+
+                // Une classe de regroupement ne se choisit pas. L'élève qui y
+                // est déjà — une ancienne « première technologique » sans série —
+                // peut la garder le temps que son parent précise la série.
+                if (!VoiesScolaires.EstSelectionnable(niveau.Code)
+                    && niveau.Id != existant.NiveauScolaireId)
+                {
+                    return null;
+                }
             }
 
             var eleve = _mapper.Map<DomainEleve>(model);
             eleve.ParentId = parent.Id;
+
+            // Un changement de classe rebat les cartes : les trois spécialités de
+            // première ne passent pas telles quelles en terminale, où il n'en
+            // reste que deux, ni en voie technologique, où il n'y en a aucune.
+            eleve.Specialites = VoiesScolaires.SpecialitesRetenues(codeNiveau, model.Specialites);
 
             var maj = await _eleveService.UpdateEleveAsync(eleve);
             return maj is null ? null : _mapper.Map<EleveViewModel>(maj);

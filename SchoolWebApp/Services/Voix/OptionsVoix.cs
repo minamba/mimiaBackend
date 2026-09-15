@@ -48,7 +48,51 @@ namespace SchoolWebApp.Api.Services.Voix
         /// soit une part négligeable du coût d'une séance — à condition de ne
         /// diffuser que le son utile : l'élève ne parle que 5 % du temps.
         /// </summary>
-        public string ModeleTranscription { get; set; } = "gpt-4o-mini-transcribe";
+        public string ModeleTranscription { get; set; } = "gpt-transcribe";
+
+        /// <summary>
+        /// Modèle de transcription des COURS DE LANGUE, et d'eux seuls.
+        ///
+        /// POURQUOI UN SECOND MODÈLE PLUTÔT QU'UN SEUL POUR TOUT.
+        ///
+        /// Un cours de langue est le seul où l'élève parle DEUX langues dans le
+        /// même tour : sa question en français, sa réponse en anglais. Le
+        /// modèle courant ne sait pas qu'on lui borne le choix — il n'accepte
+        /// ni `languages` ni `keywords`, et le refuse explicitement :
+        ///
+        ///   « The 'languages' parameter is not supported for this model. »
+        ///
+        /// Vérifié contre le service le 07/09/2026, ainsi que tout ce qui suit.
+        /// `gpt-transcribe`, lui, les accepte et les RETIENT — la session
+        /// renvoyée contient bien `languages: ["fr","en"]` — et il fonctionne
+        /// avec la détection de tour sémantique déjà configurée ici.
+        ///
+        /// CE MODÈLE EST DÉSORMAIS CELUI DE TOUTES LES MATIÈRES.
+        ///
+        /// Ce commentaire a longtemps conclu l'inverse — « le coût ne justifie
+        /// pas de généraliser » — au motif que borner à « français »
+        /// n'apprenait rien de plus au modèle « mini ». L'argument portait sur
+        /// les champs `languages` et `keywords` ; il ignorait la QUALITÉ DE
+        /// TRANSCRIPTION elle-même, et c'est là que tout se jouait.
+        ///
+        /// Constaté le 10/09/2026 : en anglais, une explication de trente
+        /// secondes revenait entière ; en mathématiques, sur la même durée, il
+        /// ne restait que les derniers mots. Même micro, même élève, même
+        /// séance — seul le modèle changeait. Un enfant qui raisonne à voix
+        /// haute et voit disparaître ce qu'il vient de dire cesse de raisonner
+        /// à voix haute.
+        ///
+        /// 0,0045 $/minute contre 0,003, soit une demi-fois plus cher, sur les
+        /// ~5 % d'une séance où l'élève parle vraiment : de l'ordre d'un
+        /// demi-centime par heure de cours. C'est le prix de ce qu'il dit.
+        ///
+        /// POUR REVENIR EN ARRIÈRE : poser ici la même valeur que
+        /// `ModeleTranscription`. Les champs `languages` et `keywords` ne
+        /// partent qu'aux modèles qui les acceptent (voir
+        /// <see cref="VocabulaireTranscription.AccepteLesIndicesRiches"/>),
+        /// donc aucune session n'est refusée par ce simple changement.
+        /// </summary>
+        public string ModeleTranscriptionLangues { get; set; } = "gpt-transcribe";
 
         /// <summary>
         /// Langue imposée à la transcription, en code ISO 639-1.

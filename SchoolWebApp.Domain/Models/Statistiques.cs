@@ -381,6 +381,10 @@ namespace SchoolWebApp.Domain.Models
 
         public string? NiveauLibelle { get; set; }
 
+        public int? AcademieId { get; set; }
+
+        public string? AcademieLibelle { get; set; }
+
         /// <summary>
         /// Le RANG de la classe dans l échelle scolaire, du CP à la terminale.
         ///

@@ -71,6 +71,63 @@ namespace SchoolWebApp.Api.Controllers
             }
         }
 
+        /// <summary>
+        /// L'année scolaire en cours et le libellé du badge « Programmes
+        /// officiels 2026-2027 » — PUBLIC, parce que la page d'accueil
+        /// l'affiche à côté de son titre. Calculé à chaque appel : le 1er
+        /// août prochain, le site passera à 2027-2028 tout seul. Voulu par
+        /// Camara le 13/09/2026.
+        ///
+        /// `echeancesEnRetard` ne sort qu'à titre d'information pour
+        /// l'administration ; le site n'en fait rien, et c'est voulu — on
+        /// n'affiche pas aux familles un retard interne de vérification.
+        /// </summary>
+        [HttpGet("annee-scolaire")]
+        [AllowAnonymous]
+        [SwaggerResponse(200, "L'année scolaire en cours et le libellé des programmes.")]
+        public async Task<IActionResult> GetAnneeScolaire(
+            [FromServices] Domain.Repositories.IEcheanceReferentielRepository echeances,
+            CancellationToken ct)
+        {
+            var maintenant = DateTime.UtcNow;
+
+            var enRetard = 0;
+            try { enRetard = await echeances.CompterEnRetardAsync(maintenant, ct); }
+            catch (Exception ex)
+            {
+                // Le badge ne dépend pas de la base : une panne ici ne doit
+                // pas priver la page d'accueil de son année.
+                _logger.LogWarning(ex, "Impossible de compter les echeances en retard.");
+            }
+
+            return Ok(new
+            {
+                anneeScolaire = Domain.Models.AnneeScolaire.Courante(maintenant),
+                libelle = Domain.Models.AnneeScolaire.LibelleProgrammes(maintenant),
+                echeancesEnRetard = enRetard,
+            });
+        }
+
+        /// <summary>
+        /// Les 30 académies françaises, chacune avec sa zone de vacances
+        /// scolaires. Sert le sélecteur du formulaire de création d'un
+        /// profil enfant — voir aussi « Mon calendrier ».
+        /// </summary>
+        [HttpGet("academies")]
+        [SwaggerResponse(200, "Les académies, triées.", typeof(IEnumerable<AcademieViewModel>))]
+        public async Task<IActionResult> GetAcademies()
+        {
+            try
+            {
+                return Ok(await _referentielBuilder.GetAcademiesAsync());
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Erreur lors de la recuperation des academies.");
+                return StatusCode(500, new { message = "Une erreur est survenue, veuillez réessayer." });
+            }
+        }
+
         [HttpGet("matieres")]
         [SwaggerResponse(200, "Les matières disponibles.", typeof(IEnumerable<MatiereViewModel>))]
         public async Task<IActionResult> GetMatieres([FromQuery] bool toutes = false)

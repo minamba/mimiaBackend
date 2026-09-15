@@ -19,6 +19,38 @@ namespace SchoolWebApp.Dal.Seed.Referentiels
     /// connaît son cours mais confond « le graphique montre » et « donc » perd
     /// autant de points qu'un élève qui n'a rien appris. D'où un domaine
     /// « Méthode » aussi fourni que les thèmes eux-mêmes.
+    ///
+    /// PROVENANCE DU LYCÉE — AUDIT DU 14/09/2026
+    /// ----------------------------------------
+    /// 1re : arrêté du 17/01/2019, NOR MENE1901648A, BO spécial n° 1 du
+    /// 22/01/2019, en vigueur depuis la rentrée 2019. Tle : arrêté du
+    /// 19/07/2019, NOR MENE1921252A, BO spécial n° 8 du 25/07/2019, en
+    /// vigueur depuis la rentrée 2020. Aucun texte plus récent trouvé au
+    /// 14/09/2026 : ces programmes valent en 2026-2027 et pour le bac 2027,
+    /// qui porte sur toute la terminale (MENE2323020N).
+    ///
+    /// L'audit mesurait une couverture d'environ 63 % en 1re et 52 % en Tle.
+    /// Il a conduit à :
+    ///   — AJOUTER 8 lignes de 1re (histoire humaine lue dans le génome,
+    ///     contrastes continents-océans, sismologie et convection, collision,
+    ///     risque génétique, résistance aux antibiotiques, immunothérapie)
+    ///     et 15 de Tle (clone, transferts horizontaux, dérive, ophiolites,
+    ///     toute la plante domestiquée, atténuation et adaptation, réflexe et
+    ///     synapse, cerveau fragile, cellule musculaire et ATP, stress aigu
+    ///     et chronique) ;
+    ///   — DÉPLACER, code gardé : SV_TLE_IMMU_INNEE, SV_TLE_IMMU_ADAPTATIVE,
+    ///     SV_TLE_IMMU_VIH et SV_TLE_IMMU_VACCIN passent en 1re ;
+    ///     SV_1RE_CLIMAT_PASSE, SV_1RE_CLIMAT_ACTUEL et SV_1RE_CLIMAT_MODELES
+    ///     passent en Tle. Le préfixe ment, le code ne se renomme pas : les
+    ///     maîtrises des élèves y sont rattachées ;
+    ///   — RÉÉCRIRE SV_1RE_TERRE_TECTONIQUE (le programme étudie la mobilité
+    ///     actuelle, pas l'histoire de la théorie) et SV_1RE_CORPS_IMMUNITE_ADAPT
+    ///     (doublon de SV_1RE_SANTE_IMMUNITE, recentrée sur la diversité et le
+    ///     soi) ;
+    ///   — RETIRER SV_TLE_GEN_HUMAIN (« évolution des primates ») : aucune
+    ///     occurrence de « primates », « lignée humaine » ou « Homo » dans les
+    ///     deux programmes. Le semis la rend obsolète, les maîtrises restent.
+    /// Libellés ajoutés rédigés d'après les textes, non relus par un professeur.
     /// </summary>
     public static class ReferentielSvt
     {
@@ -109,24 +141,39 @@ namespace SchoolWebApp.Dal.Seed.Referentiels
                 ("PREMIERE", "SV_1RE_GEN_MUTATIONS",  "Génétique", "Relier mutations, réparation de l'ADN et variabilité", 2),
                 ("PREMIERE", "SV_1RE_GEN_EXPRESSION", "Génétique", "Expliquer l'expression d'un gène de la transcription à la traduction", 3),
                 ("PREMIERE", "SV_1RE_GEN_PHENOTYPE",  "Génétique", "Relier génotype, phénotype et influence de l'environnement", 4),
-                ("PREMIERE", "SV_1RE_TERRE_TECTONIQUE","La dynamique interne", "Expliquer la construction de la théorie de la tectonique des plaques", 5),
+                ("PREMIERE", "SV_1RE_TERRE_TECTONIQUE","La dynamique interne", "Quantifier la mobilité horizontale des plaques : anomalies magnétiques, GPS, âge des roches, points chauds", 5),
                 ("PREMIERE", "SV_1RE_TERRE_LITHOSPHERE","La dynamique interne", "Expliquer la formation et la disparition de la lithosphère océanique", 6),
                 ("PREMIERE", "SV_1RE_TERRE_MAGMATISME","La dynamique interne", "Relier magmatisme et contexte géodynamique", 7),
-                ("PREMIERE", "SV_1RE_CLIMAT_PASSE",   "Les climats", "Reconstituer un climat passé à partir d'indicateurs", 8),
-                ("PREMIERE", "SV_1RE_CLIMAT_ACTUEL",  "Les climats", "Expliquer le réchauffement actuel et ses causes anthropiques", 9),
-                ("PREMIERE", "SV_1RE_CLIMAT_MODELES", "Les climats", "Interpréter une projection climatique et ses incertitudes", 10),
-                ("PREMIERE", "SV_1RE_ECO_FONCTIONNEMENT","Écosystèmes", "Analyser les flux de matière et d'énergie dans un écosystème", 11),
-                ("PREMIERE", "SV_1RE_ECO_SERVICES",   "Écosystèmes", "Analyser les services rendus par un écosystème et leur fragilité", 12),
-                ("PREMIERE", "SV_1RE_SANTE_MUTATION", "Corps humain et santé", "Relier une altération du génome au développement d'un cancer", 13),
-                ("PREMIERE", "SV_1RE_SANTE_VARIABILITE","Corps humain et santé", "Relier variabilité génétique et sensibilité à une maladie", 14),
-                ("PREMIERE", "SV_1RE_SANTE_IMMUNITE", "Corps humain et santé", "Décrire les acteurs et les étapes de l'immunité adaptative", 15),
-                ("PREMIERE", "SV_1RE_METH_ANALYSE",   "Méthode", "Analyser un document en distinguant résultat, interprétation et conclusion", 16),
-                ("PREMIERE", "SV_1RE_METH_MODELE",    "Méthode", "Discuter les limites d'un modèle scientifique", 17),
-                ("PREMIERE", "SV_1RE_METH_ARGUMENTER","Méthode", "Construire une argumentation reliant plusieurs documents", 18),
+                ("PREMIERE", "SV_1RE_ECO_FONCTIONNEMENT","Écosystèmes", "Analyser les flux de matière et d'énergie dans un écosystème", 8),
+                ("PREMIERE", "SV_1RE_ECO_SERVICES",   "Écosystèmes", "Analyser les services rendus par un écosystème et leur fragilité", 9),
+                ("PREMIERE", "SV_1RE_SANTE_MUTATION", "Corps humain et santé", "Relier une altération du génome au développement d'un cancer", 10),
+                ("PREMIERE", "SV_1RE_SANTE_VARIABILITE","Corps humain et santé", "Relier variabilité génétique et sensibilité à une maladie", 11),
+                ("PREMIERE", "SV_1RE_SANTE_IMMUNITE", "Corps humain et santé", "Décrire les acteurs et les étapes de l'immunité adaptative", 12),
+                ("PREMIERE", "SV_1RE_METH_ANALYSE",   "Méthode", "Analyser un document en distinguant résultat, interprétation et conclusion", 13),
+                ("PREMIERE", "SV_1RE_METH_MODELE",    "Méthode", "Discuter les limites d'un modèle scientifique", 14),
+                ("PREMIERE", "SV_1RE_METH_ARGUMENTER","Méthode", "Construire une argumentation reliant plusieurs documents", 15),
 
-                ("PREMIERE", "SV_1RE_VIV_ENZYMES", "Le vivant et son évolution", "Expliquer le rôle catalytique et la spécificité d’une enzyme", 19),
-                ("PREMIERE", "SV_1RE_CORPS_IMMUNITE_ADAPT", "Corps humain et santé", "Décrire l’immunité adaptative et la mémoire immunitaire", 20),
-                ("PREMIERE", "SV_1RE_TERRE_DIVERGENCE", "La planète Terre", "Expliquer la dynamique d’une zone de divergence", 21),
+                ("PREMIERE", "SV_1RE_VIV_ENZYMES", "Le vivant et son évolution", "Expliquer le rôle catalytique et la spécificité d’une enzyme", 16),
+                ("PREMIERE", "SV_1RE_CORPS_IMMUNITE_ADAPT", "Corps humain et santé", "Expliquer la diversité des anticorps par combinatoire et l'élimination de ce qui réagit contre le soi", 17),
+                ("PREMIERE", "SV_1RE_TERRE_DIVERGENCE", "La dynamique interne", "Expliquer la dynamique d’une zone de divergence", 18),
+
+                // Rangées en terminale jusqu'au 14/09/2026 : l'immunologie est au
+                // programme de première (MENE1901648A). Le préfixe SV_TLE_ est
+                // faux, le code est gardé : les maîtrises y sont rattachées.
+                ("PREMIERE", "SV_TLE_IMMU_INNEE",    "Corps humain et santé", "Décrire la réaction inflammatoire aiguë et ses acteurs", 19),
+                ("PREMIERE", "SV_TLE_IMMU_ADAPTATIVE","Corps humain et santé", "Expliquer la sélection clonale et la mémoire immunitaire", 20),
+                ("PREMIERE", "SV_TLE_IMMU_VIH",      "Corps humain et santé", "Expliquer l'effet du VIH sur le système immunitaire", 21),
+                ("PREMIERE", "SV_TLE_IMMU_VACCIN",   "Corps humain et santé", "Expliquer l'action d'un vaccin et d'un rappel, et l'intérêt collectif de la couverture vaccinale", 22),
+
+                // Compléments de l'audit du 14/09/2026 (MENE1901648A).
+                ("PREMIERE", "SV_1RE_GEN_HISTOIRE",        "Génétique", "Relier la diversité allélique des génomes humains à l'histoire des populations humaines", 23),
+                ("PREMIERE", "SV_1RE_TERRE_CONTRASTES",    "La dynamique interne", "Expliquer les contrastes d'altitude et de composition entre croûte continentale et croûte océanique", 24),
+                ("PREMIERE", "SV_1RE_TERRE_SISMOLOGIE",    "La dynamique interne", "Déduire la structure interne du globe des ondes sismiques et du gradient géothermique", 25),
+                ("PREMIERE", "SV_1RE_TERRE_CONVECTION",    "La dynamique interne", "Relier la mobilité des plaques à la convection du manteau et à la densité de la lithosphère", 26),
+                ("PREMIERE", "SV_1RE_TERRE_COLLISION",     "La dynamique interne", "Relier raccourcissement, empilement et épaississement de la croûte dans une zone de collision", 27),
+                ("PREMIERE", "SV_1RE_SANTE_MONOGENIQUE",   "Corps humain et santé", "Estimer un risque génétique à partir d'un arbre généalogique et citer le principe d'une thérapie génique", 28),
+                ("PREMIERE", "SV_1RE_SANTE_ANTIBIOTIQUES", "Corps humain et santé", "Expliquer la sélection de bactéries résistantes par l'usage des antibiotiques", 29),
+                ("PREMIERE", "SV_1RE_IMMU_IMMUNOTHERAPIE", "Corps humain et santé", "Distinguer vaccination préventive et immunothérapie : vaccins thérapeutiques, anticorps monoclonaux", 30),
 
                 // --- Terminale : spécialité ---
                 ("TERMINALE", "SV_TLE_GEN_MEIOSE",    "Génétique et évolution", "Expliquer le brassage génétique lors de la méiose et de la fécondation", 1),
@@ -134,21 +181,40 @@ namespace SchoolWebApp.Dal.Seed.Referentiels
                 ("TERMINALE", "SV_TLE_GEN_DIVERSIFICATION","Génétique et évolution", "Expliquer la diversification du vivant sans modification du génome", 3),
                 ("TERMINALE", "SV_TLE_GEN_ESPECE",    "Génétique et évolution", "Discuter la notion d'espèce et le mécanisme de spéciation", 4),
                 ("TERMINALE", "SV_TLE_GEN_POPULATION","Génétique et évolution", "Exploiter le modèle de Hardy-Weinberg pour repérer une évolution", 5),
-                ("TERMINALE", "SV_TLE_GEN_HUMAIN",    "Génétique et évolution", "Situer l'humain dans l'évolution des primates", 6),
-                ("TERMINALE", "SV_TLE_TERRE_ARCHIVES","Le passé de la Terre", "Dater un événement géologique par les méthodes relative et absolue", 7),
-                ("TERMINALE", "SV_TLE_TERRE_CHAINES", "Le passé de la Terre", "Reconstituer l'histoire d'une chaîne de montagnes", 8),
-                ("TERMINALE", "SV_TLE_TERRE_ATMOSPHERE","Le passé de la Terre", "Retracer l'évolution de l'atmosphère et du climat à long terme", 9),
-                ("TERMINALE", "SV_TLE_IMMU_INNEE",    "Immunologie", "Décrire la réaction inflammatoire aiguë et ses acteurs", 10),
-                ("TERMINALE", "SV_TLE_IMMU_ADAPTATIVE","Immunologie", "Expliquer la sélection clonale et la mémoire immunitaire", 11),
-                ("TERMINALE", "SV_TLE_IMMU_VIH",      "Immunologie", "Expliquer l'effet du VIH sur le système immunitaire", 12),
-                ("TERMINALE", "SV_TLE_IMMU_VACCIN",   "Immunologie", "Expliquer l'action d'un vaccin et d'un rappel", 13),
-                ("TERMINALE", "SV_TLE_CORPS_MOUVEMENT","Corps humain et santé", "Relier commande nerveuse, contraction musculaire et effort", 14),
-                ("TERMINALE", "SV_TLE_CORPS_CERVEAU", "Corps humain et santé", "Expliquer la plasticité cérébrale et ses conséquences", 15),
-                ("TERMINALE", "SV_TLE_CORPS_GLYCEMIE","Corps humain et santé", "Expliquer la régulation de la glycémie et le diabète", 16),
-                ("TERMINALE", "SV_TLE_ECO_CLIMAT",    "Écosystèmes et climat", "Analyser les conséquences du changement climatique sur les écosystèmes", 17),
-                ("TERMINALE", "SV_TLE_METH_SYNTHESE", "Méthode", "Rédiger une synthèse argumentée en temps limité", 18),
-                ("TERMINALE", "SV_TLE_METH_PRATIQUE", "Méthode", "Concevoir et réaliser un protocole pour l'épreuve pratique", 19),
-                ("TERMINALE", "SV_TLE_METH_CRITIQUE", "Méthode", "Discuter la portée et les limites d'un résultat expérimental", 20),
+                ("TERMINALE", "SV_TLE_TERRE_ARCHIVES","Le passé de la Terre", "Dater un événement géologique par les méthodes relative et absolue", 6),
+                ("TERMINALE", "SV_TLE_TERRE_CHAINES", "Le passé de la Terre", "Reconstituer l'histoire d'une chaîne de montagnes", 7),
+                ("TERMINALE", "SV_TLE_TERRE_ATMOSPHERE","Le passé de la Terre", "Retracer l'évolution de l'atmosphère et du climat à long terme", 8),
+                ("TERMINALE", "SV_TLE_CORPS_MOUVEMENT","Corps humain et santé", "Relier commande nerveuse, contraction musculaire et effort", 9),
+                ("TERMINALE", "SV_TLE_CORPS_CERVEAU", "Corps humain et santé", "Expliquer la plasticité cérébrale et ses conséquences", 10),
+                ("TERMINALE", "SV_TLE_CORPS_GLYCEMIE","Corps humain et santé", "Expliquer la régulation de la glycémie et le diabète", 11),
+                ("TERMINALE", "SV_TLE_ECO_CLIMAT",    "Les climats", "Analyser les conséquences du changement climatique sur les écosystèmes", 12),
+                ("TERMINALE", "SV_TLE_METH_SYNTHESE", "Méthode", "Rédiger une synthèse argumentée en temps limité", 13),
+                ("TERMINALE", "SV_TLE_METH_PRATIQUE", "Méthode", "Concevoir et réaliser un protocole pour l'épreuve pratique", 14),
+                ("TERMINALE", "SV_TLE_METH_CRITIQUE", "Méthode", "Discuter la portée et les limites d'un résultat expérimental", 15),
+
+                // Rangées en première jusqu'au 14/09/2026 : les climats sont au
+                // programme de terminale (MENE1921252A). Le préfixe SV_1RE_ est
+                // faux, le code est gardé : les maîtrises y sont rattachées.
+                ("TERMINALE", "SV_1RE_CLIMAT_PASSE",   "Les climats", "Reconstituer les variations climatiques passées par des indices, du Quaternaire au Paléozoïque, et en discuter les causes", 16),
+                ("TERMINALE", "SV_1RE_CLIMAT_ACTUEL",  "Les climats", "Expliquer le réchauffement actuel et ses causes anthropiques", 17),
+                ("TERMINALE", "SV_1RE_CLIMAT_MODELES", "Les climats", "Interpréter une projection climatique et ses incertitudes", 18),
+
+                // Compléments de l'audit du 14/09/2026 (MENE1921252A).
+                ("TERMINALE", "SV_TLE_GEN_CLONE",            "Génétique et évolution", "Expliquer la stabilité génétique d'un clone et sa diversification par mutations", 19),
+                ("TERMINALE", "SV_TLE_GEN_TRANSFERTS",       "Génétique et évolution", "Expliquer la complexification des génomes par transferts horizontaux et endosymbioses", 20),
+                ("TERMINALE", "SV_TLE_GEN_DERIVE",           "Génétique et évolution", "Distinguer sélection naturelle et dérive génétique dans l'évolution d'une population", 21),
+                ("TERMINALE", "SV_TLE_TERRE_OPHIOLITES",     "Le passé de la Terre", "Interpréter ophiolites et marges passives comme traces d'océans disparus et de fragmentation continentale", 22),
+                ("TERMINALE", "SV_TLE_PLANTE_ORGANISATION",  "De la plante sauvage à la plante domestiquée", "Relier l'organisation d'une plante à fleurs à sa vie fixée : surfaces d'échange, tissus conducteurs, croissance", 23),
+                ("TERMINALE", "SV_TLE_PLANTE_PHOTOSYNTHESE", "De la plante sauvage à la plante domestiquée", "Expliquer la production de matière organique par la photosynthèse et son devenir dans la plante", 24),
+                ("TERMINALE", "SV_TLE_PLANTE_REPRODUCTION",  "De la plante sauvage à la plante domestiquée", "Expliquer la reproduction asexuée et sexuée des plantes, la pollinisation et la dispersion des graines", 25),
+                ("TERMINALE", "SV_TLE_PLANTE_DOMESTICATION", "De la plante sauvage à la plante domestiquée", "Expliquer la domestication d'une plante par la sélection et les techniques d'amélioration", 26),
+                ("TERMINALE", "SV_TLE_CLIMAT_ACTIONS",       "Les climats", "Évaluer des stratégies d'atténuation et d'adaptation face au réchauffement climatique", 27),
+                ("TERMINALE", "SV_TLE_NERF_REFLEXE",         "Corps humain et santé", "Décrire l'arc réflexe, le potentiel d'action et la transmission synaptique", 28),
+                ("TERMINALE", "SV_TLE_NERF_CERVEAU_FRAGILE", "Corps humain et santé", "Expliquer comment des substances exogènes perturbent la communication entre neurones", 29),
+                ("TERMINALE", "SV_TLE_MUSCLE_CELLULE",       "Corps humain et santé", "Relier le raccourcissement de la cellule musculaire à la myosine, aux ions calcium et à l'ATP", 30),
+                ("TERMINALE", "SV_TLE_MUSCLE_ATP",           "Corps humain et santé", "Expliquer l'origine de l'ATP : respiration cellulaire et voie anaérobie", 31),
+                ("TERMINALE", "SV_TLE_STRESS_AIGU",          "Corps humain et santé", "Expliquer la réponse rapide puis hormonale de l'organisme à un stress aigu", 32),
+                ("TERMINALE", "SV_TLE_STRESS_CHRONIQUE",     "Corps humain et santé", "Expliquer les effets d'un stress chronique sur l'organisme et les moyens d'y faire face", 33),
             };
 
         /// <summary>
@@ -231,14 +297,16 @@ namespace SchoolWebApp.Dal.Seed.Referentiels
                 ("SV_1RE_TERRE_LITHOSPHERE", "SV_4E_TERRE_PLAQUES",      3),
                 ("SV_1RE_TERRE_TECTONIQUE",  "SV_4E_TERRE_TECTONIQUE",   3),
                 ("SV_1RE_TERRE_MAGMATISME",  "SV_1RE_TERRE_LITHOSPHERE", 3),
-                ("SV_1RE_CLIMAT_ACTUEL",     "SV_3E_TERRE_CLIMAT",       3),
-                ("SV_1RE_CLIMAT_PASSE",      "SV_3E_TERRE_PASSE",        3),
-                ("SV_1RE_CLIMAT_MODELES",    "SV_2DE_METH_STATISTIQUE",  3),
                 ("SV_1RE_ECO_FONCTIONNEMENT","SV_2DE_VIV_ECOSYSTEME",    3),
                 ("SV_1RE_ECO_SERVICES",      "SV_2DE_VIV_AGROSYSTEME",   3),
                 ("SV_1RE_SANTE_MUTATION",    "SV_1RE_GEN_MUTATIONS",     3),
                 ("SV_1RE_SANTE_VARIABILITE", "SV_1RE_GEN_PHENOTYPE",     3),
                 ("SV_1RE_SANTE_IMMUNITE",    "SV_3E_CORPS_IMMUNITE",     3),
+                // Codes SV_TLE_IMMU_* : rangés en première depuis le 14/09/2026.
+                ("SV_TLE_IMMU_ADAPTATIVE",   "SV_1RE_SANTE_IMMUNITE",    3),
+                ("SV_TLE_IMMU_INNEE",        "SV_3E_CORPS_IMMUNITE",     3),
+                ("SV_TLE_IMMU_VIH",          "SV_TLE_IMMU_ADAPTATIVE",   3),
+                ("SV_TLE_IMMU_VACCIN",       "SV_TLE_IMMU_ADAPTATIVE",   3),
                 ("SV_1RE_METH_ANALYSE",      "SV_2DE_METH_DOCUMENT",     3),
                 ("SV_1RE_METH_ARGUMENTER",   "SV_2DE_METH_REDIGER",      3),
                 ("SV_1RE_METH_MODELE",       "SV_2DE_METH_DEMARCHE",     2),
@@ -250,14 +318,13 @@ namespace SchoolWebApp.Dal.Seed.Referentiels
                 ("SV_TLE_GEN_DIVERSIFICATION","SV_1RE_GEN_PHENOTYPE",    3),
                 ("SV_TLE_GEN_ESPECE",        "SV_2DE_VIV_BIODIVERSITE",  3),
                 ("SV_TLE_GEN_POPULATION",    "SV_TLE_GEN_MEIOSE",        3),
-                ("SV_TLE_GEN_HUMAIN",        "SV_TLE_GEN_ESPECE",        2),
                 ("SV_TLE_TERRE_ARCHIVES",    "SV_2DE_TERRE_HISTOIRE",    3),
                 ("SV_TLE_TERRE_CHAINES",     "SV_1RE_TERRE_MAGMATISME",  3),
+                // Codes SV_1RE_CLIMAT_* : rangés en terminale depuis le 14/09/2026.
+                ("SV_1RE_CLIMAT_ACTUEL",     "SV_3E_TERRE_CLIMAT",       3),
+                ("SV_1RE_CLIMAT_PASSE",      "SV_3E_TERRE_PASSE",        3),
+                ("SV_1RE_CLIMAT_MODELES",    "SV_2DE_METH_STATISTIQUE",  3),
                 ("SV_TLE_TERRE_ATMOSPHERE",  "SV_1RE_CLIMAT_PASSE",      3),
-                ("SV_TLE_IMMU_ADAPTATIVE",   "SV_1RE_SANTE_IMMUNITE",    3),
-                ("SV_TLE_IMMU_INNEE",        "SV_3E_CORPS_IMMUNITE",     3),
-                ("SV_TLE_IMMU_VIH",          "SV_TLE_IMMU_ADAPTATIVE",   3),
-                ("SV_TLE_IMMU_VACCIN",       "SV_TLE_IMMU_ADAPTATIVE",   3),
                 ("SV_TLE_CORPS_MOUVEMENT",   "SV_4E_CORPS_SYSTEME_NERVEUX",3),
                 ("SV_TLE_CORPS_CERVEAU",     "SV_TLE_CORPS_MOUVEMENT",   2),
                 ("SV_TLE_CORPS_GLYCEMIE",    "SV_3E_CORPS_HORMONES",     3),

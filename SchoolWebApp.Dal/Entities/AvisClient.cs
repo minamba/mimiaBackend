@@ -26,10 +26,11 @@ namespace SchoolWebApp.Dal.Entities
     ///
     /// CE QUI N'EST PAS STOCKÉ ICI
     /// ---------------------------
-    /// Le nom affiché. Il est dérivé du parent à la lecture — prénom et
-    /// initiale — pour qu'un changement de nom ou une suppression de compte
-    /// emporte l'affichage avec lui. Le recopier ici en ferait une donnée
-    /// personnelle de plus, dupliquée, qu'un effacement oublierait.
+    /// Le nom affiché. Il est dérivé à la lecture — du parent, ou de
+    /// l'enfant désigné par <see cref="EleveId"/> — pour qu'un changement de
+    /// prénom ou une suppression de compte emporte l'affichage avec lui. Le
+    /// recopier ici en ferait une donnée personnelle de plus, dupliquée,
+    /// qu'un effacement oublierait.
     /// </summary>
     public partial class AvisClient
     {
@@ -54,6 +55,24 @@ namespace SchoolWebApp.Dal.Entities
         /// <summary>Visible sur la page d'accueil. Faux tant qu'il n'a pas été relu.</summary>
         public bool Publie { get; set; }
 
+        /// <summary>
+        /// Renseigné si c'est un enfant, avec son propre code, qui a déposé
+        /// CETTE version de l'avis — null si c'est le parent. L'avis reste
+        /// celui du foyer dans les deux cas (voir `AvisController.Executer`),
+        /// mais la signature affichée reprend le prénom de CET enfant plutôt
+        /// que celui du parent : « Bilal (Étudiant) », pas « Minamba
+        /// (Étudiant) » alors que c'est Bilal qui a écrit.
+        ///
+        /// PREMIÈRE VERSION SANS CE CHAMP : un simple booléen suffisait tant
+        /// qu'on ne montrait que le rôle. Mais un foyer a plusieurs enfants,
+        /// et le prénom AFFICHÉ doit être celui qui a vraiment tenu la
+        /// plume — pas un « Étudiant » anonyme sous le prénom du parent, ni
+        /// un enfant au hasard.
+        /// </summary>
+        public int? EleveId { get; set; }
+
         public virtual Parent? Parent { get; set; }
+
+        public virtual Eleve? Eleve { get; set; }
     }
 }

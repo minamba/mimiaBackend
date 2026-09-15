@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SchoolWebApp.Api.Services.Notifications;
 using SchoolWebApp.Domain.Services;
 
 namespace SchoolWebApp.Api.Controllers
@@ -47,11 +48,14 @@ namespace SchoolWebApp.Api.Controllers
         private const int LongueurIdentifiant = 36;
 
         private readonly IAdminService _adminService;
+        private readonly IEvenementsAdminHub _evenementsAdmin;
         private readonly ILogger<VisitesController> _logger;
 
-        public VisitesController(IAdminService adminService, ILogger<VisitesController> logger)
+        public VisitesController(
+            IAdminService adminService, IEvenementsAdminHub evenementsAdmin, ILogger<VisitesController> logger)
         {
             _adminService = adminService ?? throw new ArgumentNullException(nameof(adminService));
+            _evenementsAdmin = evenementsAdmin ?? throw new ArgumentNullException(nameof(evenementsAdmin));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
@@ -68,7 +72,14 @@ namespace SchoolWebApp.Api.Controllers
 
             try
             {
-                await _adminService.EnregistrerVisiteAsync(visiteur);
+                var nouvelle = await _adminService.EnregistrerVisiteAsync(visiteur);
+
+                // SEULEMENT SUR UNE VRAIE NOUVELLE LIGNE. Le dépôt écarte en
+                // silence un visiteur déjà vu dans l'heure — le publier quand
+                // même ferait clignoter l'onglet « Fréquentation » à chaque
+                // rechargement d'une page d'accueil, pour rien de nouveau à
+                // montrer.
+                if (nouvelle) _evenementsAdmin.Publier("visite");
             }
             catch (Exception ex)
             {

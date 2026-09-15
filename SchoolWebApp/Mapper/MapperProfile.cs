@@ -19,10 +19,13 @@ namespace SchoolWebApp.Api.Mapper
                 .ForMember(dest => dest.DerniereActivite, opt => opt.Ignore())
                 .ForMember(dest => dest.NiveauCode, opt => opt.Ignore())
                 .ForMember(dest => dest.NiveauLibelle, opt => opt.Ignore())
-                .ForMember(dest => dest.NiveauCycle, opt => opt.Ignore());
+                .ForMember(dest => dest.NiveauCycle, opt => opt.Ignore())
+                .ForMember(dest => dest.AcademieLibelle, opt => opt.Ignore())
+                .ForMember(dest => dest.Zone, opt => opt.Ignore());
 
             CreateMap<NiveauScolaire, NiveauScolaireViewModel>();
             CreateMap<Matiere, MatiereViewModel>();
+            CreateMap<Academie, AcademieViewModel>();
 
             CreateMap<Conversation, ConversationViewModel>();
             CreateMap<Message, MessageViewModel>();

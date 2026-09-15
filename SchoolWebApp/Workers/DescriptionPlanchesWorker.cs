@@ -930,6 +930,18 @@ namespace SchoolWebApp.Api.Workers
                 ["ALLEMAND"] = "allemand",
                 ["ITALIEN"] = "italien",
                 ["CHINOIS"] = "chinois",
+
+                // LES SPÉCIALITÉS DE LANGUE (14/09/2026), ajoutées avec leurs
+                // emplacements de planches. Sans elles, une carte de l'Empire
+                // britannique légendée en anglais importée sous « AMC », ou une
+                // carte d'Al-Andalus en espagnol sous « LLCER_ESPAGNOL », serait
+                // marquée langue étrangère et cachée au professeur — pour
+                // l'élève qui étudie justement cette langue.
+                ["LLCER_ANGLAIS"] = "anglais",
+                ["AMC"] = "anglais",
+                ["LLCER_ESPAGNOL"] = "espagnol",
+                ["LLCA_LATIN"] = "latin",
+                ["LLCA_GREC"] = "grec",
             };
 
         /// <summary>

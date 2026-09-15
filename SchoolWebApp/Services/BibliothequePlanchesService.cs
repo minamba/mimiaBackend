@@ -82,7 +82,9 @@ namespace SchoolWebApp.Api.Services
             // GetToutesAsync ne charge pas les octets : on lit trente titres,
             // pas trente mégaoctets.
             var planches = (await _planches.GetToutesAsync(ct))
-                .Where(p => string.Equals(p.MatiereCode, code, StringComparison.OrdinalIgnoreCase))
+                // Les siennes, et celles qu'elle emprunte clé par clé à une
+                // autre matière — voir `EmpruntsDePlanches`.
+                .Where(p => EmpruntsDePlanches.EstServie(p.Cle, p.MatiereCode, code))
                 .Where(p => !string.IsNullOrWhiteSpace(p.Contenu))
                 // Une planche sans légende lisible est marquée en base pour ne
                 // plus repasser au worker. Elle n'a rien à dire au professeur.
@@ -115,6 +117,14 @@ namespace SchoolWebApp.Api.Services
             if (string.IsNullOrWhiteSpace(matiereCode)) return;
 
             _cache.Remove($"planches:bloc:{matiereCode.Trim().ToUpperInvariant()}");
+
+            // Une planche de SVT réimportée change aussi le bloc des matières qui
+            // l'empruntent : sans ça, la biologie de ST2S garderait cinq minutes
+            // l'ancienne liste de légendes. Quatre matières, quatre suppressions.
+            foreach (var emprunteuse in EmpruntsDePlanches.ParMatiere.Keys)
+            {
+                _cache.Remove($"planches:bloc:{emprunteuse.ToUpperInvariant()}");
+            }
         }
 
         /// <summary>

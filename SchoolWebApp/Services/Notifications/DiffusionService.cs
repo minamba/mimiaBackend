@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text;
+using System.Text.RegularExpressions;
 using SchoolWebApp.Domain.Emails;
 using SchoolWebApp.Domain.Repositories;
 
@@ -45,6 +46,14 @@ namespace SchoolWebApp.Api.Services.Notifications
         string ComposerPiecesJointes(IReadOnlyList<string> nomsFichiers);
 
         /// <summary>
+        /// La mention de pied commune à la diffusion et au message à un
+        /// parent : le lien vers le site est déjà dans l'enveloppe commune à
+        /// tous les mails, celle-ci ajoute le rappel qu'on peut écrire au
+        /// support.
+        /// </summary>
+        string ComposerMentionPied();
+
+        /// <summary>
         /// Lance la diffusion en arrière-plan. Faux si une autre est déjà en
         /// cours — deux diffusions simultanées écriraient deux fois à tout le
         /// monde.
@@ -75,6 +84,16 @@ namespace SchoolWebApp.Api.Services.Notifications
     /// </summary>
     public class DiffusionService : IDiffusionService
     {
+        /// <summary>
+        /// `**gras**`, comme dans un carnet Markdown.
+        ///
+        /// L'éditeur reste du texte — voir `ComposerCorps` — mais deux
+        /// astérisques pour obtenir du gras est un geste que la plupart des
+        /// administrateurs connaissent déjà (Slack, WhatsApp), sans qu'aucun
+        /// HTML de leur cru n'entre jamais dans le message.
+        /// </summary>
+        private static readonly Regex Gras = new(@"\*\*(.+?)\*\*", RegexOptions.Compiled);
+
         private readonly IServiceScopeFactory _scopes;
         private readonly ILogger<DiffusionService> _logger;
 
@@ -139,6 +158,12 @@ namespace SchoolWebApp.Api.Services.Notifications
             {
                 var contenu = WebUtility.HtmlEncode(bloc.Trim()).Replace("\n", "<br>");
 
+                // LE GRAS, RÉINTRODUIT APRÈS L'ÉCHAPPEMENT LUI AUSSI.
+                //
+                // `**` ne fait partie d'aucune syntaxe HTML : l'appliquer sur
+                // le texte déjà échappé ne risque pas de rouvrir une balise.
+                contenu = Gras.Replace(contenu, "<strong>$1</strong>");
+
                 // LES MARQUEURS D'IMAGE, RÉINTRODUITS APRÈS L'ÉCHAPPEMENT.
                 //
                 // `[image:1]` devient une image liée par son identifiant. Le
@@ -158,6 +183,18 @@ namespace SchoolWebApp.Api.Services.Notifications
 
             return sb.ToString();
         }
+
+        /// <summary>
+        /// LE LIEN DU SITE EST DÉJÀ DANS L'ENVELOPPE — voir `enveloppe.html`,
+        /// qui porte `mimia.fr` en pied sur TOUS les mails, celui-ci compris.
+        /// Ce qui manquait à une diffusion ou un message ciblé, c'est
+        /// l'adresse du support pour qui a une question suite au message.
+        /// </summary>
+        public string ComposerMentionPied() =>
+            "Vous recevez ce message parce que vous avez un compte Mimia. "
+            + "Une question ? Écrivez-nous à "
+            + "<a href=\"mailto:support@mimia.fr\" style=\"color:#a5abb8; text-decoration:underline;\">"
+            + "support@mimia.fr</a>.";
 
         public string ComposerPiecesJointes(IReadOnlyList<string> nomsFichiers)
         {
@@ -252,6 +289,7 @@ namespace SchoolWebApp.Api.Services.Notifications
                     ["corpsMessage"] = ComposerCorps(texte, images.Count),
                     ["blocPiecesJointes"] =
                         ComposerPiecesJointes(documents.Select(d => d.NomFichier).ToList()),
+                    ["mentionPied"] = ComposerMentionPied(),
                 };
 
                 var avancement = new Progress<int>(n =>

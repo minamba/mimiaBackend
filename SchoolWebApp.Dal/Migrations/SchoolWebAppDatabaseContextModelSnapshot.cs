@@ -128,6 +128,41 @@ namespace SchoolWebApp.Dal.Migrations
                     b.ToTable("Abonnement", (string)null);
                 });
 
+            modelBuilder.Entity("SchoolWebApp.Dal.Entities.Academie", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasColumnName("id");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)")
+                        .HasColumnName("code");
+
+                    b.Property<string>("Libelle")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)")
+                        .HasColumnName("libelle");
+
+                    b.Property<string>("Zone")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)")
+                        .HasColumnName("zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique();
+
+                    b.ToTable("Academie", (string)null);
+                });
+
             modelBuilder.Entity("SchoolWebApp.Dal.Entities.AppelClaude", b =>
                 {
                     b.Property<int>("Id")
@@ -180,6 +215,147 @@ namespace SchoolWebApp.Dal.Migrations
                     b.ToTable("AppelClaude", (string)null);
                 });
 
+            modelBuilder.Entity("SchoolWebApp.Dal.Entities.AvisClient", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasColumnName("id");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Commentaire")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)")
+                        .HasColumnName("commentaire");
+
+                    b.Property<DateTime>("DateCreation")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("date_creation");
+
+                    b.Property<DateTime?>("DateModification")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("date_modification");
+
+                    b.Property<int?>("EleveId")
+                        .HasColumnType("int")
+                        .HasColumnName("eleve_id");
+
+                    b.Property<int>("Note")
+                        .HasColumnType("int")
+                        .HasColumnName("note");
+
+                    b.Property<int>("ParentId")
+                        .HasColumnType("int")
+                        .HasColumnName("parent_id");
+
+                    b.Property<bool>("Publie")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false)
+                        .HasColumnName("publie");
+
+                    b.Property<string>("Titre")
+                        .HasMaxLength(120)
+                        .HasColumnType("nvarchar(120)")
+                        .HasColumnName("titre");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EleveId");
+
+                    b.HasIndex("ParentId")
+                        .IsUnique();
+
+                    b.HasIndex("Publie", "DateCreation");
+
+                    b.ToTable("AvisClient", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_AvisClient_note", "[note] >= 1 AND [note] <= 5");
+                        });
+                });
+
+            modelBuilder.Entity("SchoolWebApp.Dal.Entities.BandeauPromo", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasColumnName("id");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("Actif")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false)
+                        .HasColumnName("actif");
+
+                    b.Property<DateTime>("DateCreation")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("date_creation");
+
+                    b.Property<DateTime?>("DateModification")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("date_modification");
+
+                    b.Property<byte[]>("ImageLarge")
+                        .IsRequired()
+                        .HasColumnType("varbinary(max)")
+                        .HasColumnName("image_large");
+
+                    b.Property<byte[]>("ImageMobile")
+                        .HasColumnType("varbinary(max)")
+                        .HasColumnName("image_mobile");
+
+                    b.Property<string>("Lien")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)")
+                        .HasColumnName("lien");
+
+                    b.Property<bool>("PleineLargeur")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false)
+                        .HasColumnName("pleine_largeur");
+
+                    b.Property<int>("TailleLarge")
+                        .HasColumnType("int")
+                        .HasColumnName("taille_large");
+
+                    b.Property<int>("TailleMobile")
+                        .HasColumnType("int")
+                        .HasColumnName("taille_mobile");
+
+                    b.Property<string>("TexteAlternatif")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)")
+                        .HasColumnName("texte_alternatif");
+
+                    b.Property<string>("Titre")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("nvarchar(120)")
+                        .HasColumnName("titre");
+
+                    b.Property<string>("TypeMimeLarge")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)")
+                        .HasColumnName("type_mime_large");
+
+                    b.Property<string>("TypeMimeMobile")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)")
+                        .HasColumnName("type_mime_mobile");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Actif");
+
+                    b.ToTable("BandeauPromo", (string)null);
+                });
+
             modelBuilder.Entity("SchoolWebApp.Dal.Entities.Competence", b =>
                 {
                     b.Property<int>("Id")
@@ -198,6 +374,28 @@ namespace SchoolWebApp.Dal.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)")
                         .HasColumnName("code_eduscol");
+
+                    b.Property<DateTime?>("DateDebutValidite")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("date_debut_validite");
+
+                    b.Property<bool>("Actif")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true)
+                        .HasColumnName("actif");
+
+                    b.Property<DateTime?>("DateFinValidite")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("date_fin_validite");
+
+                    b.Property<DateTime?>("DateCreation")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("date_creation");
+
+                    b.Property<DateTime?>("DateModification")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("date_modification");
 
                     b.Property<string>("Description")
                         .HasMaxLength(2000)
@@ -237,6 +435,301 @@ namespace SchoolWebApp.Dal.Migrations
                     b.HasIndex("MatiereId", "NiveauScolaireId");
 
                     b.ToTable("Competence", (string)null);
+                });
+
+            modelBuilder.Entity("SchoolWebApp.Dal.Entities.EcheanceReferentiel", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasColumnName("id");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("DateConnue")
+                        .HasColumnType("bit")
+                        .HasColumnName("date_connue");
+
+                    b.Property<DateTime>("DateCreation")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("date_creation");
+
+                    b.Property<DateTime>("DateEcheance")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("date_echeance");
+
+                    b.Property<DateTime?>("DerniereAlerteLe")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("derniere_alerte_le");
+
+                    b.Property<string>("DernierHashPage")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)")
+                        .HasColumnName("dernier_hash_page");
+
+                    b.Property<DateTime?>("DernierePageVerifieeLe")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("derniere_page_verifiee_le");
+
+                    b.Property<string>("DernierStatutVeille")
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)")
+                        .HasColumnName("dernier_statut_veille");
+
+                    b.Property<bool>("Sentinelle")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false)
+                        .HasColumnName("sentinelle");
+
+                    b.Property<string>("MatieresCodes")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)")
+                        .HasColumnName("matieres_codes");
+
+                    b.Property<string>("NiveauxCodes")
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)")
+                        .HasColumnName("niveaux_codes");
+
+                    b.Property<string>("MatiereLibelle")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)")
+                        .HasColumnName("matiere_libelle");
+
+                    b.Property<string>("NiveauxConcernes")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)")
+                        .HasColumnName("niveaux_concernes");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)")
+                        .HasColumnName("notes");
+
+                    b.Property<string>("TexteOfficiel")
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)")
+                        .HasColumnName("texte_officiel");
+
+                    b.Property<DateTime?>("TraiteeLe")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("traitee_le");
+
+                    b.Property<string>("Url")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)")
+                        .HasColumnName("url");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TraiteeLe", "DateEcheance")
+                        .HasDatabaseName("IX_EcheanceReferentiel_traitee_le_date_echeance");
+
+                    b.ToTable("EcheanceReferentiel", (string)null);
+                });
+
+            modelBuilder.Entity("SchoolWebApp.Dal.Entities.Examen", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasColumnName("id");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("Actif")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true)
+                        .HasColumnName("actif");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("nvarchar(40)")
+                        .HasColumnName("code");
+
+                    b.Property<DateTime>("DateCreation")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("date_creation");
+
+                    b.Property<string>("Libelle")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)")
+                        .HasColumnName("libelle");
+
+                    b.Property<string>("NiveauxCodes")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)")
+                        .HasColumnName("niveaux_codes");
+
+                    b.Property<int>("Session")
+                        .HasColumnType("int")
+                        .HasColumnName("session");
+
+                    b.Property<string>("Source")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)")
+                        .HasColumnName("source");
+
+                    b.Property<string>("TitreSection")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("nvarchar(120)")
+                        .HasColumnName("titre_section");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique();
+
+                    b.ToTable("Examen", (string)null);
+                });
+
+            modelBuilder.Entity("SchoolWebApp.Dal.Entities.EpreuveExamen", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasColumnName("id");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("nvarchar(60)")
+                        .HasColumnName("code");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)")
+                        .HasColumnName("description");
+
+                    b.Property<string>("DomainesExclus")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)")
+                        .HasColumnName("domaines_exclus");
+
+                    b.Property<string>("DomainesInclus")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)")
+                        .HasColumnName("domaines_inclus");
+
+                    b.Property<int>("ExamenId")
+                        .HasColumnType("int")
+                        .HasColumnName("examen_id");
+
+                    b.Property<string>("Libelle")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("nvarchar(120)")
+                        .HasColumnName("libelle");
+
+                    b.Property<string>("MatieresCodes")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)")
+                        .HasColumnName("matieres_codes");
+
+                    b.Property<string>("NiveauxProgrammeCodes")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)")
+                        .HasColumnName("niveaux_programme_codes");
+
+                    b.Property<int>("Ordre")
+                        .HasColumnType("int")
+                        .HasColumnName("ordre");
+
+                    b.Property<string>("Remarque")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)")
+                        .HasColumnName("remarque");
+
+                    b.Property<string>("SpecialiteExclue")
+                        .HasMaxLength(40)
+                        .HasColumnType("nvarchar(40)")
+                        .HasColumnName("specialite_exclue");
+
+                    b.Property<string>("SpecialiteRequise")
+                        .HasMaxLength(40)
+                        .HasColumnType("nvarchar(40)")
+                        .HasColumnName("specialite_requise");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique();
+
+                    b.HasIndex("ExamenId");
+
+                    b.ToTable("EpreuveExamen", (string)null);
+                });
+
+            modelBuilder.Entity("SchoolWebApp.Dal.Entities.PreparationEpreuve", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasColumnName("id");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("DateCreation")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("date_creation");
+
+                    b.Property<DateTime?>("DernierePreparationLe")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("derniere_preparation_le");
+
+                    b.Property<int>("EleveId")
+                        .HasColumnType("int")
+                        .HasColumnName("eleve_id");
+
+                    b.Property<int>("EpreuveId")
+                        .HasColumnType("int")
+                        .HasColumnName("epreuve_id");
+
+                    b.Property<int>("MatiereId")
+                        .HasColumnType("int")
+                        .HasColumnName("matiere_id");
+
+                    b.Property<int>("NombrePreparations")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(0)
+                        .HasColumnName("nombre_preparations");
+
+                    b.Property<DateTime?>("PretLe")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("pret_le");
+
+                    b.Property<string>("PretObservation")
+                        .HasColumnType("nvarchar(max)")
+                        .HasColumnName("pret_observation");
+
+                    b.Property<string>("PretVerdict")
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)")
+                        .HasColumnName("pret_verdict");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EpreuveId");
+
+                    b.HasIndex("MatiereId");
+
+                    b.HasIndex("EleveId", "EpreuveId", "MatiereId")
+                        .IsUnique();
+
+                    b.ToTable("PreparationEpreuve", (string)null);
                 });
 
             modelBuilder.Entity("SchoolWebApp.Dal.Entities.CompetencePrerequis", b =>
@@ -338,6 +831,10 @@ namespace SchoolWebApp.Dal.Migrations
                         .HasColumnType("datetime2")
                         .HasColumnName("date_sortie");
 
+                    b.Property<int?>("DureeChoisieMinutes")
+                        .HasColumnType("int")
+                        .HasColumnName("duree_choisie_minutes");
+
                     b.Property<int>("EleveId")
                         .HasColumnType("int")
                         .HasColumnName("eleve_id");
@@ -346,9 +843,24 @@ namespace SchoolWebApp.Dal.Migrations
                         .HasColumnType("int")
                         .HasColumnName("matiere_id");
 
+                    b.Property<int?>("ModeControleId")
+                        .HasColumnType("int")
+                        .HasColumnName("mode_controle_id");
+
+                    b.Property<string>("ModeEpreuveCode")
+                        .HasMaxLength(60)
+                        .HasColumnType("nvarchar(60)")
+                        .HasColumnName("mode_epreuve_code");
+
+                    b.Property<string>("ModeSeance")
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)")
+                        .HasColumnName("mode_seance");
+
                     b.Property<int?>("NiveauScolaireId")
                         .HasColumnType("int")
                         .HasColumnName("niveau_scolaire_id");
+
                     b.Property<string>("Titre")
                         .HasMaxLength(300)
                         .HasColumnType("nvarchar(300)")
@@ -356,15 +868,364 @@ namespace SchoolWebApp.Dal.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("NiveauScolaireId");
-
                     b.HasIndex("DatePurge");
 
                     b.HasIndex("MatiereId");
 
+                    b.HasIndex("NiveauScolaireId");
+
                     b.HasIndex("EleveId", "DateDernierMessage");
 
+                    b.HasIndex("DateDernierMessage");
+
+                    SqlServerIndexBuilderExtensions.IncludeProperties(b.HasIndex("DateDernierMessage"), new[] { "DateDerniereObservation" });
+
                     b.ToTable("Conversation", (string)null);
+                });
+
+            modelBuilder.Entity("SchoolWebApp.Dal.Entities.Dictee", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasColumnName("id");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("ConversationId")
+                        .HasColumnType("int")
+                        .HasColumnName("conversation_id");
+
+                    b.Property<string>("Copie")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)")
+                        .HasColumnName("copie");
+
+                    b.Property<DateTime?>("DateConsultation")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("date_consultation");
+
+                    b.Property<DateTime>("DateCreation")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("date_creation");
+
+                    b.Property<DateTime>("DateMiseAJour")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("date_mise_a_jour");
+
+                    b.Property<int>("EleveId")
+                        .HasColumnType("int")
+                        .HasColumnName("eleve_id");
+
+                    b.Property<string>("Etat")
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)")
+                        .HasColumnName("etat");
+
+                    b.Property<int>("MatiereId")
+                        .HasColumnType("int")
+                        .HasColumnName("matiere_id");
+
+                    b.Property<int?>("NiveauScolaireId")
+                        .HasColumnType("int")
+                        .HasColumnName("niveau_scolaire_id");
+
+                    b.Property<string>("Remarque")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)")
+                        .HasColumnName("remarque");
+
+                    b.Property<string>("TexteDicte")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)")
+                        .HasColumnName("texte_dicte");
+
+                    b.Property<string>("Titre")
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)")
+                        .HasColumnName("titre");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ConversationId");
+
+                    b.HasIndex("MatiereId");
+
+                    b.HasIndex("NiveauScolaireId");
+
+                    b.HasIndex("EleveId", "MatiereId", "DateCreation");
+
+                    b.HasIndex("EleveId", "MatiereId", "DateMiseAJour");
+
+                    b.ToTable("Dictee", (string)null);
+                });
+
+            modelBuilder.Entity("SchoolWebApp.Dal.Entities.ComprehensionOrale", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasColumnName("id");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("AudioChemin")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)")
+                        .HasColumnName("audio_chemin");
+
+                    b.Property<byte[]>("AudioDonnees")
+                        .HasColumnType("varbinary(max)")
+                        .HasColumnName("audio_donnees");
+
+                    b.Property<DateTime?>("AudioEffaceLe")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("audio_efface_le");
+
+                    b.Property<string>("Comprehension")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)")
+                        .HasColumnName("comprehension");
+
+                    b.Property<int>("ConversationId")
+                        .HasColumnType("int")
+                        .HasColumnName("conversation_id");
+
+                    b.Property<DateTime?>("DateConsultation")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("date_consultation");
+
+                    b.Property<DateTime>("DateCreation")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("date_creation");
+
+                    b.Property<int>("EleveId")
+                        .HasColumnType("int")
+                        .HasColumnName("eleve_id");
+
+                    b.Property<string>("Langue")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("nvarchar(10)")
+                        .HasColumnName("langue");
+
+                    b.Property<int>("MatiereId")
+                        .HasColumnType("int")
+                        .HasColumnName("matiere_id");
+
+                    b.Property<int?>("NiveauScolaireId")
+                        .HasColumnType("int")
+                        .HasColumnName("niveau_scolaire_id");
+
+                    b.Property<string>("Passage")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)")
+                        .HasColumnName("passage");
+
+                    b.Property<string>("Remarque")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)")
+                        .HasColumnName("remarque");
+
+                    b.Property<string>("ReponseEleve")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)")
+                        .HasColumnName("reponse_eleve");
+
+                    b.Property<string>("Titre")
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)")
+                        .HasColumnName("titre");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ConversationId");
+
+                    b.HasIndex("MatiereId");
+
+                    b.HasIndex("NiveauScolaireId");
+
+                    b.HasIndex("EleveId", "MatiereId", "DateCreation");
+
+                    b.ToTable("ComprehensionOrale", (string)null);
+                });
+
+            modelBuilder.Entity("SchoolWebApp.Dal.Entities.ControleNotion", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasColumnName("id");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int?>("CompetenceId")
+                        .HasColumnType("int")
+                        .HasColumnName("competence_id");
+
+                    b.Property<int>("ControleId")
+                        .HasColumnType("int")
+                        .HasColumnName("controle_id");
+
+                    b.Property<DateTime>("DateCreation")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("date_creation");
+
+                    b.Property<string>("Libelle")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)")
+                        .HasColumnName("libelle");
+
+                    b.Property<string>("Resultat")
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)")
+                        .HasColumnName("resultat");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)")
+                        .HasColumnName("source");
+
+                    b.Property<DateTime?>("TravailleeLe")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("travaillee_le");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompetenceId");
+
+                    b.HasIndex("ControleId");
+
+                    b.HasIndex("ControleId", "CompetenceId")
+                        .IsUnique()
+                        .HasFilter("[competence_id] IS NOT NULL");
+
+                    b.ToTable("ControleNotion", (string)null);
+                });
+
+            modelBuilder.Entity("SchoolWebApp.Dal.Entities.ControleScolaire", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasColumnName("id");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime?>("BilanLe")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("bilan_le");
+
+                    b.Property<int?>("ConversationId")
+                        .HasColumnType("int")
+                        .HasColumnName("conversation_id");
+
+                    b.Property<DateTime>("DateControle")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("date_controle");
+
+                    b.Property<DateTime>("DateCreation")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("date_creation");
+
+                    b.Property<DateTime?>("DateModification")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("date_modification");
+
+                    b.Property<DateTime?>("DernierePreparationLe")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("derniere_preparation_le");
+
+                    b.Property<int>("EleveId")
+                        .HasColumnType("int")
+                        .HasColumnName("eleve_id");
+
+                    b.Property<TimeSpan?>("HeureControle")
+                        .HasColumnType("time")
+                        .HasColumnName("heure_controle");
+
+                    b.Property<int>("MatiereId")
+                        .HasColumnType("int")
+                        .HasColumnName("matiere_id");
+
+                    b.Property<int?>("NiveauScolaireId")
+                        .HasColumnType("int")
+                        .HasColumnName("niveau_scolaire_id");
+
+                    b.Property<int>("NombrePreparations")
+                        .HasColumnType("int")
+                        .HasColumnName("nombre_preparations");
+
+                    b.Property<double?>("Note")
+                        .HasColumnType("float")
+                        .HasColumnName("note");
+
+                    b.Property<string>("PosePar")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)")
+                        .HasColumnName("pose_par");
+
+                    b.Property<DateTime?>("PretLe")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("pret_le");
+
+                    b.Property<string>("PretObservation")
+                        .HasColumnType("nvarchar(max)")
+                        .HasColumnName("pret_observation");
+
+                    b.Property<string>("PretVerdict")
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)")
+                        .HasColumnName("pret_verdict");
+
+                    b.Property<int>("RelancesBilan")
+                        .HasColumnType("int")
+                        .HasColumnName("relances_bilan");
+
+                    b.Property<bool?>("CopieSeparee")
+                        .HasColumnType("bit")
+                        .HasColumnName("copie_separee");
+
+                    b.Property<DateTime?>("CopieDemandeeLe")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("copie_demandee_le");
+
+                    b.Property<int?>("EnoncePieceJointeId")
+                        .HasColumnType("int")
+                        .HasColumnName("enonce_piece_jointe_id");
+
+                    b.Property<int?>("CopiePieceJointeId")
+                        .HasColumnType("int")
+                        .HasColumnName("copie_piece_jointe_id");
+
+                    b.Property<DateTime?>("CopieAnalyseeLe")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("copie_analysee_le");
+
+                    b.Property<string>("Ressenti")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)")
+                        .HasColumnName("ressenti");
+
+                    b.Property<string>("Sujet")
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)")
+                        .HasColumnName("sujet");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ConversationId");
+
+                    b.HasIndex("MatiereId");
+
+                    b.HasIndex("NiveauScolaireId");
+
+                    b.HasIndex("EleveId", "MatiereId", "DateControle");
+
+                    b.ToTable("ControleScolaire", (string)null);
                 });
 
             modelBuilder.Entity("SchoolWebApp.Dal.Entities.Eleve", b =>
@@ -376,6 +1237,10 @@ namespace SchoolWebApp.Dal.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
+                    b.Property<int?>("AcademieId")
+                        .HasColumnType("int")
+                        .HasColumnName("academie_id");
+
                     b.Property<DateTime?>("AccesSuspenduLe")
                         .HasColumnType("datetime2")
                         .HasColumnName("acces_suspendu_le");
@@ -383,6 +1248,12 @@ namespace SchoolWebApp.Dal.Migrations
                     b.Property<int>("Age")
                         .HasColumnType("int")
                         .HasColumnName("age");
+
+                    b.Property<bool>("Lv2Espagnol")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false)
+                        .HasColumnName("lv2_espagnol");
 
                     b.Property<DateTime?>("AnonymiseLe")
                         .HasColumnType("datetime2")
@@ -418,14 +1289,14 @@ namespace SchoolWebApp.Dal.Migrations
                         .HasColumnType("int")
                         .HasColumnName("parent_id");
 
-                    b.Property<DateTime?>("ProgressionVueLe")
-                        .HasColumnType("datetime2")
-                        .HasColumnName("progression_vue_le");
-
                     b.Property<string>("Prenom")
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)")
                         .HasColumnName("prenom");
+
+                    b.Property<DateTime?>("ProgressionVueLe")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("progression_vue_le");
 
                     b.Property<int>("Sexe")
                         .ValueGeneratedOnAdd()
@@ -433,7 +1304,14 @@ namespace SchoolWebApp.Dal.Migrations
                         .HasDefaultValue(0)
                         .HasColumnName("sexe");
 
+                    b.Property<string>("Specialites")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)")
+                        .HasColumnName("specialites");
+
                     b.HasKey("Id");
+
+                    b.HasIndex("AcademieId");
 
                     b.HasIndex("CodeAcces")
                         .IsUnique()
@@ -473,7 +1351,7 @@ namespace SchoolWebApp.Dal.Migrations
                     b.ToTable("EssaiConsomme", (string)null);
                 });
 
-            modelBuilder.Entity("SchoolWebApp.Dal.Entities.AvisClient", b =>
+            modelBuilder.Entity("SchoolWebApp.Dal.Entities.Evaluation", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -482,49 +1360,178 @@ namespace SchoolWebApp.Dal.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
-                    b.Property<string>("Commentaire")
-                        .HasMaxLength(2000)
-                        .HasColumnType("nvarchar(2000)")
-                        .HasColumnName("commentaire");
+                    b.Property<string>("ARevoir")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)")
+                        .HasColumnName("a_revoir");
+
+                    b.Property<int>("ConversationId")
+                        .HasColumnType("int")
+                        .HasColumnName("conversation_id");
+
+                    b.Property<bool>("CorrectionReportee")
+                        .HasColumnType("bit")
+                        .HasColumnName("correction_reportee");
 
                     b.Property<DateTime>("DateCreation")
                         .HasColumnType("datetime2")
                         .HasColumnName("date_creation");
 
-                    b.Property<DateTime?>("DateModification")
-                        .HasColumnType("datetime2")
-                        .HasColumnName("date_modification");
+                    b.Property<string>("Detail")
+                        .HasColumnType("nvarchar(max)")
+                        .HasColumnName("detail");
 
-                    b.Property<int>("Note")
+                    b.Property<int>("EleveId")
                         .HasColumnType("int")
+                        .HasColumnName("eleve_id");
+
+                    b.Property<int>("MatiereId")
+                        .HasColumnType("int")
+                        .HasColumnName("matiere_id");
+
+                    b.Property<int?>("NiveauScolaireId")
+                        .HasColumnType("int")
+                        .HasColumnName("niveau_scolaire_id");
+
+                    b.Property<double>("Note")
+                        .HasColumnType("float")
                         .HasColumnName("note");
 
-                    b.Property<int>("ParentId")
+                    b.Property<string>("Notion")
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)")
+                        .HasColumnName("notion");
+
+                    b.Property<int>("RelancesCorrection")
                         .HasColumnType("int")
-                        .HasColumnName("parent_id");
+                        .HasColumnName("relances_correction");
 
-                    b.Property<bool>("Publie")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bit")
-                        .HasDefaultValue(false)
-                        .HasColumnName("publie");
-
-                    b.Property<string>("Titre")
-                        .HasMaxLength(120)
-                        .HasColumnType("nvarchar(120)")
-                        .HasColumnName("titre");
+                    b.Property<string>("Remarque")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)")
+                        .HasColumnName("remarque");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("ParentId")
+                    b.HasIndex("ConversationId");
+
+                    b.HasIndex("MatiereId");
+
+                    b.HasIndex("NiveauScolaireId");
+
+                    b.HasIndex("EleveId", "DateCreation");
+
+                    b.ToTable("Evaluation", (string)null);
+                });
+
+            modelBuilder.Entity("SchoolWebApp.Dal.Entities.EvaluationPrevue", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasColumnName("id");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime?>("ConsommeeLe")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("consommee_le");
+
+                    b.Property<int>("ConversationId")
+                        .HasColumnType("int")
+                        .HasColumnName("conversation_id");
+
+                    b.Property<DateTime>("DateCreation")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("date_creation");
+
+                    b.Property<int>("EleveId")
+                        .HasColumnType("int")
+                        .HasColumnName("eleve_id");
+
+                    b.Property<int>("MatiereId")
+                        .HasColumnType("int")
+                        .HasColumnName("matiere_id");
+
+                    b.Property<string>("Notion")
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)")
+                        .HasColumnName("notion");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ConversationId");
+
+                    b.HasIndex("MatiereId");
+
+                    b.HasIndex("EleveId", "MatiereId", "ConsommeeLe");
+
+                    b.ToTable("EvaluationPrevue", (string)null);
+                });
+
+            modelBuilder.Entity("SchoolWebApp.Dal.Entities.FicheRevision", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasColumnName("id");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Contenu")
+                        .HasColumnType("nvarchar(max)")
+                        .HasColumnName("contenu");
+
+                    b.Property<int?>("ConversationId")
+                        .HasColumnType("int")
+                        .HasColumnName("conversation_id");
+
+                    b.Property<DateTime?>("DateConsultation")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("date_consultation");
+
+                    b.Property<DateTime>("DateCreation")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("date_creation");
+
+                    b.Property<DateTime>("DateMiseAJour")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("date_mise_a_jour");
+
+                    b.Property<string>("Domaine")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)")
+                        .HasColumnName("domaine");
+
+                    b.Property<int>("EleveId")
+                        .HasColumnType("int")
+                        .HasColumnName("eleve_id");
+
+                    b.Property<string>("Etat")
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)")
+                        .HasColumnName("etat");
+
+                    b.Property<int>("MatiereId")
+                        .HasColumnType("int")
+                        .HasColumnName("matiere_id");
+
+                    b.Property<string>("Notion")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)")
+                        .HasColumnName("notion");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MatiereId");
+
+                    b.HasIndex("EleveId", "MatiereId", "DateMiseAJour");
+
+                    b.HasIndex("EleveId", "MatiereId", "Notion")
                         .IsUnique();
 
-                    b.HasIndex("Publie", "DateCreation");
-
-                    b.ToTable("AvisClient", null, t =>
-                        {
-                            t.HasCheckConstraint("CK_AvisClient_note", "[note] >= 1 AND [note] <= 5");
-                        });
+                    b.ToTable("FicheRevision", (string)null);
                 });
 
             modelBuilder.Entity("SchoolWebApp.Dal.Entities.ForfaitAbonnement", b =>
@@ -622,244 +1629,7 @@ namespace SchoolWebApp.Dal.Migrations
                     b.HasIndex("Mail")
                         .IsUnique();
 
-                    b.ToTable("MailBanni");
-                });
-
-            modelBuilder.Entity("SchoolWebApp.Dal.Entities.BandeauPromo", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int")
-                        .HasColumnName("id");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<bool>("Actif")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bit")
-                        .HasDefaultValue(false)
-                        .HasColumnName("actif");
-
-                    b.Property<DateTime>("DateCreation")
-                        .HasColumnType("datetime2")
-                        .HasColumnName("date_creation");
-
-                    b.Property<DateTime?>("DateModification")
-                        .HasColumnType("datetime2")
-                        .HasColumnName("date_modification");
-
-                    b.Property<byte[]>("ImageLarge")
-                        .IsRequired()
-                        .HasColumnType("varbinary(max)")
-                        .HasColumnName("image_large");
-
-                    b.Property<byte[]>("ImageMobile")
-                        .HasColumnType("varbinary(max)")
-                        .HasColumnName("image_mobile");
-
-                    b.Property<string>("Lien")
-                        .HasMaxLength(500)
-                        .HasColumnType("nvarchar(500)")
-                        .HasColumnName("lien");
-
-                    b.Property<bool>("PleineLargeur")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bit")
-                        .HasDefaultValue(false)
-                        .HasColumnName("pleine_largeur");
-
-                    b.Property<int>("TailleLarge")
-                        .HasColumnType("int")
-                        .HasColumnName("taille_large");
-
-                    b.Property<int>("TailleMobile")
-                        .HasColumnType("int")
-                        .HasColumnName("taille_mobile");
-
-                    b.Property<string>("TexteAlternatif")
-                        .IsRequired()
-                        .HasMaxLength(300)
-                        .HasColumnType("nvarchar(300)")
-                        .HasColumnName("texte_alternatif");
-
-                    b.Property<string>("Titre")
-                        .IsRequired()
-                        .HasMaxLength(120)
-                        .HasColumnType("nvarchar(120)")
-                        .HasColumnName("titre");
-
-                    b.Property<string>("TypeMimeLarge")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)")
-                        .HasColumnName("type_mime_large");
-
-                    b.Property<string>("TypeMimeMobile")
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)")
-                        .HasColumnName("type_mime_mobile");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("Actif");
-
-                    b.ToTable("BandeauPromo");
-                });
-
-            modelBuilder.Entity("SchoolWebApp.Dal.Entities.VisiteSite", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int")
-                        .HasColumnName("id");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<DateTime>("Horodatage")
-                        .HasColumnType("datetime2")
-                        .HasColumnName("horodatage");
-
-                    b.Property<string>("Visiteur")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("nvarchar(64)")
-                        .HasColumnName("visiteur");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("Horodatage");
-
-                    b.ToTable("VisiteSite", (string)null);
-                });
-
-            modelBuilder.Entity("SchoolWebApp.Dal.Entities.Evaluation", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int")
-                        .HasColumnName("id");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("ARevoir")
-                        .HasMaxLength(1000)
-                        .HasColumnType("nvarchar(1000)")
-                        .HasColumnName("a_revoir");
-
-                    b.Property<int>("ConversationId")
-                        .HasColumnType("int")
-                        .HasColumnName("conversation_id");
-
-                    b.Property<DateTime>("DateCreation")
-                        .HasColumnType("datetime2")
-                        .HasColumnName("date_creation");
-
-                    b.Property<string>("Detail")
-                        .HasColumnType("nvarchar(max)")
-                        .HasColumnName("detail");
-
-                    b.Property<int>("EleveId")
-                        .HasColumnType("int")
-                        .HasColumnName("eleve_id");
-
-                    b.Property<int>("MatiereId")
-                        .HasColumnType("int")
-                        .HasColumnName("matiere_id");
-
-                    b.Property<int?>("NiveauScolaireId")
-                        .HasColumnType("int")
-                        .HasColumnName("niveau_scolaire_id");
-
-                    b.Property<double>("Note")
-                        .HasColumnType("float")
-                        .HasColumnName("note");
-
-                    b.Property<string>("Notion")
-                        .HasMaxLength(300)
-                        .HasColumnType("nvarchar(300)")
-                        .HasColumnName("notion");
-
-                    b.Property<string>("Remarque")
-                        .HasMaxLength(2000)
-                        .HasColumnType("nvarchar(2000)")
-                        .HasColumnName("remarque");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ConversationId");
-
-                    b.HasIndex("MatiereId");
-
-                    b.HasIndex("NiveauScolaireId");
-
-                    b.HasIndex("EleveId", "DateCreation");
-
-                    b.ToTable("Evaluation", (string)null);
-                });
-
-            modelBuilder.Entity("SchoolWebApp.Dal.Entities.FicheRevision", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int")
-                        .HasColumnName("id");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("Contenu")
-                        .HasColumnType("nvarchar(max)")
-                        .HasColumnName("contenu");
-
-                    b.Property<int?>("ConversationId")
-                        .HasColumnType("int")
-                        .HasColumnName("conversation_id");
-
-                    b.Property<DateTime?>("DateConsultation")
-                        .HasColumnType("datetime2")
-                        .HasColumnName("date_consultation");
-
-                    b.Property<DateTime>("DateCreation")
-                        .HasColumnType("datetime2")
-                        .HasColumnName("date_creation");
-
-                    b.Property<DateTime>("DateMiseAJour")
-                        .HasColumnType("datetime2")
-                        .HasColumnName("date_mise_a_jour");
-
-                    b.Property<string>("Domaine")
-                        .HasMaxLength(150)
-                        .HasColumnType("nvarchar(150)")
-                        .HasColumnName("domaine");
-
-                    b.Property<int>("EleveId")
-                        .HasColumnType("int")
-                        .HasColumnName("eleve_id");
-
-                    b.Property<string>("Etat")
-                        .HasMaxLength(20)
-                        .HasColumnType("nvarchar(20)")
-                        .HasColumnName("etat");
-
-                    b.Property<int>("MatiereId")
-                        .HasColumnType("int")
-                        .HasColumnName("matiere_id");
-
-                    b.Property<string>("Notion")
-                        .IsRequired()
-                        .HasMaxLength(300)
-                        .HasColumnType("nvarchar(300)")
-                        .HasColumnName("notion");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("MatiereId");
-
-                    b.HasIndex("EleveId", "MatiereId", "DateMiseAJour");
-
-                    b.HasIndex("EleveId", "MatiereId", "Notion")
-                        .IsUnique();
-
-                    b.ToTable("FicheRevision", (string)null);
+                    b.ToTable("MailBanni", (string)null);
                 });
 
             modelBuilder.Entity("SchoolWebApp.Dal.Entities.MaitriseEleve", b =>
@@ -887,6 +1657,10 @@ namespace SchoolWebApp.Dal.Migrations
                         .HasColumnType("int")
                         .HasColumnName("eleve_id");
 
+                    b.Property<int?>("NiveauScolaireId")
+                        .HasColumnType("int")
+                        .HasColumnName("niveau_scolaire_id");
+
                     b.Property<int>("NombreObservations")
                         .HasColumnType("int")
                         .HasColumnName("nombre_observations");
@@ -895,9 +1669,6 @@ namespace SchoolWebApp.Dal.Migrations
                         .HasColumnType("datetime2")
                         .HasColumnName("prochaine_revision");
 
-                    b.Property<int?>("NiveauScolaireId")
-                        .HasColumnType("int")
-                        .HasColumnName("niveau_scolaire_id");
                     b.Property<double>("Score")
                         .HasColumnType("float")
                         .HasColumnName("score");
@@ -909,9 +1680,9 @@ namespace SchoolWebApp.Dal.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("NiveauScolaireId");
-
                     b.HasIndex("CompetenceId");
+
+                    b.HasIndex("NiveauScolaireId");
 
                     b.HasIndex("ProchaineRevision");
 
@@ -965,11 +1736,6 @@ namespace SchoolWebApp.Dal.Migrations
                         .HasColumnType("int")
                         .HasColumnName("ordre");
 
-                    b.Property<string>("Promesse")
-                        .HasMaxLength(200)
-                        .HasColumnType("nvarchar(200)")
-                        .HasColumnName("promesse");
-
                     b.Property<string>("ProfAvatar")
                         .HasMaxLength(50)
                         .HasColumnType("nvarchar(50)")
@@ -984,6 +1750,11 @@ namespace SchoolWebApp.Dal.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("nvarchar(50)")
                         .HasColumnName("prof_prenom");
+
+                    b.Property<string>("Promesse")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)")
+                        .HasColumnName("promesse");
 
                     b.HasKey("Id");
 
@@ -1057,13 +1828,13 @@ namespace SchoolWebApp.Dal.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
-                    b.Property<DateTime>("DateCreation")
-                        .HasColumnType("datetime2")
-                        .HasColumnName("date_creation");
-
                     b.Property<int?>("AssemblageMs")
                         .HasColumnType("int")
                         .HasColumnName("assemblage_ms");
+
+                    b.Property<DateTime>("DateCreation")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("date_creation");
 
                     b.Property<int>("DelaiMs")
                         .HasColumnType("int")
@@ -1324,6 +2095,48 @@ namespace SchoolWebApp.Dal.Migrations
                     b.ToTable("Parent", (string)null);
                 });
 
+            modelBuilder.Entity("SchoolWebApp.Dal.Entities.PeriodeVacances", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasColumnName("id");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("AnneeScolaire")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("nvarchar(10)")
+                        .HasColumnName("annee_scolaire");
+
+                    b.Property<DateTime>("DateDebut")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("date_debut");
+
+                    b.Property<DateTime>("DateFin")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("date_fin");
+
+                    b.Property<string>("Libelle")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)")
+                        .HasColumnName("libelle");
+
+                    b.Property<string>("Zone")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)")
+                        .HasColumnName("zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Zone", "AnneeScolaire");
+
+                    b.ToTable("PeriodeVacances", (string)null);
+                });
+
             modelBuilder.Entity("SchoolWebApp.Dal.Entities.PieceJointe", b =>
                 {
                     b.Property<int>("Id")
@@ -1495,6 +2308,10 @@ namespace SchoolWebApp.Dal.Migrations
                     b.Property<DateTime>("DateCreation")
                         .HasColumnType("datetime2")
                         .HasColumnName("date_creation");
+
+                    b.Property<int?>("DureeChoisieMinutes")
+                        .HasColumnType("int")
+                        .HasColumnName("duree_choisie_minutes");
 
                     b.Property<int>("EleveId")
                         .HasColumnType("int")
@@ -1672,16 +2489,84 @@ namespace SchoolWebApp.Dal.Migrations
                     b.ToTable("SessionEleve", (string)null);
                 });
 
-            modelBuilder.Entity("SchoolWebApp.Dal.Entities.AvisClient", b =>
+            modelBuilder.Entity("SchoolWebApp.Dal.Entities.Signalement", b =>
                 {
-                    b.HasOne("SchoolWebApp.Dal.Entities.Parent", "Parent")
-                        .WithMany()
-                        .HasForeignKey("ParentId")
-                        .HasConstraintName("FK_AvisClient_Parent")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasColumnName("id");
 
-                    b.Navigation("Parent");
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Categorie")
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)")
+                        .HasColumnName("categorie");
+
+                    b.Property<DateTime>("DateCreation")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("date_creation");
+
+                    b.Property<DateTime?>("DateMiseAJour")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("date_mise_a_jour");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)")
+                        .HasColumnName("description");
+
+                    b.Property<int?>("EleveId")
+                        .HasColumnType("int")
+                        .HasColumnName("eleve_id");
+
+                    b.Property<string>("Etat")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)")
+                        .HasDefaultValue("nouveau")
+                        .HasColumnName("etat");
+
+                    b.Property<int>("ParentId")
+                        .HasColumnType("int")
+                        .HasColumnName("parent_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EleveId");
+
+                    b.HasIndex("Etat");
+
+                    b.HasIndex("ParentId");
+
+                    b.ToTable("Signalement", (string)null);
+                });
+
+            modelBuilder.Entity("SchoolWebApp.Dal.Entities.VisiteSite", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasColumnName("id");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("Horodatage")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("horodatage");
+
+                    b.Property<string>("Visiteur")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)")
+                        .HasColumnName("visiteur");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Horodatage");
+
+                    b.ToTable("VisiteSite", (string)null);
                 });
 
             modelBuilder.Entity("SchoolWebApp.Dal.Entities.Abonnement", b =>
@@ -1706,6 +2591,26 @@ namespace SchoolWebApp.Dal.Migrations
                     b.Navigation("Offre");
 
                     b.Navigation("OffrePrevue");
+
+                    b.Navigation("Parent");
+                });
+
+            modelBuilder.Entity("SchoolWebApp.Dal.Entities.AvisClient", b =>
+                {
+                    b.HasOne("SchoolWebApp.Dal.Entities.Eleve", "Eleve")
+                        .WithMany()
+                        .HasForeignKey("EleveId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("FK_AvisClient_Eleve");
+
+                    b.HasOne("SchoolWebApp.Dal.Entities.Parent", "Parent")
+                        .WithMany()
+                        .HasForeignKey("ParentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_AvisClient_Parent");
+
+                    b.Navigation("Eleve");
 
                     b.Navigation("Parent");
                 });
@@ -1781,18 +2686,187 @@ namespace SchoolWebApp.Dal.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
-                    b.Navigation("Eleve");
-
-b.HasOne("SchoolWebApp.Dal.Entities.NiveauScolaire", "NiveauScolaire")
+                    b.HasOne("SchoolWebApp.Dal.Entities.NiveauScolaire", "NiveauScolaire")
                         .WithMany()
                         .HasForeignKey("NiveauScolaireId")
                         .OnDelete(DeleteBehavior.NoAction);
 
+                    b.Navigation("Eleve");
+
                     b.Navigation("Matiere");
+
+                    b.Navigation("NiveauScolaire");
+                });
+
+            modelBuilder.Entity("SchoolWebApp.Dal.Entities.Dictee", b =>
+                {
+                    b.HasOne("SchoolWebApp.Dal.Entities.Conversation", "Conversation")
+                        .WithMany("Dictees")
+                        .HasForeignKey("ConversationId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+
+                    b.HasOne("SchoolWebApp.Dal.Entities.Eleve", "Eleve")
+                        .WithMany("Dictees")
+                        .HasForeignKey("EleveId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("SchoolWebApp.Dal.Entities.Matiere", "Matiere")
+                        .WithMany("Dictees")
+                        .HasForeignKey("MatiereId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("SchoolWebApp.Dal.Entities.NiveauScolaire", "NiveauScolaire")
+                        .WithMany()
+                        .HasForeignKey("NiveauScolaireId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.Navigation("Conversation");
+
+                    b.Navigation("Eleve");
+
+                    b.Navigation("Matiere");
+
+                    b.Navigation("NiveauScolaire");
+                });
+
+            modelBuilder.Entity("SchoolWebApp.Dal.Entities.ComprehensionOrale", b =>
+                {
+                    b.HasOne("SchoolWebApp.Dal.Entities.Conversation", "Conversation")
+                        .WithMany("ComprehensionsOrales")
+                        .HasForeignKey("ConversationId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+
+                    b.HasOne("SchoolWebApp.Dal.Entities.Eleve", "Eleve")
+                        .WithMany("ComprehensionsOrales")
+                        .HasForeignKey("EleveId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("SchoolWebApp.Dal.Entities.Matiere", "Matiere")
+                        .WithMany("ComprehensionsOrales")
+                        .HasForeignKey("MatiereId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("SchoolWebApp.Dal.Entities.NiveauScolaire", "NiveauScolaire")
+                        .WithMany()
+                        .HasForeignKey("NiveauScolaireId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.Navigation("Conversation");
+
+                    b.Navigation("Eleve");
+
+                    b.Navigation("Matiere");
+
+                    b.Navigation("NiveauScolaire");
+                });
+
+            modelBuilder.Entity("SchoolWebApp.Dal.Entities.ControleNotion", b =>
+                {
+                    b.HasOne("SchoolWebApp.Dal.Entities.Competence", "Competence")
+                        .WithMany()
+                        .HasForeignKey("CompetenceId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.HasOne("SchoolWebApp.Dal.Entities.ControleScolaire", "Controle")
+                        .WithMany("Notions")
+                        .HasForeignKey("ControleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Competence");
+
+                    b.Navigation("Controle");
+                });
+
+            modelBuilder.Entity("SchoolWebApp.Dal.Entities.EpreuveExamen", b =>
+                {
+                    b.HasOne("SchoolWebApp.Dal.Entities.Examen", "Examen")
+                        .WithMany("Epreuves")
+                        .HasForeignKey("ExamenId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Examen");
+                });
+
+            modelBuilder.Entity("SchoolWebApp.Dal.Entities.PreparationEpreuve", b =>
+                {
+                    b.HasOne("SchoolWebApp.Dal.Entities.Eleve", "Eleve")
+                        .WithMany()
+                        .HasForeignKey("EleveId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("SchoolWebApp.Dal.Entities.EpreuveExamen", "Epreuve")
+                        .WithMany()
+                        .HasForeignKey("EpreuveId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("SchoolWebApp.Dal.Entities.Matiere", "Matiere")
+                        .WithMany()
+                        .HasForeignKey("MatiereId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+
+                    b.Navigation("Eleve");
+
+                    b.Navigation("Epreuve");
+
+                    b.Navigation("Matiere");
+                });
+
+            modelBuilder.Entity("SchoolWebApp.Dal.Entities.Examen", b =>
+                {
+                    b.Navigation("Epreuves");
+                });
+
+            modelBuilder.Entity("SchoolWebApp.Dal.Entities.ControleScolaire", b =>
+                {
+                    b.HasOne("SchoolWebApp.Dal.Entities.Conversation", "Conversation")
+                        .WithMany("ControlesScolaires")
+                        .HasForeignKey("ConversationId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.HasOne("SchoolWebApp.Dal.Entities.Eleve", "Eleve")
+                        .WithMany("ControlesScolaires")
+                        .HasForeignKey("EleveId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("SchoolWebApp.Dal.Entities.Matiere", "Matiere")
+                        .WithMany("ControlesScolaires")
+                        .HasForeignKey("MatiereId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("SchoolWebApp.Dal.Entities.NiveauScolaire", "NiveauScolaire")
+                        .WithMany()
+                        .HasForeignKey("NiveauScolaireId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.Navigation("Conversation");
+
+                    b.Navigation("Eleve");
+
+                    b.Navigation("Matiere");
+
+                    b.Navigation("NiveauScolaire");
                 });
 
             modelBuilder.Entity("SchoolWebApp.Dal.Entities.Eleve", b =>
                 {
+                    b.HasOne("SchoolWebApp.Dal.Entities.Academie", "Academie")
+                        .WithMany("Eleves")
+                        .HasForeignKey("AcademieId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("SchoolWebApp.Dal.Entities.NiveauScolaire", "NiveauScolaire")
                         .WithMany("Eleves")
                         .HasForeignKey("NiveauScolaireId")
@@ -1804,6 +2878,8 @@ b.HasOne("SchoolWebApp.Dal.Entities.NiveauScolaire", "NiveauScolaire")
                         .HasForeignKey("ParentId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.Navigation("Academie");
 
                     b.Navigation("NiveauScolaire");
 
@@ -1844,23 +2920,31 @@ b.HasOne("SchoolWebApp.Dal.Entities.NiveauScolaire", "NiveauScolaire")
                     b.Navigation("NiveauScolaire");
                 });
 
-            modelBuilder.Entity("SchoolWebApp.Dal.Entities.HistoriqueClasseEleve", b =>
+            modelBuilder.Entity("SchoolWebApp.Dal.Entities.EvaluationPrevue", b =>
                 {
+                    b.HasOne("SchoolWebApp.Dal.Entities.Conversation", "Conversation")
+                        .WithMany("EvaluationsPrevues")
+                        .HasForeignKey("ConversationId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+
                     b.HasOne("SchoolWebApp.Dal.Entities.Eleve", "Eleve")
-                        .WithMany()
+                        .WithMany("EvaluationsPrevues")
                         .HasForeignKey("EleveId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("SchoolWebApp.Dal.Entities.NiveauScolaire", "NiveauScolaire")
-                        .WithMany()
-                        .HasForeignKey("NiveauScolaireId")
-                        .OnDelete(DeleteBehavior.NoAction)
+                    b.HasOne("SchoolWebApp.Dal.Entities.Matiere", "Matiere")
+                        .WithMany("EvaluationsPrevues")
+                        .HasForeignKey("MatiereId")
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.Navigation("Conversation");
 
                     b.Navigation("Eleve");
 
-                    b.Navigation("NiveauScolaire");
+                    b.Navigation("Matiere");
                 });
 
             modelBuilder.Entity("SchoolWebApp.Dal.Entities.FicheRevision", b =>
@@ -1882,6 +2966,25 @@ b.HasOne("SchoolWebApp.Dal.Entities.NiveauScolaire", "NiveauScolaire")
                     b.Navigation("Matiere");
                 });
 
+            modelBuilder.Entity("SchoolWebApp.Dal.Entities.HistoriqueClasseEleve", b =>
+                {
+                    b.HasOne("SchoolWebApp.Dal.Entities.Eleve", "Eleve")
+                        .WithMany()
+                        .HasForeignKey("EleveId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("SchoolWebApp.Dal.Entities.NiveauScolaire", "NiveauScolaire")
+                        .WithMany()
+                        .HasForeignKey("NiveauScolaireId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+
+                    b.Navigation("Eleve");
+
+                    b.Navigation("NiveauScolaire");
+                });
+
             modelBuilder.Entity("SchoolWebApp.Dal.Entities.MaitriseEleve", b =>
                 {
                     b.HasOne("SchoolWebApp.Dal.Entities.Competence", "Competence")
@@ -1896,14 +2999,16 @@ b.HasOne("SchoolWebApp.Dal.Entities.NiveauScolaire", "NiveauScolaire")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.Navigation("Competence");
-
-b.HasOne("SchoolWebApp.Dal.Entities.NiveauScolaire", "NiveauScolaire")
+                    b.HasOne("SchoolWebApp.Dal.Entities.NiveauScolaire", "NiveauScolaire")
                         .WithMany()
                         .HasForeignKey("NiveauScolaireId")
                         .OnDelete(DeleteBehavior.NoAction);
 
+                    b.Navigation("Competence");
+
                     b.Navigation("Eleve");
+
+                    b.Navigation("NiveauScolaire");
                 });
 
             modelBuilder.Entity("SchoolWebApp.Dal.Entities.Message", b =>
@@ -1984,11 +3089,34 @@ b.HasOne("SchoolWebApp.Dal.Entities.NiveauScolaire", "NiveauScolaire")
                     b.Navigation("Eleve");
                 });
 
+            modelBuilder.Entity("SchoolWebApp.Dal.Entities.Signalement", b =>
+                {
+                    b.HasOne("SchoolWebApp.Dal.Entities.Eleve", "Eleve")
+                        .WithMany("Signalements")
+                        .HasForeignKey("EleveId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("SchoolWebApp.Dal.Entities.Parent", "Parent")
+                        .WithMany("Signalements")
+                        .HasForeignKey("ParentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Eleve");
+
+                    b.Navigation("Parent");
+                });
+
             modelBuilder.Entity("SchoolWebApp.Dal.Entities.Abonnement", b =>
                 {
                     b.Navigation("Consommations");
 
                     b.Navigation("Recharges");
+                });
+
+            modelBuilder.Entity("SchoolWebApp.Dal.Entities.Academie", b =>
+                {
+                    b.Navigation("Eleves");
                 });
 
             modelBuilder.Entity("SchoolWebApp.Dal.Entities.Competence", b =>
@@ -2002,35 +3130,66 @@ b.HasOne("SchoolWebApp.Dal.Entities.NiveauScolaire", "NiveauScolaire")
 
             modelBuilder.Entity("SchoolWebApp.Dal.Entities.Conversation", b =>
                 {
+                    b.Navigation("ComprehensionsOrales");
+
+                    b.Navigation("ControlesScolaires");
+
+                    b.Navigation("Dictees");
+
                     b.Navigation("Evaluations");
+
+                    b.Navigation("EvaluationsPrevues");
 
                     b.Navigation("Messages");
 
                     b.Navigation("Rapports");
                 });
 
+            modelBuilder.Entity("SchoolWebApp.Dal.Entities.ControleScolaire", b =>
+                {
+                    b.Navigation("Notions");
+                });
+
             modelBuilder.Entity("SchoolWebApp.Dal.Entities.Eleve", b =>
                 {
+                    b.Navigation("ComprehensionsOrales");
+
                     b.Navigation("Consommations");
+
+                    b.Navigation("ControlesScolaires");
 
                     b.Navigation("Conversations");
 
+                    b.Navigation("Dictees");
+
                     b.Navigation("Evaluations");
+
+                    b.Navigation("EvaluationsPrevues");
 
                     b.Navigation("Fiches");
 
                     b.Navigation("Maitrises");
 
                     b.Navigation("Rapports");
+
+                    b.Navigation("Signalements");
                 });
 
             modelBuilder.Entity("SchoolWebApp.Dal.Entities.Matiere", b =>
                 {
                     b.Navigation("Competences");
 
+                    b.Navigation("ComprehensionsOrales");
+
+                    b.Navigation("ControlesScolaires");
+
                     b.Navigation("Conversations");
 
+                    b.Navigation("Dictees");
+
                     b.Navigation("Evaluations");
+
+                    b.Navigation("EvaluationsPrevues");
 
                     b.Navigation("Fiches");
 
@@ -2054,6 +3213,8 @@ b.HasOne("SchoolWebApp.Dal.Entities.NiveauScolaire", "NiveauScolaire")
                     b.Navigation("Abonnements");
 
                     b.Navigation("Eleves");
+
+                    b.Navigation("Signalements");
                 });
 #pragma warning restore 612, 618
         }

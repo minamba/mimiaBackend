@@ -63,3 +63,4 @@ Thumbs.db
 *.dat
 reprise-compte-ceo.sql
 migration-production.sql
+donnees/

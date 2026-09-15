@@ -18,6 +18,9 @@ namespace SchoolWebApp.Domain.Services.impl
         public Task<Parent?> GetParentByIdAsync(int id) =>
             _parentRepository.GetParentByIdAsync(id);
 
+        public Task<Parent?> GetParentByMailAsync(string mail) =>
+            _parentRepository.GetParentByMailAsync(mail);
+
         public Task<Parent?> GetParentByIdentityUserIdAsync(string identityUserId) =>
             _parentRepository.GetParentByIdentityUserIdAsync(identityUserId);
 

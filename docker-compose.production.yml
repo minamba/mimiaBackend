@@ -1,0 +1,86 @@
+# LE DEPLOIEMENT REEL DU VPS.
+#
+# A ne pas confondre avec docker-compose.yml, qui decrit une autre
+# architecture — images construites sur place, SQL Server embarque, ports
+# exposes en direct. Ici, rien de tout cela : les binaires publies sont
+# montes dans une image runtime generique, Traefik termine le TLS, et
+# SQL Server vit dans un compose separe (reseau geekai_internal).
+#
+# Deploiement : dotnet publish, envoi du contenu dans ./app/api, puis
+# docker restart mimia.
+version: "3.8"
+
+services:
+  mimia:
+    image: mcr.microsoft.com/dotnet/aspnet:9.0
+    container_name: mimia
+    restart: unless-stopped
+    working_dir: /app
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://0.0.0.0:8080
+      - ASPNETCORE_FORWARDEDHEADERS_ENABLED=true
+      - DOTNET_ROLL_FORWARD=Major
+    volumes:
+      - ./app/api:/app
+
+      # L AUDIO DES ARCHIVES, ET SURTOUT PAS SOUS /app.
+      #
+      # /app est ecrase a chaque deploiement : les enregistrements y seraient
+      # emportes avec les anciens binaires. Ils vivent donc a part.
+      #
+      # Ils ont quitte la base le 10/09/2026 : mesure, six cents kilo-octets
+      # par comprehension orale, soit une cinquantaine de giga-octets par an
+      # a mille eleves — dans une base SQL Server Express qui plafonne a dix.
+      #
+      # CE DOSSIER N A PAS BESOIN D ETRE SAUVEGARDE : chaque audio se
+      # regenere depuis le texte du passage, qui lui est en base. Un worker
+      # efface les fichiers passe quatre-vingt-dix jours.
+      #
+      # A creer avant le premier demarrage : mkdir -p ./donnees/audio
+      - ./donnees/audio:/donnees/audio
+    networks:
+      - web
+      - geekai_internal
+    entrypoint: ["dotnet", "SchoolWebApp.Api.dll"]
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=web"
+      - "traefik.http.routers.mimia.rule=Host(`mimia.fr`) || Host(`www.mimia.fr`)"
+      - "traefik.http.routers.mimia.entrypoints=websecure"
+      - "traefik.http.routers.mimia.tls.certresolver=myresolver"
+      - "traefik.http.services.mimia.loadbalancer.server.port=8080"
+
+  mimia-identity:
+    image: mcr.microsoft.com/dotnet/aspnet:9.0
+    container_name: mimia-identity
+    restart: unless-stopped
+    working_dir: /app
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://0.0.0.0:5001
+      - ASPNETCORE_FORWARDEDHEADERS_ENABLED=true
+      - DOTNET_ROLL_FORWARD=Major
+    volumes:
+      - ./app/identity:/app
+      - mimia-identity-keys:/root/.aspnet/DataProtection-Keys
+    entrypoint: ["dotnet", "SchoolWebApp.IdentityServer.dll"]
+    networks:
+      - web
+      - geekai_internal
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=web"
+      - "traefik.http.routers.mimia-identity.rule=Host(`auth.mimia.fr`)"
+      - "traefik.http.routers.mimia-identity.entrypoints=websecure"
+      - "traefik.http.routers.mimia-identity.tls.certresolver=myresolver"
+      - "traefik.http.services.mimia-identity.loadbalancer.server.port=5001"
+
+volumes:
+  mimia-identity-keys:
+
+networks:
+  web:
+    external: true
+  geekai_internal:
+    external: true

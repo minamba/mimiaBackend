@@ -39,7 +39,12 @@
     avant même qu'on ait lu le libellé.
 *@
 <a href="@(spaUrl)/code" class="entree-eleve-carte">
-    <span class="entree-eleve-carte__illu" aria-hidden="true">🎒</span>
+    @* `sac.png` et non plus l'emoji 🎒 — Camara, le 15/09/2026 : le même sac
+       « mimia.fr » que sur la page du code de l'enfant, pour que les deux
+       portes se reconnaissent. Copie réduite à 144 px (l'original fait 1,5 Mo). *@
+    <span class="entree-eleve-carte__illu" aria-hidden="true">
+        <img src="~/img/sac.png" alt="" class="entree-eleve-carte__sac" />
+    </span>
     <span class="entree-eleve-carte__texte">
         <strong>Tu es élève ?</strong>
         <span>Entre ton code pour retrouver tes cours.</span>

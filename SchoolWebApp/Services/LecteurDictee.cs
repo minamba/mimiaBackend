@@ -1,0 +1,153 @@
+using System.Text.RegularExpressions;
+
+namespace SchoolWebApp.Api.Services
+{
+    /// <summary>Une dictée corrigée telle que le professeur l'a archivée.</summary>
+    public record DicteeDeclaree(string? Titre, string? Etat, string Dicte, string Copie, string? Remarque);
+
+    /// <summary>
+    /// L'élève ne veut plus d'une dictée : la dernière de la conversation
+    /// (<see cref="DicteeId"/> nul), ou une dictée archivée désignée par son numéro.
+    /// </summary>
+    public record SuppressionDictee(int? DicteeId);
+
+    /// <summary>
+    /// Extrait le bloc [DICTEE_CORRIGEE] d'un message du professeur.
+    ///
+    /// Trois corps de texte libre à la suite, pas un seul comme [FICHE] : le
+    /// texte dicté, puis la copie de l'élève, puis la remarque. On coupe donc
+    /// à chacune des lignes `dicte:`, `copie:` et `remarque:`, dans cet ordre,
+    /// et on prend la suite telle quelle jusqu'à la coupure suivante. `titre`
+    /// et `etat` sont des champs `clé: valeur` ordinaires, lus dans l'en-tête
+    /// avant `dicte:` — voir <see cref="EtatDictee"/> pour ce que vaut `etat`.
+    /// </summary>
+    public static partial class LecteurDictee
+    {
+        /// <summary>La dictée interrompue avant sa copie — voir <see cref="Domain.Repositories.MarqueursDictee"/>.</summary>
+        public const string Abandon = Domain.Repositories.MarqueursDictee.Abandon;
+
+        [GeneratedRegex(@"\[DICTEE_CORRIGEE\](?<corps>.*?)\[/DICTEE_CORRIGEE\]",
+            RegexOptions.Singleline | RegexOptions.IgnoreCase)]
+        private static partial Regex Bloc();
+
+        [GeneratedRegex(@"^\s*dicte\s*:\s*$", RegexOptions.IgnoreCase | RegexOptions.Multiline)]
+        private static partial Regex SeparateurDicte();
+
+        [GeneratedRegex(@"^\s*copie\s*:\s*$", RegexOptions.IgnoreCase | RegexOptions.Multiline)]
+        private static partial Regex SeparateurCopie();
+
+        [GeneratedRegex(@"^\s*remarque\s*:\s*$", RegexOptions.IgnoreCase | RegexOptions.Multiline)]
+        private static partial Regex SeparateurRemarque();
+
+        /// <summary>La dictée archivée dans ce message, ou null.</summary>
+        public static DicteeDeclaree? Lire(string? message)
+        {
+            if (string.IsNullOrWhiteSpace(message)) return null;
+
+            var bloc = Bloc().Match(message);
+            return bloc.Success ? LireBloc(bloc.Groups["corps"].Value) : null;
+        }
+
+        private static DicteeDeclaree? LireBloc(string corps)
+        {
+            var coupureDicte = SeparateurDicte().Match(corps);
+
+            // Sans « dicte: », on ne sait pas où finit l'en-tête (titre) et où
+            // commence le texte dicté. Mieux vaut ne rien enregistrer qu'une
+            // dictée dont le texte serait noyé dans autre chose.
+            if (!coupureDicte.Success) return null;
+
+            var champs = LecteurBloc.Champs(corps[..coupureDicte.Index]);
+            var titre = LecteurBloc.Valeur(champs, "titre", "notion");
+            var etat = LecteurBloc.Valeur(champs, "etat", "état", "statut");
+
+            var apresDicte = corps[(coupureDicte.Index + coupureDicte.Length)..];
+            var coupureCopie = SeparateurCopie().Match(apresDicte);
+
+            // Sans « copie: », il n'y a rien à comparer au texte dicté — ce
+            // n'est pas une dictée corrigée, seulement un texte dicté seul.
+            if (!coupureCopie.Success) return null;
+
+            var dicte = apresDicte[..coupureCopie.Index].Trim();
+
+            var apresCopie = apresDicte[(coupureCopie.Index + coupureCopie.Length)..];
+            var coupureRemarque = SeparateurRemarque().Match(apresCopie);
+
+            var copie = (coupureRemarque.Success ? apresCopie[..coupureRemarque.Index] : apresCopie).Trim();
+            var remarque = coupureRemarque.Success
+                ? apresCopie[(coupureRemarque.Index + coupureRemarque.Length)..].Trim()
+                : null;
+
+            if (string.IsNullOrWhiteSpace(dicte) || string.IsNullOrWhiteSpace(copie)) return null;
+
+            return new DicteeDeclaree(
+                titre, etat, dicte, copie, string.IsNullOrWhiteSpace(remarque) ? null : remarque);
+        }
+
+        /// <summary>Retire le bloc. Sert aux relectures d'historique.</summary>
+        public static string Retirer(string? message) =>
+            LecteurBloc.Retirer(message, Bloc());
+
+        [GeneratedRegex(@"\[DICTEE_SUPPRIMEE\](?<corps>.*?)\[/DICTEE_SUPPRIMEE\]",
+            RegexOptions.Singleline | RegexOptions.IgnoreCase)]
+        private static partial Regex BlocSuppression();
+
+        [GeneratedRegex(
+            @"(ta|cette|la) dict[ée]e[^.!?\n]{0,60}(corrig[ée]e|termin[ée]e|finie|boucl[ée]e)"
+            + @"|tout bon pour (cette|ta) dict[ée]e"
+            + @"|fini de (la )?corriger",
+            RegexOptions.IgnoreCase)]
+        private static partial Regex AnnonceCorrigee();
+
+        [GeneratedRegex(@"\b(pas|plus|jamais|encore|sera|seront|quand|lorsque|avant|si)\b",
+            RegexOptions.IgnoreCase)]
+        private static partial Regex NegationOuFutur();
+
+        /// <summary>
+        /// Le professeur annonce-t-il, en toutes lettres, que la dictée est
+        /// corrigée ?
+        ///
+        /// Relevé par Camara le 11/09/2026 : « Ta dictée est complète et bien
+        /// corrigée… C'est tout bon pour cette dictée » — et aucun
+        /// [DICTEE_CORRIGEE]. L'archive la montrait « en attente de
+        /// correction », sans titre ni badges, alors qu'elle venait d'être
+        /// corrigée devant l'élève. On lit donc l'annonce elle-même.
+        ///
+        /// « Pas encore corrigée », « quand elle sera corrigée » ne comptent
+        /// pas : une négation ou un futur dans la tournure l'écarte.
+        /// </summary>
+        public static bool AnnonceLaCorrection(string? message)
+        {
+            if (string.IsNullOrWhiteSpace(message)) return false;
+
+            return AnnonceCorrigee().Matches(message)
+                .Any(m => !NegationOuFutur().IsMatch(m.Value));
+        }
+
+        /// <summary>
+        /// Une dictée archivée, remise au tableau par son numéro :
+        /// <c>[DICTEE_AU_TABLEAU]42[/DICTEE_AU_TABLEAU]</c>.
+        /// </summary>
+        [GeneratedRegex(@"\[DICTEE_AU_TABLEAU\]\s*(?:n°\s*)?(?<id>\d+)\s*\[/DICTEE_AU_TABLEAU\]",
+            RegexOptions.IgnoreCase)]
+        public static partial Regex AuTableau();
+
+        /// <summary>
+        /// La dictée que l'élève ne veut plus — voulu par Camara le
+        /// 11/09/2026 : passée, abandonnée ou refusée à la reprise, elle
+        /// disparaît de partout. Null si le message n'en demande aucune.
+        /// </summary>
+        public static SuppressionDictee? LireSuppression(string? message)
+        {
+            if (string.IsNullOrWhiteSpace(message)) return null;
+
+            var bloc = BlocSuppression().Match(message);
+            if (!bloc.Success) return null;
+
+            var numero = Regex.Match(bloc.Groups["corps"].Value, @"\d+");
+
+            return new SuppressionDictee(
+                numero.Success && int.TryParse(numero.Value, out var id) ? id : null);
+        }
+    }
+}

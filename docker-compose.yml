@@ -5,6 +5,22 @@ services:
     environment:
       ACCEPT_EULA: "Y"
       MSSQL_SA_PASSWORD: ${SQL_SA_PASSWORD}
+
+      # L EDITION EST ECRITE ICI, PARCE QUE SON DEFAUT N EST PAS CELUI QU ON VEUT.
+      #
+      # Sans MSSQL_PID, cette image demarre en Developer Edition : gratuite,
+      # mais dont la licence interdit la production. Le serveur tourne bien en
+      # Express aujourd hui (verifie le 10/09/2026 : « Express Edition
+      # (64-bit) », 1,14 Go sur les 10 autorises, aucune fonctionnalite
+      # Enterprise persistee) — mais rien dans ce fichier ne le garantissait.
+      # Un conteneur recree a partir d ici serait reparti en Developer, sans
+      # que rien ne le signale, et le produit se serait retrouve vendu sur une
+      # licence qui ne le permet pas.
+      #
+      # Express plafonne a 10 Go par base. C est pour cela que l audio des
+      # comprehensions orales a quitte la base pour le disque : a six cents
+      # kilo-octets piece, il aurait mange ce plafond en quelques mois.
+      MSSQL_PID: "Express"
     volumes:
       - sqldata:/var/opt/mssql
     restart: unless-stopped
@@ -60,9 +76,23 @@ services:
       ASPNETCORE_HTTP_PORTS: "8080"
     volumes:
       - ./SchoolWebApp/appsettings.Production.json:/app/appsettings.Production.json:ro
+
+      # L AUDIO DES ARCHIVES, HORS DE LA BASE.
+      #
+      # Mesure : six cents kilo-octets par comprehension orale. A mille eleves
+      # faisant deux exercices par semaine, c est une cinquantaine de
+      # giga-octets par an — dans une base qu il faudrait sauvegarder chaque
+      # nuit et restaurer en bloc, alors que le son n a besoin d aucune de ces
+      # garanties. Il vit donc ici, et la base n en garde que le chemin.
+      #
+      # CE VOLUME N A PAS BESOIN D ETRE SAUVEGARDE : chaque audio se regenere
+      # depuis le texte du passage, qui lui est en base. Un worker efface les
+      # fichiers passe quatre-vingt-dix jours.
+      - audioarchives:/app/archives/audio
     ports:
       - "5066:8080"
     restart: unless-stopped
 
 volumes:
   sqldata:
+  audioarchives:

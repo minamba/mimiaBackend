@@ -22,6 +22,7 @@ namespace SchoolWebApp.Domain.Repositories
             double? noteRevision,
             string? remarque,
             string? aRevoir,
+            int? dureeChoisieMinutes = null,
             CancellationToken ct = default);
 
         /// <summary>

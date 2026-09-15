@@ -20,6 +20,17 @@ namespace SchoolWebApp.Api.Services.Voix
         private const string Endpoint = "https://api.openai.com/v1/audio/speech";
 
         /// <summary>
+        /// Les paramètres du flux PCM brut demandé à OpenAI — voir la
+        /// consigne <c>response_format = "pcm"</c> dans <see cref="AppelerAsync"/>.
+        /// Nommés ici, et réutilisés par <see cref="EnvelopperWav"/>, pour
+        /// qu'un futur changement de ces paramètres ne puisse pas dériver
+        /// d'un endroit à l'autre sans avertir.
+        /// </summary>
+        private const int FrequencePcm = 24000;
+        private const short CanauxPcm = 1;
+        private const short BitsParEchantillonPcm = 16;
+
+        /// <summary>
         /// Une voix par professeur. Un enfant reconnaît son prof à sa voix comme
         /// à son visage ; deux professeurs qui parlent pareil, ce sont deux
         /// onglets d'un même chatbot.
@@ -35,7 +46,21 @@ namespace SchoolWebApp.Api.Services.Voix
             ["adrien"] = "ash",    // français — grave, expressive
             ["salim"] = "onyx",    // histoire-géo — profonde, narrative
             ["yann"] = "echo",     // sciences et physique-chimie — nette, curieuse
-            ["ines"] = "sage"      // SVT — posée, explicative
+            ["ines"] = "sage",     // SVT — posée, explicative
+
+            // L'ÉQUIPE DES SÉRIES TECHNOLOGIQUES (14/09/2026). Timbres choisis
+            // pour ne pas doubler un collègue de la même grille — un élève de
+            // STMG n'entend jamais Karim et Adrien avec la même voix. Pas
+            // encore mesurés en sauts par seconde comme les autres : à faire
+            // avant d'en juger la propreté (voir les bips de juillet).
+            ["lucia"] = "alloy",   // espagnol — non mesurée
+            ["karim"] = "verse",   // économie-gestion
+            ["elodie"] = "nova",   // sanitaire et social
+
+            // Spécialités de la voie générale : les deux timbres encore libres.
+            // Non mesurés, comme ceux ci-dessus.
+            ["theo"] = "ballad",   // EPPCS
+            ["jeanne"] = "fable",  // arts
         };
 
         /// <summary>
@@ -57,7 +82,14 @@ namespace SchoolWebApp.Api.Services.Voix
             ["adrien"] = "alloy",   // 102 — contre 398
             ["salim"] = "onyx",     // 1 — contre 108
             ["yann"] = "echo",      // 255 — contre 578
-            ["ines"] = "shimmer"    // 175 — contre 212
+            ["ines"] = "shimmer",   // 175 — contre 212
+
+            // Séries technologiques : non mesurées, voir la table principale.
+            ["lucia"] = "shimmer",
+            ["karim"] = "fable",
+            ["elodie"] = "nova",
+            ["theo"] = "echo",
+            ["jeanne"] = "shimmer",
         };
 
         private const string VoixParDefaut = "coral";
@@ -126,17 +158,65 @@ namespace SchoolWebApp.Api.Services.Voix
 
         public async Task<byte[]> SynthetiserAsync(
             string texte, string? avatar, int age, bool dictee = false,
-            bool anglais = false, CancellationToken ct = default)
+            string? langue = null, string? vitesse = null, CancellationToken ct = default)
         {
-            using var reponse = await AppelerAsync(texte, avatar, age, dictee, anglais, ct);
+            using var reponse = await AppelerAsync(texte, avatar, age, dictee, langue, vitesse, ct);
             return await reponse.Content.ReadAsByteArrayAsync(ct);
+        }
+
+        public async Task<byte[]> SynthetiserWavAsync(
+            string texte, string? avatar, int age, bool dictee = false,
+            string? langue = null, string? vitesse = null, CancellationToken ct = default)
+        {
+            var pcm = await SynthetiserAsync(texte, avatar, age, dictee, langue, vitesse, ct);
+            return EnvelopperWav(pcm);
+        }
+
+        /// <summary>
+        /// Habille un flux PCM brut (voir <see cref="FrequencePcm"/> et
+        /// consorts) d'un en-tête WAV minimal, pour qu'un simple
+        /// <c>&lt;audio&gt;</c> de navigateur sache le lire.
+        ///
+        /// LE COMMENTAIRE DE <see cref="AppelerAsync"/> ÉCARTE LE WAV POUR LA
+        /// VOIX EN DIRECT, ET IL A RAISON — POUR CE CAS-LÀ. Un en-tête WAV
+        /// porte la TAILLE TOTALE du flux, connue seulement une fois la
+        /// synthèse terminée ; en direct, l'audio part par blocs pendant que
+        /// la synthèse continue, taille inconnue à l'avance, et le décodeur
+        /// du navigateur refuse un en-tête qui ment. Ici, <paramref name="pcm"/>
+        /// est déjà complet : l'obstacle ne s'applique plus.
+        /// </summary>
+        private static byte[] EnvelopperWav(byte[] pcm)
+        {
+            var octetsParSeconde = FrequencePcm * CanauxPcm * BitsParEchantillonPcm / 8;
+            var alignementBloc = (short)(CanauxPcm * BitsParEchantillonPcm / 8);
+
+            using var flux = new MemoryStream(44 + pcm.Length);
+            using var ecrivain = new BinaryWriter(flux);
+
+            ecrivain.Write("RIFF"u8);
+            ecrivain.Write(36 + pcm.Length);
+            ecrivain.Write("WAVE"u8);
+            ecrivain.Write("fmt "u8);
+            ecrivain.Write(16);
+            ecrivain.Write((short)1); // PCM
+            ecrivain.Write(CanauxPcm);
+            ecrivain.Write(FrequencePcm);
+            ecrivain.Write(octetsParSeconde);
+            ecrivain.Write(alignementBloc);
+            ecrivain.Write(BitsParEchantillonPcm);
+            ecrivain.Write("data"u8);
+            ecrivain.Write(pcm.Length);
+            ecrivain.Write(pcm);
+
+            return flux.ToArray();
         }
 
         public async Task CopierAudioAsync(
             string texte, string? avatar, int age, Stream destination,
-            bool dictee = false, bool anglais = false, CancellationToken ct = default)
+            bool dictee = false, string? langue = null, string? vitesse = null,
+            CancellationToken ct = default)
         {
-            using var reponse = await AppelerAsync(texte, avatar, age, dictee, anglais, ct);
+            using var reponse = await AppelerAsync(texte, avatar, age, dictee, langue, vitesse, ct);
             await using var flux = await reponse.Content.ReadAsStreamAsync(ct);
 
             // Petit tampon et vidange explicite : avec les 81 920 octets par
@@ -160,7 +240,8 @@ namespace SchoolWebApp.Api.Services.Voix
         /// tout le bénéfice de la recopie au fil de l'eau.
         /// </summary>
         private async Task<HttpResponseMessage> AppelerAsync(
-            string texte, string? avatar, int age, bool dictee, bool anglais, CancellationToken ct)
+            string texte, string? avatar, int age, bool dictee, string? langue,
+            string? vitesse, CancellationToken ct)
         {
             if (!Disponible)
             {
@@ -177,18 +258,34 @@ namespace SchoolWebApp.Api.Services.Voix
 
             // DEUX MODÈLES, DEUX FAÇONS DE RALENTIR UNE DICTÉE.
             //
-            // Le principal refuse `speed` : on le lui demande par consigne.
-            // Le secours ignore les consignes mais accepte `speed`. Chacun
-            // reçoit donc ce qu’il sait lire, et l’autre champ est absent
-            // plutôt que nul — un `instructions: null` sur `tts-1` passe,
-            // mais autant n’envoyer que ce qui a un sens.
+            // Le secours ignore les consignes mais accepte `speed` ; le
+            // principal lit les consignes. Chacun reçoit donc ce qu'il sait
+            // lire, et l'autre champ est absent plutôt que nul — un
+            // `instructions: null` sur `tts-1` passe, mais autant n'envoyer
+            // que ce qui a un sens.
+            //
+            // LE PRINCIPAL ACCEPTE `speed`, ET C'EST NOUVEAU. Ce commentaire
+            // disait le contraire, et c'était vrai quand il a été écrit.
+            // Mesuré le 12/09/2026 sur la même phrase anglaise : 5,75 s sans
+            // rien, 7,35 s avec la consigne « très lent », 5,95 s avec la
+            // consigne « rapide » — autant dire aucun effet — et 8,75 s avec
+            // `speed: 0.7`. La consigne infléchit, le paramètre décide.
+            //
+            // Les deux partent donc ensemble : la consigne soigne
+            // l'articulation et les silences, `speed` tient le débit. Relevé
+            // par Camara le même jour : « j'ai mis très lent et rapide, la
+            // vitesse est la même ».
+            //
+            // LA DICTÉE NE BOUGE PAS. Son débit est réglé par sa consigne et
+            // éprouvé en séance ; lui ajouter un facteur sans l'avoir mesurée
+            // changerait un exercice qui marche.
             object corps = secours
                 ? new
                 {
                     model = ModeleSecours,
                     input = propre,
                     voice = ChoisirVoix(avatar, true),
-                    speed = dictee ? VitesseDictee : 1.0,
+                    speed = dictee ? VitesseDictee : FacteurVitesse(vitesse),
                     response_format = "pcm",
                 }
                 : new
@@ -196,7 +293,8 @@ namespace SchoolWebApp.Api.Services.Voix
                 model = _options.Modele,
                 input = propre,
                 voice = ChoisirVoix(avatar, false),
-                instructions = Jeu(age, dictee, anglais),
+                instructions = Jeu(age, dictee, langue) + ConsigneVitesse(vitesse),
+                speed = dictee ? 1.0 : FacteurVitesse(vitesse),
                 // PCM brut : ni en-tête, ni encodage.
                 //
                 // Le MP3 pose une amorce de silence en tête et en queue de
@@ -298,40 +396,117 @@ namespace SchoolWebApp.Api.Services.Voix
 
             N'articule pas exagérément. Ne détache pas les mots. Ne prends pas
             de ton de présentateur.
+
+            Prononciation française d'un bout à l'autre, y compris sur un mot
+            bref ou isolé — jamais un accent anglicisé, même passager.
+
+            UN SIGLE SE LIT LETTRE PAR LETTRE, JAMAIS COMME UN MOT. « COD »
+            se dit « C, O, D », pas « code » ; « ADN » se dit « A, D, N »,
+            pas un mot qui rime avec lui. C'est arrivé en cours de français :
+            le professeur a dit « COD » comme s'il prononçait le mot
+            « code », et l'élève a entendu autre chose que le sigle
+            grammatical dont il était question. La règle vaut pour tout
+            groupe de deux lettres majuscules ou plus qui n'est pas un mot du
+            dictionnaire, quelle que soit la matière.
+
+            UN TIRET ENTOURÉ D'ESPACES NE SE PRONONCE JAMAIS « MOINS » — à
+            l'écrit c'est une pause, pas une soustraction, et tu le lis comme
+            une virgule ou un silence bref, jamais comme le mot. C'est
+            arrivé en épelant une correction : « "es" - e accent aigu, s -
+            remarquées » a été lu « es moins e accent aigu, s moins
+            remarquées », et l'élève n'a plus compris ce qu'on lui épelait.
             """;
 
-        private static string Jeu(int age, bool dictee, bool anglais) =>
+        /// <summary>
+        /// LA VITESSE CHOISIE PAR L'ÉLÈVE, DANS LES DEUX LANGAGES.
+        ///
+        /// Voulu par Camara le 12/09/2026 : avant chaque exercice d'écoute,
+        /// l'enfant choisit le débit. Comme pour la dictée, les deux modèles
+        /// l'entendent différemment — le principal par consigne, le secours
+        /// par le paramètre `speed`. Chacun reçoit ce qu'il sait lire.
+        ///
+        /// Une valeur inconnue vaut « normal » : on ne casse pas un exercice
+        /// pour un libellé mal orthographié.
+        /// </summary>
+        private static double FacteurVitesse(string? vitesse) => vitesse switch
+        {
+            "tres_lent" => 0.7,
+            "lent" => 0.85,
+            "rapide" => 1.15,
+            _ => 1.0,
+        };
+
+        private static string ConsigneVitesse(string? vitesse) => vitesse switch
+        {
+            "tres_lent" => "\n\nDÉBIT TRÈS LENT, demandé par l'élève lui-même : presque mot à "
+                + "mot, avec un vrai silence entre les groupes de sens. Articule chaque fin de "
+                + "mot. Ne te presse jamais, même sur une phrase courte.",
+
+            "lent" => "\n\nDÉBIT LENT, demandé par l'élève lui-même : nettement plus lent qu'une "
+                + "conversation, en articulant les fins de mots.",
+
+            "rapide" => "\n\nDÉBIT VIF, demandé par l'élève lui-même : le rythme naturel d'un "
+                + "locuteur qui parle à quelqu'un de son âge, sans ralentir pour l'école.",
+
+            _ => "",
+        };
+
+        private static string Jeu(int age, bool dictee, string? langue) =>
             dictee ? Dictee
-            : anglais ? Anglais
+            : langue is not null && InstructionsParLangue.TryGetValue(langue, out var instructions) ? instructions
             : Naturel + "\n\n" + Registre(age);
 
         /// <summary>
-        /// La consigne d'un passage prononcé EN ANGLAIS.
+        /// Une consigne de prononciation par langue étudiée — "en", "es",
+        /// "de", "it", "zh" — construite sur UN SEUL GABARIT (voir
+        /// <see cref="InstructionEcoute"/>). Le français n'y figure pas : la
+        /// balise <c>[FR]</c> déclenche le registre habituel, déjà en
+        /// français, sans consigne de plus.
+        ///
+        /// AJOUTER UNE LANGUE, C'EST AJOUTER UNE LIGNE ICI. Rien d'autre dans
+        /// ce fichier ne connaît la liste des langues enseignées — voir aussi
+        /// <c>PromptsPedagogiques.EnseignerUneLangue</c>, côté prompt, où
+        /// chaque matière de langue déclare sa propre balise à deux lettres
+        /// sur le même principe.
         ///
         /// ELLE REMPLACE LE RESTE, comme celle de la dictée et pour la même
         /// raison : le registre lié à l'âge est écrit en français et pour du
         /// français. Les superposer donnerait au modèle deux ordres dans deux
         /// langues, et il en choisirait un.
         ///
-        /// LA DICTÉE L'EMPORTE quand les deux se présentent. Une dictée
-        /// d'anglais reste avant tout une dictée : c'est le débit qui porte
-        /// l'exercice, et mieux vaut un mot dit à la française qu'un texte
-        /// débité trop vite pour être écrit. Le cas est rare, mais l'ordre des
-        /// branches le tranche plutôt que de le laisser au hasard.
+        /// LA DICTÉE L'EMPORTE quand les deux se présentent — voir `Jeu`. Une
+        /// dictée en langue étrangère reste avant tout une dictée : c'est le
+        /// débit qui porte l'exercice, et mieux vaut un mot dit à la
+        /// française qu'un texte débité trop vite pour être écrit.
+        /// </summary>
+        private static readonly Dictionary<string, string> InstructionsParLangue =
+            new(StringComparer.OrdinalIgnoreCase)
+            {
+                ["en"] = InstructionEcoute("ANGLAIS"),
+                ["es"] = InstructionEcoute("ESPAGNOL"),
+                ["de"] = InstructionEcoute("ALLEMAND"),
+                ["it"] = InstructionEcoute("ITALIEN"),
+                ["zh"] = InstructionEcoute("CHINOIS (mandarin), avec les tons corrects d'un locuteur natif"),
+            };
+
+        /// <summary>
+        /// Le gabarit commun à toute langue étudiée.
         ///
         /// L'ACCENT EST DEMANDÉ EXPLICITEMENT. Sans consigne, le modèle lit
-        /// l'anglais avec l'accent de la voix choisie — française, ici — et
+        /// la langue avec l'accent de la voix choisie — française, ici — et
         /// c'est précisément la fausse prononciation qu'on cherche à éviter.
         /// C'était la raison pour laquelle le professeur d'anglais avait
-        /// interdiction de prononcer le moindre mot d'anglais.
+        /// interdiction de prononcer le moindre mot d'anglais avant que
+        /// cette consigne n'existe.
         /// </summary>
-        private const string Anglais = """
-            Lis ce passage EN ANGLAIS, avec la prononciation naturelle d'un
+        private static string InstructionEcoute(string langue) => $"""
+            Lis ce passage EN {langue}, avec la prononciation naturelle d'un
             locuteur natif. N'imite pas un accent français.
 
             Débit posé, un peu plus lent qu'une conversation : l'élève écoute
             pour comprendre, dans une langue qui n'est pas la sienne. Articule
-            les fins de mots. Marque les groupes de sens par de courtes pauses.
+            les fins de mots, et laisse de courts silences entre les groupes
+            de sens — sans jamais les annoncer à voix haute.
 
             Ton neutre et bienveillant, sans emphase de présentateur.
             """;
@@ -357,18 +532,28 @@ namespace SchoolWebApp.Api.Services.Voix
             rythme.
 
             Débit LENT et très régulier. Articule chaque mot nettement, sans
-            exagérer au point de déformer.
+            exagérer au point de déformer. Prononciation française sur
+            chaque mot, même bref ou isolé — jamais un glissement vers un
+            accent anglais.
 
             Dis le texte par groupes de souffle — quelques mots qui vont
-            ensemble — et marque un VRAI silence après chacun, le temps que la
-            main de l'élève rattrape la voix. Le silence doit être franc,
-            plusieurs secondes, pas une respiration.
+            ensemble — puis tais-toi. Un vrai silence suit chaque groupe, le
+            temps que la main de l'élève rattrape la voix : plusieurs
+            secondes, pas une respiration. Le silence est plus long encore
+            après un point.
 
-            Marque un silence plus long encore à chaque point.
+            CE SILENCE NE S'ANNONCE JAMAIS, IL SE FAIT. Tu ne dis à AUCUN
+            moment « je fais une pause », « voici un silence », ni rien qui y
+            ressemble — tu te tais, simplement. C'est arrivé le 07/09/2026 :
+            au lieu de se taire entre les phrases, la voix a répété à voix
+            haute « une pause », « une pause plus longue », plusieurs fois de
+            suite. L'élève n'a rien compris, la dictée s'est arrêtée là, et il
+            a quitté le cours.
 
             Ton neutre et posé, sans emphase ni intonation expressive : tu ne
             joues pas le texte, tu le donnes à écrire. Aucune hésitation, aucun
-            commentaire, aucune familiarité — seulement le texte.
+            commentaire, aucune familiarité — seulement le texte, et le
+            silence entre ses morceaux.
             """;
 
         private static string Registre(int age) => age switch
@@ -376,8 +561,9 @@ namespace SchoolWebApp.Api.Services.Voix
             <= 8 => """
                 Tu es un professeur particulier qui parle à un enfant de sept ans.
                 Débit lent et très articulé, ton chaleureux et rassurant, beaucoup
-                de douceur. Tu souris en parlant. Marque de vraies pauses entre les
-                idées, comme si tu laissais à l'enfant le temps de réfléchir.
+                de douceur. Tu souris en parlant. Laisse de vrais silences entre
+                les idées, comme si tu laissais à l'enfant le temps de
+                réfléchir — sans jamais dire que tu marques une pause.
                 """,
             <= 11 => """
                 Tu es un professeur particulier bienveillant qui parle à un enfant

@@ -31,8 +31,15 @@ namespace SchoolWebApp.Domain.Repositories
         /// était déjà publié. Sans quoi il suffirait de publier une phrase
         /// anodine, d'attendre la validation, puis de la remplacer.
         /// </summary>
+        /// <param name="eleveId">
+        /// Renseigné si c'est CET enfant, avec son propre code, qui a rédigé
+        /// cette version — null si c'est le parent. Sert à afficher le bon
+        /// prénom à la lecture, pas à restreindre quoi que ce soit : l'avis
+        /// reste celui du foyer.
+        /// </param>
         Task<MonAvis> DeposerAsync(
-            int parentId, int note, string? titre, string? commentaire, CancellationToken ct = default);
+            int parentId, int note, string? titre, string? commentaire, int? eleveId,
+            CancellationToken ct = default);
 
         /// <summary>Efface l'avis d'un parent. Rend faux s'il n'en avait pas.</summary>
         Task<bool> RetirerAsync(int parentId, CancellationToken ct = default);

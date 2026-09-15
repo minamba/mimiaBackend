@@ -1,3 +1,5 @@
+using System.Text;
+using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
@@ -5,6 +7,7 @@ using SchoolWebApp.Api.Request;
 using SchoolWebApp.Api.Services;
 using SchoolWebApp.Api.Services.Notifications;
 using SchoolWebApp.Api.Services.Paiement;
+using SchoolWebApp.Api.ViewModels;
 using SchoolWebApp.Domain.Models;
 using SchoolWebApp.Domain.Repositories;
 using SchoolWebApp.Domain.Services;
@@ -93,6 +96,47 @@ namespace SchoolWebApp.Api.Controllers
                         + "ni changé de rôle. Son adresse se règle dans la configuration du serveur."
             });
         }
+
+        // ------------------------------------------------------------------
+        // Échéances de référentiel
+        //
+        // Voir EcheanceReferentielWorker : il alerte tout seul, il ne peut
+        // pas constater qu'une vérification a réellement eu lieu — seul un
+        // humain le peut, via GetEcheancesReferentiel puis MarquerTraitee.
+        // ------------------------------------------------------------------
+        [HttpGet("echeances-referentiel")]
+        [SwaggerResponse(200, "Les échéances de révision du référentiel.", typeof(IEnumerable<EcheanceReferentielDetail>))]
+        public async Task<IActionResult> GetEcheancesReferentiel(
+            [FromServices] IEcheanceReferentielRepository echeances, CancellationToken ct) =>
+            Ok(await echeances.GetToutesAsync(ct));
+
+        /// <summary>
+        /// Le programme scolaire entier, classe par classe, avec le statut de
+        /// chaque notion et les échéances officielles rangées sous leur
+        /// matière — l'onglet « Programme scolaire » de l'administration.
+        /// </summary>
+        [HttpGet("programme-scolaire")]
+        [SwaggerResponse(200, "Le programme, classe par classe.", typeof(ProgrammeScolaireAdmin))]
+        public async Task<IActionResult> GetProgrammeScolaire(
+            [FromServices] IProgrammeScolaireRepository programme, CancellationToken ct) =>
+            Ok(await programme.GetProgrammeAsync(ct));
+
+        /// <summary>
+        /// La vérification des cartes d'examen : notions retenues par matière, et
+        /// tout ce qui viderait une carte en silence. Voir `VerificationExamen`.
+        /// </summary>
+        [HttpGet("examens/verification")]
+        [SwaggerResponse(200, "Les examens actifs, carte par carte.", typeof(IEnumerable<VerificationExamen>))]
+        public async Task<IActionResult> VerifierExamens(
+            [FromServices] IExamenRepository examens, CancellationToken ct) =>
+            Ok(await examens.VerifierAsync(ct));
+
+        [HttpPost("echeances-referentiel/{id:int}/traiter")]
+        [SwaggerResponse(204, "Marquée traitée : le worker cesse d'alerter dessus.")]
+        [SwaggerResponse(404, "Cette échéance n'existe pas.")]
+        public async Task<IActionResult> TraiterEcheanceReferentiel(
+            int id, [FromServices] IEcheanceReferentielRepository echeances, CancellationToken ct) =>
+            await echeances.MarquerTraiteeAsync(id, DateTime.UtcNow, ct) ? NoContent() : NotFound();
 
         // ------------------------------------------------------------------
         // Statistiques
@@ -294,6 +338,31 @@ namespace SchoolWebApp.Api.Controllers
             await Executer(() => _adminService.GetEtatBaseAsync());
 
         /// <summary>
+        /// L'état d'Anthropic et d'OpenAI, tel que la dernière vérification
+        /// l'a constaté — sans rappeler personne.
+        ///
+        /// CE N'EST PAS LE SOLDE. Aucune des deux API ne le donne avec une clé
+        /// ordinaire ; on sait seulement si un appel payant passe, et sinon
+        /// pourquoi. Le solde se lit sur leurs sites, dont l'écran donne le lien.
+        /// </summary>
+        [HttpGet("fournisseurs")]
+        [SwaggerResponse(200, "L'état des fournisseurs d'IA.", typeof(IEnumerable<SchoolWebApp.Api.Services.Fournisseurs.EtatFournisseur>))]
+        public IActionResult GetFournisseurs(
+            [FromServices] SchoolWebApp.Api.Services.Fournisseurs.EtatFournisseurs etats) =>
+            Ok(etats.Tous());
+
+        /// <summary>
+        /// Vérifie tout de suite, sans attendre le worker — le bouton qu'on
+        /// presse juste après avoir rechargé un compte.
+        /// </summary>
+        [HttpPost("fournisseurs/verifier")]
+        [SwaggerResponse(200, "L'état des fournisseurs d'IA, à l'instant.", typeof(IEnumerable<SchoolWebApp.Api.Services.Fournisseurs.EtatFournisseur>))]
+        public async Task<IActionResult> VerifierFournisseurs(
+            [FromServices] SchoolWebApp.Api.Services.Fournisseurs.SurveillanceFournisseurs surveillance,
+            CancellationToken ct) =>
+            Ok(await surveillance.VerifierAsync(ct));
+
+        /// <summary>
         /// Les bornes d'une période nommée, décalée d'autant de crans.
         ///
         /// PARTAGÉE ENTRE LE RÉSUMÉ ET LE TABLEAU, et c'est tout son intérêt :
@@ -389,6 +458,87 @@ namespace SchoolWebApp.Api.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Erreur lors du chargement de la fiche de l'eleve {EleveId}.", id);
+                return StatusCode(500, new { message = "Une erreur est survenue, veuillez réessayer." });
+            }
+        }
+
+        /// <summary>
+        /// Le calendrier d'un élève, pour l'administration — vacances,
+        /// séances par matière, évaluations passées et à venir.
+        ///
+        /// MÊME CONTENU QUE `ElevesController.GetCalendrier`, MAIS SANS LA
+        /// PROPRIÉTÉ À VÉRIFIER. Celle-ci passe par
+        /// `IChatContexteResolver.ResoudreEleveAsync`, qui rend null si
+        /// l'élève n'appartient pas au parent du jeton — une garde qui n'a
+        /// pas de sens ici : l'administration doit justement pouvoir ouvrir
+        /// le calendrier de n'importe quel enfant. `IEleveService.GetEleveByIdAsync`
+        /// est la version SANS cette vérification, réservée aux lectures déjà
+        /// protégées en amont par `EstAdmin` — voir son commentaire.
+        /// </summary>
+        [HttpGet("eleves/{id:int}/calendrier")]
+        [SwaggerResponse(200, "Le calendrier.", typeof(CalendrierEleveViewModel))]
+        [SwaggerResponse(404, "Élève inexistant.")]
+        public async Task<IActionResult> GetCalendrierEleve(
+            int id,
+            [FromQuery] int annee,
+            [FromQuery] int mois,
+            [FromServices] IEleveService eleveService,
+            [FromServices] IReferentielService referentiel,
+            [FromServices] IRapportRepository rapports,
+            [FromServices] IEvaluationRepository evaluations,
+            CancellationToken ct)
+        {
+            if (mois < 1 || mois > 12) return BadRequest();
+
+            try
+            {
+                var eleve = await eleveService.GetEleveByIdAsync(id);
+                if (eleve is null) return NotFound();
+
+                var debutMois = new DateTime(annee, mois, 1, 0, 0, 0, DateTimeKind.Utc);
+                var finMoisExclusif = debutMois.AddMonths(1);
+
+                var vacances = await referentiel.GetPeriodesVacancesAsync(eleve.Zone, debutMois, finMoisExclusif);
+                var prochaineVacances = await referentiel.GetProchainePeriodeVacancesAsync(eleve.Zone, DateTime.UtcNow.Date);
+
+                var seances = await rapports.GetEntreAsync(id, debutMois, finMoisExclusif, ct);
+                var evaluationsDuMois = await evaluations.GetEntreAsync(id, debutMois, finMoisExclusif, ct);
+
+                return Ok(new CalendrierEleveViewModel
+                {
+                    Zone = eleve.Zone,
+                    Vacances = vacances.Select(v => new PeriodeVacancesViewModel
+                    {
+                        Libelle = v.Libelle,
+                        DateDebut = v.DateDebut,
+                        DateFin = v.DateFin,
+                    }),
+                    ProchaineVacances = prochaineVacances is null ? null : new PeriodeVacancesViewModel
+                    {
+                        Libelle = prochaineVacances.Libelle,
+                        DateDebut = prochaineVacances.DateDebut,
+                        DateFin = prochaineVacances.DateFin,
+                    },
+                    Seances = seances.Select(s => new SeanceJourViewModel
+                    {
+                        Date = s.DateCreation,
+                        MatiereId = s.MatiereId,
+                        MatiereLibelle = s.MatiereLibelle,
+                        ProfCouleur = s.ProfCouleur,
+                        DureeChoisieMinutes = s.DureeChoisieMinutes,
+                    }),
+                    Evaluations = evaluationsDuMois.Select(e => new EvaluationJourViewModel
+                    {
+                        Date = e.DateCreation,
+                        MatiereId = e.MatiereId,
+                        MatiereLibelle = e.MatiereLibelle,
+                        Note = e.Note,
+                    }),
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Erreur lors du chargement du calendrier de l'eleve {EleveId}.", id);
                 return StatusCode(500, new { message = "Une erreur est survenue, veuillez réessayer." });
             }
         }
@@ -493,6 +643,34 @@ namespace SchoolWebApp.Api.Controllers
                 _logger.LogError(
                     ex, "Erreur lors du chargement de la copie {EvaluationId} de l'eleve {EleveId}.",
                     evaluationId, id);
+
+                return StatusCode(500, new { message = "Une erreur est survenue, veuillez réessayer." });
+            }
+        }
+
+        /// <summary>
+        /// Une dictée corrigée. Même raison que les deux routes ci-dessus : le
+        /// bouton « Voir la dictée » de la fiche souffrirait exactement du
+        /// même défaut sans elle — un administrateur qui consulte une autre
+        /// famille se heurterait à la garde d'appartenance de la route
+        /// parent.
+        /// </summary>
+        [HttpGet("eleves/{id:int}/dictees/{dicteeId:int}")]
+        [SwaggerResponse(200, "La dictée.", typeof(DicteeEleve))]
+        [SwaggerResponse(404, "Dictée inexistante, ou n'appartenant pas à cet élève.")]
+        public async Task<IActionResult> GetDicteeEleve(
+            int id, int dicteeId, [FromServices] IDicteeRepository dictees)
+        {
+            try
+            {
+                var dictee = await dictees.GetDetailAsync(dicteeId, id);
+                return dictee is null ? NotFound() : Ok(dictee);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(
+                    ex, "Erreur lors du chargement de la dictee {DicteeId} de l'eleve {EleveId}.",
+                    dicteeId, id);
 
                 return StatusCode(500, new { message = "Une erreur est survenue, veuillez réessayer." });
             }
@@ -1035,6 +1213,7 @@ namespace SchoolWebApp.Api.Controllers
                 ["corpsMessage"] = diffusion.ComposerCorps(texte ?? string.Empty, images?.Count ?? 0),
                 ["blocPiecesJointes"] = diffusion.ComposerPiecesJointes(
                     documents?.Select(d => d.FileName).ToList() ?? []),
+                ["mentionPied"] = diffusion.ComposerMentionPied(),
             };
 
             var html = await email.RendreAsync(sujet ?? string.Empty, "diffusion", valeurs);
@@ -1109,6 +1288,82 @@ namespace SchoolWebApp.Api.Controllers
             Ok(diffusion.Etat);
 
         /// <summary>
+        /// Écrit à UN parent, dans la même mise en page que la diffusion.
+        ///
+        /// MÊME COMPOSITION, UN SEUL DESTINATAIRE.
+        /// `IDiffusionService.ComposerCorps` et le gabarit « diffusion » sont
+        /// réutilisés tels quels : ce parent voit la même mise en page qu'une
+        /// diffusion générale, avec ses propres images et pièces jointes.
+        /// `DiffuserAsync` avec une liste d'un seul destinataire fait
+        /// exactement ce qu'il faut — pas de second chemin d'envoi à
+        /// entretenir.
+        ///
+        /// SYNCHRONE, CONTRAIREMENT À LA DIFFUSION. Un seul message se compose
+        /// et s'envoie en une poignée de secondes, largement sous le délai qui
+        /// ferait expirer la requête. Le suivi d'avancement de la diffusion en
+        /// masse n'a pas de sens pour un message à un seul destinataire.
+        /// </summary>
+        [HttpPost("mails/parent")]
+        [RequestSizeLimit(TailleMaxDiffusion)]
+        [SwaggerResponse(200, "Message envoyé.")]
+        [SwaggerResponse(400, "Adresse, objet ou message manquant ou invalide.")]
+        [SwaggerResponse(502, "L'envoi a échoué.")]
+        public async Task<IActionResult> EnvoyerMailParent(
+            [FromForm] string destinataire,
+            [FromForm] string sujet,
+            [FromForm] string titre,
+            [FromForm] string texte,
+            [FromServices] IDiffusionService diffusion,
+            [FromServices] SchoolWebApp.Domain.Emails.IServiceEmail email,
+            [FromForm] List<IFormFile>? images = null,
+            [FromForm] List<IFormFile>? documents = null,
+            CancellationToken ct = default)
+        {
+            if (string.IsNullOrWhiteSpace(sujet) || string.IsNullOrWhiteSpace(texte))
+            {
+                return BadRequest(new { message = "L'objet et le message sont obligatoires." });
+            }
+
+            var adresse = destinataire?.Trim() ?? string.Empty;
+
+            try
+            {
+                _ = new System.Net.Mail.MailAddress(adresse);
+            }
+            catch (FormatException)
+            {
+                return BadRequest(new { message = "L'adresse du parent n'est pas valide." });
+            }
+
+            var lues = await LirePiecesAsync(images, "diffusion");
+            var jointes = await LirePiecesAsync(documents, null);
+
+            var valeurs = new Dictionary<string, string>
+            {
+                ["titre"] = sujet,
+                ["titreMessage"] = titre ?? sujet,
+                ["corpsMessage"] = diffusion.ComposerCorps(texte, lues.Count),
+                ["blocPiecesJointes"] =
+                    diffusion.ComposerPiecesJointes(jointes.Select(d => d.NomFichier).ToList()),
+                ["mentionPied"] = diffusion.ComposerMentionPied(),
+            };
+
+            var resultat = await email.DiffuserAsync(
+                new[] { adresse }, sujet, "diffusion", valeurs, lues, jointes, ct: ct);
+
+            if (resultat.Envoyes == 0)
+            {
+                return StatusCode(502, new { message = "Le message n'a pas pu être envoyé." });
+            }
+
+            _logger.LogInformation(
+                "MAIL PARENT ENVOYE a {Destinataire} : « {Sujet} », {Images} image(s), {Docs} document(s).",
+                adresse, sujet, lues.Count, jointes.Count);
+
+            return Ok(new { message = "Message envoyé." });
+        }
+
+        /// <summary>
         /// Charge les fichiers en mémoire.
         ///
         /// Les octets ne sont NULLE PART persistés : une diffusion vit le temps
@@ -1156,7 +1411,8 @@ namespace SchoolWebApp.Api.Controllers
             try
             {
                 var eleve = await _adminService.ModifierEleveAsync(
-                    id, model.Prenom, model.Nom, model.Age, model.NiveauScolaireId, model.Sexe);
+                    id, model.Prenom, model.Nom, model.Age, model.NiveauScolaireId, model.Sexe,
+                    model.AcademieId);
 
                 return eleve is null ? NotFound() : Ok(eleve);
             }
@@ -1165,6 +1421,374 @@ namespace SchoolWebApp.Api.Controllers
                 _logger.LogError(ex, "Erreur lors de la modification de l'eleve {EleveId}.", id);
                 return StatusCode(500, new { message = "Une erreur est survenue, veuillez réessayer." });
             }
+        }
+
+        /// <summary>
+        /// Toutes les périodes de vacances, toutes zones et années — pour
+        /// l'onglet « Périodes scolaires ». `CalendrierScolaireSyncWorker`
+        /// les tient à jour tout seul chaque jour ; cet écran sert à
+        /// corriger une date à la main quand la source officielle se trompe
+        /// (voir `CalendrierScolaireApiService`), ou à ajouter une zone
+        /// qu'elle ne couvre pas encore.
+        /// </summary>
+        [HttpGet("periodes-vacances")]
+        [SwaggerResponse(200, "Toutes les periodes.", typeof(IEnumerable<Domain.Models.PeriodeVacances>))]
+        public async Task<IActionResult> GetPeriodesVacances(
+            [FromServices] IReferentielService referentiel) =>
+            Ok(await referentiel.GetToutesLesPeriodesVacancesAsync());
+
+        [HttpPost("periodes-vacances")]
+        [SwaggerResponse(200, "La periode creee.", typeof(Domain.Models.PeriodeVacances))]
+        [SwaggerResponse(400, "Requete invalide.")]
+        public async Task<IActionResult> CreerPeriodeVacances(
+            [FromBody] PeriodeVacancesRequest model, [FromServices] IReferentielService referentiel)
+        {
+            var faute = ValiderPeriodeVacances(model);
+            if (faute is not null) return BadRequest(new { message = faute });
+
+            try
+            {
+                var periode = await referentiel.AjouterPeriodeVacancesAsync(
+                    model.Zone!.Trim(), model.AnneeScolaire!.Trim(), model.Libelle!.Trim(),
+                    model.DateDebut!.Value, model.DateFin!.Value);
+
+                return Ok(periode);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Erreur lors de la creation d'une periode de vacances.");
+                return StatusCode(500, new { message = "Une erreur est survenue, veuillez réessayer." });
+            }
+        }
+
+        [HttpPut("periodes-vacances/{id:int}")]
+        [SwaggerResponse(200, "La periode modifiee.", typeof(Domain.Models.PeriodeVacances))]
+        [SwaggerResponse(400, "Requete invalide.")]
+        [SwaggerResponse(404, "Periode inexistante.")]
+        public async Task<IActionResult> ModifierPeriodeVacances(
+            int id, [FromBody] PeriodeVacancesRequest model, [FromServices] IReferentielService referentiel)
+        {
+            var faute = ValiderPeriodeVacances(model);
+            if (faute is not null) return BadRequest(new { message = faute });
+
+            try
+            {
+                var periode = await referentiel.ModifierPeriodeVacancesAsync(
+                    id, model.Zone!.Trim(), model.AnneeScolaire!.Trim(), model.Libelle!.Trim(),
+                    model.DateDebut!.Value, model.DateFin!.Value);
+
+                return periode is null ? NotFound() : Ok(periode);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Erreur lors de la modification de la periode de vacances {Id}.", id);
+                return StatusCode(500, new { message = "Une erreur est survenue, veuillez réessayer." });
+            }
+        }
+
+        [HttpDelete("periodes-vacances/{id:int}")]
+        [SwaggerResponse(204, "Periode supprimee.")]
+        [SwaggerResponse(404, "Periode inexistante.")]
+        public async Task<IActionResult> SupprimerPeriodeVacances(
+            int id, [FromServices] IReferentielService referentiel) =>
+            await referentiel.SupprimerPeriodeVacancesAsync(id) ? NoContent() : NotFound();
+
+        /// <summary>
+        /// Une fin avant un début n'est pas rattrapable par la base : c'est
+        /// exactement la coquille relevée sur la source officielle
+        /// (Guadeloupe, Noël 2026-2027) que ce garde-fou empêche de ressaisir
+        /// à la main par erreur.
+        /// </summary>
+        private static string? ValiderPeriodeVacances(PeriodeVacancesRequest model)
+        {
+            if (string.IsNullOrWhiteSpace(model.Zone)) return "La zone est obligatoire.";
+            if (string.IsNullOrWhiteSpace(model.AnneeScolaire)) return "L'annee scolaire est obligatoire.";
+            if (string.IsNullOrWhiteSpace(model.Libelle)) return "Le libelle est obligatoire.";
+            if (model.DateDebut is null || model.DateFin is null) return "Les deux dates sont obligatoires.";
+            if (model.DateFin < model.DateDebut) return "La date de fin ne peut pas précéder la date de début.";
+
+            return null;
+        }
+
+        // -----------------------------------------------------------------
+        // Événements en direct — pour ne plus sonder le serveur en boucle
+        // -----------------------------------------------------------------
+
+        /// <summary>
+        /// Un flux tenu ouvert : chaque « signalement » ou « visite » publié
+        /// via <see cref="IEvenementsAdminHub"/> arrive ici à la seconde,
+        /// tant que l'onglet d'administration reste ouvert.
+        /// </summary>
+        /// <summary>
+        /// Le silence maximal toléré sur le flux avant d'envoyer un signe de vie.
+        ///
+        /// Un onglet d'administration peut rester ouvert des heures sans qu'il
+        /// se passe quoi que ce soit — c'est même le cas normal. Or une
+        /// connexion muette est coupée par les intermédiaires bien avant :
+        /// nginx abandonne au bout d'une minute d'inactivité. Sans ce
+        /// battement, le flux tomberait donc en boucle toutes les minutes en
+        /// production, et l'écran ne devrait ses mises à jour qu'à la
+        /// reconnexion suivante.
+        /// </summary>
+        private static readonly TimeSpan IntervalleBattement = TimeSpan.FromSeconds(25);
+
+        [HttpGet("evenements")]
+        [SwaggerResponse(200, "Flux SSE des événements d'administration.")]
+        public async Task Evenements(
+            [FromServices] IEvenementsAdminHub hub, CancellationToken ct)
+        {
+            Response.Headers.ContentType = "text/event-stream";
+            Response.Headers.CacheControl = "no-cache";
+            Response.Headers.Connection = "keep-alive";
+
+            HttpContext.Features
+                .Get<Microsoft.AspNetCore.Http.Features.IHttpResponseBodyFeature>()
+                ?.DisableBuffering();
+
+            async Task EcrireAsync(string charge)
+            {
+                await Response.Body.WriteAsync(Encoding.UTF8.GetBytes(charge), ct);
+                await Response.Body.FlushAsync(ct);
+            }
+
+            try
+            {
+                // LES EN-TÊTES PARTENT À LA CONNEXION, PAS AU PREMIER ÉVÉNEMENT.
+                //
+                // Les poser ne les envoie pas : ASP.NET attend la première
+                // écriture pour ça. Et cette première écriture peut n'arriver
+                // que dans trois heures, puisqu'elle dépend d'un signalement
+                // qu'un parent n'a peut-être pas encore fait. D'ici là le
+                // navigateur restait suspendu sur une requête sans réponse,
+                // incapable de distinguer « connecté et en attente » de
+                // « ignoré » — et le navigateur n'avait donc rien à refermer
+                // proprement en quittant l'écran. Une ligne de commentaire SSE
+                // (« : … »), que le navigateur lit et jette, suffit à trancher.
+                await EcrireAsync(": connecté\n\n");
+
+                await using var evenements = hub.SAbonnerAsync(ct).GetAsyncEnumerator(ct);
+
+                // L'événement suivant n'est demandé QU'UNE FOIS, et attendu
+                // d'un tour à l'autre : le redemander à chaque battement
+                // ouvrirait une deuxième lecture sur la même file.
+                var suivant = evenements.MoveNextAsync().AsTask();
+
+                while (true)
+                {
+                    // Sans jeton d'annulation sur l'attente : un battement
+                    // annulé laisserait derrière lui une tâche en échec que
+                    // personne ne regarde. Il expire seul, la sortie se joue
+                    // sur `suivant`.
+                    var battement = Task.Delay(IntervalleBattement);
+
+                    if (await Task.WhenAny(suivant, battement) == battement)
+                    {
+                        await EcrireAsync(": battement\n\n");
+                        continue;
+                    }
+
+                    if (!await suivant) break;
+
+                    var json = JsonSerializer.Serialize(new { type = evenements.Current });
+                    await EcrireAsync($"data: {json}\n\n");
+
+                    suivant = evenements.MoveNextAsync().AsTask();
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // L'administrateur a fermé l'onglet — rien à signaler.
+            }
+        }
+
+        // -----------------------------------------------------------------
+        // Signalements — bouton « Signaler »
+        // -----------------------------------------------------------------
+
+        private static readonly HashSet<string> SignalementCategoriesConnues =
+            new(StringComparer.OrdinalIgnoreCase) { "PROFESSEUR", "TECHNIQUE", "SUGGESTION", "AUTRE" };
+
+        private static readonly HashSet<string> SignalementEtatsConnus =
+            new(StringComparer.OrdinalIgnoreCase) { "nouveau", "en_cours", "traite" };
+
+        [HttpGet("signalements")]
+        [SwaggerResponse(200, "Tous les signalements.", typeof(IEnumerable<Signalement>))]
+        public async Task<IActionResult> GetSignalements(
+            [FromServices] ISignalementService signalements, CancellationToken ct) =>
+            Ok(await signalements.GetTousAsync(ct));
+
+        [HttpPost("signalements")]
+        [SwaggerResponse(200, "Le signalement cree.", typeof(Signalement))]
+        [SwaggerResponse(400, "Requete invalide.")]
+        public async Task<IActionResult> CreerSignalement(
+            [FromBody] SignalementAdminRequest model,
+            [FromServices] ISignalementService signalements,
+            [FromServices] IParentService parentService,
+            CancellationToken ct)
+        {
+            var faute = ValiderSignalement(model, exigerParentMail: true);
+            if (faute is not null) return BadRequest(new { message = faute });
+
+            var parent = await parentService.GetParentByMailAsync(model.ParentMail!.Trim());
+            if (parent is null)
+            {
+                return BadRequest(new { message = "Aucun parent ne correspond à cette adresse." });
+            }
+
+            try
+            {
+                var signalement = await signalements.CreerAsync(
+                    parent.Id, null, model.Categorie!.Trim().ToUpperInvariant(),
+                    model.Description!.Trim(), ct);
+
+                // L'état par défaut est "nouveau" : une saisie initiale dans
+                // un autre état n'est pas un CHANGEMENT vécu par le parent,
+                // donc pas d'e-mail ici — contrairement à la modification
+                // ci-dessous.
+                var etatDemande = model.Etat?.Trim().ToLowerInvariant();
+                if (!string.IsNullOrWhiteSpace(etatDemande) && etatDemande != "nouveau")
+                {
+                    signalement = await signalements.ModifierAsync(
+                        signalement.Id, signalement.Categorie!, signalement.Description!,
+                        etatDemande, ct) ?? signalement;
+                }
+
+                return StatusCode(201, signalement);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Erreur lors de la creation manuelle d'un signalement.");
+                return StatusCode(500, new { message = "Une erreur est survenue, veuillez réessayer." });
+            }
+        }
+
+        [HttpPut("signalements/{id:int}")]
+        [SwaggerResponse(200, "Le signalement modifie.", typeof(Signalement))]
+        [SwaggerResponse(400, "Requete invalide.")]
+        [SwaggerResponse(404, "Signalement inexistant.")]
+        public async Task<IActionResult> ModifierSignalement(
+            int id, [FromBody] SignalementAdminRequest model,
+            [FromServices] ISignalementService signalements,
+            [FromServices] Domain.Emails.IServiceEmail email,
+            CancellationToken ct)
+        {
+            var faute = ValiderSignalement(model, exigerParentMail: false);
+            if (faute is not null) return BadRequest(new { message = faute });
+
+            var avant = await signalements.GetByIdAsync(id, ct);
+            if (avant is null) return NotFound();
+
+            var categorie = model.Categorie!.Trim().ToUpperInvariant();
+            var etat = model.Etat!.Trim().ToLowerInvariant();
+
+            try
+            {
+                var apres = await signalements.ModifierAsync(
+                    id, categorie, model.Description!.Trim(), etat, ct);
+
+                if (apres is null) return NotFound();
+
+                // UN MAIL SEULEMENT SI L'ÉTAT A VRAIMENT CHANGÉ.
+                //
+                // Corriger une faute de frappe dans la description ne doit
+                // pas relancer un message au parent — seule une vraie
+                // progression du traitement le justifie.
+                if (etat != avant.Etat && !string.IsNullOrWhiteSpace(apres.ParentMail))
+                {
+                    await EnvoyerMailEtatSignalementAsync(email, apres, etat, ct);
+                }
+
+                return Ok(apres);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Erreur lors de la modification du signalement {Id}.", id);
+                return StatusCode(500, new { message = "Une erreur est survenue, veuillez réessayer." });
+            }
+        }
+
+        [HttpDelete("signalements/{id:int}")]
+        [SwaggerResponse(204, "Signalement supprime.")]
+        [SwaggerResponse(404, "Signalement inexistant.")]
+        public async Task<IActionResult> SupprimerSignalement(
+            int id, [FromServices] ISignalementService signalements, CancellationToken ct) =>
+            await signalements.SupprimerAsync(id, ct) ? NoContent() : NotFound();
+
+        private static readonly Dictionary<string, string> LibellesCategorieSignalement =
+            new(StringComparer.OrdinalIgnoreCase)
+            {
+                ["PROFESSEUR"] = "Problème avec un professeur",
+                ["TECHNIQUE"] = "Problème technique",
+                ["SUGGESTION"] = "Suggestion",
+                ["AUTRE"] = "Autre",
+            };
+
+        /// <summary>
+        /// Le mail « en cours » ou « traité », selon le nouvel état. Le
+        /// second varie en plus selon la catégorie : un problème technique ou
+        /// un souci avec un professeur mérite qu'on demande au parent de
+        /// retester, une suggestion ou un « autre » non.
+        /// </summary>
+        private static async Task EnvoyerMailEtatSignalementAsync(
+            Domain.Emails.IServiceEmail email, Signalement signalement, string etat, CancellationToken ct)
+        {
+            var theme = LibellesCategorieSignalement.GetValueOrDefault(
+                signalement.Categorie ?? "", signalement.Categorie ?? "");
+
+            var valeurs = new Dictionary<string, string>
+            {
+                ["theme"] = theme,
+                ["description"] = signalement.Description ?? "",
+            };
+
+            if (etat == "en_cours")
+            {
+                await email.EnvoyerAsync(
+                    signalement.ParentMail!, "Votre signalement est en cours de traitement",
+                    "signalement-en-cours", valeurs, ct);
+            }
+            else if (etat == "traite")
+            {
+                var relance = string.Equals(signalement.Categorie, "PROFESSEUR", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(signalement.Categorie, "TECHNIQUE", StringComparison.OrdinalIgnoreCase);
+
+                valeurs["consigneSuivi"] = relance
+                    ? """
+                      <p style="margin:0 0 20px 0; font-size:15px; line-height:1.7; color:#16233a;">
+                        N'hésitez pas à retester dès maintenant. Si le problème persiste,
+                        répondez directement à ce message pour nous le signaler à nouveau.
+                      </p>
+                      """
+                    : "";
+
+                await email.EnvoyerAsync(
+                    signalement.ParentMail!, "Votre signalement a été traité",
+                    "signalement-traite", valeurs, ct);
+            }
+        }
+
+        private static string? ValiderSignalement(SignalementAdminRequest model, bool exigerParentMail)
+        {
+            if (exigerParentMail && string.IsNullOrWhiteSpace(model.ParentMail))
+            {
+                return "L'adresse du parent est obligatoire.";
+            }
+
+            if (string.IsNullOrWhiteSpace(model.Categorie)
+                || !SignalementCategoriesConnues.Contains(model.Categorie.Trim()))
+            {
+                return "La catégorie est obligatoire et doit être connue.";
+            }
+
+            if (string.IsNullOrWhiteSpace(model.Description)) return "La description est obligatoire.";
+
+            if (string.IsNullOrWhiteSpace(model.Etat)
+                || !SignalementEtatsConnus.Contains(model.Etat.Trim()))
+            {
+                return "L'état est obligatoire et doit être connu.";
+            }
+
+            return null;
         }
 
         /// <summary>

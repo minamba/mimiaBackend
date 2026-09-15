@@ -61,7 +61,7 @@ namespace SchoolWebApp.Domain.Services.impl
         /// venue du navigateur laisserait n'importe qui écrire dans le passé —
         /// ou dans l'avenir — et fausser une courbe qu'on lit pour décider.
         /// </summary>
-        public Task EnregistrerVisiteAsync(string visiteur) =>
+        public Task<bool> EnregistrerVisiteAsync(string visiteur) =>
             _adminRepository.EnregistrerVisiteAsync(visiteur, DateTime.UtcNow);
 
         public Task<IEnumerable<PointSerie>> GetSerieParentsAsync(
@@ -120,8 +120,10 @@ namespace SchoolWebApp.Domain.Services.impl
             return fiche;
         }
 
-        public Task<EleveAdmin?> ModifierEleveAsync(int id, string? prenom, string? nom, int? age, int? niveauScolaireId, Sexe? sexe) =>
-            _adminRepository.ModifierEleveAsync(id, prenom, nom, age, niveauScolaireId, sexe);
+        public Task<EleveAdmin?> ModifierEleveAsync(
+            int id, string? prenom, string? nom, int? age, int? niveauScolaireId, Sexe? sexe,
+            int? academieId = null) =>
+            _adminRepository.ModifierEleveAsync(id, prenom, nom, age, niveauScolaireId, sexe, academieId);
 
         public Task<RepartitionParents> GetRepartitionParentsAsync(
             IReadOnlyCollection<string> mailsExclus) =>

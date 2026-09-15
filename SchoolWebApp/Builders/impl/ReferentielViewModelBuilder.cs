@@ -19,7 +19,38 @@ namespace SchoolWebApp.Api.Builders.impl
         public async Task<IEnumerable<NiveauScolaireViewModel>> GetNiveauxScolairesAsync()
         {
             var niveaux = await _referentielService.GetNiveauxScolairesAsync();
-            return _mapper.Map<IEnumerable<NiveauScolaireViewModel>>(niveaux);
+            var vues = _mapper.Map<IEnumerable<NiveauScolaireViewModel>>(niveaux).ToList();
+
+            // UNE SPÉCIALITÉ N'EST PROPOSÉE QUE SI SON PROFESSEUR EXISTE : une case
+            // cochée sans matière ouverte derrière ne donnerait rien à l'élève.
+            var ouvertes = (await _referentielService.GetMatieresAsync(activesSeulement: true))
+                .Select(m => m.Code)
+                .Where(c => c is not null)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            var proposees = VoiesScolaires.SpecialitesGenerales
+                .Where(s => ouvertes.Contains(s.Code))
+                .Select(s => new SpecialiteViewModel { Code = s.Code, Libelle = s.Libelle, Precision = s.Precision })
+                .ToList();
+
+            // Le regroupement et le choix possible viennent de la même table que
+            // le programme de chaque classe : `VoiesScolaires`.
+            foreach (var vue in vues)
+            {
+                vue.Groupe = VoiesScolaires.Groupe(vue.Code, vue.Cycle);
+                vue.Selectionnable = VoiesScolaires.EstSelectionnable(vue.Code);
+                vue.Lv2Possible = VoiesScolaires.AUneLv2(vue.Code);
+                vue.NombreSpecialites = VoiesScolaires.NombreSpecialites(vue.Code);
+                vue.SpecialitesPossibles = vue.NombreSpecialites > 0 ? proposees : [];
+            }
+
+            return vues;
+        }
+
+        public async Task<IEnumerable<AcademieViewModel>> GetAcademiesAsync()
+        {
+            var academies = await _referentielService.GetAcademiesAsync();
+            return _mapper.Map<IEnumerable<AcademieViewModel>>(academies);
         }
 
         public async Task<IEnumerable<MatiereViewModel>> GetMatieresAsync(bool activesSeulement)
@@ -80,7 +111,7 @@ namespace SchoolWebApp.Api.Builders.impl
                         Avatar = principale.ProfAvatar,
                         Couleur = principale.ProfCouleur,
                         Code = principale.Code,
-                        Matieres = siennes.Select(m => m.Libelle ?? string.Empty).ToList(),
+                        Matieres = siennes.Select(m => NomCourt(m.Code, m.Libelle)).ToList(),
                     };
                 })
                 // L'équipe suit l'ordre des matières, pas l'ordre du
@@ -89,5 +120,42 @@ namespace SchoolWebApp.Api.Builders.impl
                 .OrderBy(p => matieres.First(m => m.Code == p.Code).Ordre)
                 .ToList();
         }
+
+        /// <summary>
+        /// LE NOM COURT D'UNE MATIÈRE, POUR LES CARTES DE L'ÉQUIPE — Camara, le
+        /// 15/09/2026 : « enlève les descriptions, laisse juste le nom des
+        /// matières, sinon c'est trop long ». Sous Adrien s'alignaient trois
+        /// intitulés officiels complets (« Littérature, langues et cultures de
+        /// l'Antiquité — latin »…) et la carte devenait un paragraphe.
+        ///
+        /// LES SIGLES QUE LES FAMILLES CONNAISSENT : c'est ainsi que les
+        /// spécialités s'écrivent sur un bulletin et dans les conversations.
+        ///
+        /// POUR CES CARTES SEULEMENT : ailleurs — grille des matières, fiches,
+        /// bilans — l'intitulé complet reste, parce qu'on y a la place et que
+        /// l'élève y cherche sa matière exacte. Une matière absente de la table
+        /// garde son libellé : un ajout ne casse rien, il reste simplement long.
+        /// </summary>
+        private static string NomCourt(string? code, string? libelle) => code?.ToUpperInvariant() switch
+        {
+            "SCIENCES" => "Sciences",
+            "HGGSP" => "HGGSP",
+            "HLP" => "HLP",
+            "SES" => "SES",
+            "NSI" => "NSI",
+            "SI" => "SI",
+            "EPPCS" => "EPPCS",
+            "LLCER_ANGLAIS" => "LLCER anglais",
+            "AMC" => "AMC",
+            "LLCER_ESPAGNOL" => "LLCER espagnol",
+            "LLCA_LATIN" => "LLCA latin",
+            "LLCA_GREC" => "LLCA grec",
+            "SCIENCES_GESTION" => "SGN",
+            "SANITAIRE_SOCIAL" => "STSS",
+            "BIOLOGIE_HUMAINE" => "Biologie humaine",
+            "BIOTECHNOLOGIES" => "Biotechnologies",
+            "SPCL" => "SPCL",
+            _ => libelle ?? string.Empty,
+        };
     }
 }

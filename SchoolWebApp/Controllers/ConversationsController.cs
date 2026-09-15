@@ -20,16 +20,19 @@ namespace SchoolWebApp.Api.Controllers
     {
         private readonly IChatViewModelBuilder _chatBuilder;
         private readonly Workers.ReveilDocuments _reveilDocuments;
+        private readonly Services.ScanMobile.JetonsScanMobile _jetonsScan;
         private readonly ILogger<ConversationsController> _logger;
 
         public ConversationsController(
             IChatViewModelBuilder chatBuilder,
             Workers.ReveilDocuments reveilDocuments,
+            Services.ScanMobile.JetonsScanMobile jetonsScan,
             ILogger<ConversationsController> logger)
         {
             _chatBuilder = chatBuilder ?? throw new ArgumentNullException(nameof(chatBuilder));
             _reveilDocuments = reveilDocuments
                 ?? throw new ArgumentNullException(nameof(reveilDocuments));
+            _jetonsScan = jetonsScan ?? throw new ArgumentNullException(nameof(jetonsScan));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
@@ -155,7 +158,7 @@ namespace SchoolWebApp.Api.Controllers
         /// </summary>
         [HttpPost("{id:int}/accueil")]
         [SwaggerResponse(200, "Flux SSE du message d'accueil.")]
-        public async Task Accueil(int id)
+        public async Task Accueil(int id, [FromBody] AccueilRequest? model)
         {
             PreparerFluxSse();
 
@@ -164,7 +167,8 @@ namespace SchoolWebApp.Api.Controllers
             try
             {
                 await foreach (var fragment in _chatBuilder.StreamAccueilAsync(
-                    id, HttpContext.RequestAborted))
+                    id, model?.DureeChoisieMinutes, model?.ControleId, model?.Mode, model?.EpreuveCode,
+                    HttpContext.RequestAborted))
                 {
                     await EcrireEvenementAsync(new { type = "delta", texte = fragment });
                 }
@@ -369,6 +373,124 @@ namespace SchoolWebApp.Api.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Echec du depot d'une piece jointe sur {ConversationId}.", id);
+                return StatusCode(500, new { message = "Une erreur est survenue, veuillez réessayer." });
+            }
+        }
+
+        /// <summary>
+        /// LA RÉPONSE À « L'ÉNONCÉ ET TA COPIE SONT-ILS SÉPARÉS ? », HORS DE LA
+        /// CONVERSATION.
+        ///
+        /// Relevé par Camara le 13/09/2026 : le clic partait comme un message,
+        /// le professeur y répondait — et répondait « J'ai bien reçu, envoie-moi
+        /// le second » alors que rien n'avait été envoyé. Son marqueur de choix
+        /// ressemblait presque mot pour mot à celui d'une copie envoyée.
+        ///
+        /// Un clic sur un bouton n'est pas une phrase : il ne demande aucune
+        /// réponse. Enregistré ici, le choix ne déclenche AUCUN tour — la
+        /// phrase ne peut donc plus exister. Le professeur l'apprend avec la
+        /// première pièce envoyée, par le rappel de chaque tour.
+        /// </summary>
+        [HttpPost("{id:int}/copie-controle/choix")]
+        [SwaggerResponse(204, "Choix enregistré.")]
+        [SwaggerResponse(404, "Conversation ou contrôle inexistant, ou n'appartenant pas au compte authentifié.")]
+        public async Task<IActionResult> PoserChoixCopie(int id, [FromBody] ChoixCopieRequest model)
+        {
+            if (!ModelState.IsValid) return BadRequest(ModelState);
+
+            try
+            {
+                return await _chatBuilder.PoserChoixCopieAsync(
+                    id, model.ControleId, model.Separee, HttpContext.RequestAborted)
+                    ? NoContent()
+                    : NotFound();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Echec de l'enregistrement du choix de copie sur {ConversationId}.", id);
+                return StatusCode(500, new { message = "Une erreur est survenue, veuillez réessayer." });
+            }
+        }
+
+        [HttpGet("{id:int}/copie-controle/{controleId:int}")]
+        [SwaggerResponse(200, "Le choix déjà enregistré, ou null.")]
+        [SwaggerResponse(404, "Conversation ou contrôle inexistant, ou n'appartenant pas au compte authentifié.")]
+        public async Task<IActionResult> GetChoixCopie(int id, int controleId)
+        {
+            try
+            {
+                var (trouve, separee) = await _chatBuilder.GetChoixCopieAsync(
+                    id, controleId, HttpContext.RequestAborted);
+
+                return trouve ? Ok(new { separee }) : NotFound();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Echec de la lecture du choix de copie sur {ConversationId}.", id);
+                return StatusCode(500, new { message = "Une erreur est survenue, veuillez réessayer." });
+            }
+        }
+
+        /// <summary>
+        /// Un QR code pour envoyer une photo depuis le téléphone — le bouton
+        /// scanner de la séance. Voir `JetonsScanMobile` pour ce que le jeton
+        /// permet, et surtout ce qu'il ne permet pas.
+        /// </summary>
+        [HttpPost("{id:int}/scan-mobile")]
+        [SwaggerResponse(200, "Le jeton du QR code et son expiration.")]
+        [SwaggerResponse(404, "Conversation inexistante ou n'appartenant pas au compte authentifié.")]
+        public async Task<IActionResult> CreerScanMobile(int id)
+        {
+            try
+            {
+                var entete = await _chatBuilder.ResoudreEnTeteScanAsync(id);
+                if (entete is null) return NotFound();
+
+                var (jeton, expireLe) = _jetonsScan.Creer(id, entete.ProfPrenom, entete.Matiere, DateTime.UtcNow);
+
+                return Ok(new { jeton, expireLe });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Echec de la creation d'un QR code de scan sur {ConversationId}.", id);
+                return StatusCode(500, new { message = "Une erreur est survenue, veuillez réessayer." });
+            }
+        }
+
+        /// <summary>
+        /// L'ordinateur demande si la photo est arrivée. Interrogé toutes les
+        /// deux secondes pendant que le QR code est affiché — une lecture en
+        /// mémoire, rien en base tant que rien n'est arrivé.
+        /// </summary>
+        [HttpGet("{id:int}/scan-mobile/{jeton}")]
+        [SwaggerResponse(200, "attente, recu (avec la pièce) ou expire.")]
+        [SwaggerResponse(404, "Conversation inexistante ou n'appartenant pas au compte authentifié.")]
+        public async Task<IActionResult> EtatScanMobile(int id, string jeton)
+        {
+            try
+            {
+                if (await _chatBuilder.ResoudreEnTeteScanAsync(id) is null) return NotFound();
+
+                var (etat, pieceId) = _jetonsScan.Etat(jeton, id, DateTime.UtcNow);
+
+                var piece = pieceId is int idPiece
+                    ? await _chatBuilder.GetApercuPieceAsync(id, idPiece, HttpContext.RequestAborted)
+                    : null;
+
+                return Ok(new
+                {
+                    etat = etat switch
+                    {
+                        Services.ScanMobile.EtatJetonScan.Recu when piece is not null => "recu",
+                        Services.ScanMobile.EtatJetonScan.Attente => "attente",
+                        _ => "expire",
+                    },
+                    piece,
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Echec de la lecture d'un QR code de scan sur {ConversationId}.", id);
                 return StatusCode(500, new { message = "Une erreur est survenue, veuillez réessayer." });
             }
         }

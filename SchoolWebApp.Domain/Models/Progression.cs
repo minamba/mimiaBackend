@@ -127,6 +127,15 @@ namespace SchoolWebApp.Domain.Models
         public bool AutreNiveau { get; set; }
 
         /// <summary>
+        /// La notion a QUITTÉ le programme depuis que l'enfant l'a travaillée.
+        /// Elle reste sur sa carte — ce qu'il a acquis est à lui — mais dite
+        /// comme telle, pour qu'il ne la prenne pas pour une notion de son
+        /// année. Un élève arrivé après la réforme ne la voit jamais. Voir
+        /// `Competence.Actif`.
+        /// </summary>
+        public bool AncienProgramme { get; set; }
+
+        /// <summary>
         /// Le RANG du niveau de la notion. C'est lui qui regroupe et ordonne la
         /// section des années précédentes : trier sur le libellé rangerait
         /// « CM2 » avant « 6e ».

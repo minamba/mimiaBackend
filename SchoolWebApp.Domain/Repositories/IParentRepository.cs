@@ -16,6 +16,9 @@ namespace SchoolWebApp.Domain.Repositories
 
         Task<Parent?> GetParentByIdAsync(int id);
 
+        /// <summary>Sert à l'admin, qui pense en adresse et non en identifiant.</summary>
+        Task<Parent?> GetParentByMailAsync(string mail);
+
         /// <summary>
         /// Retrouve le parent à partir du claim `sub` du JWT.
         /// Point d'entrée de toute requête authentifiée.

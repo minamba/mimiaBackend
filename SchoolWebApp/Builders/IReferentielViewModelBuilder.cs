@@ -8,6 +8,8 @@ namespace SchoolWebApp.Api.Builders
 
         Task<IEnumerable<MatiereViewModel>> GetMatieresAsync(bool activesSeulement);
 
+        Task<IEnumerable<AcademieViewModel>> GetAcademiesAsync();
+
         /// <summary>
         /// L équipe pédagogique : un professeur par visage, avec ses matières.
         /// </summary>

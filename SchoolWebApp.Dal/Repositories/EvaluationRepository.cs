@@ -82,6 +82,91 @@ namespace SchoolWebApp.Dal.Repositories
                 .FirstAsync(ct);
         }
 
+        public async Task<bool> ReporterCorrectionAsync(
+            int eleveId, int evaluationId, CancellationToken ct = default)
+        {
+            // Le filtre sur l'élève est dans la requête : un numéro recopié
+            // d'une autre copie ne doit rien reporter chez un autre enfant.
+            var evaluation = await _context.Evaluations
+                .FirstOrDefaultAsync(e => e.Id == evaluationId && e.EleveId == eleveId, ct);
+
+            if (evaluation is null) return false;
+
+            evaluation.CorrectionReportee = true;
+            await _context.SaveChangesAsync(ct);
+            return true;
+        }
+
+        public async Task<DomainEvaluation?> GetCorrectionEnAttenteAsync(
+            int eleveId, int matiereId, CancellationToken ct = default)
+        {
+            var trouvee = await _context.Evaluations
+                .AsNoTracking()
+                .Where(e => e.EleveId == eleveId
+                    && e.MatiereId == matiereId
+                    && e.CorrectionReportee
+
+                    // Le plafond est DANS la requête : une fois atteint, la
+                    // copie ne remonte plus, quoi que le professeur ait oublié
+                    // d'écrire. C'est ce qui garantit qu'on n'insiste pas.
+                    && e.RelancesCorrection < Evaluation.RelancesCorrectionMaximum)
+                .OrderByDescending(e => e.DateCreation)
+                .Select(e => new
+                {
+                    Evaluation = new DomainEvaluation
+                    {
+                        Id = e.Id,
+                        MatiereId = e.MatiereId,
+                        MatiereLibelle = e.Matiere!.Libelle,
+                        ProfPrenom = e.Matiere.ProfPrenom,
+                        ProfAvatar = e.Matiere.ProfAvatar,
+                        ProfCouleur = e.Matiere.ProfCouleur,
+                        Notion = e.Notion,
+                        Note = e.Note,
+                        Remarque = e.Remarque,
+                        ARevoir = e.ARevoir,
+                        DateCreation = e.DateCreation
+                    },
+                    e.Detail
+                })
+                .FirstOrDefaultAsync(ct);
+
+            if (trouvee is null) return null;
+
+            // LES QUESTIONS VOYAGENT AVEC LA COPIE. Le professeur doit pouvoir
+            // reprendre les erreurs d'une séance qui n'est peut-être plus dans
+            // sa fenêtre d'historique — une consigne sans la copie lui
+            // demanderait de corriger ce qu'il ne voit pas.
+            trouvee.Evaluation.Questions = Desserialiser(trouvee.Detail);
+            return trouvee.Evaluation;
+        }
+
+        public async Task<bool> MarquerRelanceCorrectionAsync(
+            int eleveId, int evaluationId, CancellationToken ct = default)
+        {
+            var evaluation = await _context.Evaluations
+                .FirstOrDefaultAsync(e => e.Id == evaluationId && e.EleveId == eleveId, ct);
+
+            if (evaluation is null) return false;
+
+            evaluation.RelancesCorrection += 1;
+            await _context.SaveChangesAsync(ct);
+            return true;
+        }
+
+        public async Task<bool> CloreCorrectionAsync(
+            int eleveId, int evaluationId, CancellationToken ct = default)
+        {
+            var evaluation = await _context.Evaluations
+                .FirstOrDefaultAsync(e => e.Id == evaluationId && e.EleveId == eleveId, ct);
+
+            if (evaluation is null) return false;
+
+            evaluation.CorrectionReportee = false;
+            await _context.SaveChangesAsync(ct);
+            return true;
+        }
+
         public async Task<IEnumerable<DomainEvaluation>> GetParEleveAsync(
             int eleveId, int limite, CancellationToken ct = default) =>
             await _context.Evaluations

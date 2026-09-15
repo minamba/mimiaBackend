@@ -89,5 +89,13 @@ namespace SchoolWebApp.Dal.Entities
         public virtual ICollection<RapportSeance> Rapports { get; set; } = new List<RapportSeance>();
 
         public virtual ICollection<FicheRevision> Fiches { get; set; } = new List<FicheRevision>();
+
+        public virtual ICollection<Dictee> Dictees { get; set; } = new List<Dictee>();
+
+        public virtual ICollection<ComprehensionOrale> ComprehensionsOrales { get; set; } = new List<ComprehensionOrale>();
+
+        public virtual ICollection<EvaluationPrevue> EvaluationsPrevues { get; set; } = new List<EvaluationPrevue>();
+
+        public virtual ICollection<ControleScolaire> ControlesScolaires { get; set; } = new List<ControleScolaire>();
     }
 }

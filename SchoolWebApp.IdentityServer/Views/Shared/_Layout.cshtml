@@ -1,10 +1,31 @@
-﻿<!DOCTYPE html>
-<html lang="fr">
+﻿@inject SchoolWebApp.IdentityServer.Services.IModeTestService ModeTest
+@inject IConfiguration Configuration
+@{
+    // L'accueil du site, derrière le logo. Même source que le lien « Tu es
+    // élève ? » de la connexion : codée en dur, l'adresse enverrait sur
+    // localhost le jour du déploiement.
+    var accueilSite = (Configuration["Clients:Spa:Url"] ?? "http://localhost:3000").TrimEnd('/') + "/";
+
+    // LE STYLE « BLUE SKY » (réglage BLUE_SKY, basculé depuis l'administration
+    // de l'application). Posé dans la mise en page commune : connexion,
+    // inscription, mot de passe oublié — toutes les pages de ce serveur suivent
+    // le reste du site d'un coup. Éteint, la classe est absente et site.css
+    // rend exactement la page d'avant.
+    var blueSky = await ModeTest.BlueSkyAsync();
+}
+<!DOCTYPE html>
+<html lang="fr" class="@(blueSky ? "blue-sky" : null)">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>@ViewData["Title"] — Mimia</title>
     <link rel="icon" href="~/img/favicon-32.png" sizes="32x32" />
+    @* Les deux polices du site — Fraunces pour les titres, Outfit pour le
+       texte. Sans elles, la page parlait une autre typographie que le site
+       d'où le parent arrive. *@
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600&family=Outfit:wght@400;500;600&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
 </head>
 <body>
@@ -19,10 +40,15 @@
                Deux fichiers plutôt qu'un filtre CSS, comme dans l'application :
                le lettrage marine est illisible sur fond sombre, et inverser
                l'image retournerait aussi le corail, qui est la marque. *@
-            <div class="auth-brand">
-                <img src="~/img/logo-fond-clair.png" alt="Mimia" class="auth-brand__logo auth-brand__logo--clair" />
-                <img src="~/img/logo-fond-sombre.png" alt="" aria-hidden="true" class="auth-brand__logo auth-brand__logo--sombre" />
-            </div>
+            @* LE LOGO RAMÈNE À L'ACCUEIL DU SITE — Camara, le 15/09/2026. C'est le
+               réflexe de tout visiteur arrivé ici par erreur, et la seule issue
+               de la page sans passer par le bouton précédent du navigateur.
+               `logo-fond-sombre.png` est celui du site, recopié à l'identique :
+               la page est sombre dans tous les cas. *@
+            <a href="@accueilSite" class="auth-brand" aria-label="Mimia — retour à l'accueil">
+                <img src="~/img/logo-fond-clair.png" alt="" aria-hidden="true" class="auth-brand__logo auth-brand__logo--clair" />
+                <img src="~/img/logo-fond-sombre.png" alt="Mimia" class="auth-brand__logo auth-brand__logo--sombre" />
+            </a>
             @RenderBody()
         </div>
         <p class="auth-footnote">

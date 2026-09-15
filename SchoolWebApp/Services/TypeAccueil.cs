@@ -60,5 +60,21 @@ namespace SchoolWebApp.Api.Services
         /// qui le découvre en voyant réapparaître la question un.
         /// </summary>
         RetourControleAbandonne = 9,
+
+        /// <summary>
+        /// L'élève a cliqué « Quitter le cours » avant l'heure prévue, alors
+        /// qu'il y a eu un vrai échange. Le professeur conclut quand même,
+        /// mais À RETARDEMENT — l'élève n'est déjà plus là pour l'entendre,
+        /// ce n'est pas une prise de parole en direct comme les autres.
+        /// </summary>
+        DepartAnticipe = 10,
+
+        /// <summary>
+        /// L'élève revient après être parti PENDANT UNE DICTÉE, avant d'avoir
+        /// rendu sa copie. Elle est annulée et rien n'a été archivé : le
+        /// professeur le lui dit, et lui propose de la refaire ou de passer à
+        /// autre chose.
+        /// </summary>
+        RetourDicteeInterrompue = 11,
     }
 }

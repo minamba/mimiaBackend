@@ -25,6 +25,36 @@ namespace SchoolWebApp.Domain.Repositories
         Task TouchConversationAsync(int conversationId, int eleveId);
 
         /// <summary>
+        /// Pose la durée choisie (15/25/35/45 min) pour la séance qui
+        /// commence. Silencieux si la conversation n'existe pas.
+        /// </summary>
+        Task DefinirDureeChoisieAsync(int conversationId, int dureeMinutes, CancellationToken ct = default);
+
+        /// <summary>D'où vient l'élève pour la séance qui commence — voir `ModesSeance`.</summary>
+        Task DefinirModeSeanceAsync(
+            int conversationId, string mode, int? controleId, string? epreuveCode, CancellationToken ct = default);
+
+        /// <summary>
+        /// Vrai s'il existe au moins un message élève depuis le dernier
+        /// compte rendu de cette conversation (ou depuis sa création, s'il
+        /// n'y en a pas encore). Sert à décider si un départ anticipé mérite
+        /// une conclusion, ou si rien ne s'est passé.
+        /// </summary>
+        Task<bool> ADuTravailNonConcluAsync(int conversationId, CancellationToken ct = default);
+
+        /// <summary>
+        /// Le `sub` du parent propriétaire de cette conversation, ou null si
+        /// elle n'existe pas.
+        ///
+        /// SERT AUX TÂCHES DE FOND, ET À ELLES SEULES. Une requête HTTP porte
+        /// son identité dans son jeton ; un worker n'en a aucune, et tout ce
+        /// qui passe par <c>ICurrentUserAccessor</c> y échoue. C'est par cette
+        /// méthode que la conclusion d'un départ anticipé retrouve au nom de
+        /// qui elle travaille.
+        /// </summary>
+        Task<string?> GetIdentityUserIdAsync(int conversationId, CancellationToken ct = default);
+
+        /// <summary>
         /// Séances terminées depuis <paramref name="inactivite"/> et dont les
         /// échanges n'ont pas encore été analysés.
         ///

@@ -73,6 +73,34 @@ namespace SchoolWebApp.Api.Services.Notifications
 
         Task NotifierContactAsync(
             string? nom, string? mail, string? sujet, string? message, bool connecte);
+
+        /// <summary>
+        /// Un signalement vient d'être déposé depuis le bouton « Signaler ».
+        ///
+        /// PARTAGE LE SALON DU CONTACT, à dessein : les deux sont le même
+        /// genre d'événement — quelqu'un signale quelque chose — et n'ont pas
+        /// besoin d'un salon à part.
+        /// </summary>
+        /// <param name="eleve">
+        /// Prénom de l'enfant si c'est lui qui a signalé, null si c'est le
+        /// parent — la nuance compte pour savoir à qui s'adresser en le lisant.
+        /// </param>
+        Task NotifierSignalementAsync(
+            string categorie, string? mail, string? description, string? eleve);
+
+        /// <summary>
+        /// Anthropic ou OpenAI vient de passer au rouge ou à l'orange — ou
+        /// fonctionne de nouveau.
+        ///
+        /// DANS LE SALON DES SIGNALEMENTS, voulu par Camara le 15/09/2026 :
+        /// c'est celui qu'on regarde quand quelque chose ne va pas, et un
+        /// professeur muet est d'abord un problème technique que les familles
+        /// signaleront par le même bouton.
+        /// </summary>
+        /// <param name="libelleStatut">L'état en toutes lettres (« Crédit épuisé »).</param>
+        /// <param name="retabli">Vrai pour annoncer le retour à la normale.</param>
+        Task NotifierFournisseurAsync(
+            SchoolWebApp.Api.Services.Fournisseurs.EtatFournisseur etat, string libelleStatut, bool retabli);
     }
 
     public class TelegramService : ITelegramService
@@ -284,6 +312,77 @@ namespace SchoolWebApp.Api.Services.Notifications
             sb.AppendLine($"— Le : {Horodatage()}");
             sb.AppendLine("———————————————");
             sb.AppendLine(Echapper(Borner(message)));
+
+            return EnvoyerAsync(_contactToken, _contactChatId, sb.ToString());
+        }
+
+        private static readonly IReadOnlyDictionary<string, string> LibellesCategorie =
+            new Dictionary<string, string>
+            {
+                ["PROFESSEUR"] = "Problème avec un professeur",
+                ["TECHNIQUE"] = "Problème technique",
+                ["SUGGESTION"] = "Suggestion",
+                ["AUTRE"] = "Autre",
+            };
+
+        public Task NotifierSignalementAsync(
+            string categorie, string? mail, string? description, string? eleve)
+        {
+            var sb = new StringBuilder();
+            sb.AppendLine("🚩 *Nouveau signalement*");
+            sb.AppendLine($"— Thème : {Echapper(LibellesCategorie.GetValueOrDefault(categorie, categorie))}");
+            sb.AppendLine($"— Parent : {Echapper(mail)}");
+
+            if (!string.IsNullOrWhiteSpace(eleve))
+            {
+                sb.AppendLine($"— Signalé par l'enfant : {Echapper(eleve)}");
+            }
+
+            sb.AppendLine($"— Le : {Horodatage()}");
+            sb.AppendLine("———————————————");
+            sb.AppendLine(Echapper(Borner(description)));
+
+            return EnvoyerAsync(_contactToken, _contactChatId, sb.ToString());
+        }
+
+        public Task NotifierFournisseurAsync(
+            SchoolWebApp.Api.Services.Fournisseurs.EtatFournisseur etat, string libelleStatut, bool retabli)
+        {
+            var sb = new StringBuilder();
+
+            // La pastille en tête : c'est tout ce qu'on voit dans l'aperçu
+            // d'une notification, et elle dit déjà s'il faut agir.
+            if (retabli)
+            {
+                sb.AppendLine($"🟢 *{Echapper(etat.Nom)} fonctionne de nouveau*");
+                sb.AppendLine($"— Rétabli : {Echapper(etat.Usage)}");
+            }
+            else
+            {
+                var pastille = SchoolWebApp.Api.Services.Fournisseurs.StatutFournisseur.Bloquant(etat.Statut)
+                    ? "🔴"
+                    : "🟠";
+
+                sb.AppendLine($"{pastille} *{Echapper(etat.Nom)} : {Echapper(libelleStatut)}*");
+                sb.AppendLine($"— Touché : {Echapper(etat.Usage)}");
+
+                if (etat.CodeHttp is not null || !string.IsNullOrWhiteSpace(etat.CodeErreur))
+                {
+                    sb.AppendLine($"— Réponse : {Echapper($"{etat.CodeHttp} {etat.CodeErreur}".Trim())}");
+                }
+
+                if (!string.IsNullOrWhiteSpace(etat.Detail))
+                {
+                    sb.AppendLine($"— Détail : {Echapper(etat.Detail)}");
+                }
+
+                if (etat.Statut == SchoolWebApp.Api.Services.Fournisseurs.StatutFournisseur.CreditEpuise)
+                {
+                    sb.AppendLine($"— Recharger : {Echapper(etat.LienFacturation)}");
+                }
+            }
+
+            sb.AppendLine($"— Le : {Echapper(ALHeureDeParis(etat.VerifieLe ?? DateTime.UtcNow))} \\(Paris\\)");
 
             return EnvoyerAsync(_contactToken, _contactChatId, sb.ToString());
         }

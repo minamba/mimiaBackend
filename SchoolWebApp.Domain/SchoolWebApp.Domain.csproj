@@ -16,11 +16,17 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Gabarits et logo embarqués dans l'assembly : les deux applications
+    <!-- Gabarits et images embarqués dans l'assembly : les deux applications
          (API et serveur d'identité) envoient des mails, et un chemin de
-         fichier relatif casserait selon celle qui s'exécute. -->
+         fichier relatif casserait selon celle qui s'exécute.
+
+         `*.jpg` s'ajoute ici pour la bannière (bann_mail.jpg) : son fond en
+         dégradé et quadrillage n'a pas de transparence, et compresse
+         nettement mieux en JPEG qu'en PNG — 50 Ko contre 700 au format
+         d'origine, pour un rendu visuellement identique. -->
     <EmbeddedResource Include="Emails\Gabarits\*.html" />
     <EmbeddedResource Include="Emails\Ressources\*.png" />
+    <EmbeddedResource Include="Emails\Ressources\*.jpg" />
   </ItemGroup>
 
 </Project>

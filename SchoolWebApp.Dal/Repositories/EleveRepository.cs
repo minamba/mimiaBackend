@@ -19,6 +19,7 @@ namespace SchoolWebApp.Dal.Repositories
             var entities = await _context.Eleves
                 .AsNoTracking()
                 .Include(e => e.NiveauScolaire)
+                .Include(e => e.Academie)
                 .ToListAsync();
 
             return entities.Select(Map).ToList();
@@ -29,6 +30,7 @@ namespace SchoolWebApp.Dal.Repositories
             var entities = await _context.Eleves
                 .AsNoTracking()
                 .Include(e => e.NiveauScolaire)
+                .Include(e => e.Academie)
                 // Les profils retirés ne remontent pas : le parent les a mis de
                 // côté, il ne doit pas les retrouver dans la liste de ses
                 // enfants. Ils restent en base pour les consommations.
@@ -49,6 +51,7 @@ namespace SchoolWebApp.Dal.Repositories
             var entities = await _context.Eleves
                 .AsNoTracking()
                 .Include(e => e.NiveauScolaire)
+                .Include(e => e.Academie)
                 .Where(e => e.ParentId == parentId
                             && e.ArchiveLe != null
                             && e.AnonymiseLe == null)
@@ -63,6 +66,7 @@ namespace SchoolWebApp.Dal.Repositories
             var entity = await _context.Eleves
                 .AsNoTracking()
                 .Include(e => e.NiveauScolaire)
+                .Include(e => e.Academie)
                 .FirstOrDefaultAsync(e => e.Id == id);
 
             return entity is null ? null : Map(entity);
@@ -74,10 +78,13 @@ namespace SchoolWebApp.Dal.Repositories
             {
                 ParentId = model.ParentId,
                 NiveauScolaireId = model.NiveauScolaireId,
+                AcademieId = model.AcademieId,
                 Prenom = model.Prenom,
                 Nom = model.Nom,
                 Age = model.Age,
                 Sexe = model.Sexe,
+                Lv2Espagnol = model.Lv2Espagnol,
+                Specialites = Domain.Models.VoiesScolaires.EcrireSpecialites(model.Specialites),
                 DateCreation = model.DateCreation == default ? DateTime.UtcNow : model.DateCreation
             };
 
@@ -110,6 +117,13 @@ namespace SchoolWebApp.Dal.Repositories
                 await HistoriqueClasse.ChangerAsync(_context, entity.Id, model.NiveauScolaireId);
                 entity.NiveauScolaireId = model.NiveauScolaireId;
             }
+
+            if (model.AcademieId.HasValue) entity.AcademieId = model.AcademieId;
+
+            // Toujours écrit : le formulaire d'édition envoie le profil entier,
+            // et une case décochée est une information, pas un oubli.
+            entity.Lv2Espagnol = model.Lv2Espagnol;
+            entity.Specialites = Domain.Models.VoiesScolaires.EcrireSpecialites(model.Specialites);
 
             await _context.SaveChangesAsync();
             return await GetEleveByIdAsync(entity.Id);
@@ -249,6 +263,7 @@ namespace SchoolWebApp.Dal.Repositories
             var entity = await _context.Eleves
                 .AsNoTracking()
                 .Include(e => e.NiveauScolaire)
+                .Include(e => e.Academie)
                 .FirstOrDefaultAsync(e => e.CodeAcces == code, ct);
 
             return entity is null ? null : Map(entity);
@@ -283,9 +298,14 @@ namespace SchoolWebApp.Dal.Repositories
             AnonymiseLe = entity.AnonymiseLe,
             CodeAcces = entity.CodeAcces,
             AccesSuspenduLe = entity.AccesSuspenduLe,
+            Lv2Espagnol = entity.Lv2Espagnol,
+            Specialites = Domain.Models.VoiesScolaires.LireSpecialites(entity.Specialites),
             NiveauCode = entity.NiveauScolaire?.Code,
             NiveauLibelle = entity.NiveauScolaire?.Libelle,
-            NiveauCycle = entity.NiveauScolaire?.Cycle
+            NiveauCycle = entity.NiveauScolaire?.Cycle,
+            AcademieId = entity.AcademieId,
+            AcademieLibelle = entity.Academie?.Libelle,
+            Zone = entity.Academie?.Zone
         };
     }
 }

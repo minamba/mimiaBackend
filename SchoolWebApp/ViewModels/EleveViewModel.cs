@@ -18,9 +18,22 @@ namespace SchoolWebApp.Api.ViewModels
 
         public string? NiveauCode { get; set; }
 
+        /// <summary>L'espagnol en LV2, choisi par la famille.</summary>
+        public bool Lv2Espagnol { get; set; }
+
+        /// <summary>Les spécialités de la voie générale cochées par la famille (codes).</summary>
+        public List<string> Specialites { get; set; } = [];
+
         public string? NiveauLibelle { get; set; }
 
         public string? NiveauCycle { get; set; }
+
+        public int? AcademieId { get; set; }
+
+        public string? AcademieLibelle { get; set; }
+
+        /// <summary>A, B, C, ou le calendrier propre à la Corse et à chaque académie d'outre-mer.</summary>
+        public string? Zone { get; set; }
 
         public DateTime DateCreation { get; set; }
 

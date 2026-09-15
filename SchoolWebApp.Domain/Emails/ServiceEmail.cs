@@ -69,15 +69,15 @@ namespace SchoolWebApp.Domain.Emails
 
                 var constructeur = new BodyBuilder { HtmlBody = corps, TextBody = VersTexte(corps) };
 
-                // Logo attaché plutôt que lié à une URL : il s'affiche même sans
-                // connexion, et échappe aux filtres qui bloquent les images
-                // distantes par défaut.
+                // Bannière attachée plutôt que liée à une URL : elle s'affiche
+                // même sans connexion, et échappe aux filtres qui bloquent les
+                // images distantes par défaut.
                 await using var flux = Assemblee.GetManifestResourceStream(
-                    "SchoolWebApp.Domain.Emails.Ressources.logo.png");
+                    "SchoolWebApp.Domain.Emails.Ressources.bann_mail.jpg");
 
                 if (flux is not null)
                 {
-                    var image = constructeur.LinkedResources.Add("logo.png", flux);
+                    var image = constructeur.LinkedResources.Add("bann_mail.jpg", flux);
                     image.ContentId = "logoMimia";
                     corps = corps.Replace("cid:logoMimia", $"cid:{image.ContentId}");
                     constructeur.HtmlBody = corps;
@@ -517,18 +517,18 @@ namespace SchoolWebApp.Domain.Emails
         }
 
         /// <summary>
-        /// Le logo, en pièce liée. Extrait parce que l'envoi simple et la
-        /// diffusion en ont besoin tous les deux, et qu'une seconde copie du
+        /// La bannière, en pièce liée. Extraite parce que l'envoi simple et la
+        /// diffusion en ont besoin toutes les deux, et qu'une seconde copie du
         /// nom de la ressource finirait par diverger.
         /// </summary>
         private static void AttacherLogo(BodyBuilder constructeur)
         {
             using var flux = Assemblee.GetManifestResourceStream(
-                "SchoolWebApp.Domain.Emails.Ressources.logo.png");
+                "SchoolWebApp.Domain.Emails.Ressources.bann_mail.jpg");
 
             if (flux is null) return;
 
-            var image = constructeur.LinkedResources.Add("logo.png", flux);
+            var image = constructeur.LinkedResources.Add("bann_mail.jpg", flux);
             image.ContentId = "logoMimia";
         }
 
@@ -541,11 +541,11 @@ namespace SchoolWebApp.Domain.Emails
         {
             var corps = await ConstruireCorpsAsync(sujet, gabarit, valeurs);
 
-            // Dans un mail le logo est une pièce jointe liée (cid:). Un
+            // Dans un mail la bannière est une pièce jointe liée (cid:). Un
             // navigateur ne sait pas résoudre ces adresses : on l'incorpore en
             // base64 pour que l'aperçu montre exactement ce que verra le parent.
             await using var flux = Assemblee.GetManifestResourceStream(
-                "SchoolWebApp.Domain.Emails.Ressources.logo.png");
+                "SchoolWebApp.Domain.Emails.Ressources.bann_mail.jpg");
 
             if (flux is null) return corps;
 
@@ -554,7 +554,7 @@ namespace SchoolWebApp.Domain.Emails
 
             return corps.Replace(
                 "cid:logoMimia",
-                $"data:image/png;base64,{Convert.ToBase64String(memoire.ToArray())}");
+                $"data:image/jpeg;base64,{Convert.ToBase64String(memoire.ToArray())}");
         }
 
         private async Task<string> ConstruireCorpsAsync(

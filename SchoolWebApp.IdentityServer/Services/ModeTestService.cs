@@ -44,6 +44,15 @@ namespace SchoolWebApp.IdentityServer.Services
         /// connexions, y compris la vôtre, sur une panne de lecture.
         /// </summary>
         Task<bool> MaintenanceAsync(CancellationToken ct = default);
+
+        /// <summary>
+        /// Le style « Blue Sky » est-il allumé ? La page de connexion prend
+        /// alors le même habillage que le reste du site — voir le réglage
+        /// `BLUE_SKY` côté application.
+        ///
+        /// FAUX PAR DÉFAUT : une base injoignable garde le style d'origine.
+        /// </summary>
+        Task<bool> BlueSkyAsync(CancellationToken ct = default);
     }
 
     public class ModeTestService : IModeTestService
@@ -51,6 +60,7 @@ namespace SchoolWebApp.IdentityServer.Services
         private const string CleModeTest = "MODE_TEST";
         private const string CleCompteTest = "COMPTE_TEST_ACTIF";
         private const string CleMaintenance = "MAINTENANCE_ACTIVE";
+        private const string CleBlueSky = "BLUE_SKY";
 
         /// <summary>
         /// Durée de mise en cache. Assez courte pour qu'un basculement depuis
@@ -87,6 +97,9 @@ namespace SchoolWebApp.IdentityServer.Services
 
         public Task<bool> MaintenanceAsync(CancellationToken ct = default) =>
             LireAsync(CleMaintenance, false, ct);
+
+        public Task<bool> BlueSkyAsync(CancellationToken ct = default) =>
+            LireAsync(CleBlueSky, false, ct);
 
         private async Task<bool> LireAsync(string cle, bool parDefaut, CancellationToken ct)
         {

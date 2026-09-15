@@ -123,6 +123,24 @@ namespace SchoolWebApp.Api.Controllers
         public const string VoixDeSecours = "VOIX_DE_SECOURS";
 
         /// <summary>
+        /// Le style « Blue Sky » : le fond bleu de marque, les cartes en verre
+        /// dépoli et les accents corail, sur TOUT le site.
+        ///
+        /// VOULU PAR CAMARA LE 15/09/2026, pour faire tester ce style à des
+        /// personnes et pouvoir revenir à l'ancien quand il le veut. D'où un
+        /// réglage et non un déploiement : le choix se fait et se défait d'un
+        /// clic, pour tous les visiteurs à la fois.
+        ///
+        /// Lu par les DEUX serveurs : l'application (route publique ci-dessous)
+        /// et le serveur d'identité, qui habille la page de connexion.
+        ///
+        /// ÉTEINT PAR DÉFAUT : le style d'origine reste la référence tant que
+        /// rien n'a été décidé, et une lecture qui échoue ne change pas l'allure
+        /// du site.
+        /// </summary>
+        public const string BlueSky = "BLUE_SKY";
+
+        /// <summary>
         /// Le bandeau d'information affiché en haut du site.
         ///
         /// DEUX CLÉS ET NON UNE. Le texte survit à son extinction : on
@@ -254,7 +272,7 @@ namespace SchoolWebApp.Api.Controllers
         /// </summary>
         private static readonly string[] ClesConnues =
             [ModeTest, CompteTest, EssaisOuverts, TachesDeFond, Maintenance, VoixDeSecours,
-             OffreLancement, OffreLancementBandeau];
+             OffreLancement, OffreLancementBandeau, BlueSky];
 
         private readonly IReglageRepository _reglages;
         private readonly ILogger<ReglagesController> _logger;
@@ -288,6 +306,10 @@ namespace SchoolWebApp.Api.Controllers
                     // d'attente fermerait le site sur une panne de lecture.
                     maintenance = await _reglages.EstActifAsync(Maintenance, false, ct),
 
+                    // Le style du site : public, puisqu'il habille aussi les
+                    // pages qu'on voit avant d'avoir un compte.
+                    blueSky = await _reglages.EstActifAsync(BlueSky, false, ct),
+
                     // LE BANDEAU EST PUBLIC, et il doit l'être : il annonce
                     // une maintenance ou une panne, c'est-à-dire précisément
                     // ce qu'un visiteur non connecté a besoin de savoir avant
@@ -320,6 +342,10 @@ namespace SchoolWebApp.Api.Controllers
                     modeTest = false,
                     essaisOuverts = true,
                     maintenance = false,
+
+                    // Le style d'origine : une panne de lecture ne change pas
+                    // l'allure du site.
+                    blueSky = false,
 
                     // Pas de bandeau quand on ne sait pas lire : afficher un
                     // avertissement sur une panne de lecture inquiéterait
@@ -360,6 +386,8 @@ namespace SchoolWebApp.Api.Controllers
                 // meilleur des deux quand il fonctionne. Le secours est un
                 // secours, pas un réglage de confort.
                 voixDeSecours = await _reglages.EstActifAsync(VoixDeSecours, false, ct),
+
+                blueSky = await _reglages.EstActifAsync(BlueSky, false, ct),
 
                 // Ici le texte part TOUJOURS, allumé ou non : sans quoi on ne
                 // pourrait ni préparer un message à l'avance, ni relire celui

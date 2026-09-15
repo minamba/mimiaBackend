@@ -77,6 +77,20 @@ namespace SchoolWebApp.Api.Workers
         private const int LotsMax = 200;
 
         /// <summary>
+        /// Combien de temps un audio de compréhension orale reste écoutable.
+        ///
+        /// Trois mois, comme la péremption d'une mesure de maîtrise : passé ce
+        /// délai, la notion elle-même n'est plus annoncée comme acquise, et
+        /// personne ne revient réécouter un passage d'il y a un trimestre.
+        ///
+        /// CE QUI PART EST LE SON, PAS L'ARCHIVE. Le passage, ce que l'élève en
+        /// a dit et le retour du professeur restent lisibles pour toujours.
+        /// Et le son est REGÉNÉRABLE — le passage est en base, la synthèse
+        /// peut le redire — si on décide un jour de l'offrir à la demande.
+        /// </summary>
+        private static readonly TimeSpan AncienneteAudio = TimeSpan.FromDays(90);
+
+        /// <summary>
         /// Le temps qu'on laisse à la base entre deux lots.
         ///
         /// Sans cette respiration, dix mille suppressions s'enchaînent sans
@@ -109,6 +123,7 @@ namespace SchoolWebApp.Api.Workers
                     await PurgerAsync(ct);
                     await PurgerOrphelinesAsync(ct);
                     await AllegerDocumentsAsync(ct);
+                    await PurgerAudiosAsync(ct);
                 }
                 catch (OperationCanceledException) when (ct.IsCancellationRequested)
                 {
@@ -331,6 +346,53 @@ namespace SchoolWebApp.Api.Workers
                     "{Documents} document(s) alleges, {Mo:F1} Mo recuperes. "
                     + "Les transcriptions sont conservees.",
                     documents, octets / (1024.0 * 1024.0));
+            }
+        }
+
+        /// <summary>
+        /// Efface les audio trop anciens des compréhensions orales.
+        ///
+        /// SIX CENTS KILO-OCTETS PAR EXERCICE, MESURES. C est le plus lourd de
+        /// tout ce que l application garde, loin devant les messages — deux
+        /// kilo-octets piece. Sans cette purge, mille eleves faisant deux
+        /// exercices par semaine deposent une cinquantaine de giga-octets par
+        /// an qui ne repartent jamais.
+        /// </summary>
+        private async Task PurgerAudiosAsync(CancellationToken ct)
+        {
+            var effaces = 0L;
+            var octets = 0L;
+
+            for (var lot = 0; lot < LotsMax; lot++)
+            {
+                using var scope = _scopes.CreateScope();
+                var archives = scope.ServiceProvider
+                    .GetRequiredService<Domain.Repositories.IComprehensionOraleRepository>();
+
+                var (faits, poids) = await archives.PurgerAudiosAsync(
+                    AncienneteAudio, TailleLot, ct);
+
+                effaces += faits;
+                octets += poids;
+
+                if (faits == 0) break;
+
+                if (lot == LotsMax - 1)
+                {
+                    _logger.LogError(
+                        "Purge des audio ARRETEE au plafond de {Lots} lots.", LotsMax);
+                }
+
+                try { await Task.Delay(Respiration, ct); }
+                catch (OperationCanceledException) { break; }
+            }
+
+            if (effaces > 0)
+            {
+                _logger.LogInformation(
+                    "{Effaces} audio de comprehension orale efface(s) apres {Jours} jours. "
+                    + "Les passages et les reponses des eleves sont conserves.",
+                    effaces, AncienneteAudio.TotalDays);
             }
         }
 

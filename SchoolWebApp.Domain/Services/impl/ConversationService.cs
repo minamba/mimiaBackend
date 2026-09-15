@@ -41,6 +41,16 @@ namespace SchoolWebApp.Domain.Services.impl
         public Task TouchConversationAsync(int conversationId, int eleveId) =>
             _conversationRepository.TouchConversationAsync(conversationId, eleveId);
 
+        public Task DefinirDureeChoisieAsync(int conversationId, int dureeMinutes, CancellationToken ct = default) =>
+            _conversationRepository.DefinirDureeChoisieAsync(conversationId, dureeMinutes, ct);
+
+        public Task DefinirModeSeanceAsync(
+            int conversationId, string mode, int? controleId, string? epreuveCode, CancellationToken ct = default) =>
+            _conversationRepository.DefinirModeSeanceAsync(conversationId, mode, controleId, epreuveCode, ct);
+
+        public Task<bool> ADuTravailNonConcluAsync(int conversationId, CancellationToken ct = default) =>
+            _conversationRepository.ADuTravailNonConcluAsync(conversationId, ct);
+
         public Task MarquerSortieAsync(int conversationId, int eleveId) =>
             _conversationRepository.MarquerSortieAsync(conversationId, eleveId);
 
@@ -83,8 +93,11 @@ namespace SchoolWebApp.Domain.Services.impl
 
     public class MaitriseService : IMaitriseService
     {
-        private const double SeuilLacune = 0.6;
-        private const double SeuilAcquis = 0.8;
+        // Le professeur doit voir les memes fragilites que le parent : ce
+        // seuil valait 0,6 face au 0,75 de la fiche, et l un des deux se
+        // trompait forcement.
+        private const double SeuilLacune = SeuilsMaitrise.Fragile;
+        private const double SeuilAcquis = SeuilsMaitrise.Acquis;
 
         private readonly IMaitriseRepository _maitriseRepository;
 
@@ -101,5 +114,16 @@ namespace SchoolWebApp.Domain.Services.impl
 
         public Task<IEnumerable<MaitriseCompetence>> GetARevoirAsync(int eleveId, int? matiereId, int limite) =>
             _maitriseRepository.GetARevoirAsync(eleveId, matiereId, limite);
+
+        // SA CLASSE EXACTE, PAS UNE FENETRE DE NIVEAUX.
+        //
+        // L observateur remonte cinq niveaux en amont — un blocage en 6e vient
+        // souvent du CM1, et il doit pouvoir le dire. Ici l objet est different :
+        // c est la liste dans laquelle le professeur choisit le NOM d une fiche.
+        // Y melanger cinq niveaux la rendrait illisible et l inviterait a titrer
+        // une fiche de 6e avec un libelle de CM1.
+        public Task<IEnumerable<CompetenceCandidate>> GetNotionsDuProgrammeAsync(
+            int matiereId, int niveauScolaireId, CancellationToken ct = default) =>
+            _maitriseRepository.GetNotionsDuNiveauAsync(matiereId, niveauScolaireId, ct);
     }
 }

@@ -8,6 +8,9 @@ namespace SchoolWebApp.Domain.Models
 
         public int NiveauScolaireId { get; set; }
 
+        /// <summary>Détermine la zone de vacances scolaires. Facultatif.</summary>
+        public int? AcademieId { get; set; }
+
         public string? Prenom { get; set; }
 
         /// <summary>
@@ -47,10 +50,22 @@ namespace SchoolWebApp.Domain.Models
 
         // Dénormalisé pour l'affichage : évite un aller-retour côté front
         // uniquement pour afficher « 6e » à côté du prénom.
+        /// <summary>L'espagnol en LV2, choisi par la famille. Voir `VoiesScolaires.AUneLv2`.</summary>
+        public bool Lv2Espagnol { get; set; }
+
+        /// <summary>Les spécialités cochées par la famille. Voir `VoiesScolaires.SpecialitesGenerales`.</summary>
+        public List<string> Specialites { get; set; } = [];
+
         public string? NiveauCode { get; set; }
 
         public string? NiveauLibelle { get; set; }
 
         public string? NiveauCycle { get; set; }
+
+        // Dénormalisé pour l'affichage, même raison que le niveau : le
+        // calendrier a besoin de la zone sans un aller-retour de plus.
+        public string? AcademieLibelle { get; set; }
+
+        public string? Zone { get; set; }
     }
 }

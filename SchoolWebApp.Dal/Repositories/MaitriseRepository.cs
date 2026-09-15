@@ -18,9 +18,23 @@ namespace SchoolWebApp.Dal.Repositories
             int eleveId, int? matiereId, double seuil, int limite) =>
             QueryAsync(eleveId, matiereId, m => m.Score < seuil, ascendant: true, limite);
 
+        // LE PROFESSEUR ET LE PARENT DOIVENT LIRE LA MEME CHOSE.
+        //
+        // Cette liste sert a ne pas reexpliquer ce qui est su. Une mesure de
+        // septembre ne le garantit plus en fevrier : sans ce filtre, la fiche
+        // du parent afficherait « a confirmer » pendant que le professeur
+        // tiendrait la notion pour acquise et passerait dessus. C est
+        // exactement l incoherence que SeuilsMaitrise existe pour supprimer.
         public Task<IEnumerable<MaitriseCompetence>> GetAcquisesAsync(
-            int eleveId, int? matiereId, double seuil, int limite) =>
-            QueryAsync(eleveId, matiereId, m => m.Score >= seuil, ascendant: false, limite);
+            int eleveId, int? matiereId, double seuil, int limite)
+        {
+            var limitePeremption = DateTime.UtcNow.AddDays(-SeuilsMaitrise.JoursAvantPeremption);
+
+            return QueryAsync(
+                eleveId, matiereId,
+                m => m.Score >= seuil && m.DerniereEvaluation >= limitePeremption,
+                ascendant: false, limite);
+        }
 
         /// <summary>
         /// Les notions dont l'échéance de révision est passée.
@@ -92,9 +106,14 @@ namespace SchoolWebApp.Dal.Repositories
             var min = niveauOrdre - margeAmont;
             var max = niveauOrdre + margeAval;
 
+            // ACTIVES SEULEMENT : une notion sortie du programme n'est plus
+            // proposée à personne — voir `Competence.Actif`. Ce qu'un élève y
+            // a déjà gagné reste sur sa carte, mais aucun professeur ne la lui
+            // fait plus travailler.
             var candidates = await _context.Competences
                 .AsNoTracking()
-                .Where(c => c.MatiereId == matiereId
+                .Where(c => c.Actif
+                            && c.MatiereId == matiereId
                             && c.NiveauScolaire!.Ordre >= min
                             && c.NiveauScolaire.Ordre <= max)
                 .OrderBy(c => c.NiveauScolaire!.Ordre)
@@ -124,6 +143,53 @@ namespace SchoolWebApp.Dal.Repositories
             return VoiesScolaires.RetenirPourLaVoie(
                 candidates,
                 codeNiveau,
+                c => c.NiveauCode,
+                c => (matiereId, c.NiveauOrdre));
+        }
+
+        public async Task<IEnumerable<CompetenceCandidate>> GetNotionsDuNiveauAsync(
+            int matiereId, int niveauScolaireId, CancellationToken ct = default)
+        {
+            var niveau = await _context.NiveauxScolaires
+                .AsNoTracking()
+                .Where(n => n.Id == niveauScolaireId)
+                .Select(n => new { n.Code, n.Ordre })
+                .FirstOrDefaultAsync(ct);
+
+            if (niveau is null) return [];
+
+            // PAR RANG ET PAR VOIE, PLUS PAR IDENTIFIANT DE CLASSE.
+            //
+            // Depuis les séries technologiques, le programme d'une classe est
+            // écrit sur plusieurs classes à la fois : un terminale STMG
+            // mercatique a son option, le tronc commun de la série et celui de
+            // la voie. Chercher les notions du seul identifiant de sa classe
+            // n'en trouvait qu'une partie — le droit et l'économie, écrits pour
+            // toute la série, n'y étaient pas.
+            var notions = await _context.Competences
+                .AsNoTracking()
+                // Actives seulement — même règle que `GetCandidatesAsync` :
+                // c'est LE programme du niveau, tel qu'il est aujourd'hui.
+                .Where(c => c.Actif
+                            && c.MatiereId == matiereId
+                            && c.NiveauScolaire!.Ordre == niveau.Ordre)
+                .OrderBy(c => c.Domaine)
+                .ThenBy(c => c.Ordre)
+                .Select(c => new CompetenceCandidate
+                {
+                    Id = c.Id,
+                    Code = c.Code,
+                    Libelle = c.Libelle,
+                    Domaine = c.Domaine,
+                    NiveauLibelle = c.NiveauScolaire!.Libelle,
+                    NiveauCode = c.NiveauScolaire.Code,
+                    NiveauOrdre = c.NiveauScolaire.Ordre,
+                })
+                .ToListAsync(ct);
+
+            return VoiesScolaires.RetenirPourLaVoie(
+                notions,
+                niveau.Code,
                 c => c.NiveauCode,
                 c => (matiereId, c.NiveauOrdre));
         }
@@ -190,12 +256,36 @@ namespace SchoolWebApp.Dal.Repositories
                     existantes[competenceId] = maitrise;
                 }
 
-                maitrise.Score = Recalculer(maitrise.Score, observation.Resultat);
+                var apres = Recalculer(maitrise.Score, observation.Resultat);
+
+                // UNE MESURE NE SE DÉFAIT PAS À L'IMPRESSION.
+                //
+                // Relevé par Camara le 13/09/2026 : la réciproque de Thalès,
+                // validée à 17,5/20 la veille — 0,98, source « Evaluation » —,
+                // retombée à 0,715 le lendemain matin. Trois observations de
+                // conversation, posées par l'observateur sur une séance où les
+                // transcriptions arrivaient hachées, l'ont fait passer pour
+                // hésitant sur une notion qu'il venait de prouver.
+                //
+                // La règle « la copie fait foi » ne valait que dans la séance
+                // de la copie ; une séance plus tard, l'impression reprenait la
+                // main. Elle vaut désormais dans le temps : tant que la dernière
+                // source d'une notion est une MESURE — une copie notée, le
+                // résultat d'un contrôle —, une impression ne peut plus la faire
+                // BAISSER. Seule une nouvelle mesure le peut. Elle peut encore
+                // la faire monter : un enfant qui progresse en cours ordinaire
+                // après une mauvaise note doit le voir — et la source reste la
+                // mesure, pour que le verrou tienne jusqu'à la suivante.
+                var verrouillee = EstUneMesure(maitrise.Source) && !EstUneMesure(source);
+
+                if (verrouillee && apres < maitrise.Score) continue;
+
+                maitrise.Score = apres;
                 maitrise.NombreObservations += 1;
                 maitrise.Confiance = ConfianceApres(maitrise.NombreObservations);
                 maitrise.DerniereEvaluation = maintenant;
                 maitrise.ProchaineRevision = ProchaineRevision(maintenant, maitrise.Score, maitrise.NombreObservations);
-                maitrise.Source = source;
+                if (!verrouillee) maitrise.Source = source;
 
                 // Réécrit à CHAQUE observation, et non seulement à la création :
                 // une notion travaillée en 4e puis reprise en 3e appartient à la
@@ -208,6 +298,18 @@ namespace SchoolWebApp.Dal.Repositories
             await _context.SaveChangesAsync(ct);
             return appliquees;
         }
+
+        /// <summary>
+        /// Les sources qui MESURENT, par opposition à celles qui devinent.
+        ///
+        /// « Evaluation » : une copie notée, question par question.
+        /// « Controle » : le résultat d'un contrôle de l'école, sur la copie
+        /// corrigée. « Conversation » : l'impression de l'observateur sur les
+        /// échanges. Voir <see cref="AppliquerObservationsAsync"/> pour ce que
+        /// cette distinction protège.
+        /// </summary>
+        private static bool EstUneMesure(string? source) =>
+            source is "Evaluation" or "Controle";
 
         /// <summary>
         /// Mise à jour bayésienne du niveau de maîtrise (Bayesian Knowledge
@@ -227,10 +329,23 @@ namespace SchoolWebApp.Dal.Repositories
                 _ => (Posterieur(prior, true) + Posterieur(prior, false)) / 2,
             };
 
-            // Le seul fait de travailler la notion fait progresser : c'est le
-            // terme d'apprentissage du modèle, sans lui un élève resterait
-            // bloqué au même score en répétant les mêmes erreurs.
-            var apres = posterieur + (1 - posterieur) * Apprentissage;
+            // LE TERME D APPRENTISSAGE NE S APPLIQUE PAS A UN ECHEC.
+            //
+            // Il valait pour toutes les observations, y compris ratees, et
+            // cela rendait la fiche FAUSSE : sous 14 %, un echec FAISAIT
+            // MONTER le score. Point fixe a 0,137 — un eleve qui se trompe dix
+            // fois de suite affichait exactement le meme pourcentage que celui
+            // qui s est trompe une fois. Le plancher etait donc inatteignable,
+            // et deux difficultes reelles devenaient indiscernables.
+            //
+            // L intention derriere ce terme reste juste : travailler une notion
+            // fait progresser, meme sans y arriver du premier coup. On la garde
+            // donc pour une reussite et pour une hesitation — ou l eleve a
+            // produit quelque chose — et on la retire de l echec, qui ne prouve
+            // aucun progres.
+            var apres = resultat == ResultatObservation.Echoue
+                ? posterieur
+                : posterieur + (1 - posterieur) * Apprentissage;
 
             return Math.Clamp(apres, 0.02, 0.98);
         }
@@ -321,9 +436,9 @@ namespace SchoolWebApp.Dal.Repositories
         /// pédagogie. Le jour où ils bougent, ils bougent ici aussi — c'est
         /// écrit des deux côtés.
         /// </summary>
-        private const double SeuilAcquis = 0.8;
+        private const double SeuilAcquis = SeuilsMaitrise.Acquis;
 
-        private const double SeuilEnCours = 0.4;
+        private const double SeuilEnCours = SeuilsMaitrise.Fragile;
 
         public async Task<Progression?> GetProgressionAsync(
             int eleveId, bool marquerVue, CancellationToken ct = default)
@@ -381,9 +496,14 @@ namespace SchoolWebApp.Dal.Repositories
             // était le seul endroit à s'y prendre autrement.
             var rang = eleve.NiveauScolaire!.Ordre;
 
+            // LE PROGRAMME DE SON ANNÉE, TEL QU'IL EST AUJOURD'HUI — les
+            // notions actives de son rang — PLUS TOUT CE QU'IL A TRAVAILLÉ,
+            // actif ou non. Une notion sortie du programme après qu'il l'a
+            // travaillée reste à lui ; un élève arrivé après la réforme ne la
+            // voit jamais. Voir `Competence.Actif`.
             var competences = await _context.Competences
                 .AsNoTracking()
-                .Where(co => co.NiveauScolaire!.Ordre == rang
+                .Where(co => (co.Actif && co.NiveauScolaire!.Ordre == rang)
                              || travaillees.Contains(co.Id))
                 .Select(co => new
                 {
@@ -391,6 +511,7 @@ namespace SchoolWebApp.Dal.Repositories
                     co.Libelle,
                     co.Domaine,
                     co.Ordre,
+                    co.Actif,
                     co.MatiereId,
                     co.NiveauScolaireId,
                     NiveauLibelle = co.NiveauScolaire!.Libelle,
@@ -477,13 +598,15 @@ namespace SchoolWebApp.Dal.Repositories
                 // pas. On réutilise donc la seule partie qui porte une décision
                 // — la table des exclusions par voie — et on recopie les deux
                 // bornes, qui sont de simples comparaisons.
-                var horsBornes = rang < matiere.NiveauOrdreMin || rang > matiere.NiveauOrdreMax;
-
-                var horsVoie = VoiesScolaires
-                    .NiveauxExclus(matiere.Code)
-                    .Contains(eleve.NiveauScolaire!.Code, StringComparer.OrdinalIgnoreCase);
-
-                if (horsBornes || horsVoie) exclues.Add(matiereId);
+                // Depuis les séries technologiques, la surcharge sur valeurs
+                // brutes existe : plus rien n'est recopié ici.
+                if (!VoiesScolaires.EstAuProgramme(
+                        matiere.Code, matiere.NiveauOrdreMin, matiere.NiveauOrdreMax,
+                        eleve.NiveauScolaire!.Code, rang, eleve.Lv2Espagnol,
+                        VoiesScolaires.LireSpecialites(eleve.Specialites)))
+                {
+                    exclues.Add(matiereId);
+                }
             }
 
             foreach (var groupe in competences
@@ -499,8 +622,9 @@ namespace SchoolWebApp.Dal.Repositories
                     // LE TOTAL DE L'ANNÉE, et non de tout ce qui est affiché.
                     // Les notions des années précédentes figurent dans la liste
                     // — l'enfant doit les voir — mais elles ne rallongent pas le
-                    // chemin de sa classe.
-                    Total = groupe.Count(x => x.NiveauOrdre == rang),
+                    // chemin de sa classe. Une notion sortie du programme non
+                    // plus : elle n'est plus sur son chemin.
+                    Total = groupe.Count(x => x.NiveauOrdre == rang && x.Actif),
                 };
 
                 // LES NOTIONS D AUTRES ANNÉES D ABORD, par ordre de niveau :
@@ -545,7 +669,13 @@ namespace SchoolWebApp.Dal.Repositories
                         // de première professionnelle, une compétence de
                         // première générale est de SON année — la signaler
                         // comme un rattrapage serait faux, et vexant.
-                        AutreNiveau = co.NiveauOrdre != rang,
+                        //
+                        // Une notion sortie du programme n'est plus « de son
+                        // année » non plus, quel que soit son rang : elle
+                        // rejoint ce qu'il a consolidé avant, signalée comme
+                        // ancien programme.
+                        AutreNiveau = co.NiveauOrdre != rang || !co.Actif,
+                        AncienProgramme = !co.Actif,
                         NiveauOrdre = co.NiveauOrdre,
                     };
 
@@ -554,8 +684,11 @@ namespace SchoolWebApp.Dal.Repositories
                     if (etat != "acquise") continue;
 
                     // Acquise DE SON ANNÉE d'un côté, rattrapage de l'autre :
-                    // les deux se comptent, jamais dans le même total.
-                    if (co.NiveauOrdre == rang) matiere.Acquises += 1;
+                    // les deux se comptent, jamais dans le même total. Le
+                    // total de l'année ne compte que les notions actives, donc
+                    // une acquise obsolète ne peut PAS y entrer — sinon un
+                    // élève pourrait afficher 13 acquises sur 12.
+                    if (co.NiveauOrdre == rang && co.Actif) matiere.Acquises += 1;
                     else progression.AcquisesAutresAnnees += 1;
 
                     // NOUVELLE DEPUIS LA DERNIÈRE VISITE.

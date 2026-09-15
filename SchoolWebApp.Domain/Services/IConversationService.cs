@@ -29,6 +29,25 @@ namespace SchoolWebApp.Domain.Services
 
         Task TouchConversationAsync(int conversationId, int eleveId);
 
+        /// <summary>
+        /// Pose la durée choisie (15/25/35/45 min) pour la séance qui
+        /// commence. Silencieux si la conversation n'existe pas : c'est un
+        /// à-côté de l'accueil, jamais une condition de son bon déroulement.
+        /// </summary>
+        Task DefinirDureeChoisieAsync(int conversationId, int dureeMinutes, CancellationToken ct = default);
+
+        /// <summary>D'où vient l'élève pour la séance qui commence — voir `ModesSeance`.</summary>
+        Task DefinirModeSeanceAsync(
+            int conversationId, string mode, int? controleId, string? epreuveCode, CancellationToken ct = default);
+
+        /// <summary>
+        /// Vrai s'il existe au moins un message élève depuis le dernier
+        /// compte rendu de cette conversation (ou depuis sa création, s'il
+        /// n'y en a pas encore). Sert à décider si un départ anticipé mérite
+        /// une conclusion, ou si rien ne s'est passé.
+        /// </summary>
+        Task<bool> ADuTravailNonConcluAsync(int conversationId, CancellationToken ct = default);
+
         /// <summary>Note la sortie explicite de l'élève du cours.</summary>
         Task MarquerSortieAsync(int conversationId, int eleveId);
 
@@ -59,5 +78,21 @@ namespace SchoolWebApp.Domain.Services
 
         /// <summary>Notions dues en révision espacée, la plus fragile en tête.</summary>
         Task<IEnumerable<MaitriseCompetence>> GetARevoirAsync(int eleveId, int? matiereId, int limite);
+
+        /// <summary>
+        /// Les notions du programme officiel, pour le niveau et la matière de
+        /// la séance.
+        ///
+        /// SERT AU PROFESSEUR QUAND IL NOMME UNE FICHE. Il ne recevait
+        /// jusqu'ici que les notions DÉJÀ mesurées chez cet élève : sur une
+        /// notion neuve, il n'avait aucun libellé officiel sous les yeux et
+        /// en inventait un. D'où, dans les seize premières fiches, un mélange
+        /// de « Utiliser le théorème de Thalès » (le programme) et de
+        /// « Division décimale » (un titre de chapitre) — deux styles pour un
+        /// même objet, et des fiches qui ne se raccrochent plus à ce qui est
+        /// mesuré.
+        /// </summary>
+        Task<IEnumerable<CompetenceCandidate>> GetNotionsDuProgrammeAsync(
+            int matiereId, int niveauScolaireId, CancellationToken ct = default);
     }
 }

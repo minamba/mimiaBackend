@@ -31,6 +31,47 @@ namespace SchoolWebApp.Api.Request
 
         /// <summary>Corrige les accords du professeur. Ignoré s'il vaut NonPrecise.</summary>
         public Sexe? Sexe { get; set; }
+
+        /// <summary>Détermine la zone de vacances scolaires. Null = pas de changement.</summary>
+        public int? AcademieId { get; set; }
+    }
+
+    /// <summary>Création ou modification d'un signalement — voir « Signalements ».</summary>
+    public class SignalementAdminRequest
+    {
+        /// <summary>
+        /// Seulement à la création, pour retrouver le parent : on ne
+        /// réattribue jamais un signalement existant à un autre compte.
+        /// </summary>
+        [EmailAddress(ErrorMessage = "Adresse email invalide."), StringLength(255)]
+        public string? ParentMail { get; set; }
+
+        [StringLength(30)]
+        public string? Categorie { get; set; }
+
+        [StringLength(2000)]
+        public string? Description { get; set; }
+
+        /// <summary>nouveau / en_cours / traite.</summary>
+        [StringLength(20)]
+        public string? Etat { get; set; }
+    }
+
+    /// <summary>Création ou modification d'une période de vacances — voir « Périodes scolaires ».</summary>
+    public class PeriodeVacancesRequest
+    {
+        [StringLength(20)]
+        public string? Zone { get; set; }
+
+        [StringLength(10)]
+        public string? AnneeScolaire { get; set; }
+
+        [StringLength(50)]
+        public string? Libelle { get; set; }
+
+        public DateTime? DateDebut { get; set; }
+
+        public DateTime? DateFin { get; set; }
     }
 
     /// <summary>

@@ -34,6 +34,12 @@ namespace SchoolWebApp.Domain.Models
 
         public string? NiveauCycle { get; set; }
 
+        /// <summary>L'espagnol en LV2, choisi par la famille.</summary>
+        public bool Lv2Espagnol { get; set; }
+
+        /// <summary>Les spécialités cochées par la famille, telles qu'en base (codes séparés par « ; »).</summary>
+        public string? Specialites { get; set; }
+
         // ------------------------------------------------------------ parent
         public int ParentId { get; set; }
 
@@ -72,6 +78,38 @@ namespace SchoolWebApp.Domain.Models
         public IEnumerable<CompetenceEleve> Lacunes { get; set; } = [];
 
         public IEnumerable<CompetenceEleve> Acquises { get; set; } = [];
+
+        /// <summary>
+        /// Commencées, pas encore tenues. Elles n'apparaissaient nulle part :
+        /// tout ce qui n'était pas acquis tombait dans « points fragiles »,
+        /// et une notion à 74 % — travaillée, presque là — s'affichait au
+        /// parent comme une faiblesse. C'est pourtant l'état le plus fréquent
+        /// d'un élève qui progresse.
+        /// </summary>
+        public IEnumerable<CompetenceEleve> EnCours { get; set; } = [];
+
+        /// <summary>
+        /// Vues une seule fois : le produit ne s'avance pas encore. Affichées
+        /// à part, sans pourcentage présenté comme un verdict.
+        /// </summary>
+        public IEnumerable<CompetenceEleve> AConfirmer { get; set; } = [];
+
+        /// <summary>
+        /// COMBIEN IL Y EN A VRAIMENT, PAR COLONNE.
+        ///
+        /// Chaque liste est bornée à dix lignes, et rien ne le disait : un
+        /// élève avec douze notions fragiles en voyait dix, sans savoir que
+        /// deux manquaient. Pire, le tri par score écartait silencieusement
+        /// tout ce qui se trouvait juste au-dessus — c'est ainsi que la
+        /// compréhension orale, entre 40 et 65 %, restait invisible.
+        /// </summary>
+        public int TotalFragiles { get; set; }
+
+        public int TotalEnCours { get; set; }
+
+        public int TotalAcquises { get; set; }
+
+        public int TotalAConfirmer { get; set; }
 
         // -------------------------------------------------------- évaluations
         /// <summary>
@@ -149,6 +187,15 @@ namespace SchoolWebApp.Domain.Models
         public int CompetencesEvaluees { get; set; }
 
         /// <summary>Maîtrise moyenne, de 0 à 1. Null tant que rien n'a été évalué.</summary>
+        /// <summary>
+        /// Sur combien de compétences porte réellement la moyenne : celles
+        /// vues au moins deux fois. Sans ce chiffre, « 85 % de maîtrise »
+        /// pouvait reposer sur deux notions effleurées dans une matière qui
+        /// en compte cinquante — vrai arithmétiquement, faux tel qu'un parent
+        /// le lit.
+        /// </summary>
+        public int CompetencesAssises { get; set; }
+
         public double? MaitriseMoyenne { get; set; }
     }
 

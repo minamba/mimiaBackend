@@ -81,9 +81,20 @@ namespace SchoolWebApp.Api.Controllers
             }
         }
 
-        /// <summary>L'avis du parent connecté, s'il en a laissé un.</summary>
+        /// <summary>
+        /// L'avis du foyer, s'il en a laissé un.
+        ///
+        /// OUVERTE À L'ENFANT (voir `Executer`) : sans `[AutoriseEleve]`, le
+        /// filtre global `RestrictionEleveFilter` refusait cette route à une
+        /// session enfant avec un 403 — alors que le commentaire sur
+        /// `Executer` affirme depuis le début qu'un enfant peut déposer
+        /// l'avis du foyer. Corrigé ici, pas seulement pour `Deposer` : un
+        /// enfant qui va déposer doit d'abord pouvoir voir s'il y en a déjà
+        /// un.
+        /// </summary>
         [HttpGet("mien")]
         [Authorize]
+        [SchoolWebApp.Api.Auth.AutoriseEleve]
         [SwaggerResponse(200, "Son avis.", typeof(MonAvis))]
         [SwaggerResponse(204, "Il n'en a pas encore laissé.")]
         public Task<IActionResult> Mien(CancellationToken ct) =>
@@ -100,14 +111,22 @@ namespace SchoolWebApp.Api.Controllers
         /// elle, la page d'accueil accepterait du texte de n'importe qui, y
         /// compris d'un robot ou d'un concurrent, à raison d'un avis par
         /// requête.
+        ///
+        /// OUVERTE À L'ENFANT — voir le commentaire sur `Executer` : un
+        /// enfant porte le « sub » de son parent, et peut donc déposer
+        /// l'avis du foyer en son nom. `[AutoriseEleve]` le permettait déjà
+        /// en intention, mais le filtre global le refusait faute de
+        /// l'attribut.
         /// </summary>
         [HttpPut]
         [Authorize]
+        [SchoolWebApp.Api.Auth.AutoriseEleve]
         [SwaggerResponse(200, "Avis enregistré, en attente de relecture.", typeof(MonAvis))]
         [SwaggerResponse(400, "Note hors de 1 à 5, ou commentaire trop long.")]
         public Task<IActionResult> Deposer(
             [FromBody] AvisRequest requete,
             [FromServices] ITelegramService telegram,
+            [FromServices] ICurrentUserAccessor utilisateur,
             CancellationToken ct) =>
             Executer(async parentId =>
             {
@@ -130,8 +149,15 @@ namespace SchoolWebApp.Api.Controllers
                     return BadRequest(new { message = "L'avis ne peut pas dépasser 2000 caractères." });
                 }
 
+                // L'AUTEUR VIENT DE LA SESSION, JAMAIS DU CORPS DE LA REQUÊTE.
+                // `EleveId` n'est renseigné que sur un jeton d'enfant — rien
+                // qu'un appelant puisse déclarer lui-même. Et il vaut null
+                // pour un parent, ce qui EFFACE l'enfant d'une version
+                // précédente si le parent réécrit par-dessus (voir le
+                // commentaire sur `AvisRepository.DeposerAsync`).
                 var mien = await _avis.DeposerAsync(
-                    parentId, requete.Note, requete.Titre, requete.Commentaire, ct);
+                    parentId, requete.Note, requete.Titre, requete.Commentaire,
+                    eleveId: utilisateur.EleveId, ct);
 
                 _logger.LogInformation(
                     "Avis {Note}/5 depose par le parent {ParentId}, en attente de relecture.",
@@ -158,9 +184,10 @@ namespace SchoolWebApp.Api.Controllers
                 return Ok(mien);
             });
 
-        /// <summary>Retire son propre avis.</summary>
+        /// <summary>Retire l'avis du foyer.</summary>
         [HttpDelete]
         [Authorize]
+        [SchoolWebApp.Api.Auth.AutoriseEleve]
         [SwaggerResponse(204, "Avis retiré, ou déjà absent.")]
         public Task<IActionResult> Retirer(CancellationToken ct) =>
             Executer(async parentId =>

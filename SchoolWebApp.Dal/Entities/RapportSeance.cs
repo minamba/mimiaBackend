@@ -44,6 +44,15 @@ namespace SchoolWebApp.Dal.Entities
         /// <summary>Ce qu'il reste à retravailler. Vide quand tout est en place.</summary>
         public string? ARevoir { get; set; }
 
+        /// <summary>
+        /// La durée choisie par l'élève pour CETTE séance (15/25/35/45 min),
+        /// recopiée depuis <see cref="Conversation.DureeChoisieMinutes"/> au
+        /// moment où ce compte rendu est écrit. Null pour tout ce qui a été
+        /// enregistré avant l'existence de ce champ — il n'y a rien à
+        /// reconstituer pour l'existant.
+        /// </summary>
+        public int? DureeChoisieMinutes { get; set; }
+
         public DateTime DateCreation { get; set; }
 
         public virtual Eleve? Eleve { get; set; }

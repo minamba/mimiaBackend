@@ -9,6 +9,8 @@ using DomainMessage = SchoolWebApp.Domain.Models.Message;
 using DomainPieceJointe = SchoolWebApp.Domain.Models.PieceJointe;
 using MessageObserve = SchoolWebApp.Domain.Models.MessageObserve;
 using SeanceAObserver = SchoolWebApp.Domain.Models.SeanceAObserver;
+using ExerciceObserve = SchoolWebApp.Domain.Models.ExerciceObserve;
+using QuestionEvaluation = SchoolWebApp.Domain.Models.QuestionEvaluation;
 
 namespace SchoolWebApp.Dal.Repositories
 {
@@ -151,6 +153,69 @@ namespace SchoolWebApp.Dal.Repositories
             await _context.SaveChangesAsync();
         }
 
+        public async Task DefinirDureeChoisieAsync(int conversationId, int dureeMinutes, CancellationToken ct = default)
+        {
+            var conversation = await _context.Conversations
+                .FirstOrDefaultAsync(c => c.Id == conversationId, ct);
+
+            if (conversation is null) return;
+
+            conversation.DureeChoisieMinutes = dureeMinutes;
+            await _context.SaveChangesAsync(ct);
+        }
+
+        public async Task DefinirModeSeanceAsync(
+            int conversationId, string mode, int? controleId, string? epreuveCode, CancellationToken ct = default)
+        {
+            var conversation = await _context.Conversations
+                .FirstOrDefaultAsync(c => c.Id == conversationId, ct);
+
+            if (conversation is null) return;
+
+            // LES TROIS ENSEMBLE, TOUJOURS : un mode « cours » qui garderait le
+            // contrôle de la séance précédente ferait reparler de ce contrôle.
+            conversation.ModeSeance = mode;
+            conversation.ModeControleId = controleId;
+            conversation.ModeEpreuveCode = epreuveCode;
+            await _context.SaveChangesAsync(ct);
+        }
+
+        /// <summary>
+        /// Vrai s'il existe au moins un message ÉLÈVE postérieur au dernier
+        /// compte rendu de cette conversation — ou, faute de compte rendu,
+        /// postérieur à sa création.
+        ///
+        /// C'est la garde d'un départ anticipé : sans elle, cliquer « Quitter
+        /// le cours » deux secondes après l'avoir ouvert, sans avoir rien dit,
+        /// ferait quand même parler le professeur pour rien — un compte rendu
+        /// sur un silence. Un seul message suffit en revanche à ne rien
+        /// perdre : mieux vaut un bilan trop bref que pas de bilan du tout.
+        /// </summary>
+        public async Task<bool> ADuTravailNonConcluAsync(int conversationId, CancellationToken ct = default)
+        {
+            var dernierRapport = await _context.RapportsSeance
+                .Where(r => r.ConversationId == conversationId)
+                .OrderByDescending(r => r.DateCreation)
+                .Select(r => (DateTime?)r.DateCreation)
+                .FirstOrDefaultAsync(ct);
+
+            var depuis = dernierRapport ?? DateTime.MinValue;
+
+            return await _context.Messages.AnyAsync(
+                m => m.ConversationId == conversationId
+                    && m.Role == "user"
+                    && m.DateCreation > depuis,
+                ct);
+        }
+
+        public async Task<string?> GetIdentityUserIdAsync(
+            int conversationId, CancellationToken ct = default) =>
+            await _context.Conversations
+                .AsNoTracking()
+                .Where(c => c.Id == conversationId)
+                .Select(c => c.Eleve!.Parent!.IdentityUserId)
+                .FirstOrDefaultAsync(ct);
+
         public async Task<SeanceAObserver?> GetSeanceAObserverAsync(
             int conversationId, CancellationToken ct = default)
         {
@@ -199,6 +264,9 @@ namespace SchoolWebApp.Dal.Repositories
                         NiveauLibelle = c.Eleve.NiveauScolaire!.Libelle,
                         NiveauOrdre = c.Eleve.NiveauScolaire.Ordre,
                         NiveauCode = c.Eleve.NiveauScolaire.Code,
+                        ModeSeance = c.ModeSeance,
+                        ModeControleId = c.ModeControleId,
+                        ModeEpreuveCode = c.ModeEpreuveCode,
                         Jusqua = c.DateDernierMessage!.Value,
                     },
                     Depuis = c.DateDerniereObservation,
@@ -219,9 +287,107 @@ namespace SchoolWebApp.Dal.Repositories
                     .OrderBy(m => m.DateCreation)
                     .Select(m => new MessageObserve(m.Role ?? "user", m.Contenu ?? "", m.DateCreation))
                     .ToListAsync(ct);
+
+                element.Seance.Exercices =
+                    await ExercicesAsync(element.Seance.ConversationId, depuis, ct);
             }
 
             return seances.Select(e => e.Seance).ToList();
+        }
+
+        /// <summary>
+        /// Les exercices notés archivés pendant la fenêtre non encore analysée.
+        ///
+        /// ON LIT LES ARCHIVES, PAS LES MESSAGES. Le bloc que le professeur
+        /// pose dans son message n est qu une des deux façons dont une archive
+        /// naît : le rattrapage en écrit autant, depuis les messages bruts,
+        /// quand le modèle a oublié de poser le bloc. Relevé le 10/09/2026 :
+        /// quinze compréhensions orales en table pour cinq blocs en message,
+        /// deux dictées pour aucun bloc. Chercher les exercices dans les
+        /// messages en aurait donc raté les deux tiers.
+        ///
+        /// Même fenêtre que les messages — `depuis` — pour la même raison :
+        /// sans elle, chaque passage du worker recompterait les mêmes copies.
+        /// </summary>
+        private async Task<List<ExerciceObserve>> ExercicesAsync(
+            int conversationId, DateTime? depuis, CancellationToken ct)
+        {
+            var evaluations = await _context.Evaluations
+                .AsNoTracking()
+                .Where(e => e.ConversationId == conversationId
+                            && (depuis == null || e.DateCreation > depuis))
+                .Select(e => new ExerciceObserve
+                {
+                    Genre = "évaluation",
+                    Titre = e.Notion,
+                    Note = e.Note,
+                    Bilan = e.ARevoir,
+                    Date = e.DateCreation,
+                    Attendu = e.Detail,
+                })
+                .ToListAsync(ct);
+
+            // Le détail voyage en JSON dans la colonne : il est relu ici, pas
+            // dans la requête — traduire une désérialisation en SQL est
+            // impossible, et la faire côté base le serait tout autant.
+            foreach (var evaluation in evaluations)
+            {
+                evaluation.Questions = Questions(evaluation.Attendu);
+                evaluation.Attendu = null;
+            }
+
+            var dictees = await _context.Dictees
+                .AsNoTracking()
+                .Where(d => d.ConversationId == conversationId
+                            && (depuis == null || d.DateCreation > depuis))
+                .Select(d => new ExerciceObserve
+                {
+                    Genre = "dictée",
+                    Titre = d.Titre,
+                    Attendu = d.TexteDicte,
+                    Production = d.Copie,
+                    Bilan = d.Remarque,
+                    Date = d.DateCreation,
+                })
+                .ToListAsync(ct);
+
+            var comprehensions = await _context.ComprehensionsOrales
+                .AsNoTracking()
+                .Where(c => c.ConversationId == conversationId
+                            && (depuis == null || c.DateCreation > depuis))
+                .Select(c => new ExerciceObserve
+                {
+                    Genre = "compréhension orale",
+                    Titre = c.Titre,
+                    Langue = c.Langue,
+                    Attendu = c.Passage,
+                    Production = c.ReponseEleve,
+                    Bilan = c.Comprehension,
+                    Date = c.DateCreation,
+                })
+                .ToListAsync(ct);
+
+            return evaluations
+                .Concat(dictees)
+                .Concat(comprehensions)
+                .OrderBy(e => e.Date)
+                .ToList();
+        }
+
+        /// <summary>Un détail illisible ne coûte que le détail, jamais l exercice.</summary>
+        private static List<QuestionEvaluation> Questions(string? json)
+        {
+            if (string.IsNullOrWhiteSpace(json)) return [];
+
+            try
+            {
+                return System.Text.Json.JsonSerializer
+                    .Deserialize<List<QuestionEvaluation>>(json) ?? [];
+            }
+            catch (System.Text.Json.JsonException)
+            {
+                return [];
+            }
         }
 
         // ------------------------------------------------------------------
@@ -506,6 +672,10 @@ namespace SchoolWebApp.Dal.Repositories
             DateDernierMessage = entity.DateDernierMessage,
             DatePurge = entity.DatePurge,
             DateSortie = entity.DateSortie,
+            DureeChoisieMinutes = entity.DureeChoisieMinutes,
+            ModeSeance = entity.ModeSeance,
+            ModeControleId = entity.ModeControleId,
+            ModeEpreuveCode = entity.ModeEpreuveCode,
             MatiereCode = entity.Matiere?.Code,
             MatiereLibelle = entity.Matiere?.Libelle,
             AgentSlug = entity.Matiere?.AgentSlug,

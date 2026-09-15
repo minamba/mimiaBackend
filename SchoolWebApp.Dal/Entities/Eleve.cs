@@ -15,6 +15,14 @@ namespace SchoolWebApp.Dal.Entities
         public int NiveauScolaireId { get; set; }
 
         /// <summary>
+        /// Détermine la zone de vacances scolaires de l'enfant. Nullable :
+        /// les profils existants n'en ont pas, et le calendrier se dégrade
+        /// simplement — pas de vacances affichées — tant qu'elle n'est pas
+        /// renseignée.
+        /// </summary>
+        public int? AcademieId { get; set; }
+
+        /// <summary>
         /// Quand l enfant a regardé sa carte de progression pour la dernière
         /// fois. Nulle tant qu il ne l a jamais ouverte.
         ///
@@ -105,9 +113,24 @@ namespace SchoolWebApp.Dal.Entities
         /// </summary>
         public DateTime? AccesSuspenduLe { get; set; }
 
+        /// <summary>
+        /// L'espagnol en LV2 — un choix de la famille, que la classe ne dit pas.
+        /// Il n'ouvre la matière que dans les classes où une LV2 existe : voir
+        /// `VoiesScolaires.AUneLv2`.
+        /// </summary>
+        public bool Lv2Espagnol { get; set; }
+
+        /// <summary>
+        /// Les spécialités de la voie générale cochées par la famille, codes
+        /// séparés par « ; ». Voir `VoiesScolaires.SpecialitesGenerales`.
+        /// </summary>
+        public string? Specialites { get; set; }
+
         public virtual Parent? Parent { get; set; }
 
         public virtual NiveauScolaire? NiveauScolaire { get; set; }
+
+        public virtual Academie? Academie { get; set; }
 
         public virtual ICollection<MaitriseEleve> Maitrises { get; set; } = new List<MaitriseEleve>();
 
@@ -119,6 +142,16 @@ namespace SchoolWebApp.Dal.Entities
 
         public virtual ICollection<FicheRevision> Fiches { get; set; } = new List<FicheRevision>();
 
+        public virtual ICollection<Dictee> Dictees { get; set; } = new List<Dictee>();
+
+        public virtual ICollection<ComprehensionOrale> ComprehensionsOrales { get; set; } = new List<ComprehensionOrale>();
+
+        public virtual ICollection<EvaluationPrevue> EvaluationsPrevues { get; set; } = new List<EvaluationPrevue>();
+
+        public virtual ICollection<ControleScolaire> ControlesScolaires { get; set; } = new List<ControleScolaire>();
+
         public virtual ICollection<ConsommationEleve> Consommations { get; set; } = new List<ConsommationEleve>();
+
+        public virtual ICollection<Signalement> Signalements { get; set; } = new List<Signalement>();
     }
 }
