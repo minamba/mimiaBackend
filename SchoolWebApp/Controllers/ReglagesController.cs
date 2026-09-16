@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using SchoolWebApp.Api.Services;
 using SchoolWebApp.Api.Services.Paiement;
 using SchoolWebApp.Domain.Repositories;
+using SchoolWebApp.Domain.Services;
 using Swashbuckle.AspNetCore.Annotations;
 
 namespace SchoolWebApp.Api.Controllers
@@ -281,6 +282,23 @@ namespace SchoolWebApp.Api.Controllers
         /// </summary>
         public const string OffreLancementFormules = "OFFRE_LANCEMENT_FORMULES";
 
+        /// <summary>
+        /// LE COUPE-CIRCUIT DU TEMPS RÉEL — voulu par Camara le 16/09/2026,
+        /// avant le lancement : « si le site explose, je ne veux pas que cette
+        /// histoire de SSE ait un impact sur les performances ».
+        ///
+        /// Éteint, plus aucun navigateur n'ouvre de connexion longue et les
+        /// écoutes en cours sont fermées immédiatement. Le produit ne perd
+        /// rien d'essentiel : les réglages se propagent alors en une minute au
+        /// lieu d'être instantanés, comme avant que ce flux existe.
+        ///
+        /// ALLUMÉ PAR DÉFAUT, sans quoi la fonction serait éteinte chez tout
+        /// le monde tant que personne n'a posé le réglage. Mais ÉTEINT quand la
+        /// lecture échoue : une panne de base ne doit pas ouvrir des connexions
+        /// qui durent des heures.
+        /// </summary>
+        public const string FluxSse = "FLUX_SSE";
+
         /// <summary>Le texte du badge ne doit pas déborder de la carte.</summary>
         private const int LongueurTexteLancementMax = 40;
 
@@ -290,7 +308,7 @@ namespace SchoolWebApp.Api.Controllers
         /// </summary>
         private static readonly string[] ClesConnues =
             [ModeTest, CompteTest, EssaisOuverts, TachesDeFond, Maintenance, VoixDeSecours,
-             OffreLancement, OffreLancementBandeau, BlueSky, ModeDeveloppeur];
+             OffreLancement, OffreLancementBandeau, BlueSky, ModeDeveloppeur, FluxSse];
 
         private readonly IReglageRepository _reglages;
         private readonly ILogger<ReglagesController> _logger;
@@ -300,6 +318,125 @@ namespace SchoolWebApp.Api.Controllers
         {
             _reglages = reglages ?? throw new ArgumentNullException(nameof(reglages));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        }
+
+        /// <summary>
+        /// LE FLUX DES CHANGEMENTS DE RÉGLAGE — Camara, le 16/09/2026 : « quand
+        /// j'active Blue Sky, ça ne change pas sur tous les ordinateurs et
+        /// mobiles de manière instantanée ».
+        ///
+        /// Le navigateur ouvre cette écoute une fois (`EventSource`), et reçoit
+        /// le NOM de la clé changée — jamais sa valeur. Il rappelle ensuite
+        /// `reglages/publics`, qui reste seule à décider de ce qu'un visiteur a
+        /// le droit de savoir : un flux anonyme ne doit rien révéler de plus.
+        ///
+        /// ANONYME, comme `publics` et pour la même raison : le style habille
+        /// le site avant toute connexion, page d'attente comprise.
+        ///
+        /// UN BATTEMENT TOUTES LES 25 SECONDES. Sans trafic, un proxy referme
+        /// une connexion inactive au bout d'une minute environ ; le commentaire
+        /// SSE (une ligne qui commence par `:`) la tient ouverte sans rien
+        /// annoncer. `X-Accel-Buffering: no` interdit à nginx de mettre le flux
+        /// en tampon — sans lui, l'annonce arriverait quand la connexion se
+        /// ferme, c'est-à-dire jamais.
+        /// </summary>
+        [HttpGet("flux")]
+        [AllowAnonymous]
+        [SwaggerResponse(200, "Flux SSE des changements de réglage.")]
+        [SwaggerResponse(503, "Trop d'écoutes ouvertes : relecture périodique.")]
+        public async Task Flux(
+            [FromServices] IDiffusionReglages diffusion, CancellationToken ct)
+        {
+            // L'ABONNEMENT D'ABORD, LES EN-TÊTES ENSUITE. Une fois le
+            // `Content-Type` posé et le corps entamé, il n'est plus possible de
+            // répondre autre chose qu'un flux.
+            var (id, lecteur) = diffusion.Abonner();
+
+            // REFUSÉ AU-DELÀ DU PLAFOND, ET REFUSÉ FRANCHEMENT. Accepter la
+            // connexion pour la refermer aussitôt serait pire que de la refuser :
+            // le navigateur y verrait une écoute réussie puis coupée, et
+            // reviendrait toutes les trois secondes — le garde-fou nourrirait
+            // alors la saturation qu'il est censé contenir. Un statut d'erreur
+            // arrête net la reconnexion automatique d'`EventSource` ; le
+            // navigateur retombe sur sa relecture périodique, et le service
+            // reste rendu.
+            if (id == Guid.Empty)
+            {
+                Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
+                Response.Headers.RetryAfter = "60";
+                return;
+            }
+
+            Response.Headers.ContentType = "text/event-stream";
+            Response.Headers.CacheControl = "no-cache";
+            Response.Headers.Connection = "keep-alive";
+            Response.Headers["X-Accel-Buffering"] = "no";
+
+            HttpContext.Features
+                .Get<Microsoft.AspNetCore.Http.Features.IHttpResponseBodyFeature>()
+                ?.DisableBuffering();
+
+            try
+            {
+                // `retry` : le délai de reconnexion que le navigateur respecte
+                // après une coupure. Trois secondes, pour qu'un changement
+                // manqué pendant une micro-coupure soit rattrapé vite.
+                await EcrireSseAsync("retry: 3000\n\n", ct);
+
+                while (!ct.IsCancellationRequested)
+                {
+                    using var tour = CancellationTokenSource.CreateLinkedTokenSource(ct);
+
+                    var annonce = lecteur.WaitToReadAsync(tour.Token).AsTask();
+                    var battement = Task.Delay(BattementSse, tour.Token);
+                    var premier = await Task.WhenAny(annonce, battement);
+
+                    // L'autre attente est annulée tout de suite : sans ça, un
+                    // minuteur de 25 s resterait en vol à chaque annonce.
+                    tour.Cancel();
+
+                    if (premier == battement)
+                    {
+                        await EcrireSseAsync(": battement\n\n", ct);
+                        continue;
+                    }
+
+                    if (!await annonce) break;
+
+                    while (lecteur.TryRead(out var cle))
+                    {
+                        var json = System.Text.Json.JsonSerializer.Serialize(cle);
+                        await EcrireSseAsync($"data: {{\"cle\":{json}}}\n\n", ct);
+                    }
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // L'onglet s'est fermé, ou le serveur s'arrête : rien à signaler.
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Flux des reglages interrompu.");
+            }
+            finally
+            {
+                diffusion.Desabonner(id);
+            }
+        }
+
+        /// <summary>
+        /// Vingt-cinq secondes : sous la minute d'inactivité au bout de laquelle
+        /// un proxy referme une connexion, et assez rare pour ne rien coûter —
+        /// une douzaine d'octets par navigateur et par demi-minute.
+        /// </summary>
+        private static readonly TimeSpan BattementSse = TimeSpan.FromSeconds(25);
+
+        private async Task EcrireSseAsync(string texte, CancellationToken ct)
+        {
+            var octets = System.Text.Encoding.UTF8.GetBytes(texte);
+
+            await Response.Body.WriteAsync(octets, ct);
+            await Response.Body.FlushAsync(ct);
         }
 
         /// <summary>Ce que le navigateur a besoin de savoir, sans être connecté.</summary>
@@ -327,6 +464,13 @@ namespace SchoolWebApp.Api.Controllers
                     // Le style du site : public, puisqu'il habille aussi les
                     // pages qu'on voit avant d'avoir un compte.
                     blueSky = await _reglages.EstActifAsync(BlueSky, false, ct),
+
+                    // LE COUPE-CIRCUIT DU TEMPS RÉEL. Public parce que c'est le
+                    // navigateur qui ouvre la connexion longue : c'est donc à lui
+                    // qu'il faut dire de s'en abstenir. Allumé par défaut — une
+                    // API antérieure à ce drapeau ne l'enverrait pas, et le lire
+                    // comme éteint priverait tout le monde du temps réel.
+                    fluxSse = await _reglages.EstActifAsync(FluxSse, true, ct),
 
                     // LE BANDEAU EST PUBLIC, et il doit l'être : il annonce
                     // une maintenance ou une panne, c'est-à-dire précisément
@@ -364,6 +508,13 @@ namespace SchoolWebApp.Api.Controllers
                     // Le style d'origine : une panne de lecture ne change pas
                     // l'allure du site.
                     blueSky = false,
+
+                    // ÉTEINT SUR UNE PANNE DE LECTURE, à l'inverse du défaut
+                    // normal : quand la base ne répond pas, la dernière chose à
+                    // faire est d'ouvrir des connexions qui durent des heures.
+                    // Les navigateurs relisent par minute, ce qui suffit
+                    // largement le temps que la panne passe.
+                    fluxSse = false,
 
                     // Pas de bandeau quand on ne sait pas lire : afficher un
                     // avertissement sur une panne de lecture inquiéterait
@@ -411,6 +562,11 @@ namespace SchoolWebApp.Api.Controllers
                 // publique. Un visiteur n'a pas à savoir dans quel état sont
                 // les professeurs, et un élève encore moins.
                 modeDeveloppeur = await _reglages.EstActifAsync(ModeDeveloppeur, false, ct),
+
+                // Allumé par défaut, comme sur la route publique : l'écran doit
+                // montrer « activé » tant que personne n'a posé le réglage,
+                // puisque c'est bien l'état du produit.
+                fluxSse = await _reglages.EstActifAsync(FluxSse, true, ct),
 
                 // Ici le texte part TOUJOURS, allumé ou non : sans quoi on ne
                 // pourrait ni préparer un message à l'avance, ni relire celui
@@ -634,7 +790,8 @@ namespace SchoolWebApp.Api.Controllers
         [SwaggerResponse(204, "Réglage enregistré.")]
         [SwaggerResponse(400, "Clé inconnue.")]
         public async Task<IActionResult> Definir(
-            string cle, [FromBody] DefinirReglageRequest requete, CancellationToken ct)
+            string cle, [FromBody] DefinirReglageRequest requete,
+            [FromServices] IDiffusionReglages diffusion, CancellationToken ct)
         {
             var connue = ClesConnues.FirstOrDefault(
                 k => string.Equals(cle, k, StringComparison.OrdinalIgnoreCase));
@@ -642,6 +799,15 @@ namespace SchoolWebApp.Api.Controllers
             if (connue is null) return BadRequest(new { message = "Réglage inconnu." });
 
             await _reglages.DefinirAsync(connue, requete.Actif, ct);
+
+            // LE COUPE-CIRCUIT AGIT MAINTENANT, pas au prochain redémarrage.
+            //
+            // APRÈS l'écriture, et l'ordre a du sens : l'enregistrement annonce
+            // déjà la clé aux navigateurs à l'écoute, qui relisent et se
+            // débranchent d'eux-mêmes ; la fermeture ci-dessous ramasse ce qui
+            // resterait. Ils sont donc prévenus, puis coupés — jamais coupés
+            // sans savoir pourquoi.
+            if (connue == FluxSse) diffusion.DefinirActif(requete.Actif);
 
             _logger.LogWarning(
                 "Reglage {Cle} {Etat} par un administrateur.",

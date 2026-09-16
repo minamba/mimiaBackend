@@ -428,6 +428,11 @@ builder.Services.AddScoped<ITranscriptionTempsReelService, TranscriptionTempsRee
 // donc un singleton — le même texte n'est découpé qu'une fois par processus.
 builder.Services.AddSingleton<IFaconneurEcoute, FaconneurEcoute>();
 
+// L'annonce des changements de réglage aux navigateurs ouverts. Singleton :
+// il tient la liste des écoutes en cours, qui survit aux requêtes — un
+// service à durée de vie de requête n'aurait personne à qui parler.
+builder.Services.AddSingleton<IDiffusionReglages, DiffusionReglages>();
+
 builder.Services.AddHttpClient<ISyntheseVocaleService, SyntheseVocaleService>(client =>
 {
     // Une phrase courte revient en moins d'une seconde ; au-delà de 30 s c'est
@@ -670,6 +675,32 @@ using (var scope = app.Services.CreateScope())
             // l'administration dès qu'ils ont été semés.
             await ModelesMailSeeder.SeedAsync(db);
             Console.WriteLine("Referentiel et grille tarifaire verifies.");
+
+            // LE COUPE-CIRCUIT DU FLUX, RELU AU DÉMARRAGE. L'état de la
+            // diffusion vit en mémoire — c'est ce qui lui évite d'interroger la
+            // base dans chaque écoute. Sans cette lecture, un redémarrage
+            // rallumerait donc une diffusion que l'administration avait éteinte,
+            // et l'interrupteur ne tiendrait pas le premier `docker restart`.
+            try
+            {
+                var fluxActif = await scope.ServiceProvider
+                    .GetRequiredService<SchoolWebApp.Domain.Repositories.IReglageRepository>()
+                    .EstActifAsync(SchoolWebApp.Api.Controllers.ReglagesController.FluxSse, true);
+
+                scope.ServiceProvider
+                    .GetRequiredService<SchoolWebApp.Domain.Services.IDiffusionReglages>()
+                    .DefinirActif(fluxActif);
+
+                if (!fluxActif)
+                    Console.WriteLine("Diffusion temps reel ETEINTE par reglage.");
+            }
+            catch (Exception ex)
+            {
+                // Une lecture qui échoue laisse la diffusion allumée : c'est
+                // l'état normal du produit, et elle ne coûte rien tant que
+                // personne n'écoute.
+                Console.WriteLine($"Lecture du reglage FLUX_SSE impossible : {ex.Message}");
+            }
 
             // LES CARTES D'EXAMEN, VÉRIFIÉES À CHAQUE DÉMARRAGE : une faute de
             // frappe dans une partie retenue vide une carte sans rien faire

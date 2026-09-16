@@ -1,16 +1,27 @@
 using Microsoft.EntityFrameworkCore;
 using SchoolWebApp.Dal.Entities;
 using SchoolWebApp.Domain.Repositories;
+using SchoolWebApp.Domain.Services;
 
 namespace SchoolWebApp.Dal.Repositories
 {
     public class ReglageRepository : IReglageRepository
     {
         private readonly SchoolWebAppDatabaseContext _context;
+        private readonly IDiffusionReglages? _diffusion;
 
-        public ReglageRepository(SchoolWebAppDatabaseContext context)
+        /// <summary>
+        /// LA DIFFUSION EST FACULTATIVE, ET C'EST VOULU. Elle est fournie par
+        /// l'API, qui tient la liste des navigateurs à l'écoute ; un semeur, un
+        /// worker ou un test qui construirait ce dépôt sans elle écrit
+        /// normalement — les navigateurs relisent alors à leur rythme habituel,
+        /// sans que rien ne casse.
+        /// </summary>
+        public ReglageRepository(
+            SchoolWebAppDatabaseContext context, IDiffusionReglages? diffusion = null)
         {
             _context = context ?? throw new ArgumentNullException(nameof(context));
+            _diffusion = diffusion;
         }
 
         public async Task<IReadOnlyDictionary<string, string>> GetTousAsync(
@@ -49,6 +60,13 @@ namespace SchoolWebApp.Dal.Repositories
             reglage.DateModification = DateTime.UtcNow;
 
             await _context.SaveChangesAsync(ct);
+
+            // ANNONCÉ ICI, ET NON DANS LES ROUTES — Camara, le 16/09/2026 :
+            // « il faut que ce soit instantané ». Toute écriture passe par ce
+            // dépôt ; annoncer route par route reviendrait à en oublier une le
+            // jour où l'on en ajoute. APRÈS l'enregistrement : un navigateur
+            // qui relit doit trouver la nouvelle valeur, pas l'ancienne.
+            _diffusion?.Diffuser(cle);
         }
 
         public async Task<string?> LireAsync(string cle, CancellationToken ct = default) =>
@@ -70,6 +88,11 @@ namespace SchoolWebApp.Dal.Repositories
             reglage.DateModification = DateTime.UtcNow;
 
             await _context.SaveChangesAsync(ct);
+
+            // Même chose pour les valeurs en clair — le texte du bandeau,
+            // l'offre de lancement : elles s'affichent chez le visiteur au
+            // même titre qu'un interrupteur.
+            _diffusion?.Diffuser(cle);
         }
     }
 }
