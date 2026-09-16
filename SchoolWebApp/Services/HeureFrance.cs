@@ -26,6 +26,32 @@ namespace SchoolWebApp.Api.Services
             utc.HasValue ? Locale(utc.Value) : null;
 
         /// <summary>
+        /// L'inverse : une heure lue à l'horloge de Paris, ramenée en UTC.
+        ///
+        /// DEUX HEURES PAR AN N'ONT PAS UNE RÉPONSE SIMPLE, et un courriel
+        /// programmé peut tomber dessus :
+        /// - au passage à l'heure d'été, 2 h 30 n'existe pas — l'horloge saute
+        ///   de 2 h à 3 h. On prend 3 h 30 : l'envoi part, avec une heure de
+        ///   retard, plutôt que jamais ;
+        /// - au passage à l'heure d'hiver, 2 h 30 existe deux fois. On prend la
+        ///   première : un seul envoi, au premier des deux instants.
+        /// </summary>
+        public static DateTime VersUtc(DateTime heureParis)
+        {
+            var locale = DateTime.SpecifyKind(heureParis, DateTimeKind.Unspecified);
+
+            if (Paris.IsInvalidTime(locale)) locale = locale.AddHours(1);
+
+            if (Paris.IsAmbiguousTime(locale))
+            {
+                var decalage = Paris.GetAmbiguousTimeOffsets(locale).Max();
+                return DateTime.SpecifyKind(locale - decalage, DateTimeKind.Utc);
+            }
+
+            return TimeZoneInfo.ConvertTimeToUtc(locale, Paris);
+        }
+
+        /// <summary>
         /// « Europe/Paris » est l'identifiant IANA, que .NET 8 accepte sur les
         /// deux plateformes. On garde l'ancien nom Windows en secours au cas
         /// où la machine n'aurait pas les données ICU, et l'UTC en dernier

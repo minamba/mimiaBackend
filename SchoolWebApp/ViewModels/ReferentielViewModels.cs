@@ -334,5 +334,38 @@ namespace SchoolWebApp.Api.ViewModels
         /// motif dessiné en fond de sa carte.
         /// </summary>
         public string? Code { get; set; }
+
+        /// <summary>
+        /// Ce que dit sa carte, en un mot ou deux : « Mathématiques », « Sport »,
+        /// « Arts ». Le détail est dans la fiche, qui s ouvre au clic.
+        /// </summary>
+        public string? Titre { get; set; }
+
+        /// <summary>Sa présentation, à la première personne, pour sa fiche.</summary>
+        public string? Presentation { get; set; }
+
+        /// <summary>Chacune de ses disciplines, dans l ordre de la grille.</summary>
+        public List<DisciplineViewModel> Disciplines { get; set; } = [];
+    }
+
+    /// <summary>
+    /// Une discipline, telle que la fiche d un professeur la détaille.
+    /// </summary>
+    public class DisciplineViewModel
+    {
+        /// <summary>L intitulé officiel complet : la fiche a la place de l écrire.</summary>
+        public string? Libelle { get; set; }
+
+        /// <summary>Ce que la matière promet à l enfant, en une phrase.</summary>
+        public string? Promesse { get; set; }
+
+        /// <summary>Les classes concernées : « Du CP à la Terminale », « Terminale ».</summary>
+        public string? Niveaux { get; set; }
+
+        /// <summary>
+        /// La voie ou la série quand la discipline n est pas pour tous :
+        /// « Spécialité, voie générale », « Série STMG », « LV2 ». Null sinon.
+        /// </summary>
+        public string? Voie { get; set; }
     }
 }

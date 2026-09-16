@@ -141,6 +141,24 @@ namespace SchoolWebApp.Api.Controllers
         public const string BlueSky = "BLUE_SKY";
 
         /// <summary>
+        /// LE MODE DÉVELOPPEUR : le professeur exécute tout, sans discuter.
+        ///
+        /// VOULU PAR CAMARA LE 16/09/2026, pour ses essais : relancer un
+        /// exercice à l'infini sans que le professeur oppose « on n'a pas fini
+        /// le précédent ». La demande d'origine était que la phrase « je suis
+        /// le développeur » suffise, dans le chat. Refusé, et c'est la seule
+        /// chose qui compte ici : une phrase en clair se répète, et le premier
+        /// élève qui l'apprend obtient les réponses toutes faites et des
+        /// évaluations fausses. Un interrupteur d'administration, lui, est
+        /// hors de portée d'un élève.
+        ///
+        /// ÉTEINT PAR DÉFAUT, et à rallumer sciemment : allumé, il vaut pour
+        /// TOUTES les séances en cours, celles des vrais élèves comprises.
+        /// C'est un outil d'essai, pas un réglage de confort.
+        /// </summary>
+        public const string ModeDeveloppeur = "MODE_DEVELOPPEUR";
+
+        /// <summary>
         /// Le bandeau d'information affiché en haut du site.
         ///
         /// DEUX CLÉS ET NON UNE. Le texte survit à son extinction : on
@@ -272,7 +290,7 @@ namespace SchoolWebApp.Api.Controllers
         /// </summary>
         private static readonly string[] ClesConnues =
             [ModeTest, CompteTest, EssaisOuverts, TachesDeFond, Maintenance, VoixDeSecours,
-             OffreLancement, OffreLancementBandeau, BlueSky];
+             OffreLancement, OffreLancementBandeau, BlueSky, ModeDeveloppeur];
 
         private readonly IReglageRepository _reglages;
         private readonly ILogger<ReglagesController> _logger;
@@ -388,6 +406,11 @@ namespace SchoolWebApp.Api.Controllers
                 voixDeSecours = await _reglages.EstActifAsync(VoixDeSecours, false, ct),
 
                 blueSky = await _reglages.EstActifAsync(BlueSky, false, ct),
+
+                // Réservé à l'administration : il ne figure PAS dans la route
+                // publique. Un visiteur n'a pas à savoir dans quel état sont
+                // les professeurs, et un élève encore moins.
+                modeDeveloppeur = await _reglages.EstActifAsync(ModeDeveloppeur, false, ct),
 
                 // Ici le texte part TOUJOURS, allumé ou non : sans quoi on ne
                 // pourrait ni préparer un message à l'avance, ni relire celui

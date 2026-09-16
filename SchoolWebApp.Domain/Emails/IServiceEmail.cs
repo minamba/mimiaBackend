@@ -52,6 +52,25 @@ namespace SchoolWebApp.Domain.Emails
             IDictionary<string, string> valeurs,
             CancellationToken ct = default);
 
+        /// <summary>
+        /// Envoie un message PERSONNEL avec ses images, ses documents et ses
+        /// en-têtes.
+        ///
+        /// Pour ce qu'une diffusion ne sait pas faire : un courriel dont le
+        /// prénom et le lien de désabonnement changent à chaque destinataire,
+        /// avec les pièces d'un template.
+        /// </summary>
+        /// <param name="enTetes">`List-Unsubscribe`, par exemple. Nuls : aucun.</param>
+        Task<bool> EnvoyerAsync(
+            string destinataire,
+            string sujet,
+            string gabarit,
+            IDictionary<string, string> valeurs,
+            IReadOnlyList<PieceMail>? images,
+            IReadOnlyList<PieceMail>? documents,
+            IReadOnlyDictionary<string, string>? enTetes,
+            CancellationToken ct = default);
+
         int Envoyes { get; }
 
         int Echecs { get; }

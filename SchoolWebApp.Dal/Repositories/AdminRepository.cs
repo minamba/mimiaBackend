@@ -1291,6 +1291,12 @@ WHERE  role = 'assistant' AND date_creation >= {0}";
                     Sexe = e.Sexe,
                     NiveauLibelle = e.NiveauScolaire!.Libelle,
                     NiveauOrdre = e.NiveauScolaire.Ordre,
+                    // La classe, la LVB et les spécialités : ce que le parent a
+                    // toujours vu, et que l'administration ne recevait pas. La
+                    // liste est relue en mémoire, dans la projection finale.
+                    NiveauScolaireId = e.NiveauScolaireId,
+                    Lv2Espagnol = e.Lv2Espagnol,
+                    Specialites = VoiesScolaires.LireSpecialites(e.Specialites),
                     AcademieId = e.AcademieId,
                     AcademieLibelle = e.Academie!.Libelle,
                     ParentMail = e.Parent!.Mail,
@@ -1741,7 +1747,7 @@ WHERE  role = 'assistant' AND date_creation >= {0}";
 
         public async Task<EleveAdmin?> ModifierEleveAsync(
             int id, string? prenom, string? nom, int? age, int? niveauScolaireId, Sexe? sexe,
-            int? academieId = null)
+            int? academieId = null, bool? lv2Espagnol = null, IEnumerable<string>? specialites = null)
         {
             var entite = await _context.Eleves.FirstOrDefaultAsync(e => e.Id == id);
             if (entite is null) return null;
@@ -1765,6 +1771,28 @@ WHERE  role = 'assistant' AND date_creation >= {0}";
             // changement », jamais « à effacer » — même raison que
             // NiveauScolaireId juste au-dessus.
             if (academieId.HasValue) entite.AcademieId = academieId;
+
+            // LA LVB ET LES SPÉCIALITÉS, COMME LE PARENT LES POSE — Camara, le
+            // 16/09/2026 : l'administration doit pouvoir tout ce qu'un parent
+            // peut. Null veut dire « pas de changement » : un ancien écran qui
+            // n'envoie pas ces champs ne les efface pas.
+            if (lv2Espagnol.HasValue) entite.Lv2Espagnol = lv2Espagnol.Value;
+
+            if (specialites is not null)
+            {
+                // Filtrées sur la classe FINALE, celle qu'on vient peut-être de
+                // changer : les trois spécialités de première ne passent pas
+                // telles quelles en terminale, ni en voie technologique. Le
+                // serveur ne croit jamais la liste sur parole — même règle que
+                // `EleveViewModelBuilder` côté parent.
+                var codeNiveau = await _context.NiveauxScolaires.AsNoTracking()
+                    .Where(n => n.Id == entite.NiveauScolaireId)
+                    .Select(n => n.Code)
+                    .FirstOrDefaultAsync();
+
+                entite.Specialites = VoiesScolaires.EcrireSpecialites(
+                    VoiesScolaires.SpecialitesRetenues(codeNiveau, specialites));
+            }
 
             await _context.SaveChangesAsync();
 

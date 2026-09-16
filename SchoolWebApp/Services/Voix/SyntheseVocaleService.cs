@@ -61,6 +61,12 @@ namespace SchoolWebApp.Api.Services.Voix
             // Non mesurés, comme ceux ci-dessus.
             ["theo"] = "ballad",   // EPPCS
             ["jeanne"] = "fable",  // arts
+
+            // La NSI, confiée à Nora jusqu'au 15/09/2026, a son professeur :
+            // « une matière à part entière » (Camara). Les onze timbres
+            // historiques étant pris, il reçoit l'un des deux plus récents,
+            // masculin. Non mesuré.
+            ["minamba"] = "cedar", // NSI
         };
 
         /// <summary>
@@ -90,6 +96,9 @@ namespace SchoolWebApp.Api.Services.Voix
             ["elodie"] = "nova",
             ["theo"] = "echo",
             ["jeanne"] = "shimmer",
+            // `cedar` n'existe pas sur `tts-1` : le timbre masculin encore
+            // libre de cette table le remplace. Non mesuré.
+            ["minamba"] = "ash",
         };
 
         private const string VoixParDefaut = "coral";
@@ -115,17 +124,20 @@ namespace SchoolWebApp.Api.Services.Voix
         private readonly HttpClient _http;
         private readonly OptionsVoix _options;
         private readonly IReglageRepository _reglages;
+        private readonly IFaconneurEcoute _faconneur;
         private readonly ILogger<SyntheseVocaleService> _logger;
 
         public SyntheseVocaleService(
             HttpClient http,
             IOptions<OptionsVoix> options,
             IReglageRepository reglages,
+            IFaconneurEcoute faconneur,
             ILogger<SyntheseVocaleService> logger)
         {
             _http = http ?? throw new ArgumentNullException(nameof(http));
             _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
             _reglages = reglages ?? throw new ArgumentNullException(nameof(reglages));
+            _faconneur = faconneur ?? throw new ArgumentNullException(nameof(faconneur));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
@@ -256,6 +268,26 @@ namespace SchoolWebApp.Api.Services.Voix
 
             var secours = await SecoursAsync(ct);
 
+            // LA LENTEUR EST ÉCRITE DANS LE TEXTE, PAS DANS LA BANDE.
+            //
+            // Troisième levier, après les deux autres : le facteur `speed`
+            // ralentit tout — syllabes et silences — et sonne mécanique ; la
+            // consigne sonne naturel mais ne produit rien de mesurable. Reste
+            // ce qu'un modèle de parole lit VRAIMENT : la ponctuation. Des
+            // points de suspension entre les mots donnent de vrais silences
+            // (« lent ») ; des points médians dans les mots donnent des
+            // syllabes détachées (« très lent »), avec la prosodie normale.
+            //
+            // Et le rapide est le symétrique du lent : on retire la ponctuation
+            // qui fait les pauses, le modèle enchaîne.
+            //
+            // Seulement le passage en langue étudiée, jamais la dictée : elle a
+            // son propre rythme, et ses silences sont posés côté navigateur.
+            if (!dictee && langue is not null && vitesse is "lent" or "tres_lent" or "rapide")
+            {
+                propre = await _faconneur.FaconnerAsync(propre, langue, vitesse, ct);
+            }
+
             // DEUX MODÈLES, DEUX FAÇONS DE RALENTIR UNE DICTÉE.
             //
             // Le secours ignore les consignes mais accepte `speed` ; le
@@ -264,17 +296,17 @@ namespace SchoolWebApp.Api.Services.Voix
             // `instructions: null` sur `tts-1` passe, mais autant n'envoyer
             // que ce qui a un sens.
             //
-            // LE PRINCIPAL ACCEPTE `speed`, ET C'EST NOUVEAU. Ce commentaire
-            // disait le contraire, et c'était vrai quand il a été écrit.
-            // Mesuré le 12/09/2026 sur la même phrase anglaise : 5,75 s sans
-            // rien, 7,35 s avec la consigne « très lent », 5,95 s avec la
-            // consigne « rapide » — autant dire aucun effet — et 8,75 s avec
-            // `speed: 0.7`. La consigne infléchit, le paramètre décide.
+            // LE PRINCIPAL ACCEPTE `speed` : mesuré le 12/09/2026 sur la même
+            // phrase anglaise — 5,75 s sans rien, 8,75 s à `speed: 0.7`, contre
+            // 7,35 s avec la seule consigne « très lent ». Le paramètre décidait
+            // donc du débit, et les deux sont partis ensemble un temps.
             //
-            // Les deux partent donc ensemble : la consigne soigne
-            // l'articulation et les silences, `speed` tient le débit. Relevé
-            // par Camara le même jour : « j'ai mis très lent et rapide, la
-            // vitesse est la même ».
+            // ON L'A RETIRÉ LE 16/09/2026, l'oreille ayant tranché contre la
+            // mesure : étirer la bande ralentit les syllabes ET les silences,
+            // ce qui s'entend comme un magnétophone, pas comme un professeur.
+            // La consigne demande maintenant des gestes de diction — détacher
+            // les syllabes, espacer les mots — que le modèle sait faire. Le
+            // secours garde le facteur, faute de savoir lire une consigne.
             //
             // LA DICTÉE NE BOUGE PAS. Son débit est réglé par sa consigne et
             // éprouvé en séance ; lui ajouter un facteur sans l'avoir mesurée
@@ -285,7 +317,7 @@ namespace SchoolWebApp.Api.Services.Voix
                     model = ModeleSecours,
                     input = propre,
                     voice = ChoisirVoix(avatar, true),
-                    speed = dictee ? VitesseDictee : FacteurVitesse(vitesse),
+                    speed = dictee ? VitesseDictee : FacteurSecours(vitesse),
                     response_format = "pcm",
                 }
                 : new
@@ -294,7 +326,29 @@ namespace SchoolWebApp.Api.Services.Voix
                 input = propre,
                 voice = ChoisirVoix(avatar, false),
                 instructions = Jeu(age, dictee, langue) + ConsigneVitesse(vitesse),
-                speed = dictee ? 1.0 : FacteurVitesse(vitesse),
+                // TROIS ESSAIS EN UNE JOURNÉE, LE 16/09/2026, ET CHACUN A
+                // APPRIS QUELQUE CHOSE :
+                //
+                //   1. Facteur 0,7 : « on ralentit informatiquement, ce n'est
+                //      pas vraiment le professeur qui parle lentement ».
+                //   2. Facteur retiré, consigne seule : « quelle que soit la
+                //      vitesse demandée, c'est toujours la même ».
+                //   3. Facteur 0,65 + consigne : ça change, « mais on a l'effet
+                //      robotique ».
+                //
+                //   4. Texte façonné, pointe à 1,08 en rapide seulement : lent
+                //      et très lent « tout est bon », rapide « un côté
+                //      robotique ». Même une accélération de 8 % s'entend.
+                //
+                // Le facteur décide du débit et sonne faux ; la consigne sonne
+                // vrai et ne décide de rien. Aucun des deux ne fera « ta·ble ».
+                // Les quatre vitesses sont donc ÉCRITES DANS LE TEXTE (voir
+                // `IFaconneurEcoute`) : pauses ajoutées pour ralentir, pauses
+                // retirées pour accélérer. La bande ne s'étire plus jamais sur
+                // le modèle principal — c'est le sens de ce 1,0 fixe, et la
+                // raison pour laquelle il n'y a plus de fonction de facteur ici.
+                // Le secours, qui ne lit rien, garde le sien.
+                speed = 1.0,
                 // PCM brut : ni en-tête, ni encodage.
                 //
                 // Le MP3 pose une amorce de silence en tête et en queue de
@@ -428,25 +482,54 @@ namespace SchoolWebApp.Api.Services.Voix
         /// Une valeur inconnue vaut « normal » : on ne casse pas un exercice
         /// pour un libellé mal orthographié.
         /// </summary>
-        private static double FacteurVitesse(string? vitesse) => vitesse switch
+        /// <summary>
+        /// LE SECOURS, LUI, N'A QUE LE FACTEUR : `tts-1` ne lit pas de consigne
+        /// et lit la ponctuation à sa façon. Valeurs calées sur les mesures —
+        /// 0,75 presque inaudible (6,51 s contre 6,40 s), 0,5 net (7,73 s),
+        /// 0,25 disloqué (23,82 s). Mécanique, mais audible : c'est un secours.
+        /// </summary>
+        private static double FacteurSecours(string? vitesse) => vitesse switch
         {
-            "tres_lent" => 0.7,
-            "lent" => 0.85,
-            "rapide" => 1.15,
+            "tres_lent" => 0.65,
+            "lent" => 0.82,
+            "rapide" => 1.12,
             _ => 1.0,
         };
 
+        /// <summary>
+        /// QUATRE FAÇONS DE DIRE, PAS QUATRE VITESSES DE BANDE — Camara, le
+        /// 16/09/2026 : « quelqu'un qui veut du très lent veut bien entendre
+        /// entre les syllabes des mots, pas juste une pause », et « en rapide,
+        /// la pause entre les mots est plus courte qu'en normal ».
+        ///
+        /// C'est la bonne façon de le demander. Un modèle de parole obéit mal
+        /// à « parle plus lentement » — mesuré : la consigne n'allongeait la
+        /// phrase que de 1,28× — mais il sait détacher des syllabes et espacer
+        /// des mots, parce que ce sont des gestes de diction, pas un réglage
+        /// de magnétophone. L'étirement, lui, ralentissait AUSSI les syllabes
+        /// et les silences, d'où la voix traînante qu'on entendait.
+        ///
+        /// L'ÉCHELLE EST PROGRESSIVE : on détache les syllabes, puis on espace
+        /// les mots, puis on parle, puis on enchaîne.
+        /// </summary>
         private static string ConsigneVitesse(string? vitesse) => vitesse switch
         {
-            "tres_lent" => "\n\nDÉBIT TRÈS LENT, demandé par l'élève lui-même : presque mot à "
-                + "mot, avec un vrai silence entre les groupes de sens. Articule chaque fin de "
-                + "mot. Ne te presse jamais, même sur une phrase courte.",
+            "tres_lent" => "\n\nDICTION TRÈS LENTE, demandée par l'élève lui-même. Le texte "
+                + "est déjà découpé pour toi : les points médians « · » séparent les syllabes "
+                + "d'un mot, les points de suspension « … » séparent les mots. Prononce chaque "
+                + "syllabe entière et distincte, comme un professeur qui montre comment un mot "
+                + "se dit — « ta·ble », « win·dow » — sans jamais épeler, et sans JAMAIS "
+                + "prononcer les signes eux-mêmes : ni « point », ni « points de suspension ». "
+                + "Marque un vrai silence entre les mots.",
 
-            "lent" => "\n\nDÉBIT LENT, demandé par l'élève lui-même : nettement plus lent qu'une "
-                + "conversation, en articulant les fins de mots.",
+            "lent" => "\n\nDICTION LENTE, demandée par l'élève lui-même. Les points de "
+                + "suspension « … » entre les mots sont des silences à marquer, pas des mots à "
+                + "dire : prononce chaque mot en entier, puis laisse ce silence, comme "
+                + "lorsqu'on dicte. Articule les fins de mots.",
 
-            "rapide" => "\n\nDÉBIT VIF, demandé par l'élève lui-même : le rythme naturel d'un "
-                + "locuteur qui parle à quelqu'un de son âge, sans ralentir pour l'école.",
+            "rapide" => "\n\nDICTION VIVE, demandée par l'élève lui-même : enchaîne les mots "
+                + "avec des pauses PLUS COURTES qu'en conversation ordinaire, sans rien "
+                + "hacher ni avaler. C'est le liant qui change, pas la précision.",
 
             _ => "",
         };

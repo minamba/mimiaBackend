@@ -445,6 +445,54 @@ namespace SchoolWebApp.Api.Controllers
         /// <param name="Actif">Vrai pour accorder, faux pour retirer.</param>
         public record DefinirAdministrateurRequest(bool Actif);
 
+        /// <summary>
+        /// LA FICHE D'UN PARENT CRÉÉ PAR L'ADMINISTRATION — Camara, le
+        /// 16/09/2026. Le navigateur enchaîne, comme pour la suppression mais
+        /// dans l'autre sens : l'identité d'abord (serveur d'identité), la
+        /// fiche ensuite (ici), le rôle enfin si demandé.
+        ///
+        /// Sans cette route, la fiche n'apparaîtrait qu'à la première
+        /// connexion du parent (`GetOrCreateAsync`) : l'administrateur
+        /// venait de créer un compte qu'il ne voyait pas dans sa liste.
+        /// </summary>
+        [HttpPost("parents")]
+        [SwaggerResponse(201, "Fiche créée.")]
+        [SwaggerResponse(409, "Un parent existe déjà avec cette adresse ou cette identité.")]
+        public async Task<IActionResult> CreerParent(
+            [FromBody] CreerParentRequest requete, [FromServices] IParentService parents)
+        {
+            if (!ModelState.IsValid) return BadRequest(ModelState);
+
+            var mail = requete.Mail!.Trim();
+
+            try
+            {
+                if (await parents.GetParentByMailAsync(mail) is not null
+                    || await parents.GetParentByIdentityUserIdAsync(requete.IdentityUserId!) is not null)
+                {
+                    return Conflict(new { message = "Un parent existe déjà avec cette adresse." });
+                }
+
+                var cree = await parents.AddParentAsync(new Parent
+                {
+                    IdentityUserId = requete.IdentityUserId!,
+                    Mail = mail,
+                    Prenom = requete.Prenom?.Trim(),
+                    Nom = requete.Nom?.Trim(),
+                    DateCreation = DateTime.UtcNow,
+                });
+
+                _logger.LogWarning("Fiche parent {ParentId} creee par un administrateur.", cree.Id);
+
+                return StatusCode(201, new { id = cree.Id, mail = cree.Mail });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Echec de la creation d'une fiche parent par l'administration.");
+                return StatusCode(500, new { message = "Une erreur est survenue, veuillez réessayer." });
+            }
+        }
+
         [HttpGet("eleves/{id:int}/fiche")]
         [SwaggerResponse(200, "Fiche de l'élève.", typeof(FicheEleve))]
         [SwaggerResponse(404, "Élève inexistant.")]
@@ -1072,6 +1120,7 @@ namespace SchoolWebApp.Api.Controllers
             [FromBody] ReponseMessageRequest model,
             [FromServices] SchoolWebApp.Domain.Emails.IMessagerieService messagerie,
             [FromServices] SchoolWebApp.Domain.Emails.IServiceEmail email,
+            [FromServices] SchoolWebApp.Domain.Repositories.IBannissementRepository bannis,
             CancellationToken ct)
         {
             if (string.IsNullOrWhiteSpace(model?.Texte))
@@ -1085,6 +1134,11 @@ namespace SchoolWebApp.Api.Controllers
             var diffusion = HttpContext.RequestServices.GetRequiredService<IDiffusionService>();
             var corps = diffusion.ComposerCorps(model.Texte, 0);
 
+            // La réponse part par la boîte du support, pas par le service d'envoi
+            // filtré : le bannissement se vérifie donc ici, dès que l'adresse de
+            // l'expéditeur est connue — dans la composition.
+            var expediteurBanni = false;
+
             // LA COMPOSITION EST PASSÉE AU SERVICE, PAS FAITE AVANT.
             //
             // Elle a besoin du message d'origine ; le lire ici obligeait à
@@ -1092,6 +1146,14 @@ namespace SchoolWebApp.Api.Controllers
             // consécutive butait sur la limite de l'hébergeur.
             var envoye = await messagerie.RepondreAsync((uint)identifiant, async origine =>
             {
+                // UNE ADRESSE BANNIE NE REÇOIT PLUS RIEN, réponse du support
+                // comprise. Lever ici interrompt l'envoi avant qu'il parte.
+                if (await bannis.EstBanniAsync(origine.DeAdresse, ct))
+                {
+                    expediteurBanni = true;
+                    throw new InvalidOperationException("Adresse bannie : reponse non envoyee.");
+                }
+
                 var sujet = string.IsNullOrWhiteSpace(origine.Sujet)
                     ? "Votre message"
                     : origine.Sujet!;
@@ -1124,6 +1186,11 @@ namespace SchoolWebApp.Api.Controllers
                         .Replace("\n", "<br>"),
                 });
             }, ct);
+
+            if (expediteurBanni)
+            {
+                return BadRequest(new { message = "Cette adresse est bannie : elle ne reçoit plus aucun courriel." });
+            }
 
             if (!envoye.Envoye)
             {
@@ -1315,6 +1382,7 @@ namespace SchoolWebApp.Api.Controllers
             [FromForm] string texte,
             [FromServices] IDiffusionService diffusion,
             [FromServices] SchoolWebApp.Domain.Emails.IServiceEmail email,
+            [FromServices] SchoolWebApp.Domain.Repositories.IBannissementRepository bannis,
             [FromForm] List<IFormFile>? images = null,
             [FromForm] List<IFormFile>? documents = null,
             CancellationToken ct = default)
@@ -1333,6 +1401,13 @@ namespace SchoolWebApp.Api.Controllers
             catch (FormatException)
             {
                 return BadRequest(new { message = "L'adresse du parent n'est pas valide." });
+            }
+
+            // Une adresse bannie ne reçoit plus rien : on le dit, au lieu de
+            // laisser le service d'envoi l'écarter et répondre « échec ».
+            if (await bannis.EstBanniAsync(adresse, ct))
+            {
+                return BadRequest(new { message = "Cette adresse est bannie : elle ne reçoit plus aucun courriel." });
             }
 
             var lues = await LirePiecesAsync(images, "diffusion");
@@ -1412,7 +1487,7 @@ namespace SchoolWebApp.Api.Controllers
             {
                 var eleve = await _adminService.ModifierEleveAsync(
                     id, model.Prenom, model.Nom, model.Age, model.NiveauScolaireId, model.Sexe,
-                    model.AcademieId);
+                    model.AcademieId, model.Lv2Espagnol, model.Specialites);
 
                 return eleve is null ? NotFound() : Ok(eleve);
             }

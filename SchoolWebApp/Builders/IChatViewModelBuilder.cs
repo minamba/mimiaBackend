@@ -22,9 +22,14 @@ namespace SchoolWebApp.Api.Builders
         /// Temps restant dans la séance, tel que le navigateur le compte. Sans
         /// lui, l'agent ne peut que le deviner — et il conclut trop tôt.
         /// </param>
+        /// <param name="vitesseEcoute">
+        /// La vitesse de lecture choisie par l'élève, telle que le navigateur
+        /// la tient. Sans elle, le professeur ne peut ni descendre d'un cran,
+        /// ni dire qu'il lit déjà au plus lent.
+        /// </param>
         IAsyncEnumerable<string> StreamReponseAsync(
             int conversationId, string contenu, int? pieceJointeId,
-            int? secondesRestantes, CancellationToken ct);
+            int? secondesRestantes, string? vitesseEcoute, CancellationToken ct);
 
         /// <summary>
         /// Fait parler l'agent en premier, à l'ouverture de la conversation.

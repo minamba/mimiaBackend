@@ -381,6 +381,21 @@ namespace SchoolWebApp.Domain.Models
 
         public string? NiveauLibelle { get; set; }
 
+        /// <summary>
+        /// LA CLASSE ELLE-MÊME, ET PAS SEULEMENT SON LIBELLÉ — Camara, le
+        /// 16/09/2026 : « je suis admin, je dois tout contrôler ». L'écran
+        /// d'administration ne pouvait ni changer la classe ni toucher aux
+        /// spécialités : il ne recevait qu'un libellé, inutilisable dans une
+        /// liste déroulante. Le parent, lui, avait tout.
+        /// </summary>
+        public int NiveauScolaireId { get; set; }
+
+        /// <summary>L'enfant a l'espagnol en LVB — même sens que côté parent.</summary>
+        public bool Lv2Espagnol { get; set; }
+
+        /// <summary>Les codes des spécialités de la voie générale, vides ailleurs.</summary>
+        public List<string> Specialites { get; set; } = [];
+
         public int? AcademieId { get; set; }
 
         public string? AcademieLibelle { get; set; }

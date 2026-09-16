@@ -19,5 +19,16 @@ namespace SchoolWebApp.Domain.Models
         public string? StripeClientId { get; set; }
 
         public DateTime DateCreation { get; set; }
+
+        /// <summary>
+        /// Le droit d'administrer, accordé par le super-administrateur.
+        ///
+        /// PORTÉ JUSQU'AU DOMAINE DEPUIS LE 16/09/2026, pour la facturation :
+        /// « toutes les personnes qui ont le rôle d'administrateur ne se font
+        /// pas facturer les heures et les forfaits » (Camara). La caisse lit
+        /// ce drapeau en base, et non le jeton : un droit accordé vaut à
+        /// l'instant, sans attendre que le parent se reconnecte.
+        /// </summary>
+        public bool EstAdministrateur { get; set; }
     }
 }

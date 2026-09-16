@@ -62,6 +62,15 @@ namespace SchoolWebApp.Dal.Entities
 
         public virtual DbSet<BandeauPromo> BandeauxPromo { get; set; }
 
+        // Les modèles de courriel : diffusions réutilisables et courriels
+        // automatiques, avec leurs images et documents.
+        public virtual DbSet<ModeleMail> ModelesMail { get; set; }
+        public virtual DbSet<PieceModeleMail> PiecesModelesMail { get; set; }
+
+        // Le journal des courriels automatiques, et qui ne veut plus quoi.
+        public virtual DbSet<EnvoiAutomatique> EnvoisAutomatiques { get; set; }
+        public virtual DbSet<DesabonnementMail> DesabonnementsMail { get; set; }
+
         public virtual DbSet<MailBanni> MailsBannis { get; set; }
 
         /// <summary>Les annees scolaires passees chez nous, en intervalles.</summary>
@@ -1419,6 +1428,118 @@ namespace SchoolWebApp.Dal.Entities
                 // déséquilibrée — au plus une ligne vraie — : c'est
                 // exactement le cas où il sert.
                 entity.HasIndex(e => e.Actif);
+            });
+
+            // ---------------------------------------------------------------
+            // Modèles de courriel — diffusions enregistrées et automatiques
+            // ---------------------------------------------------------------
+            modelBuilder.Entity<ModeleMail>(entity =>
+            {
+                entity.ToTable("ModeleMail");
+                entity.HasKey(e => e.Id);
+
+                entity.Property(e => e.Id).HasColumnName("id");
+                entity.Property(e => e.Nature).IsRequired().HasMaxLength(20).HasColumnName("nature");
+                entity.Property(e => e.Code).HasMaxLength(40).HasColumnName("code");
+                entity.Property(e => e.Nom).IsRequired().HasMaxLength(120).HasColumnName("nom");
+                entity.Property(e => e.Description).HasMaxLength(500).HasColumnName("description");
+                entity.Property(e => e.Sujet).IsRequired().HasMaxLength(150).HasColumnName("sujet");
+                entity.Property(e => e.Titre).IsRequired().HasMaxLength(150).HasColumnName("titre");
+                entity.Property(e => e.Texte).IsRequired().HasColumnName("texte");
+
+                entity.Property(e => e.Frequence).IsRequired().HasMaxLength(10).HasColumnName("frequence");
+                entity.Property(e => e.HeureEnvoi).HasColumnName("heure_envoi");
+                entity.Property(e => e.JourSemaine).HasColumnName("jour_semaine");
+                entity.Property(e => e.JourMois).HasColumnName("jour_mois");
+                entity.Property(e => e.Actif).HasDefaultValue(false).HasColumnName("actif");
+                entity.Property(e => e.DerniereOccurrence).HasColumnName("derniere_occurrence");
+                entity.Property(e => e.DernierEnvoiLe).HasColumnName("dernier_envoi_le");
+                entity.Property(e => e.DernierResultat).HasMaxLength(400).HasColumnName("dernier_resultat");
+
+                entity.Property(e => e.DateCreation).HasColumnName("date_creation");
+                entity.Property(e => e.DateModification).HasColumnName("date_modification");
+
+                // Unique mais filtré : les courriels automatiques ont un code
+                // qui ne se répète pas, les diffusions n'en ont aucun.
+                entity.HasIndex(e => e.Code).IsUnique().HasFilter("[code] IS NOT NULL");
+
+                entity.HasIndex(e => e.Nature);
+            });
+
+            modelBuilder.Entity<PieceModeleMail>(entity =>
+            {
+                entity.ToTable("PieceModeleMail");
+                entity.HasKey(e => e.Id);
+
+                entity.Property(e => e.Id).HasColumnName("id");
+                entity.Property(e => e.ModeleMailId).HasColumnName("modele_mail_id");
+                entity.Property(e => e.Genre).IsRequired().HasMaxLength(10).HasColumnName("genre");
+                entity.Property(e => e.Rang).HasColumnName("rang");
+                entity.Property(e => e.NomFichier).IsRequired().HasMaxLength(255).HasColumnName("nom_fichier");
+                entity.Property(e => e.TypeMime).IsRequired().HasMaxLength(100).HasColumnName("type_mime");
+                entity.Property(e => e.Taille).HasColumnName("taille");
+                entity.Property(e => e.Donnees).IsRequired().HasColumnName("donnees");
+                entity.Property(e => e.DateCreation).HasColumnName("date_creation");
+
+                // Cascade : une image n'a aucune vie hors de son modèle.
+                entity.HasOne(e => e.ModeleMail)
+                      .WithMany(m => m.Pieces)
+                      .HasForeignKey(e => e.ModeleMailId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                // L'ordre de lecture : les pièces d'un modèle, par genre puis
+                // rang. Commence par la clé étrangère, qui s'en sert aussi.
+                entity.HasIndex(e => new { e.ModeleMailId, e.Genre, e.Rang });
+            });
+
+            // ---------------------------------------------------------------
+            // Courriels automatiques — journal des envois, désabonnements
+            // ---------------------------------------------------------------
+            modelBuilder.Entity<EnvoiAutomatique>(entity =>
+            {
+                entity.ToTable("EnvoiAutomatique");
+                entity.HasKey(e => e.Id);
+
+                entity.Property(e => e.Id).HasColumnName("id");
+                entity.Property(e => e.CodeModele).IsRequired().HasMaxLength(40).HasColumnName("code_modele");
+                entity.Property(e => e.ParentId).HasColumnName("parent_id");
+                entity.Property(e => e.Cle).HasMaxLength(80).HasColumnName("cle");
+                entity.Property(e => e.Occurrence).HasColumnName("occurrence");
+                entity.Property(e => e.DateEnvoi).HasColumnName("date_envoi");
+                entity.Property(e => e.Statut).IsRequired().HasMaxLength(10).HasColumnName("statut");
+
+                // Cascade : le journal d'un compte supprimé ne lui survit pas.
+                entity.HasOne<Parent>()
+                      .WithMany()
+                      .HasForeignKey(e => e.ParentId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                // LA GARDE CONTRE LE DOUBLON : une seule fin d'essai par
+                // abonnement, une seule demande d'avis d'essai par parent.
+                entity.HasIndex(e => new { e.CodeModele, e.Cle })
+                      .IsUnique()
+                      .HasFilter("[cle] IS NOT NULL");
+
+                // La fenêtre de trois mois de la demande d'avis générale.
+                entity.HasIndex(e => new { e.ParentId, e.CodeModele, e.DateEnvoi });
+            });
+
+            modelBuilder.Entity<DesabonnementMail>(entity =>
+            {
+                entity.ToTable("DesabonnementMail");
+                entity.HasKey(e => e.Id);
+
+                entity.Property(e => e.Id).HasColumnName("id");
+                entity.Property(e => e.ParentId).HasColumnName("parent_id");
+                entity.Property(e => e.Categorie).IsRequired().HasMaxLength(20).HasColumnName("categorie");
+                entity.Property(e => e.DateCreation).HasColumnName("date_creation");
+
+                entity.HasOne<Parent>()
+                      .WithMany()
+                      .HasForeignKey(e => e.ParentId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasIndex(e => new { e.ParentId, e.Categorie }).IsUnique();
             });
 
             modelBuilder.Entity<VisiteSite>(entity =>

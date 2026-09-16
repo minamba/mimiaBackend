@@ -127,7 +127,8 @@ namespace SchoolWebApp.Api.Controllers
             {
                 await foreach (var fragment in _chatBuilder.StreamReponseAsync(
                     id, model.Contenu ?? string.Empty, model.PieceJointeId,
-                    model.SecondesRestantes, HttpContext.RequestAborted))
+                    model.SecondesRestantes, model.VitesseEcoute,
+                    HttpContext.RequestAborted))
                 {
                     await EcrireEvenementAsync(new { type = "delta", texte = fragment });
                 }

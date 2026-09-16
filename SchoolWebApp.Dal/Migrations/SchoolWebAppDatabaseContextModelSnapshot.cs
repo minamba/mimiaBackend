@@ -1865,6 +1865,165 @@ namespace SchoolWebApp.Dal.Migrations
                     b.ToTable("MesureVoix", (string)null);
                 });
 
+            modelBuilder.Entity("SchoolWebApp.Dal.Entities.ModeleMail", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasColumnName("id");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("Actif")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false)
+                        .HasColumnName("actif");
+
+                    b.Property<string>("Code")
+                        .HasMaxLength(40)
+                        .HasColumnType("nvarchar(40)")
+                        .HasColumnName("code");
+
+                    b.Property<DateTime>("DateCreation")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("date_creation");
+
+                    b.Property<DateTime?>("DateModification")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("date_modification");
+
+                    b.Property<DateTime?>("DernierEnvoiLe")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("dernier_envoi_le");
+
+                    b.Property<string>("DernierResultat")
+                        .HasMaxLength(400)
+                        .HasColumnType("nvarchar(400)")
+                        .HasColumnName("dernier_resultat");
+
+                    b.Property<DateTime?>("DerniereOccurrence")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("derniere_occurrence");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)")
+                        .HasColumnName("description");
+
+                    b.Property<string>("Frequence")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("nvarchar(10)")
+                        .HasColumnName("frequence");
+
+                    b.Property<TimeOnly?>("HeureEnvoi")
+                        .HasColumnType("time")
+                        .HasColumnName("heure_envoi");
+
+                    b.Property<int?>("JourMois")
+                        .HasColumnType("int")
+                        .HasColumnName("jour_mois");
+
+                    b.Property<int?>("JourSemaine")
+                        .HasColumnType("int")
+                        .HasColumnName("jour_semaine");
+
+                    b.Property<string>("Nature")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)")
+                        .HasColumnName("nature");
+
+                    b.Property<string>("Nom")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("nvarchar(120)")
+                        .HasColumnName("nom");
+
+                    b.Property<string>("Sujet")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)")
+                        .HasColumnName("sujet");
+
+                    b.Property<string>("Texte")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)")
+                        .HasColumnName("texte");
+
+                    b.Property<string>("Titre")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)")
+                        .HasColumnName("titre");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique()
+                        .HasFilter("[code] IS NOT NULL");
+
+                    b.HasIndex("Nature");
+
+                    b.ToTable("ModeleMail", (string)null);
+                });
+
+            modelBuilder.Entity("SchoolWebApp.Dal.Entities.PieceModeleMail", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasColumnName("id");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("DateCreation")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("date_creation");
+
+                    b.Property<byte[]>("Donnees")
+                        .IsRequired()
+                        .HasColumnType("varbinary(max)")
+                        .HasColumnName("donnees");
+
+                    b.Property<string>("Genre")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("nvarchar(10)")
+                        .HasColumnName("genre");
+
+                    b.Property<int>("ModeleMailId")
+                        .HasColumnType("int")
+                        .HasColumnName("modele_mail_id");
+
+                    b.Property<string>("NomFichier")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)")
+                        .HasColumnName("nom_fichier");
+
+                    b.Property<int>("Rang")
+                        .HasColumnType("int")
+                        .HasColumnName("rang");
+
+                    b.Property<int>("Taille")
+                        .HasColumnType("int")
+                        .HasColumnName("taille");
+
+                    b.Property<string>("TypeMime")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)")
+                        .HasColumnName("type_mime");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ModeleMailId", "Genre", "Rang");
+
+                    b.ToTable("PieceModeleMail", (string)null);
+                });
+
             modelBuilder.Entity("SchoolWebApp.Dal.Entities.NiveauScolaire", b =>
                 {
                     b.Property<int>("Id")
@@ -3215,6 +3374,119 @@ namespace SchoolWebApp.Dal.Migrations
                     b.Navigation("Eleves");
 
                     b.Navigation("Signalements");
+                });
+            modelBuilder.Entity("SchoolWebApp.Dal.Entities.EnvoiAutomatique", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasColumnName("id");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Cle")
+                        .HasMaxLength(80)
+                        .HasColumnType("nvarchar(80)")
+                        .HasColumnName("cle");
+
+                    b.Property<string>("CodeModele")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("nvarchar(40)")
+                        .HasColumnName("code_modele");
+
+                    b.Property<DateTime>("DateEnvoi")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("date_envoi");
+
+                    b.Property<DateTime>("Occurrence")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("occurrence");
+
+                    b.Property<int>("ParentId")
+                        .HasColumnType("int")
+                        .HasColumnName("parent_id");
+
+                    b.Property<string>("Statut")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("nvarchar(10)")
+                        .HasColumnName("statut");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CodeModele", "Cle")
+                        .IsUnique()
+                        .HasFilter("[cle] IS NOT NULL");
+
+                    b.HasIndex("ParentId", "CodeModele", "DateEnvoi");
+
+                    b.ToTable("EnvoiAutomatique", (string)null);
+                });
+
+            modelBuilder.Entity("SchoolWebApp.Dal.Entities.DesabonnementMail", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasColumnName("id");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Categorie")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)")
+                        .HasColumnName("categorie");
+
+                    b.Property<DateTime>("DateCreation")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("date_creation");
+
+                    b.Property<int>("ParentId")
+                        .HasColumnType("int")
+                        .HasColumnName("parent_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ParentId", "Categorie")
+                        .IsUnique();
+
+                    b.ToTable("DesabonnementMail", (string)null);
+                });
+
+            modelBuilder.Entity("SchoolWebApp.Dal.Entities.EnvoiAutomatique", b =>
+                {
+                    b.HasOne("SchoolWebApp.Dal.Entities.Parent", null)
+                        .WithMany()
+                        .HasForeignKey("ParentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("SchoolWebApp.Dal.Entities.DesabonnementMail", b =>
+                {
+                    b.HasOne("SchoolWebApp.Dal.Entities.Parent", null)
+                        .WithMany()
+                        .HasForeignKey("ParentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("SchoolWebApp.Dal.Entities.PieceModeleMail", b =>
+                {
+                    b.HasOne("SchoolWebApp.Dal.Entities.ModeleMail", "ModeleMail")
+                        .WithMany("Pieces")
+                        .HasForeignKey("ModeleMailId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ModeleMail");
+                });
+
+            modelBuilder.Entity("SchoolWebApp.Dal.Entities.ModeleMail", b =>
+                {
+                    b.Navigation("Pieces");
                 });
 #pragma warning restore 612, 618
         }

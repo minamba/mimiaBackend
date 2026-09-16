@@ -70,6 +70,11 @@ namespace SchoolWebApp.Dal.Repositories
                             && e.Parent.Mail != ""
                             && e.ArchiveLe == null
                             && e.AnonymiseLe == null
+
+                            // UN PARENT BANNI NE REÇOIT PLUS RIEN — le service
+                            // d'envoi l'écarterait de toute façon, mais compté
+                            // ici il fausserait le découpage de la série.
+                            && !_context.MailsBannis.Any(b => b.Mail == e.Parent.Mail)
                             && e.Parent.Abonnements.Any(a =>
                                 a.Statut == StatutAbonnement.Actif && !a.Offre!.EstEssai));
 

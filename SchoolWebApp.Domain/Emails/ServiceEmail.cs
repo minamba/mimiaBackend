@@ -293,11 +293,22 @@ namespace SchoolWebApp.Domain.Emails
 
             public int Echecs { get; private set; }
 
+            public Task<bool> EnvoyerAsync(
+                string destinataire,
+                string sujet,
+                string gabarit,
+                IDictionary<string, string> valeurs,
+                CancellationToken ct = default) =>
+                EnvoyerAsync(destinataire, sujet, gabarit, valeurs, null, null, null, ct);
+
             public async Task<bool> EnvoyerAsync(
                 string destinataire,
                 string sujet,
                 string gabarit,
                 IDictionary<string, string> valeurs,
+                IReadOnlyList<PieceMail>? images,
+                IReadOnlyList<PieceMail>? documents,
+                IReadOnlyDictionary<string, string>? enTetes,
                 CancellationToken ct = default)
             {
                 var options = _service._options;
@@ -327,8 +338,30 @@ namespace SchoolWebApp.Domain.Emails
                     message.To.Add(MailboxAddress.Parse(cible));
                     message.Subject = sujet;
 
+                    foreach (var (nom, valeur) in enTetes ?? new Dictionary<string, string>())
+                    {
+                        message.Headers.Add(nom, valeur);
+                    }
+
                     var constructeur = new BodyBuilder { HtmlBody = corps, TextBody = VersTexte(corps) };
                     AttacherLogo(constructeur);
+
+                    // Les mêmes gestes que la diffusion : l'identifiant de l'image
+                    // EST la référence du corps, et le constructeur est neuf à
+                    // chaque message — MimeKit consomme les pièces en composant.
+                    foreach (var image in images ?? [])
+                    {
+                        var liee = constructeur.LinkedResources.Add(
+                            image.NomFichier, image.Donnees, ContentType.Parse(image.TypeMime));
+                        liee.ContentId = image.Reference;
+                    }
+
+                    foreach (var piece in documents ?? [])
+                    {
+                        constructeur.Attachments.Add(
+                            piece.NomFichier, piece.Donnees, ContentType.Parse(piece.TypeMime));
+                    }
+
                     message.Body = constructeur.ToMessageBody();
                 }
                 catch (Exception ex)

@@ -2,6 +2,7 @@ using System.Net;
 using System.Text;
 using System.Text.RegularExpressions;
 using SchoolWebApp.Domain.Emails;
+using SchoolWebApp.Domain.Models;
 using SchoolWebApp.Domain.Repositories;
 
 namespace SchoolWebApp.Api.Services.Notifications
@@ -29,6 +30,12 @@ namespace SchoolWebApp.Api.Services.Notifications
         public string? Erreur { get; set; }
     }
 
+    /// <summary>
+    /// La valeur d'une variable `{{cle}}` d'un message : un texte, et un lien
+    /// s'il doit être cliquable (« donner mon avis »).
+    /// </summary>
+    public record ValeurVariable(string Texte, string? Lien = null);
+
     public interface IDiffusionService
     {
         /// <summary>L'état courant, pour l'écran qui suit l'avancement.</summary>
@@ -42,6 +49,16 @@ namespace SchoolWebApp.Api.Services.Notifications
         /// </summary>
         string ComposerCorps(string texte, int nombreImages);
 
+        /// <summary>
+        /// Le même corps, les variables `{{cle}}` remplacées. Une variable
+        /// inconnue reste visible : dans l'aperçu, c'est une faute de frappe
+        /// qui se voit.
+        /// </summary>
+        string ComposerCorps(string texte, int nombreImages, IReadOnlyDictionary<string, ValeurVariable>? variables);
+
+        /// <summary>Les variables d'un texte simple — un objet, un titre. Sans HTML.</summary>
+        string RemplacerVariables(string? texte, IReadOnlyDictionary<string, ValeurVariable>? variables);
+
         /// <summary>Le bloc de la liste des pièces jointes, ou une chaîne vide.</summary>
         string ComposerPiecesJointes(IReadOnlyList<string> nomsFichiers);
 
@@ -52,6 +69,9 @@ namespace SchoolWebApp.Api.Services.Notifications
         /// support.
         /// </summary>
         string ComposerMentionPied();
+
+        /// <summary>La même mention, suivie du lien « Ne plus recevoir ces messages ».</summary>
+        string ComposerMentionPied(string? lienDesabonnement);
 
         /// <summary>
         /// Lance la diffusion en arrière-plan. Faux si une autre est déjà en
@@ -81,6 +101,13 @@ namespace SchoolWebApp.Api.Services.Notifications
     /// SINGLETON, ET UNE SEULE DIFFUSION À LA FOIS. C'est le verrou qui
     /// empêche deux envois concurrents, et il n'a de sens que s'il n'existe
     /// qu'un seul objet.
+    ///
+    /// UN COURRIEL PAR PARENT, COMPOSÉ POUR LUI — Camara, le 15/09/2026
+    /// ----------------------------------------------------------------
+    /// Chaque diffusion porte un lien « Ne plus recevoir ces messages » propre
+    /// au parent, et peut dire « Bonjour {{prenom}} ». Le corps n'est donc plus
+    /// construit une fois pour tous : il l'est pour chacun, dans la même
+    /// connexion SMTP.
     /// </summary>
     public class DiffusionService : IDiffusionService
     {
@@ -94,7 +121,15 @@ namespace SchoolWebApp.Api.Services.Notifications
         /// </summary>
         private static readonly Regex Gras = new(@"\*\*(.+?)\*\*", RegexOptions.Compiled);
 
+        /// <summary>
+        /// `{{prenom}}`, avec l'espace qui le précède : une variable vide
+        /// l'emporte avec elle, et « Bonjour {{prenom}}, » devient « Bonjour, »
+        /// plutôt que « Bonjour , ».
+        /// </summary>
+        private static readonly Regex Variable = new(@"(\s?)\{\{(\w+)\}\}", RegexOptions.Compiled);
+
         private readonly IServiceScopeFactory _scopes;
+        private readonly IJetonDesabonnement _jetons;
         private readonly ILogger<DiffusionService> _logger;
 
         // `object` et non `Lock` : ce dernier est une nouveauté .NET 9, et le
@@ -102,9 +137,13 @@ namespace SchoolWebApp.Api.Services.Notifications
         private readonly object _verrou = new();
         private readonly EtatDiffusion _etat = new();
 
-        public DiffusionService(IServiceScopeFactory scopes, ILogger<DiffusionService> logger)
+        public DiffusionService(
+            IServiceScopeFactory scopes,
+            IJetonDesabonnement jetons,
+            ILogger<DiffusionService> logger)
         {
             _scopes = scopes ?? throw new ArgumentNullException(nameof(scopes));
+            _jetons = jetons ?? throw new ArgumentNullException(nameof(jetons));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
@@ -133,17 +172,21 @@ namespace SchoolWebApp.Api.Services.Notifications
             }
         }
 
+        public string ComposerCorps(string texte, int nombreImages) =>
+            ComposerCorps(texte, nombreImages, null);
+
         /// <summary>
         /// Le texte saisi devient du HTML sûr.
         ///
         /// TOUT EST ÉCHAPPÉ D'ABORD, puis on réintroduit ce qu'on autorise :
-        /// les paragraphes et les images. L'inverse — laisser passer le HTML de
-        /// l'administrateur — marcherait très bien jusqu'au jour où un copier-
-        /// coller depuis un traitement de texte injecte des balises qui cassent
-        /// la mise en page chez le parent, sans qu'on puisse le relire après
-        /// coup.
+        /// les paragraphes, les images et les variables. L'inverse — laisser
+        /// passer le HTML de l'administrateur — marcherait très bien jusqu'au
+        /// jour où un copier-coller depuis un traitement de texte injecte des
+        /// balises qui cassent la mise en page chez le parent, sans qu'on puisse
+        /// le relire après coup.
         /// </summary>
-        public string ComposerCorps(string texte, int nombreImages)
+        public string ComposerCorps(
+            string texte, int nombreImages, IReadOnlyDictionary<string, ValeurVariable>? variables)
         {
             if (string.IsNullOrWhiteSpace(texte)) return string.Empty;
 
@@ -177,6 +220,20 @@ namespace SchoolWebApp.Api.Services.Notifications
                         + "style=\"max-width:100%; height:auto; border-radius:12px; margin:6px 0;\">");
                 }
 
+                // LES VARIABLES EN DERNIER, et leurs valeurs échappées à leur
+                // tour : un prénom saisi par un parent n'est pas du HTML.
+                if (variables is { Count: > 0 })
+                {
+                    contenu = Variable.Replace(contenu, m =>
+                    {
+                        if (!variables.TryGetValue(m.Groups[2].Value, out var valeur)) return m.Value;
+
+                        return string.IsNullOrEmpty(valeur.Texte)
+                            ? string.Empty
+                            : m.Groups[1].Value + EnHtml(valeur);
+                    });
+                }
+
                 sb.AppendLine(
                     $"<p style=\"margin:0 0 18px 0; font-size:15px; line-height:1.7; color:#16233a;\">{contenu}</p>");
             }
@@ -184,17 +241,48 @@ namespace SchoolWebApp.Api.Services.Notifications
             return sb.ToString();
         }
 
+        public string RemplacerVariables(string? texte, IReadOnlyDictionary<string, ValeurVariable>? variables)
+        {
+            if (string.IsNullOrEmpty(texte) || variables is not { Count: > 0 }) return texte ?? string.Empty;
+
+            return Variable.Replace(texte, m =>
+            {
+                if (!variables.TryGetValue(m.Groups[2].Value, out var valeur)) return m.Value;
+
+                return string.IsNullOrEmpty(valeur.Texte)
+                    ? string.Empty
+                    : m.Groups[1].Value + valeur.Texte;
+            });
+        }
+
+        private static string EnHtml(ValeurVariable valeur) =>
+            valeur.Lien is null
+                ? WebUtility.HtmlEncode(valeur.Texte)
+                : $"<a href=\"{WebUtility.HtmlEncode(valeur.Lien)}\" "
+                  + "style=\"color:#e8603c; font-weight:600; text-decoration:underline;\">"
+                  + $"{WebUtility.HtmlEncode(valeur.Texte)}</a>";
+
         /// <summary>
         /// LE LIEN DU SITE EST DÉJÀ DANS L'ENVELOPPE — voir `enveloppe.html`,
         /// qui porte `mimia.fr` en pied sur TOUS les mails, celui-ci compris.
         /// Ce qui manquait à une diffusion ou un message ciblé, c'est
         /// l'adresse du support pour qui a une question suite au message.
         /// </summary>
-        public string ComposerMentionPied() =>
-            "Vous recevez ce message parce que vous avez un compte Mimia. "
-            + "Une question ? Écrivez-nous à "
-            + "<a href=\"mailto:support@mimia.fr\" style=\"color:#a5abb8; text-decoration:underline;\">"
-            + "support@mimia.fr</a>.";
+        public string ComposerMentionPied() => ComposerMentionPied(null);
+
+        public string ComposerMentionPied(string? lienDesabonnement)
+        {
+            var mention = "Vous recevez ce message parce que vous avez un compte Mimia. "
+                          + "Une question ? Écrivez-nous à "
+                          + "<a href=\"mailto:support@mimia.fr\" style=\"color:#a5abb8; text-decoration:underline;\">"
+                          + "support@mimia.fr</a>.";
+
+            return lienDesabonnement is null
+                ? mention
+                : mention
+                  + $"<br><a href=\"{WebUtility.HtmlEncode(lienDesabonnement)}\" "
+                  + "style=\"color:#a5abb8; text-decoration:underline;\">Ne plus recevoir ces messages</a>";
+        }
 
         public string ComposerPiecesJointes(IReadOnlyList<string> nomsFichiers)
         {
@@ -265,46 +353,95 @@ namespace SchoolWebApp.Api.Services.Notifications
         {
             try
             {
+                // PAS DE LIEN, PAS D'ENVOI. Une annonce commerciale sans moyen de
+                // s'en désabonner n'a pas à partir chez trois cents parents ; la
+                // configuration manquante se voit ici, dans l'écran, au lieu de
+                // se découvrir dans les plaintes.
+                if (!_jetons.Disponible)
+                {
+                    const string raison =
+                        "Clé de désabonnement absente (Courrier:CleDesabonnement) : la diffusion n'est pas partie.";
+
+                    _logger.LogError("Diffusion « {Sujet} » : {Raison}", sujet, raison);
+                    lock (_verrou) { _etat.Erreur = raison; }
+                    return;
+                }
+
                 using var portee = _scopes.CreateScope();
-                var parents = portee.ServiceProvider.GetRequiredService<IParentRepository>();
+                var envois = portee.ServiceProvider.GetRequiredService<IEnvoiAutomatiqueRepository>();
                 var email = portee.ServiceProvider.GetRequiredService<IServiceEmail>();
 
-                var adresses = (await parents.GetAdressesParentsAsync())
-                    .Where(a => !string.IsNullOrWhiteSpace(a))
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .ToList();
+                var destinataires = await envois.GetDestinatairesDiffusionAsync();
 
-                lock (_verrou) { _etat.Total = adresses.Count; }
+                lock (_verrou) { _etat.Total = destinataires.Count; }
 
-                if (adresses.Count == 0)
+                if (destinataires.Count == 0)
                 {
                     _logger.LogWarning("Diffusion « {Sujet} » : aucun destinataire.", sujet);
                     return;
                 }
 
-                var valeurs = new Dictionary<string, string>
-                {
-                    ["titre"] = sujet,
-                    ["titreMessage"] = titre,
-                    ["corpsMessage"] = ComposerCorps(texte, images.Count),
-                    ["blocPiecesJointes"] =
-                        ComposerPiecesJointes(documents.Select(d => d.NomFichier).ToList()),
-                    ["mentionPied"] = ComposerMentionPied(),
-                };
+                var blocPieces = ComposerPiecesJointes(documents.Select(d => d.NomFichier).ToList());
+                var envoyes = 0;
+                var echecs = 0;
 
-                var avancement = new Progress<int>(n =>
-                {
-                    lock (_verrou) { _etat.Traites = n; }
-                });
+                // UNE CONNEXION POUR TOUTE LA LISTE : la session espace les
+                // envois, se reconnecte et renonce si le service ne répond plus.
+                await using var session = email.OuvrirSession();
 
-                var resultat = await email.DiffuserAsync(
-                    adresses, sujet, "diffusion", valeurs, images, documents, avancement);
-
-                lock (_verrou)
+                foreach (var destinataire in destinataires)
                 {
-                    _etat.Envoyes = resultat.Envoyes;
-                    _etat.Echecs = resultat.Echecs;
+                    var variables = new Dictionary<string, ValeurVariable>
+                    {
+                        ["prenom"] = new(destinataire.Prenom?.Trim() ?? string.Empty),
+                    };
+
+                    var sujetPersonnel = RemplacerVariables(sujet, variables);
+
+                    var valeurs = new Dictionary<string, string>
+                    {
+                        ["titre"] = sujetPersonnel,
+                        ["titreMessage"] = RemplacerVariables(titre, variables),
+                        ["corpsMessage"] = ComposerCorps(texte, images.Count, variables),
+                        ["blocPiecesJointes"] = blocPieces,
+                        ["mentionPied"] = ComposerMentionPied(
+                            _jetons.Lien(destinataire.ParentId, CategorieDesabonnement.Diffusion)),
+                    };
+
+                    bool envoye;
+
+                    try
+                    {
+                        envoye = await session.EnvoyerAsync(
+                            destinataire.Mail,
+                            sujetPersonnel,
+                            "diffusion",
+                            valeurs,
+                            images,
+                            documents,
+                            _jetons.EnTetes(destinataire.ParentId, CategorieDesabonnement.Diffusion));
+                    }
+                    catch (Exception ex)
+                    {
+                        // UNE ADRESSE MORTE NE PRIVE PAS LES SUIVANTS.
+                        _logger.LogError(ex, "Diffusion : echec vers le parent {Parent}.", destinataire.ParentId);
+                        envoye = false;
+                    }
+
+                    if (envoye) envoyes++;
+                    else echecs++;
+
+                    lock (_verrou)
+                    {
+                        _etat.Traites = envoyes + echecs;
+                        _etat.Envoyes = envoyes;
+                        _etat.Echecs = echecs;
+                    }
                 }
+
+                _logger.LogWarning(
+                    "Diffusion « {Sujet} » terminee : {Envoyes} envoye(s), {Echecs} echec(s).",
+                    sujet, envoyes, echecs);
             }
             catch (Exception ex)
             {

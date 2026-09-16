@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Net;
 using System.Text;
 using Microsoft.Extensions.Options;
+using SchoolWebApp.Api.Services.Notifications;
 using SchoolWebApp.Domain.Emails;
 using SchoolWebApp.Domain.Models;
 using SchoolWebApp.Domain.Repositories;
@@ -35,6 +36,13 @@ namespace SchoolWebApp.Api.Services
 
         /// <summary>Rend le bilan d'un élève en HTML sans l'envoyer. Null si l'élève n'existe pas.</summary>
         Task<string?> ApercuAsync(int eleveId, DateTime? finSemaine = null, CancellationToken ct = default);
+
+        /// <summary>
+        /// Un bilan FICTIF rendu en HTML, avec l'objet et le mot d'introduction
+        /// du template : l'aperçu de l'écran « Automatique ». Aucun appel au
+        /// modèle de rédaction, aucun élève réel.
+        /// </summary>
+        Task<string> ApercuExempleAsync(CancellationToken ct = default);
     }
 
     public record ResultatEnvoi(int Traites, int Envoyes, int Echecs, DateTime Debut, DateTime Fin);
@@ -46,6 +54,8 @@ namespace SchoolWebApp.Api.Services
         private readonly IBilanRepository _bilans;
         private readonly IRedacteurBilanService _redacteur;
         private readonly IServiceEmail _email;
+        private readonly IModeleMailRepository _modeles;
+        private readonly IDiffusionService _diffusion;
         private readonly OptionsEmail _optionsEmail;
         private readonly ILogger<EnvoiBilansService> _logger;
 
@@ -53,12 +63,16 @@ namespace SchoolWebApp.Api.Services
             IBilanRepository bilans,
             IRedacteurBilanService redacteur,
             IServiceEmail email,
+            IModeleMailRepository modeles,
+            IDiffusionService diffusion,
             IOptions<OptionsEmail> optionsEmail,
             ILogger<EnvoiBilansService> logger)
         {
             _bilans = bilans ?? throw new ArgumentNullException(nameof(bilans));
             _redacteur = redacteur ?? throw new ArgumentNullException(nameof(redacteur));
             _email = email ?? throw new ArgumentNullException(nameof(email));
+            _modeles = modeles ?? throw new ArgumentNullException(nameof(modeles));
+            _diffusion = diffusion ?? throw new ArgumentNullException(nameof(diffusion));
             _optionsEmail = optionsEmail?.Value ?? throw new ArgumentNullException(nameof(optionsEmail));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
@@ -87,6 +101,10 @@ namespace SchoolWebApp.Api.Services
                     groupeDuJour + 1, nombreDeGroupes, debut, bilans.Count);
             }
 
+            // Le template est lu UNE FOIS pour toute la série : l'objet et le mot
+            // d'introduction sont les mêmes pour tous les bilans de la semaine.
+            var modele = await _modeles.GetParCodeAsync(CodeModeleMail.Bilans, ct);
+
             // UNE SEULE CONNEXION SMTP POUR TOUTE LA SÉRIE.
             //
             // Avant, `EnvoyerAsync` ouvrait, authentifiait et fermait une
@@ -114,7 +132,7 @@ namespace SchoolWebApp.Api.Services
                 // appel au modèle, et vingt appels simultanés se feraient limiter.
                 await _redacteur.RedigerAsync(bilan, ct);
 
-                var (sujet, gabarit, valeurs) = Composer(bilan);
+                var (sujet, gabarit, valeurs) = Composer(bilan, modele);
                 await session.EnvoyerAsync(bilan.ParentMail!, sujet, gabarit, valeurs, ct);
             }
 
@@ -142,18 +160,85 @@ namespace SchoolWebApp.Api.Services
 
             await _redacteur.RedigerAsync(bilan, ct);
 
-            var (sujet, gabarit, valeurs) = Composer(bilan);
+            var modele = await _modeles.GetParCodeAsync(CodeModeleMail.Bilans, ct);
+            var (sujet, gabarit, valeurs) = Composer(bilan, modele);
+            return await _email.RendreAsync(sujet, gabarit, valeurs);
+        }
+
+        /// <summary>
+        /// UN BILAN FICTIF, ÉCRIT À LA MAIN. Relire la mise en page d'un
+        /// template ne doit ni coûter un appel au modèle, ni exposer le bilan
+        /// d'un vrai enfant dans un aperçu d'administration.
+        /// </summary>
+        public async Task<string> ApercuExempleAsync(CancellationToken ct = default)
+        {
+            var fin = LundiPrecedent(DateTime.UtcNow).Date;
+
+            var bilan = new BilanEleve
+            {
+                Prenom = "Léo",
+                NiveauLibelle = "5e",
+                Debut = fin.AddDays(-7),
+                Fin = fin,
+                NombreSeances = 3,
+                NombreEchanges = 42,
+                DerniereActivite = fin.AddDays(-2),
+                Matieres =
+                [
+                    new BilanMatiere
+                    {
+                        Libelle = "Mathématiques",
+                        ProfPrenom = "Nora",
+                        ProfCouleur = "#0E7C7B",
+                        NombreSeances = 2,
+                        Travaille = "Les fractions : comparer, simplifier, puis additionner avec des dénominateurs différents.",
+                    },
+                    new BilanMatiere
+                    {
+                        Libelle = "Français",
+                        ProfPrenom = "Adrien",
+                        ProfCouleur = "#B4531F",
+                        NombreSeances = 1,
+                        Travaille = "L’accord du participe passé employé avec avoir.",
+                        Difficultes = "Le participe passé quand le complément est placé avant le verbe.",
+                    },
+                ],
+                Remarque = "Une belle semaine : Léo pose de bonnes questions et ose se tromper. "
+                           + "On reprend les fractions la semaine prochaine.",
+                SignatureProf = "Nora",
+                SignatureMatiere = "Mathématiques",
+            };
+
+            var modele = await _modeles.GetParCodeAsync(CodeModeleMail.Bilans, ct);
+            var (sujet, gabarit, valeurs) = Composer(bilan, modele);
             return await _email.RendreAsync(sujet, gabarit, valeurs);
         }
 
         /// <summary>
         /// Objet, gabarit et valeurs du mail. Extrait de l'envoi pour que
         /// l'aperçu et le message réel ne puissent pas diverger.
+        ///
+        /// L'OBJET ET LE MOT D'INTRODUCTION VIENNENT DU TEMPLATE « BILANS »
+        /// (Admin › Mails › Automatique), avec leurs variables `{{prenomEnfant}}`
+        /// et `{{dateDebut}}`. Un objet laissé vide reprend l'objet d'origine :
+        /// un bilan ne part jamais sans objet.
         /// </summary>
-        private (string Sujet, string Gabarit, Dictionary<string, string> Valeurs) Composer(BilanEleve bilan)
+        private (string Sujet, string Gabarit, Dictionary<string, string> Valeurs) Composer(
+            BilanEleve bilan, ModeleMailDetail? modele)
         {
             var periode = $"Semaine du {Jour(bilan.Debut)} au {Jour(bilan.Fin.AddDays(-1))}";
             var site = (_optionsEmail.UrlSite ?? "https://mimia.fr").TrimEnd('/');
+
+            var variables = new Dictionary<string, ValeurVariable>
+            {
+                ["prenomEnfant"] = new(bilan.Prenom ?? string.Empty),
+                ["dateDebut"] = new(Jour(bilan.Debut)),
+                ["periode"] = new(periode),
+            };
+
+            var introduction = string.IsNullOrWhiteSpace(modele?.Texte)
+                ? string.Empty
+                : _diffusion.ComposerCorps(modele.Texte, 0, variables);
 
             if (!bilan.Actif)
             {
@@ -163,6 +248,7 @@ namespace SchoolWebApp.Api.Services
                     new Dictionary<string, string>
                     {
                         ["apercu"] = $"Aucune séance pour {bilan.Prenom} cette semaine.",
+                        ["introMessage"] = introduction,
                         ["prenom"] = Echapper(bilan.Prenom),
                         ["classe"] = Echapper(bilan.NiveauLibelle),
                         ["periode"] = periode,
@@ -172,12 +258,17 @@ namespace SchoolWebApp.Api.Services
                     });
             }
 
+            var sujet = string.IsNullOrWhiteSpace(modele?.Sujet)
+                ? $"Le bilan de {bilan.Prenom} — {Jour(bilan.Debut)}"
+                : _diffusion.RemplacerVariables(modele.Sujet, variables);
+
             return (
-                $"Le bilan de {bilan.Prenom} — {Jour(bilan.Debut)}",
+                sujet,
                 "bilan",
                 new Dictionary<string, string>
                 {
                     ["apercu"] = Apercu(bilan),
+                    ["introMessage"] = introduction,
                     ["prenom"] = Echapper(bilan.Prenom),
                     ["classe"] = Echapper(bilan.NiveauLibelle),
                     ["periode"] = periode,

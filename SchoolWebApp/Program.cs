@@ -343,6 +343,22 @@ builder.Services.AddScoped<IMaitriseService, MaitriseService>();
 builder.Services.AddScoped<IAdminService, AdminService>();
 builder.Services.AddScoped<IAvisRepository, AvisRepository>();
 builder.Services.AddScoped<IPromoRepository, PromoRepository>();
+builder.Services.AddScoped<IModeleMailRepository, ModeleMailRepository>();
+// Sans état, et appuyé sur le service de diffusion qui est lui-même un
+// singleton : un template se compose comme un message tapé à la main.
+builder.Services.AddSingleton<SchoolWebApp.Api.Services.Notifications.IComposeurModeleMail,
+    SchoolWebApp.Api.Services.Notifications.ComposeurModeleMail>();
+
+// Les courriels automatiques programmés, le journal de leurs envois et les
+// liens de désabonnement. Le jeton est un singleton : sa clé est lue une fois,
+// et une clé jetable de développement doit rester la même pour toute la
+// session, sans quoi les liens envoyés le matin ne marcheraient plus l'après-midi.
+builder.Services.AddScoped<IEnvoiAutomatiqueRepository, EnvoiAutomatiqueRepository>();
+builder.Services.AddSingleton<SchoolWebApp.Api.Services.Notifications.IJetonDesabonnement,
+    SchoolWebApp.Api.Services.Notifications.JetonDesabonnement>();
+builder.Services.AddScoped<SchoolWebApp.Api.Services.Notifications.IEnvoisAutomatiquesService,
+    SchoolWebApp.Api.Services.Notifications.EnvoisAutomatiquesService>();
+builder.Services.AddHostedService<SchoolWebApp.Api.Workers.EnvoisAutomatiquesWorker>();
 builder.Services.AddScoped<IBannissementRepository, BannissementRepository>();
 builder.Services.AddScoped<IVerrouBannissement, VerrouBannissement>();
 builder.Services.AddScoped<IOffreLancementService, OffreLancementService>();
@@ -408,6 +424,10 @@ builder.Services.Configure<OptionsVoix>(options =>
 // injecter, mais une durée de vie par requête comme le reste.
 builder.Services.AddScoped<ITranscriptionTempsReelService, TranscriptionTempsReelService>();
 
+// Le façonnage des passages d'écoute lents : un cache mémoire par passage,
+// donc un singleton — le même texte n'est découpé qu'une fois par processus.
+builder.Services.AddSingleton<IFaconneurEcoute, FaconneurEcoute>();
+
 builder.Services.AddHttpClient<ISyntheseVocaleService, SyntheseVocaleService>(client =>
 {
     // Une phrase courte revient en moins d'une seconde ; au-delà de 30 s c'est
@@ -427,7 +447,16 @@ builder.Services.Configure<OptionsEmail>(options =>
     options.UrlSite = builder.Configuration["Clients:Spa:Url"] ?? options.UrlSite;
 });
 
-builder.Services.AddScoped<IServiceEmail, ServiceEmail>();
+// LE SERVICE D'ENVOI, AVEC LA LISTE DES BANNIS DEVANT — Camara, le 15/09/2026 :
+// une adresse bannie ne reçoit plus rien du tout. Tout ce qui demande
+// `IServiceEmail` (bilans, diffusions, alertes, courriels automatiques) reçoit
+// l'enveloppe filtrée ; le service réel n'est jamais demandé directement.
+builder.Services.AddScoped<ServiceEmail>();
+builder.Services.AddScoped<IFiltreEnvoi, SchoolWebApp.Api.Services.FiltreEnvoiBannissement>();
+builder.Services.AddScoped<IServiceEmail>(fournisseur => new ServiceEmailFiltre(
+    fournisseur.GetRequiredService<ServiceEmail>(),
+    fournisseur.GetRequiredService<IFiltreEnvoi>(),
+    fournisseur.GetRequiredService<ILogger<ServiceEmailFiltre>>()));
 
 // ---------------------------------------------------------------------------
 // La boîte de support, lue et répondue depuis l'administration.
@@ -635,6 +664,11 @@ using (var scope = app.Services.CreateScope())
             await EcheanceReferentielSeeder.SeedAsync(db);
             await ExamenSeeder.SeedAsync(db);
             await OffresSeeder.SeedAsync(db);
+
+            // Les six courriels automatiques du menu. N'écrase jamais une ligne
+            // existante : le texte et la programmation appartiennent à
+            // l'administration dès qu'ils ont été semés.
+            await ModelesMailSeeder.SeedAsync(db);
             Console.WriteLine("Referentiel et grille tarifaire verifies.");
 
             // LES CARTES D'EXAMEN, VÉRIFIÉES À CHAQUE DÉMARRAGE : une faute de

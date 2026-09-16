@@ -385,9 +385,10 @@ namespace SchoolWebApp.Api.Builders.impl
 
         public IAsyncEnumerable<string> StreamReponseAsync(
             int conversationId, string contenu, int? pieceJointeId,
-            int? secondesRestantes, CancellationToken ct) =>
+            int? secondesRestantes, string? vitesseEcoute, CancellationToken ct) =>
             StreamTourAsync(conversationId, contenu, accueil: false, ct,
-                secondesRestantes: secondesRestantes, pieceJointeId: pieceJointeId);
+                secondesRestantes: secondesRestantes, pieceJointeId: pieceJointeId,
+                vitesseEcoute: vitesseEcoute);
 
         /// <summary>
         /// La sortie signalée par une page qui se ferme, SANS identité.
@@ -1835,7 +1836,8 @@ namespace SchoolWebApp.Api.Builders.impl
             [EnumeratorCancellation] CancellationToken ct,
             TypeAccueil annonce = TypeAccueil.Aucun,
             int? secondesRestantes = null,
-            int? pieceJointeId = null)
+            int? pieceJointeId = null,
+            string? vitesseEcoute = null)
         {
             var contexte = await _resolver.ResoudreConversationAsync(conversationId)
                 ?? throw new UnauthorizedAccessException(
@@ -2276,6 +2278,15 @@ namespace SchoolWebApp.Api.Builders.impl
             {
                 declencheur += "\n\n" + PromptsPedagogiques.MarqueurTemps(
                     restant, contexte.Eleve.NiveauCycle, contexte.Eleve.Age);
+            }
+
+            // LA VITESSE D'ÉCOUTE, MÊME CHEMIN QUE LE TEMPS : elle vit dans le
+            // navigateur, elle voyage avec le tour de l'élève, et elle n'est
+            // pas persistée. Sans elle, « plus lent » n'a pas de cran de
+            // référence et « tu es déjà au plus lent » est indicible.
+            if (!string.IsNullOrWhiteSpace(vitesseEcoute))
+            {
+                declencheur += "\n\n" + PromptsPedagogiques.MarqueurVitesse(vitesseEcoute);
             }
 
             // Un accueil de retour n'a de sens que si l'agent voit la dernière

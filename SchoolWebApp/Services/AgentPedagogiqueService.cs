@@ -73,6 +73,7 @@ namespace SchoolWebApp.Api.Services
         private readonly IFicheRepository _fiches;
         private readonly IBibliothequePlanchesService _bibliotheque;
         private readonly IPlancheRepository _planches;
+        private readonly IReglageRepository _reglages;
         private readonly OptionsClaude _options;
         private readonly ILogger<AgentPedagogiqueService> _logger;
 
@@ -82,9 +83,11 @@ namespace SchoolWebApp.Api.Services
             IFicheRepository fiches,
             IBibliothequePlanchesService bibliotheque,
             IPlancheRepository planches,
+            IReglageRepository reglages,
             IOptions<OptionsClaude> options,
             ILogger<AgentPedagogiqueService> logger)
         {
+            _reglages = reglages ?? throw new ArgumentNullException(nameof(reglages));
             _client = client ?? throw new ArgumentNullException(nameof(client));
             _maitriseService = maitriseService ?? throw new ArgumentNullException(nameof(maitriseService));
             _fiches = fiches ?? throw new ArgumentNullException(nameof(fiches));
@@ -287,6 +290,33 @@ namespace SchoolWebApp.Api.Services
                 {
                     Text = PromptsPedagogiques.Accueil(accueil, depuisDerniereSeance),
                 });
+            }
+
+            // LE MODE DÉVELOPPEUR, S'IL EST ALLUMÉ — voir `ReglagesController`.
+            //
+            // EN DERNIER, ET APRÈS LES DEUX POINTS DE CÉSURE : un bloc
+            // conditionnel placé plus haut réécrirait tout le préfixe mis en
+            // cache à chaque bascule, et le ferait payer à toutes les séances.
+            // Ici, il ne coûte que sa propre longueur.
+            //
+            // UNE LECTURE PAR TOUR, sur une table minuscule déjà lue par
+            // ailleurs. Une panne de lecture ne doit pas ouvrir le mode : le
+            // défaut est `false`, et l'exception est avalée — un réglage
+            // illisible laisse le professeur se comporter normalement.
+            var modeDeveloppeur = false;
+            try
+            {
+                modeDeveloppeur = await _reglages.EstActifAsync(
+                    Controllers.ReglagesController.ModeDeveloppeur, false, ct);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Lecture du mode developpeur impossible : mode ignore.");
+            }
+
+            if (modeDeveloppeur)
+            {
+                blocs.Add(new TextBlockParam { Text = PromptsPedagogiques.ModeDeveloppeur });
             }
 
             return blocs;

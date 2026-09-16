@@ -277,7 +277,14 @@ builder.Services.Configure<OptionsEmail>(options =>
     options.UrlSite = builder.Configuration["Clients:Spa:Url"] ?? options.UrlSite;
 });
 
-builder.Services.AddScoped<IServiceEmail, ServiceEmail>();
+// La liste des bannis devant le service d'envoi : une adresse bannie ne reçoit
+// plus rien, pas même une confirmation d'adresse ou un mot de passe oublié.
+builder.Services.AddScoped<ServiceEmail>();
+builder.Services.AddScoped<IFiltreEnvoi, FiltreEnvoiIdentite>();
+builder.Services.AddScoped<IServiceEmail>(fournisseur => new ServiceEmailFiltre(
+    fournisseur.GetRequiredService<ServiceEmail>(),
+    fournisseur.GetRequiredService<IFiltreEnvoi>(),
+    fournisseur.GetRequiredService<ILogger<ServiceEmailFiltre>>()));
 
 // Singleton : il porte son propre cache de quinze secondes, un par requete le
 // viderait a chaque affichage de page.

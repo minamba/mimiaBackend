@@ -1,8 +1,12 @@
+using System.ComponentModel.DataAnnotations;
+using System.Security.Cryptography;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using OpenIddict.Validation.AspNetCore;
+using SchoolWebApp.Domain.Emails;
 using SchoolWebApp.IdentityServer.Data;
+using SchoolWebApp.IdentityServer.Services;
 
 namespace SchoolWebApp.IdentityServer.Controllers
 {
@@ -42,16 +46,143 @@ namespace SchoolWebApp.IdentityServer.Controllers
     {
         private readonly UserManager<ApplicationUser> _userManager;
         private readonly IConfiguration _configuration;
+        private readonly IServiceEmail _email;
+        private readonly IBannissementService _bannissements;
         private readonly ILogger<ComptesAdminController> _logger;
 
         public ComptesAdminController(
             UserManager<ApplicationUser> userManager,
             IConfiguration configuration,
+            IServiceEmail email,
+            IBannissementService bannissements,
             ILogger<ComptesAdminController> logger)
         {
             _userManager = userManager ?? throw new ArgumentNullException(nameof(userManager));
             _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
+            _email = email ?? throw new ArgumentNullException(nameof(email));
+            _bannissements = bannissements ?? throw new ArgumentNullException(nameof(bannissements));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        }
+
+        /// <summary>
+        /// CRÉE L'IDENTITÉ D'UN PARENT, À LA DEMANDE D'UN ADMINISTRATEUR —
+        /// Camara, le 16/09/2026 : « je peux tout faire sauf créer un parent
+        /// et lui donner un rôle ».
+        ///
+        /// AUCUN MOT DE PASSE NE TRANSITE PAR L'ADMINISTRATEUR. Le compte naît
+        /// avec un mot de passe aléatoire que personne ne connaît, et le parent
+        /// reçoit le courriel de réinitialisation — le même que « mot de passe
+        /// oublié » — pour choisir le sien. Un mot de passe fixé ici aurait
+        /// circulé par oral ou par message, et serait resté dans une boîte.
+        ///
+        /// Le mot de passe aléatoire n'est pas un détail : sans lui, le compte
+        /// n'aurait « pas de mot de passe » au sens d'Identity, et « mot de
+        /// passe oublié » refuserait de lui renvoyer un lien si le premier
+        /// expirait (deux heures).
+        ///
+        /// L'ADRESSE EST CONFIRMÉE D'OFFICE : c'est l'administrateur qui en
+        /// répond. Un lien de confirmation de plus, avant le lien de mot de
+        /// passe, ferait deux courriels pour un seul geste.
+        ///
+        /// APPELÉ AVANT la création de la fiche par l'API métier — l'inverse de
+        /// la suppression. Le `sub` rendu ici est ce qui les relie ; si la
+        /// fiche échouait ensuite, la première connexion du parent la créerait
+        /// (`GetOrCreateAsync`), rien ne serait perdu.
+        /// </summary>
+        [HttpPost]
+        public async Task<IActionResult> Creer([FromBody] CreerCompteRequest requete)
+        {
+            if (!User.HasClaim("role", "Admin"))
+            {
+                return StatusCode(StatusCodes.Status403Forbidden);
+            }
+
+            if (!ModelState.IsValid) return BadRequest(ModelState);
+
+            var email = requete.Email!.Trim();
+
+            if (await _bannissements.EstBanniAsync(email))
+            {
+                return BadRequest(new { message = "Cette adresse est bannie : aucun compte ne peut être créé avec." });
+            }
+
+            if (await _userManager.FindByEmailAsync(email) is not null)
+            {
+                return Conflict(new { message = "Un compte existe déjà avec cette adresse." });
+            }
+
+            var utilisateur = new ApplicationUser
+            {
+                UserName = email,
+                Email = email,
+                Prenom = requete.Prenom?.Trim(),
+                Nom = requete.Nom?.Trim(),
+                EmailConfirmed = true,
+            };
+
+            var creation = await _userManager.CreateAsync(utilisateur, MotDePasseAleatoire());
+
+            if (!creation.Succeeded)
+            {
+                _logger.LogError(
+                    "Echec de la creation admin d'un compte : {Erreurs}.",
+                    string.Join(" ", creation.Errors.Select(e => e.Description)));
+
+                return StatusCode(500, new { message = "Le compte de connexion n'a pas pu être créé." });
+            }
+
+            _logger.LogWarning("Compte {UserId} cree par un administrateur.", utilisateur.Id);
+
+            // LE COURRIEL PART APRÈS LA CRÉATION, et son échec ne la défait pas :
+            // le compte existe, le parent peut toujours demander un lien depuis
+            // « mot de passe oublié ». L'administrateur en est prévenu.
+            var courrielParti = true;
+            try
+            {
+                var jeton = await _userManager.GeneratePasswordResetTokenAsync(utilisateur);
+                var lien = Url.Action("ResetPassword", "Account", new { jeton, email }, Request.Scheme)!;
+
+                await _email.EnvoyerAsync(
+                    email,
+                    "Bienvenue sur Mimia — choisissez votre mot de passe",
+                    "reinitialisation",
+                    new Dictionary<string, string>
+                    {
+                        ["apercu"] = "Votre compte Mimia est prêt. Un lien valable deux heures pour choisir votre mot de passe.",
+                        ["lien"] = lien,
+                    });
+            }
+            catch (Exception ex)
+            {
+                courrielParti = false;
+                _logger.LogError(ex, "Compte {UserId} cree, mais le courriel de mot de passe n'est pas parti.", utilisateur.Id);
+            }
+
+            return StatusCode(StatusCodes.Status201Created, new
+            {
+                id = utilisateur.Id,
+                email,
+                courrielParti,
+            });
+        }
+
+        /// <summary>
+        /// Trente-deux octets aléatoires en base64 : assez long et varié pour
+        /// passer toute politique de mot de passe, et jamais montré à personne.
+        /// </summary>
+        private static string MotDePasseAleatoire() =>
+            Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)) + "aA1!";
+
+        public class CreerCompteRequest
+        {
+            [Required, EmailAddress, StringLength(255)]
+            public string? Email { get; set; }
+
+            [StringLength(100)]
+            public string? Prenom { get; set; }
+
+            [StringLength(100)]
+            public string? Nom { get; set; }
         }
 
         /// <summary>

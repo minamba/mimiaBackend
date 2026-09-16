@@ -283,6 +283,7 @@ namespace SchoolWebApp.Dal.Repositories
             Mail = entity.Mail,
             StripeClientId = entity.StripeClientId,
             DateCreation = entity.DateCreation,
+            EstAdministrateur = entity.EstAdministrateur,
         };
     }
 }

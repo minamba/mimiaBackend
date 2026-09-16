@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SchoolWebApp.Api.Builders;
 using SchoolWebApp.Api.Services.Voix;
+using SchoolWebApp.Api.Utils;
 
 namespace SchoolWebApp.Api.Controllers
 {
@@ -97,6 +98,50 @@ namespace SchoolWebApp.Api.Controllers
             // socle commun. Une pondération faible vaut mieux qu'un cours muet.
             var matiereCode = await _chatBuilder.GetMatiereCodeAsync(conversationId);
 
+            await RelayerAsync(matiereCode, $"conversation {conversationId}");
+        }
+
+        /// <summary>
+        /// La dictée d'un contrôle, depuis le formulaire « Ajouter un contrôle ».
+        /// WebSocket uniquement.
+        ///
+        /// LE MÊME MICRO QU'EN COURS — voulu par Camara le 15/09/2026 : « le micro
+        /// marche déjà bien en cours, mets le même système ». Le formulaire
+        /// passait par la reconnaissance du navigateur, refusée à Chrome sur
+        /// iPhone ; ici c'est exactement le relais des séances, sans séance.
+        ///
+        /// OUVERTE AUX ENFANTS (`AutoriseEleve`) : c'est l'enfant qui dicte son
+        /// contrôle. Le filtre des sessions enfants vérifie qu'il ne dicte que
+        /// pour LUI (paramètre `eleveId`) ; pour un parent, le résolveur vérifie
+        /// que l'élève est bien le sien.
+        /// </summary>
+        [HttpGet("dictee/{eleveId:int}")]
+        [SchoolWebApp.Api.Auth.AutoriseEleve]
+        public async Task Dicter(int eleveId, [FromServices] IChatContexteResolver resolveur)
+        {
+            if (!HttpContext.WebSockets.IsWebSocketRequest)
+            {
+                HttpContext.Response.StatusCode = StatusCodes.Status400BadRequest;
+                return;
+            }
+
+            if (await resolveur.ResoudreEleveAsync(eleveId) is null)
+            {
+                HttpContext.Response.StatusCode = StatusCodes.Status403Forbidden;
+                return;
+            }
+
+            // Pas de matière : la phrase en contient justement une à reconnaître
+            // (« en maths »), le socle commun du vocabulaire suffit.
+            await RelayerAsync(null, $"dictée de contrôle, élève {eleveId}");
+        }
+
+        /// <summary>
+        /// Le relais entre le micro du navigateur et le fournisseur — commun aux
+        /// séances et à la dictée d'un contrôle. Appelé une fois l'accès vérifié.
+        /// </summary>
+        private async Task RelayerAsync(string? matiereCode, string origine)
+        {
             using var navigateur = await HttpContext.WebSockets.AcceptWebSocketAsync();
             var ct = HttpContext.RequestAborted;
 
@@ -135,8 +180,8 @@ namespace SchoolWebApp.Api.Controllers
                     secondes =>
                     {
                         _logger.LogInformation(
-                            "Audio transcrit : {Secondes:0} s (conversation {ConversationId}).",
-                            secondes, conversationId);
+                            "Audio transcrit : {Secondes:0} s ({Origine}).",
+                            secondes, origine);
                         return Task.CompletedTask;
                     },
                     matiereCode,
@@ -149,7 +194,7 @@ namespace SchoolWebApp.Api.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex,
-                    "Echec de la transcription pour la conversation {ConversationId}.", conversationId);
+                    "Echec de la transcription ({Origine}).", origine);
 
                 await EmettreAsync(
                     navigateur,

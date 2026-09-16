@@ -89,8 +89,13 @@ namespace SchoolWebApp.Domain.Repositories
         /// <summary>Fiche complète d'un élève, ou null s'il n'existe pas.</summary>
         Task<FicheEleve?> GetFicheEleveAsync(int eleveId, int? niveauScolaireId = null);
 
+        /// <param name="lv2Espagnol">Null = pas de changement.</param>
+        /// <param name="specialites">
+        /// Null = pas de changement ; une liste, même vide, remplace. Le dépôt
+        /// n'en garde que ce que la classe FINALE permet.
+        /// </param>
         Task<EleveAdmin?> ModifierEleveAsync(
             int id, string? prenom, string? nom, int? age, int? niveauScolaireId, Sexe? sexe,
-            int? academieId = null);
+            int? academieId = null, bool? lv2Espagnol = null, IEnumerable<string>? specialites = null);
     }
 }

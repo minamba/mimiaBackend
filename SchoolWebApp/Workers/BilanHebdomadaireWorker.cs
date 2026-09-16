@@ -1,5 +1,7 @@
+using System.Globalization;
 using SchoolWebApp.Api.Services;
 using SchoolWebApp.Api.Services.Notifications;
+using SchoolWebApp.Domain.Models;
 using SchoolWebApp.Domain.Repositories;
 
 namespace SchoolWebApp.Api.Workers
@@ -34,14 +36,23 @@ namespace SchoolWebApp.Api.Workers
     /// fois au démarrage : un serveur redémarré le dimanche soir raterait
     /// autrement l'envoi du lundi, et personne ne s'en apercevrait avant la
     /// semaine suivante.
+    ///
+    /// LE JOUR ET L'HEURE VIENNENT DU TEMPLATE « BILANS » — Camara, le
+    /// 15/09/2026. Ils étaient écrits en dur (lundi 7 h UTC, soit 8 h ou 9 h à
+    /// Paris selon la saison) ; ils se règlent maintenant dans Admin › Mails ›
+    /// Automatique, à l'heure de Paris. Le semis reprend lundi 9 h. Sans
+    /// template, on retombe sur cette même règle.
     /// </summary>
     public class BilanHebdomadaireWorker : BackgroundService
     {
         private static readonly TimeSpan Intervalle = TimeSpan.FromHours(1);
 
-        /// <summary>Lundi 7 h UTC : le bilan attend le parent au réveil, semaine close.</summary>
-        private const DayOfWeek JourEnvoi = DayOfWeek.Monday;
-        private const int HeureEnvoi = 7;
+        /// <summary>
+        /// La règle à défaut de template : lundi 9 h, heure de Paris — le bilan
+        /// attend le parent au réveil, semaine close.
+        /// </summary>
+        private static readonly RegleEnvoi RegleParDefaut =
+            new(FrequenceEnvoi.Semaine, new TimeOnly(9, 0), 1, null);
 
         /// <summary>
         /// Budget de bilans par jour, à défaut de configuration.
@@ -173,27 +184,63 @@ namespace SchoolWebApp.Api.Workers
         {
             var maintenant = DateTime.UtcNow;
 
-            // Avant l'heure, il n'y a rien à faire — et surtout rien à demander
-            // à la base : ce test tourne vingt-quatre fois par jour.
-            if (maintenant.Hour < HeureEnvoi) return;
-
-            var lundi = LundiDeLaSerie(maintenant);
-
             // Portée dédiée : le worker est un singleton, les dépôts et le
             // DbContext sont à durée de requête.
             using var portee = _services.CreateScope();
+            var modeles = portee.ServiceProvider.GetRequiredService<IModeleMailRepository>();
             var reglages = portee.ServiceProvider.GetRequiredService<IReglageRepository>();
             var envoi = portee.ServiceProvider.GetRequiredService<IEnvoiBilansService>();
             var telegram = portee.ServiceProvider.GetRequiredService<ITelegramService>();
 
-            var jour = maintenant.ToString("yyyy-MM-dd");
+            var modele = await modeles.GetParCodeAsync(CodeModeleMail.Bilans, ct);
+
+            // DÉPROGRAMMÉS DANS L'ADMINISTRATION : plus de nouvelle série, et la
+            // série en cours s'arrête là où elle en est. C'est ce qu'attend
+            // quelqu'un qui éteint un envoi : que plus rien ne parte.
+            if (modele is { Actif: false }) return;
+
+            var regle = modele is null ? RegleParDefaut : RegleEnvoi.De(modele);
+
+            if (modele is null)
+            {
+                _logger.LogWarning("Template BILANS absent : bilans envoyes selon la regle par defaut (lundi 9 h).");
+            }
+
+            // L'ANCRE DE LA SÉRIE : le dernier créneau prévu, à l'horloge de
+            // Paris. Avant l'heure, c'est encore celui de la semaine passée —
+            // dont la série est close, donc rien à faire.
+            var ancre = Planification.OccurrencePrecedente(maintenant, regle);
+            if (ancre is null) return;
+
+            var ancreParis = HeureFrance.Locale(ancre.Value);
+            var jour = HeureFrance.Locale(maintenant).ToString("yyyy-MM-dd");
 
             // UN SEUL GROUPE PAR JOUR. Le worker se réveille toutes les heures :
-            // sans cette marque, la série entière partirait le lundi entre 7 h
-            // et minuit, ce qui est exactement ce qu'on cherche à éviter.
+            // sans cette marque, la série entière partirait le premier jour
+            // entre l'heure d'envoi et minuit, ce qui est exactement ce qu'on
+            // cherche à éviter.
             if (await reglages.LireAsync(CleDernierJour, ct) == jour) return;
 
-            var cycle = lundi.ToString("yyyy-MM-dd");
+            var cycle = ancreParis.ToString("yyyy-MM-dd");
+
+            // PAS DE NOUVELLE SÉRIE MOINS DE SEPT JOURS APRÈS LA PRÉCÉDENTE.
+            //
+            // Passer du lundi au mercredi un mardi ferait apparaître une ancre
+            // « mercredi dernier », antérieure à la série du lundi : la série
+            // se rouvrirait, et le premier groupe recevrait son bilan une
+            // seconde fois. La nouvelle règle prend effet une fois la semaine
+            // écoulée — un bilan qui arrive deux jours plus tard se pardonne,
+            // un bilan en double non.
+            var cycleConnu = await reglages.LireAsync(CleCycle, ct);
+
+            if (cycleConnu != cycle
+                && DateTime.TryParseExact(cycleConnu, "yyyy-MM-dd", CultureInfo.InvariantCulture,
+                    DateTimeStyles.None, out var precedent)
+                && (ancreParis.Date - precedent.Date).TotalDays < 7)
+            {
+                return;
+            }
+
             var nombreDeGroupes = await NombreDeGroupesAsync(reglages, envoi, telegram, cycle, ct);
 
             if (nombreDeGroupes == 0) return;
@@ -203,7 +250,7 @@ namespace SchoolWebApp.Api.Workers
             if (suivant >= nombreDeGroupes)
             {
                 // Série terminée. On ne dit rien : ce serait un message par
-                // heure jusqu'au lundi suivant.
+                // heure jusqu'à la série suivante.
                 return;
             }
 
@@ -216,12 +263,17 @@ namespace SchoolWebApp.Api.Workers
             await reglages.EcrireAsync(CleDernierJour, jour, ct);
             await reglages.EcrireAsync(CleGroupeSuivant, (suivant + 1).ToString(), ct);
 
-            // La semaine de référence est celle du LUNDI DE LA SÉRIE, pas celle
+            // La semaine de référence est celle de L'ANCRE DE LA SÉRIE, pas celle
             // d'aujourd'hui. Sans cela, le groupe du mercredi porterait sur une
             // autre période que celui du lundi : deux parents recevraient le
             // même jour des bilans qui ne couvrent pas la même semaine.
+            //
+            // Minuit du jour d'ancre, marqué UTC : la même borne qu'avant, quand
+            // l'ancre était le lundi calculé en UTC.
+            var finSemaine = DateTime.SpecifyKind(ancreParis.Date, DateTimeKind.Utc);
+
             var resultat = await envoi.EnvoyerAsync(
-                finSemaine: lundi,
+                finSemaine: finSemaine,
                 groupeDuJour: nombreDeGroupes > 1 ? suivant : null,
                 nombreDeGroupes: nombreDeGroupes > 1 ? nombreDeGroupes : null,
                 ct: ct);
@@ -229,6 +281,16 @@ namespace SchoolWebApp.Api.Workers
             _logger.LogInformation(
                 "Bilans : groupe {Groupe}/{Total} envoye, {Envoyes}/{Traites} parti(s).",
                 suivant + 1, nombreDeGroupes, resultat.Envoyes, resultat.Traites);
+
+            // Pour l'écran « Automatique » : quand, et avec quel résultat.
+            if (modele is not null)
+            {
+                var libelle = nombreDeGroupes > 1
+                    ? $"Groupe {suivant + 1}/{nombreDeGroupes} : {resultat.Envoyes} envoyé(s), {resultat.Echecs} échec(s)"
+                    : $"{resultat.Envoyes} envoyé(s), {resultat.Echecs} échec(s)";
+
+                await modeles.NoterEnvoiAsync(modele.Id, DateTime.UtcNow, libelle, ct);
+            }
         }
 
         /// <summary>
@@ -326,16 +388,6 @@ namespace SchoolWebApp.Api.Workers
             // et la série reprendrait au milieu, privant les premiers groupes
             // de leur bilan.
             await reglages.EcrireAsync(CleCycle, cycle, ct);
-        }
-
-        /// <summary>
-        /// Le jour d'envoi le plus récent, aujourd'hui compris. C'est l'ancre
-        /// de la série ET la fin de la semaine couverte.
-        /// </summary>
-        private static DateTime LundiDeLaSerie(DateTime maintenant)
-        {
-            var recul = ((int)maintenant.DayOfWeek - (int)JourEnvoi + 7) % 7;
-            return maintenant.Date.AddDays(-recul);
         }
     }
 }

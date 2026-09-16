@@ -510,7 +510,24 @@ namespace SchoolWebApp.Api.Controllers
         private async Task<bool> DoitPayerAsync()
         {
             var parent = await _resolver.ResoudreParentAsync();
-            return !_exemptions.EstExempte(parent.Mail);
+
+            // LES ADMINISTRATEURS NE PAIENT PAS — Camara, le 16/09/2026 :
+            // l'exemption, jusque-là une liste d'adresses (le
+            // super-administrateur, le compte de démonstration), suit
+            // désormais le RÔLE. « Quand ils choisissent, ça s'affecte
+            // directement » : forfait ou pack d'heures, sans passer par la
+            // caisse — même chemin que l'essai gratuit, plus haut.
+            //
+            // LE DRAPEAU EN BASE D'ABORD, LE JETON ENSUITE. Le rôle ne rentre
+            // dans le jeton qu'à la prochaine connexion ; la base, elle, dit
+            // le droit à l'instant où il est accordé. Le jeton couvre le
+            // super-administrateur, dont le rôle vient de la configuration et
+            // non de la base.
+            var administrateur = parent.EstAdministrateur
+                                 || User.HasClaim("role", "Admin")
+                                 || User.HasClaim("role", "SuperAdmin");
+
+            return !administrateur && !_exemptions.EstExempte(parent.Mail);
         }
 
         private async Task<IActionResult> Executer(Func<int, Task<IActionResult>> action)

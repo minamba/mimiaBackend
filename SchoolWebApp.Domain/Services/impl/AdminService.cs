@@ -122,8 +122,9 @@ namespace SchoolWebApp.Domain.Services.impl
 
         public Task<EleveAdmin?> ModifierEleveAsync(
             int id, string? prenom, string? nom, int? age, int? niveauScolaireId, Sexe? sexe,
-            int? academieId = null) =>
-            _adminRepository.ModifierEleveAsync(id, prenom, nom, age, niveauScolaireId, sexe, academieId);
+            int? academieId = null, bool? lv2Espagnol = null, IEnumerable<string>? specialites = null) =>
+            _adminRepository.ModifierEleveAsync(
+                id, prenom, nom, age, niveauScolaireId, sexe, academieId, lv2Espagnol, specialites);
 
         public Task<RepartitionParents> GetRepartitionParentsAsync(
             IReadOnlyCollection<string> mailsExclus) =>

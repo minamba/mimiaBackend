@@ -54,7 +54,7 @@ namespace SchoolWebApp.Domain.Services
 
         Task<EleveAdmin?> ModifierEleveAsync(
             int id, string? prenom, string? nom, int? age, int? niveauScolaireId, Sexe? sexe,
-            int? academieId = null);
+            int? academieId = null, bool? lv2Espagnol = null, IEnumerable<string>? specialites = null);
 
         /// <summary>
         /// L adresse d un compte, sans le reste de sa fiche.

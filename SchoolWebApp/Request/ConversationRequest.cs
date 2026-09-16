@@ -43,6 +43,21 @@ namespace SchoolWebApp.Api.Request
         /// </summary>
         [Range(0, 24 * 3600)]
         public int? SecondesRestantes { get; set; }
+
+        /// <summary>
+        /// La vitesse de lecture des passages d'écoute, telle que l'élève l'a
+        /// choisie : `tres_lent`, `lent`, `normal` ou `rapide`.
+        ///
+        /// MÊME RAISON QUE LE TEMPS RESTANT : ce choix vit dans le navigateur.
+        /// Sans lui, le professeur ne peut ni descendre d'un cran quand l'élève
+        /// demande « plus lent », ni répondre qu'il lit déjà au plus lent.
+        ///
+        /// Facultatif : un cours sans exercice d'écoute n'en envoie pas, et une
+        /// valeur inconnue est ignorée côté serveur plutôt que rejetée — un
+        /// libellé inattendu ne doit pas faire échouer un message d'élève.
+        /// </summary>
+        [StringLength(20)]
+        public string? VitesseEcoute { get; set; }
     }
 
     /// <summary>

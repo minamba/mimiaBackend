@@ -16,6 +16,27 @@ namespace SchoolWebApp.Api.Request
         public string? Mail { get; set; }
     }
 
+    /// <summary>
+    /// La fiche d'un parent créé par l'administration. L'identité a été créée
+    /// juste avant sur le serveur d'identité, qui a rendu son `sub` : c'est le
+    /// seul lien entre les deux bases, et il vient donc de la requête — c'est
+    /// le cas inverse de l'inscription, où il vient du jeton.
+    /// </summary>
+    public class CreerParentRequest
+    {
+        [Required, StringLength(450)]
+        public string? IdentityUserId { get; set; }
+
+        [Required, EmailAddress(ErrorMessage = "Adresse email invalide."), StringLength(255)]
+        public string? Mail { get; set; }
+
+        [StringLength(100)]
+        public string? Prenom { get; set; }
+
+        [StringLength(100)]
+        public string? Nom { get; set; }
+    }
+
     public class EleveAdminRequest
     {
         [StringLength(100, MinimumLength = 2)]
@@ -34,6 +55,16 @@ namespace SchoolWebApp.Api.Request
 
         /// <summary>Détermine la zone de vacances scolaires. Null = pas de changement.</summary>
         public int? AcademieId { get; set; }
+
+        /// <summary>L'espagnol en LVB. Null = pas de changement.</summary>
+        public bool? Lv2Espagnol { get; set; }
+
+        /// <summary>
+        /// Les spécialités (codes). Null = pas de changement ; une liste, même
+        /// vide, remplace. Le serveur n'en garde que ce que la classe permet —
+        /// voir `VoiesScolaires.SpecialitesRetenues`.
+        /// </summary>
+        public List<string>? Specialites { get; set; }
     }
 
     /// <summary>Création ou modification d'un signalement — voir « Signalements ».</summary>

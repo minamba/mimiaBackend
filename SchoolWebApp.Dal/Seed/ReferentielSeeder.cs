@@ -254,10 +254,11 @@ namespace SchoolWebApp.Dal.Seed
     /// terminale, avec la note de service de son épreuve : provenance en tête de
     /// chaque fichier de Referentiels/Generale/. Elles vont aux professeurs qui
     /// les enseignent au lycée : l'HGGSP à Salim, l'HLP à Camille, les SES à
-    /// Karim, la NSI à Nora, les LLCER d'anglais et l'AMC à Marine, la LLCER
+    /// Karim, les LLCER d'anglais et l'AMC à Marine, la LLCER
     /// d'espagnol à Lucía, les sciences de l'ingénieur à Yann, la LLCA latin et
     /// grec à Adrien. Deux nouveaux
     /// visages : Théo pour l'EPPCS, Jeanne pour les sept enseignements artistiques.
+    /// Puis un troisième le 15/09/2026 : Minamba pour la NSI, d'abord confiée à Nora.
     /// Les lignes de pratique physique ou artistique portent un domaine
     /// « Pratique — » : un tuteur vocal ne les fait pas travailler, et elles ne
     /// comptent pas dans la barre de préparation de l'écrit.
@@ -660,12 +661,18 @@ namespace SchoolWebApp.Dal.Seed
                 // famille : `VoiesScolaires` ne les ouvre qu'en première et
                 // terminale générales, et seulement à l'élève qui les a cochées.
                 // Chacune va au professeur qui l'enseigne au lycée : un élève
-                // retrouve Salim en HGGSP, Camille en HLP, Karim en SES, Nora en
-                // NSI. Maths, physique-chimie et SVT gardent leur matière.
+                // retrouve Salim en HGGSP, Camille en HLP, Karim en SES. Maths,
+                // physique-chimie et SVT gardent leur matière.
                 ("HGGSP",                 "Histoire-géographie, géopolitique et sciences politiques", "agent-hggsp", "Salim",   "salim",   "#99277F", 18, true, 11, 12, "Comprendre les grands enjeux du monde contemporain"),
                 ("HLP",                   "Humanités, littérature et philosophie",           "agent-hlp",                   "Camille", "camille", "#5A4A8C", 19, true, 11, 12, "Lire, interpréter et penser les grandes questions humaines"),
                 ("SES",                   "Sciences économiques et sociales",                "agent-ses",                   "Karim",   "karim",   "#166534", 20, true, 11, 12, "L'économie, la société et le politique"),
-                ("NSI",                   "Numérique et sciences informatiques",             "agent-nsi",                   "Nora",    "nora",    "#0E7C7B", 21, true, 11, 12, "Programmer, structurer les données, comprendre les réseaux"),
+                // LA NSI A SON PROFESSEUR — Camara, le 15/09/2026 : « c'est une
+                // matière à part entière, on ne peut pas la confier à un
+                // professeur qui n'a rien à voir ». Confiée à Nora jusque-là.
+                // Orange, choisi par Camara comme la veste de son portrait ; la
+                // version foncée, pour tenir 4,5:1 sur fond clair — voir
+                // `couleurMatiere.js`.
+                ("NSI",                   "Numérique et sciences informatiques",             "agent-nsi",                   "Minamba", "minamba", "#AA5F04", 21, true, 11, 12, "Programmer, structurer les données, comprendre les réseaux"),
                 ("LLCER_ANGLAIS",         "Langues, littératures et cultures étrangères — anglais", "agent-llcer-anglais", "Marine", "marine", "#1D6FB8", 22, true, 11, 12, "La littérature et les cultures du monde anglophone"),
                 ("AMC",                   "LLCER anglais, monde contemporain (AMC)",         "agent-amc",                   "Marine",  "marine",  "#1D6FB8", 23, true, 11, 12, "Les grands enjeux du monde anglophone d'aujourd'hui"),
                 ("LLCER_ESPAGNOL",        "Langues, littératures et cultures étrangères — espagnol", "agent-llcer-espagnol", "Lucía", "lucia", "#BE123C", 24, true, 11, 12, "La littérature et les cultures du monde hispanophone"),
@@ -711,6 +718,8 @@ namespace SchoolWebApp.Dal.Seed
             var prenomsRemplaces = new Dictionary<string, string>
             {
                 ["ANGLAIS"] = "Chloé",
+                // Pas un renommage : la NSI change de professeur (15/09/2026).
+                ["NSI"] = "Nora",
             };
 
             // Couleurs d'origine de deux matières, remplacées depuis.
@@ -735,6 +744,9 @@ namespace SchoolWebApp.Dal.Seed
             {
                 ["HISTOIRE_GEO"] = new[] { "#7A3E9D" },
                 ["SCIENCES"] = new[] { "#2E7D32", "#5C7F14" },
+                // Le sarcelle de Nora, que la NSI portait avant d'avoir son
+                // professeur, puis le violet essayé le même jour pour Minamba.
+                ["NSI"] = new[] { "#0E7C7B", "#8158DA" },
             };
 
             var existants = await context.Matieres.ToListAsync(ct);
@@ -827,7 +839,13 @@ namespace SchoolWebApp.Dal.Seed
                     existant.ProfPrenom = m.Prenom;
                     existant.ProfAvatar = m.Avatar;
                 }
-                else if (couleursRemplacees.TryGetValue(m.Code, out var anciennes)
+
+                // LA COULEUR SE VÉRIFIE À PART, et non plus en `else` du prénom :
+                // un nouveau professeur change À LA FOIS de prénom et de couleur
+                // (la NSI, 15/09/2026). Chaîner les deux laissait Minamba en
+                // sarcelle, la couleur de Nora. Même précaution : seule une
+                // valeur encore identique à l'ancienne est réalignée.
+                if (couleursRemplacees.TryGetValue(m.Code, out var anciennes)
                          && anciennes.Any(a => string.Equals(existant.ProfCouleur, a,
                                                              StringComparison.OrdinalIgnoreCase)))
                 {
