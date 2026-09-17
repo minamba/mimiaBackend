@@ -345,15 +345,6 @@ namespace SchoolWebApp.Dal.Seed
                 + "programme change par tiers chaque année : ne pas réviser sur une liste ancienne.",
                 specialiteRequise: "CINEMA_AUDIOVISUEL", domainesExclus: "Pratique —");
 
-            Epreuve(general, "BAC_GENERAL_2027_MUSIQUE", "Musique", "MUSIQUE", "TERMINALE", 33,
-                "Coefficient 16 — écrit de 3 h 30 en trois exercices : description d'un extrait hors programme, "
-                + "commentaire comparé de deux extraits dont un du programme limitatif, commentaire d'un document "
-                + "sur la vie musicale actuelle. Oral de 30 min : interprétation d'une création collective, exposé "
-                + "et entretien.",
-                "Programme limitatif 2026-2027 : Porgy and Bess (Armstrong-Fitzgerald), l'Allegro assai du Concerto "
-                + "Wq 172 de C. P. E. Bach, « Écritures, formes, graphismes ». Écrit le 16 juin 2027 au matin.",
-                specialiteRequise: "MUSIQUE", domainesExclus: "Pratique —");
-
             Epreuve(general, "BAC_GENERAL_2027_THEATRE", "Théâtre", "THEATRE", "TERMINALE", 34,
                 "Coefficient 16 — écrit de 3 h 30 sur le programme limitatif : court essai à partir d'une captation "
                 + "(8 points), puis proposition pour le plateau justifiée (12 points). Oral de 30 min : jeu sur "
@@ -361,14 +352,6 @@ namespace SchoolWebApp.Dal.Seed
                 "Programme limitatif 2026-2027 : Un Chapeau de paille d'Italie (Labiche et Marc-Michel) et "
                 + "« Voyages romanesques » (L'Autre Monde de Benjamin Lazar, Gulliver de Lesort et Hecq).",
                 specialiteRequise: "THEATRE", domainesExclus: "Pratique —");
-
-            Epreuve(general, "BAC_GENERAL_2027_DANSE", "Danse", "DANSE", "TERMINALE", 35,
-                "Coefficient 16 — écrit de 3 h 30 : deux sujets au choix sur « La danse, une interrogation portée "
-                + "sur le monde », de culture chorégraphique ou d'analyse de documents. Oral de 30 min : composition "
-                + "de 3 à 6 min en chorégraphe et interprète (12 points), puis entretien (8 points).",
-                "Session 2027 : la terminale reste sur le programme limitatif de 2022, post-modern dance et Maguy "
-                + "Marin. Les œuvres de la note de 2026 ne concernent que la première cette année.",
-                specialiteRequise: "DANSE", domainesExclus: "Pratique —");
 
             Epreuve(general, "BAC_GENERAL_2027_ARTS_CIRQUE", "Arts du cirque", "ARTS_CIRQUE", "TERMINALE", 36,
                 "Coefficient 16 — écrit de 3 h 30 sur le programme limitatif, à partir d'un même dossier : court "
@@ -472,6 +455,41 @@ namespace SchoolWebApp.Dal.Seed
                 + "exploite des résultats expérimentaux. Pratique de 3 h (coefficient 9).",
                 "Seulement si ta spécialité de terminale est les sciences physiques et chimiques en "
                 + "laboratoire.");
+
+            // LES CARTES DES MATIÈRES RETIRÉES SE SUPPRIMENT — 17/09/2026. Elles ne se
+            // ferment pas : une épreuve ne porte pas de drapeau « actif », contrairement
+            // à une matière. Et retirer sa ligne du semeur ne suffisait pas non plus — il
+            // n'enlève jamais ce qu'il ne connaît plus. Les deux cartes de musique et de
+            // danse restaient donc en base après le retrait des matières, vérifiées à
+            // chaque passage et signalées en rouge : « spécialité inconnue », « matière
+            // fermée », « aucune notion au programme ». Quatre reproches chacune, tous
+            // exacts, tous sans objet.
+            //
+            // SUPPRIMÉES PLUTÔT QU'EXCUSÉES. Une liste d'exceptions dans le contrôle
+            // aurait rendu la page verte en laissant l'orpheline en place — et le jour
+            // où une VRAIE carte se casserait de la même façon, l'exception l'aurait
+            // couverte aussi.
+            //
+            // LA SUPPRESSION EMPORTE LES PRÉPARATIONS des élèves qui visaient ces
+            // épreuves (clé étrangère en cascade). C'est voulu : préparer une épreuve
+            // qui n'existe plus n'a pas de sens, et plus personne ne peut choisir ces
+            // spécialités.
+            var epreuvesRetirees = new[]
+            {
+                "BAC_GENERAL_2027_MUSIQUE",
+                "BAC_GENERAL_2027_DANSE",
+            };
+
+            foreach (var examen in existants)
+            {
+                foreach (var retiree in examen.Epreuves
+                             .Where(e => epreuvesRetirees.Contains(e.Code))
+                             .ToList())
+                {
+                    examen.Epreuves.Remove(retiree);
+                    context.Remove(retiree);
+                }
+            }
 
             await context.SaveChangesAsync(ct);
         }

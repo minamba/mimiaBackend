@@ -182,9 +182,26 @@ namespace SchoolWebApp.Domain.Models
     /// <summary>
     /// Ce que la formule autorise en nombre de profils enfants.
     /// </summary>
-    public record CapaciteEnfants(int Actuels, int Maximum, string? OffreLibelle)
+    /// <param name="DroitRetire">
+    /// L'administration a-t-elle retiré à ce compte le droit d'ajouter un
+    /// enfant ? Voulu par Camara le 17/09/2026.
+    ///
+    /// PORTÉ PAR LA CAPACITÉ, ET PAS À CÔTÉ. Les deux écrans qui proposent
+    /// d'ajouter un enfant lisent déjà cet objet pour savoir s'ils doivent
+    /// s'effacer ; y loger le droit les fait obéir sans une ligne de plus.
+    /// Un second champ transporté en parallèle aurait fini par être oublié
+    /// sur l'un des deux.
+    /// </param>
+    public record CapaciteEnfants(
+        int Actuels, int Maximum, string? OffreLibelle, bool DroitRetire = false)
     {
-        public bool PeutAjouter => Actuels < Maximum;
+        /// <summary>
+        /// DEUX RAISONS DE REFUSER, UN SEUL DRAPEAU. La formule peut couvrir
+        /// trois enfants pendant que ce compte n'a plus le droit d'en ajouter :
+        /// les écrans ne veulent savoir que « oui ou non », le MOTIF se lit
+        /// séparément pour choisir le message.
+        /// </summary>
+        public bool PeutAjouter => !DroitRetire && Actuels < Maximum;
 
         public int Restantes => Math.Max(0, Maximum - Actuels);
     }

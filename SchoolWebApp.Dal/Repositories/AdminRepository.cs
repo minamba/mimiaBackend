@@ -179,15 +179,78 @@ namespace SchoolWebApp.Dal.Repositories
         /// en base à chaque appel coûterait une lecture par requête pour un
         /// droit qui change deux fois par an.
         /// </summary>
+        public async Task<bool> DefinirAjoutEnfantAsync(int parentId, bool autorise)
+        {
+            var parent = await _context.Parents.FirstOrDefaultAsync(p => p.Id == parentId);
+            if (parent is null) return false;
+
+            parent.PeutAjouterEnfant = autorise;
+            await _context.SaveChangesAsync();
+
+            return true;
+        }
+
         public async Task<bool> DefinirAdministrateurAsync(int parentId, bool actif)
         {
             var parent = await _context.Parents.FirstOrDefaultAsync(p => p.Id == parentId);
             if (parent is null) return false;
 
             parent.EstAdministrateur = actif;
+
+            // RETIRER LE RÔLE EFFACE LES DROITS, et il le faut. Sans cette ligne,
+            // un compte rétrogradé puis repromu six mois plus tard retrouverait
+            // exactement les sections qu'on lui avait ouvertes — sans que
+            // personne ne les ait redécidées. Le super-administrateur croirait
+            // avoir nommé un administrateur vierge.
+            //
+            // C'est aussi ce qui rend la règle de Camara vraie à la lettre : « de
+            // base quand le super admin passe un utilisateur en admin, tout est
+            // décoché ».
+            if (!actif) parent.OngletsAdmin = null;
+
             await _context.SaveChangesAsync();
 
             return true;
+        }
+
+        public async Task<string[]?> GetOngletsAdminAsync(int parentId)
+        {
+            var parent = await _context.Parents
+                .AsNoTracking()
+                .Where(p => p.Id == parentId)
+                .Select(p => new { p.OngletsAdmin })
+                .FirstOrDefaultAsync();
+
+            return parent is null ? null : OngletsAdmin.Lire(parent.OngletsAdmin);
+        }
+
+        public async Task<bool> DefinirOngletsAdminAsync(int parentId, IEnumerable<string>? onglets)
+        {
+            var parent = await _context.Parents.FirstOrDefaultAsync(p => p.Id == parentId);
+            if (parent is null) return false;
+
+            // VIDE S'ÉCRIT NULL. Une chaîne vide et NULL diraient la même chose à
+            // la lecture, mais une colonne qu'on relit à l'œil en base est plus
+            // claire avec une seule façon de dire « rien ».
+            var valeur = OngletsAdmin.Ecrire(onglets);
+            parent.OngletsAdmin = string.IsNullOrEmpty(valeur) ? null : valeur;
+
+            await _context.SaveChangesAsync();
+
+            return true;
+        }
+
+        public async Task<string[]> GetOngletsAdminParMailAsync(string? mail)
+        {
+            if (string.IsNullOrWhiteSpace(mail)) return [];
+
+            var parent = await _context.Parents
+                .AsNoTracking()
+                .Where(p => p.Mail == mail && p.EstAdministrateur)
+                .Select(p => new { p.OngletsAdmin })
+                .FirstOrDefaultAsync();
+
+            return parent is null ? [] : OngletsAdmin.Lire(parent.OngletsAdmin);
         }
 
         /// <summary>
@@ -935,6 +998,7 @@ FROM sys.database_files;";
                         .Max(e => e.DerniereActivite),
                     DerniereConnexion = p.DerniereConnexion,
                     EstAdministrateur = p.EstAdministrateur,
+                    PeutAjouterEnfant = p.PeutAjouterEnfant,
 
                     // LA CONSOMMATION DE LA PÉRIODE EN COURS.
                     //

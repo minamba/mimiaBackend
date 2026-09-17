@@ -387,9 +387,7 @@ namespace SchoolWebApp.Dal.Seed
                 ("Arts plastiques (spécialité)", "ARTS_PLASTIQUES", "https://eduscol.education.gouv.fr/5772/programmes-et-ressources-en-arts-plastiques-voie-gt"),
                 ("Histoire des arts (spécialité)", "HISTOIRE_ARTS", "https://eduscol.education.gouv.fr/5796/programmes-et-ressources-en-histoire-des-arts-voie-gt"),
                 ("Cinéma-audiovisuel (spécialité)", "CINEMA_AUDIOVISUEL", "https://eduscol.education.gouv.fr/5775/programmes-et-ressources-en-cinema-audiovisuel-voie-gt"),
-                ("Musique (spécialité)", "MUSIQUE", "https://eduscol.education.gouv.fr/5820/programmes-et-ressources-en-musique-voie-gt"),
                 ("Théâtre (spécialité)", "THEATRE", "https://eduscol.education.gouv.fr/5865/programmes-et-ressources-en-theatre-voie-gt"),
-                ("Danse (spécialité)", "DANSE", "https://eduscol.education.gouv.fr/5778/programmes-et-ressources-en-danse-voie-gt"),
                 ("Arts du cirque (spécialité)", "ARTS_CIRQUE", "https://eduscol.education.gouv.fr/5769/programmes-et-ressources-en-arts-du-cirque-voie-gt"),
             })
             {

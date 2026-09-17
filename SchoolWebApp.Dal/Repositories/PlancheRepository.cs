@@ -16,6 +16,24 @@ namespace SchoolWebApp.Dal.Repositories
         }
 
         /// <summary>
+        /// LES PLANCHES LÉGENDÉES SEULES — le défaut de presque tout ce fichier.
+        ///
+        /// Depuis qu'une planche peut avoir une variante muette, chaque requête
+        /// écrite avant le 17/09/2026 en verrait deux là où elle en voyait une.
+        /// Le danger n'est pas l'affichage, c'est les FILES : une muette n'a
+        /// aucune légende à lire, donc rien à extraire, donc elle resterait
+        /// éternellement « à décrire » et « à cartographier », à se faire relire
+        /// par un modèle de vision qui répondrait à chaque fois la même chose.
+        ///
+        /// Passer par cette propriété plutôt que par le DbSet est donc la règle.
+        /// Les exceptions sont nommées une par une, et il n'y en a que quatre :
+        /// servir une planche, la lister pour l'administration, l'importer, la
+        /// supprimer — plus les crédits, qui sont dus sur les deux images.
+        /// </summary>
+        private IQueryable<PlancheSchema> Legendees =>
+            _context.PlanchesSchemas.Where(p => p.Variante == VariantePlanche.Legende);
+
+        /// <summary>
         /// La projection est explicite et n'inclut PAS les octets : sans elle,
         /// EF chargerait chaque varbinary pour le jeter aussitôt, et afficher
         /// une liste de trente cases à cocher ferait transiter cent mégaoctets.
@@ -40,7 +58,8 @@ namespace SchoolWebApp.Dal.Repositories
                 // soixante noms de fichiers.
                 .Select(p => new LigneFile(
                     p.Cle, p.MatiereCode, p.Taille, p.DateCreation,
-                    p.Contenu, p.Reperes, p.Maison, p.Auteur, p.Licence, p.Source))
+                    p.Contenu, p.Reperes, p.Maison, p.Auteur, p.Licence, p.Source,
+                    p.Variante))
                 .ToListAsync(ct);
 
             static PlancheEnAttente Ligne(LigneFile p) => new()
@@ -51,14 +70,23 @@ namespace SchoolWebApp.Dal.Repositories
                 DateCreation = p.DateCreation,
             };
 
+            // LES MUETTES NE SONT NI DÉCRITES NI CARTOGRAPHIÉES, MAIS ELLES SONT
+            // CRÉDITÉES.
+            //
+            // Elles n'ont aucun mot à lire : les deux premières files les
+            // garderaient indéfiniment. Le crédit, lui, est dû — une muette est
+            // un fichier de Wikimedia comme un autre, affiché devant un enfant.
+            static bool Legendee(LigneFile p) => p.Variante == VariantePlanche.Legende;
+
             return new FilesPlanches
             {
                 ADecrire = toutes
-                    .Where(p => p.Contenu == null)
+                    .Where(p => Legendee(p) && p.Contenu == null)
                     .Select(Ligne).ToList(),
 
                 ACartographier = toutes
-                    .Where(p => p.Contenu != null
+                    .Where(p => Legendee(p)
+                             && p.Contenu != null
                              && p.Reperes == null
                              && !p.Contenu.StartsWith("SANS AUCUN NOM")
                              && !p.Contenu.StartsWith("aucune légende lisible")
@@ -81,7 +109,8 @@ namespace SchoolWebApp.Dal.Repositories
         private sealed record LigneFile(
             string Cle, string? MatiereCode, int Taille, DateTime DateCreation,
             string? Contenu, string? Reperes, bool Maison,
-            string? Auteur, string? Licence, string? Source);
+            string? Auteur, string? Licence, string? Source,
+            string Variante);
 
         public async Task<int> ViderLesFilesAsync(CancellationToken ct = default)
         {
@@ -90,12 +119,12 @@ namespace SchoolWebApp.Dal.Repositories
             // Ces valeurs sortent les planches des files ET disent pourquoi.
             // Un texte vide les y aurait laissées ; un faux contenu aurait menti
             // au professeur, qui interroge l'élève d'après ce qu'il lit là.
-            var decrites = await _context.PlanchesSchemas
+            var decrites = await Legendees
                 .Where(p => p.Contenu == null)
                 .ExecuteUpdateAsync(m => m.SetProperty(
                     p => p.Contenu, "aucune légende lisible (traitement annulé par l'administrateur)"), ct);
 
-            var reperees = await _context.PlanchesSchemas
+            var reperees = await Legendees
                 .Where(p => p.Reperes == null)
                 .ExecuteUpdateAsync(m => m.SetProperty(p => p.Reperes, "[]"), ct);
 
@@ -115,6 +144,12 @@ namespace SchoolWebApp.Dal.Repositories
                     Id = p.Id,
                     Cle = p.Cle,
                     MatiereCode = p.MatiereCode,
+
+                    // L'ADMINISTRATION VOIT LES DEUX : c'est le seul écran où une
+                    // muette doit apparaître, sous sa légendée.
+                    Variante = p.Variante,
+
+                    Niveau = p.Niveau,
                     NomFichier = p.NomFichier,
                     TypeMime = p.TypeMime,
                     Taille = p.Taille,
@@ -129,24 +164,33 @@ namespace SchoolWebApp.Dal.Repositories
                 })
                 .ToListAsync(ct);
 
-        public async Task<DomainPlanche?> GetAsync(string cle, CancellationToken ct = default)
+        public async Task<DomainPlanche?> GetAsync(
+            string cle, string? variante = null, CancellationToken ct = default)
         {
+            var v = VariantePlanche.Normaliser(variante);
+
             var entity = await _context.PlanchesSchemas
                 .AsNoTracking()
-                .FirstOrDefaultAsync(p => p.Cle == cle, ct);
+                .FirstOrDefaultAsync(p => p.Cle == cle && p.Variante == v, ct);
 
             return entity is null ? null : Map(entity, avecDonnees: true);
         }
 
-        public Task<DomainPlanche?> GetSansDonneesAsync(string cle, CancellationToken ct = default) =>
-            _context.PlanchesSchemas
+        public Task<DomainPlanche?> GetSansDonneesAsync(
+            string cle, string? variante = null, CancellationToken ct = default)
+        {
+            var v = VariantePlanche.Normaliser(variante);
+
+            return _context.PlanchesSchemas
                 .AsNoTracking()
-                .Where(p => p.Cle == cle)
+                .Where(p => p.Cle == cle && p.Variante == v)
                 .Select(p => new DomainPlanche
                 {
                     Id = p.Id,
                     Cle = p.Cle,
                     MatiereCode = p.MatiereCode,
+                    Variante = p.Variante,
+                    Niveau = p.Niveau,
 
                     // LE NOM, LE TYPE ET LA TAILLE EN FONT PARTIE AUSSI.
                     //
@@ -184,12 +228,16 @@ namespace SchoolWebApp.Dal.Repositories
                     DateModification = p.DateModification,
                 })
                 .FirstOrDefaultAsync(ct);
+        }
 
         public async Task<DomainPlanche> ImporterAsync(
             DomainPlanche planche, CancellationToken ct = default)
         {
+            var variante = VariantePlanche.Normaliser(planche.Variante);
+
             var entity = await _context.PlanchesSchemas
-                .FirstOrDefaultAsync(p => p.Cle == planche.Cle, ct);
+                .FirstOrDefaultAsync(
+                    p => p.Cle == planche.Cle && p.Variante == variante, ct);
 
             // LES MÊMES OCTETS QU'AVANT ? ALORS RIEN N'A CHANGÉ.
             //
@@ -210,7 +258,12 @@ namespace SchoolWebApp.Dal.Repositories
 
             if (entity is null)
             {
-                entity = new PlancheSchema { Cle = planche.Cle, DateCreation = DateTime.UtcNow };
+                entity = new PlancheSchema
+                {
+                    Cle = planche.Cle,
+                    Variante = variante,
+                    DateCreation = DateTime.UtcNow,
+                };
                 _context.PlanchesSchemas.Add(entity);
             }
             else if (!memesOctets)
@@ -222,6 +275,7 @@ namespace SchoolWebApp.Dal.Repositories
             }
 
             entity.MatiereCode = planche.MatiereCode;
+            entity.Niveau = planche.Niveau;
             entity.NomFichier = planche.NomFichier;
             entity.TypeMime = planche.TypeMime;
             entity.Taille = planche.Taille;
@@ -256,11 +310,28 @@ namespace SchoolWebApp.Dal.Repositories
             return Map(entity, avecDonnees: false);
         }
 
-        public async Task<bool> SupprimerAsync(string cle, CancellationToken ct = default)
+        /// <summary>
+        /// RETIRER LA LÉGENDÉE EMPORTE SA MUETTE, et il le faut.
+        ///
+        /// La muette n'a ni description ni carte de repères à elle : elle lit
+        /// celles de sa légendée. Seule, elle deviendrait une image sur laquelle
+        /// l'élève clique sans que personne ne puisse dire ce qu'il a montré.
+        ///
+        /// Retirer la muette, à l'inverse, ne touche pas la légendée : on renonce
+        /// à interroger, on continue à enseigner.
+        /// </summary>
+        public async Task<bool> SupprimerAsync(
+            string cle, string? variante = null, CancellationToken ct = default)
         {
-            var effacees = await _context.PlanchesSchemas
-                .Where(p => p.Cle == cle)
-                .ExecuteDeleteAsync(ct);
+            var v = VariantePlanche.Normaliser(variante);
+
+            var effacees = v == VariantePlanche.Legende
+                ? await _context.PlanchesSchemas
+                    .Where(p => p.Cle == cle)
+                    .ExecuteDeleteAsync(ct)
+                : await _context.PlanchesSchemas
+                    .Where(p => p.Cle == cle && p.Variante == v)
+                    .ExecuteDeleteAsync(ct);
 
             return effacees > 0;
         }
@@ -275,7 +346,7 @@ namespace SchoolWebApp.Dal.Repositories
         public async Task<IEnumerable<DomainPlanche>> GetMarqueesEtrangeresAsync(
             CancellationToken ct = default)
         {
-            var entities = await _context.PlanchesSchemas
+            var entities = await Legendees
                 .AsNoTracking()
                 .Where(p => p.Contenu != null && p.Contenu.StartsWith("LANGUE ÉTRANGÈRE"))
                 .OrderBy(p => p.MatiereCode).ThenBy(p => p.Cle)
@@ -287,7 +358,7 @@ namespace SchoolWebApp.Dal.Repositories
         public async Task<IEnumerable<DomainPlanche>> GetADecrireAsync(
             int limite, CancellationToken ct = default)
         {
-            var entities = await _context.PlanchesSchemas
+            var entities = await Legendees
                 .AsNoTracking()
                 .Where(p => p.Contenu == null)
                 // LA PLUS RÉCENTE D ABORD.
@@ -361,7 +432,8 @@ namespace SchoolWebApp.Dal.Repositories
                 // « LANGUE ÉTRANGÈRE » marque celles que le professeur n'apprend
                 // jamais : elles ne s'afficheront pas, l'élève ne cliquera donc
                 // jamais dessus.
-                .Where(p => p.Contenu != null
+                .Where(p => p.Variante == VariantePlanche.Legende
+                         && p.Contenu != null
                          && p.Reperes == null
                          && !p.Contenu.StartsWith("SANS AUCUN NOM")
                          && !p.Contenu.StartsWith("aucune légende lisible")
@@ -399,6 +471,8 @@ namespace SchoolWebApp.Dal.Repositories
             Id = e.Id,
             Cle = e.Cle,
             MatiereCode = e.MatiereCode,
+            Variante = e.Variante,
+            Niveau = e.Niveau,
             NomFichier = e.NomFichier,
             TypeMime = e.TypeMime,
             Taille = e.Taille,

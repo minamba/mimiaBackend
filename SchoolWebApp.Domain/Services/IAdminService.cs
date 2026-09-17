@@ -18,6 +18,18 @@ namespace SchoolWebApp.Domain.Services
         /// </summary>
         Task<bool> DefinirAdministrateurAsync(int parentId, bool actif);
 
+        /// <summary>Les sections ouvertes à ce compte. Null si le parent est inconnu.</summary>
+        Task<string[]?> GetOngletsAdminAsync(int parentId);
+
+        /// <summary>Remplace la liste des sections ouvertes à ce compte.</summary>
+        Task<bool> DefinirOngletsAdminAsync(int parentId, IEnumerable<string>? onglets);
+
+        /// <summary>Les sections ouvertes au titulaire de cette adresse.</summary>
+        Task<string[]> GetOngletsAdminParMailAsync(string? mail);
+
+        /// <summary>Accorde ou retire le droit d'enregistrer un enfant.</summary>
+        Task<bool> DefinirAjoutEnfantAsync(int parentId, bool autorise);
+
         /// <summary>Le tunnel : visiteurs, essais lancés, essais convertis.</summary>
         Task<Tunnel> GetTunnelAsync(DateTime debut, DateTime fin);
 

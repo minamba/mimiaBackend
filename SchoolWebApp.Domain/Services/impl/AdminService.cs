@@ -44,6 +44,18 @@ namespace SchoolWebApp.Domain.Services.impl
         public Task<bool> DefinirAdministrateurAsync(int parentId, bool actif) =>
             _adminRepository.DefinirAdministrateurAsync(parentId, actif);
 
+        public Task<string[]?> GetOngletsAdminAsync(int parentId) =>
+            _adminRepository.GetOngletsAdminAsync(parentId);
+
+        public Task<bool> DefinirOngletsAdminAsync(int parentId, IEnumerable<string>? onglets) =>
+            _adminRepository.DefinirOngletsAdminAsync(parentId, onglets);
+
+        public Task<string[]> GetOngletsAdminParMailAsync(string? mail) =>
+            _adminRepository.GetOngletsAdminParMailAsync(mail);
+
+        public Task<bool> DefinirAjoutEnfantAsync(int parentId, bool autorise) =>
+            _adminRepository.DefinirAjoutEnfantAsync(parentId, autorise);
+
         public Task<Tunnel> GetTunnelAsync(DateTime debut, DateTime fin) =>
             _adminRepository.GetTunnelAsync(debut, fin);
 

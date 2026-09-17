@@ -66,6 +66,8 @@ namespace SchoolWebApp.Dal.Entities
         // automatiques, avec leurs images et documents.
         public virtual DbSet<ModeleMail> ModelesMail { get; set; }
         public virtual DbSet<PieceModeleMail> PiecesModelesMail { get; set; }
+        public virtual DbSet<IdeeEvolution> IdeesEvolution { get; set; }
+        public virtual DbSet<PieceIdee> PiecesIdees { get; set; }
 
         // Le journal des courriels automatiques, et qui ne veut plus quoi.
         public virtual DbSet<EnvoiAutomatique> EnvoisAutomatiques { get; set; }
@@ -180,6 +182,19 @@ namespace SchoolWebApp.Dal.Entities
                 entity.Property(e => e.EstAdministrateur)
                       .HasDefaultValue(false)
                       .HasColumnName("est_administrateur");
+
+                // Pas de valeur par défaut : la colonne est nullable, et NULL se lit
+                // comme « aucune section ouverte ». Voir `OngletsAdmin`.
+                entity.Property(e => e.OngletsAdmin)
+                      .HasMaxLength(500)
+                      .HasColumnName("onglets_admin");
+
+                // Vrai par défaut : le droit d'ajouter un enfant est l'état normal,
+                // on le RETIRE à un compte précis. Même précaution que ci-dessus —
+                // la valeur par défaut doit figurer dans le modèle ET la migration.
+                entity.Property(e => e.PeutAjouterEnfant)
+                      .HasDefaultValue(true)
+                      .HasColumnName("peut_ajouter_enfant");
 
                 // Un utilisateur du serveur d'identité = un parent, jamais deux.
                 entity.HasIndex(e => e.IdentityUserId).IsUnique();
@@ -581,6 +596,15 @@ namespace SchoolWebApp.Dal.Entities
                 entity.Property(e => e.Id).HasColumnName("id");
                 entity.Property(e => e.Cle).HasMaxLength(80).IsRequired().HasColumnName("cle");
                 entity.Property(e => e.MatiereCode).HasMaxLength(50).IsRequired().HasColumnName("matiere_code");
+
+                // `legende` par défaut : les lignes déjà en base SONT les légendées.
+                entity.Property(e => e.Variante)
+                    .HasMaxLength(20)
+                    .IsRequired()
+                    .HasDefaultValue("legende")
+                    .HasColumnName("variante");
+
+                entity.Property(e => e.Niveau).HasMaxLength(20).HasColumnName("niveau");
                 entity.Property(e => e.NomFichier).HasMaxLength(255).HasColumnName("nom_fichier");
                 entity.Property(e => e.TypeMime).HasMaxLength(60).HasColumnName("type_mime");
                 entity.Property(e => e.Taille).HasColumnName("taille");
@@ -602,10 +626,14 @@ namespace SchoolWebApp.Dal.Entities
                 entity.Property(e => e.Contenu).HasColumnName("contenu");
                 entity.Property(e => e.DateModification).HasColumnName("date_modification");
 
-                // Une planche par clé : réimporter remplace, ça n'empile pas.
-                // Sans cette contrainte, deux versions coexisteraient et celle
-                // qui s'afficherait dépendrait de l'ordre de lecture.
-                entity.HasIndex(e => e.Cle).IsUnique();
+                // Une planche par clé ET PAR VARIANTE : réimporter remplace, ça
+                // n'empile pas. Sans cette contrainte, deux versions
+                // coexisteraient et celle qui s'afficherait dépendrait de
+                // l'ordre de lecture.
+                //
+                // La variante est entrée dans l'index le 17/09/2026, pour que la
+                // muette puisse tenir à côté de sa légendée sous la même clé.
+                entity.HasIndex(e => new { e.Cle, e.Variante }).IsUnique();
                 entity.HasIndex(e => e.MatiereCode);
             });
 
@@ -1490,6 +1518,51 @@ namespace SchoolWebApp.Dal.Entities
                 // L'ordre de lecture : les pièces d'un modèle, par genre puis
                 // rang. Commence par la clé étrangère, qui s'en sert aussi.
                 entity.HasIndex(e => new { e.ModeleMailId, e.Genre, e.Rang });
+            });
+
+            // ---------------------------------------------------------------
+            // Les idées d'évolution — le carnet de Camara
+            // ---------------------------------------------------------------
+            modelBuilder.Entity<IdeeEvolution>(entity =>
+            {
+                entity.ToTable("IdeeEvolution");
+                entity.HasKey(e => e.Id);
+
+                entity.Property(e => e.Id).HasColumnName("id");
+                entity.Property(e => e.Titre).IsRequired().HasMaxLength(150).HasColumnName("titre");
+                entity.Property(e => e.Urgence).IsRequired().HasMaxLength(10).HasColumnName("urgence");
+                entity.Property(e => e.Description).HasColumnName("description");
+                entity.Property(e => e.Statut).IsRequired().HasMaxLength(30).HasColumnName("statut");
+                entity.Property(e => e.AuteurPrenom).HasMaxLength(80).HasColumnName("auteur_prenom");
+                entity.Property(e => e.AuteurNom).HasMaxLength(80).HasColumnName("auteur_nom");
+                entity.Property(e => e.DateCreation).HasColumnName("date_creation");
+                entity.Property(e => e.DateModification).HasColumnName("date_modification");
+
+                // La liste se lit par statut : c'est le filtre du tableau.
+                entity.HasIndex(e => e.Statut);
+            });
+
+            modelBuilder.Entity<PieceIdee>(entity =>
+            {
+                entity.ToTable("PieceIdee");
+                entity.HasKey(e => e.Id);
+
+                entity.Property(e => e.Id).HasColumnName("id");
+                entity.Property(e => e.IdeeEvolutionId).HasColumnName("idee_evolution_id");
+                entity.Property(e => e.Rang).HasColumnName("rang");
+                entity.Property(e => e.NomFichier).IsRequired().HasMaxLength(255).HasColumnName("nom_fichier");
+                entity.Property(e => e.TypeMime).IsRequired().HasMaxLength(100).HasColumnName("type_mime");
+                entity.Property(e => e.Taille).HasColumnName("taille");
+                entity.Property(e => e.Donnees).IsRequired().HasColumnName("donnees");
+                entity.Property(e => e.DateCreation).HasColumnName("date_creation");
+
+                // Cascade : une image n'a aucune vie hors de son idée.
+                entity.HasOne(e => e.IdeeEvolution)
+                      .WithMany(i => i.Pieces)
+                      .HasForeignKey(e => e.IdeeEvolutionId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasIndex(e => new { e.IdeeEvolutionId, e.Rang });
             });
 
             // ---------------------------------------------------------------

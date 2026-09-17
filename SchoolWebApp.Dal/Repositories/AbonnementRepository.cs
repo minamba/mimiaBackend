@@ -576,7 +576,17 @@ namespace SchoolWebApp.Dal.Repositories
                 ? 1
                 : abonnement.Offre!.NombreEnfantsMax;
 
-            return new CapaciteEnfants(actuels, maximum, abonnement?.Offre?.Libelle);
+            // Le droit retiré par l'administration, s'il l'a été. Lu ici plutôt
+            // que par chaque appelant : la capacité est le seul objet que les
+            // écrans consultent avant de proposer l'ajout.
+            var droitRetire = await _context.Parents
+                .AsNoTracking()
+                .Where(p => p.Id == parentId)
+                .Select(p => !p.PeutAjouterEnfant)
+                .FirstOrDefaultAsync(ct);
+
+            return new CapaciteEnfants(
+                actuels, maximum, abonnement?.Offre?.Libelle, droitRetire);
         }
 
         // ------------------------------------------------------------ décompte

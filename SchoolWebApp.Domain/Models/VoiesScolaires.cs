@@ -87,8 +87,16 @@ namespace SchoolWebApp.Domain.Models
         /// semées ; les retirer seulement du semeur les aurait laissées actives en
         /// base, et sans réservation elles se seraient ouvertes à tout le lycée.
         /// </summary>
+        /// <remarks>
+        /// MUSIQUE et DANSE retirées le 17/09/2026 — Camara : « je ne veux pas que le
+        /// professeur d'arts les enseigne ». Ce n'est pas un changement de programme :
+        /// les textes officiels existent toujours, et Jeanne garde les cinq autres arts.
+        /// C'est un choix de catalogue, et il se pose ICI comme les précédents : les
+        /// retirer du seul semeur les aurait laissées actives en base, donc ouvertes.
+        /// </remarks>
         private static readonly HashSet<string> MatieresRetirees =
-            new(["INGENIERIE", "PHYSIQUE_CHIMIE_MATHS"], StringComparer.OrdinalIgnoreCase);
+            new(["INGENIERIE", "PHYSIQUE_CHIMIE_MATHS", "MUSIQUE", "DANSE"],
+                StringComparer.OrdinalIgnoreCase);
 
         private static readonly IReadOnlyDictionary<string, Classe> ParCode =
             Classes.ToDictionary(c => c.Code, StringComparer.OrdinalIgnoreCase);
@@ -202,9 +210,8 @@ namespace SchoolWebApp.Domain.Models
             new("ARTS_PLASTIQUES", "Arts plastiques"),
             new("HISTOIRE_ARTS", "Histoire des arts"),
             new("CINEMA_AUDIOVISUEL", "Cinéma-audiovisuel"),
-            new("MUSIQUE", "Musique"),
             new("THEATRE", "Théâtre"),
-            new("DANSE", "Danse"),
+            // Musique et danse retirées le 17/09/2026 : voir MatieresRetirees.
             new("ARTS_CIRQUE", "Arts du cirque"),
         ];
 

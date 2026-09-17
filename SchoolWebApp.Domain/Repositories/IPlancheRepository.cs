@@ -16,6 +16,11 @@ namespace SchoolWebApp.Domain.Repositories
         /// <summary>
         /// Toutes les planches importées, SANS leurs octets. C'est ce que
         /// l'administration affiche pour cocher les lignes.
+        ///
+        /// LES DEUX VARIANTES Y SONT, légendées et muettes, chacune sur sa ligne.
+        /// C'est le seul appel qui les mélange : l'écran d'import a besoin de
+        /// savoir laquelle des deux manque. Partout ailleurs, « une planche » veut
+        /// dire la légendée.
         /// </summary>
         Task<IEnumerable<Planche>> GetToutesAsync(CancellationToken ct = default);
 
@@ -40,8 +45,15 @@ namespace SchoolWebApp.Domain.Repositories
         /// </summary>
         Task<int> ViderLesFilesAsync(CancellationToken ct = default);
 
-        /// <summary>Une planche avec ses octets, pour la servir. Null si absente.</summary>
-        Task<Planche?> GetAsync(string cle, CancellationToken ct = default);
+        /// <summary>
+        /// Une planche avec ses octets, pour la servir. Null si absente.
+        ///
+        /// <paramref name="variante"/> vaut `legende` par défaut — la planche
+        /// telle qu'elle est importée depuis toujours. `muette` demande la même
+        /// figure sans ses mots, celle qui sert à interroger.
+        /// </summary>
+        Task<Planche?> GetAsync(
+            string cle, string? variante = null, CancellationToken ct = default);
 
         /// <summary>
         /// Une planche SANS ses octets, pour son crédit.
@@ -50,7 +62,8 @@ namespace SchoolWebApp.Domain.Repositories
         /// Charger le varbinary pour rendre trois chaînes doublerait le poids
         /// transféré depuis la base à chaque schéma montré en séance.
         /// </summary>
-        Task<Planche?> GetSansDonneesAsync(string cle, CancellationToken ct = default);
+        Task<Planche?> GetSansDonneesAsync(
+            string cle, string? variante = null, CancellationToken ct = default);
 
         /// <summary>
         /// Importe une planche, ou remplace celle qui portait déjà cette clé.
@@ -61,8 +74,16 @@ namespace SchoolWebApp.Domain.Repositories
         /// </summary>
         Task<Planche> ImporterAsync(Planche planche, CancellationToken ct = default);
 
-        /// <summary>Retire une planche. Le professeur redessine à la main.</summary>
-        Task<bool> SupprimerAsync(string cle, CancellationToken ct = default);
+        /// <summary>
+        /// Retire une planche. Le professeur redessine à la main.
+        ///
+        /// RETIRER LA LÉGENDÉE EMPORTE SA MUETTE : celle-ci n'a pas de carte de
+        /// repères à elle, elle lit celle de sa parente. Seule, elle deviendrait
+        /// une image sur laquelle l'élève clique sans qu'on puisse dire ce qu'il a
+        /// montré.
+        /// </summary>
+        Task<bool> SupprimerAsync(
+            string cle, string? variante = null, CancellationToken ct = default);
 
         /// <summary>
         /// Les planches dont la description reste à extraire : octets présents,

@@ -81,7 +81,19 @@ namespace SchoolWebApp.Api.Services
 
             // GetToutesAsync ne charge pas les octets : on lit trente titres,
             // pas trente mégaoctets.
-            var planches = (await _planches.GetToutesAsync(ct))
+            var toutes = (await _planches.GetToutesAsync(ct)).ToList();
+
+            // LES CLÉS QUI ONT UNE MUETTE, pour l'annoncer sur la ligne de leur
+            // légendée. Une muette ne prend JAMAIS de ligne à elle : elle n'a pas
+            // de description — rien à lire dessus — et le professeur la verrait
+            // comme une planche vide dont il ne saurait quoi faire.
+            var avecMuette = toutes
+                .Where(p => p.Variante == Domain.Models.VariantePlanche.Muette)
+                .Select(p => p.Cle)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            var planches = toutes
+                .Where(p => p.Variante == Domain.Models.VariantePlanche.Legende)
                 // Les siennes, et celles qu'elle emprunte clé par clé à une
                 // autre matière — voir `EmpruntsDePlanches`.
                 .Where(p => EmpruntsDePlanches.EstServie(p.Cle, p.MatiereCode, code))
@@ -105,7 +117,8 @@ namespace SchoolWebApp.Api.Services
 
             var bloc = planches.Count == 0
                 ? string.Empty
-                : Rediger(planches.Select(p => (p.Cle, p.Contenu!)));
+                : Rediger(planches.Select(p =>
+                    (p.Cle, p.Niveau, p.Contenu!, avecMuette.Contains(p.Cle))));
 
             _cache.Set(cle, bloc, Duree);
 
@@ -140,11 +153,48 @@ namespace SchoolWebApp.Api.Services
         /// peut donc pas y prendre une clé qui laisserait un tableau vide : ce
         /// qu'il ne voit pas ici n'existe pas pour lui, et il dessine.
         /// </summary>
-        private static string Rediger(IEnumerable<(string Cle, string Contenu)> planches)
+        private static string Rediger(
+            IEnumerable<(string Cle, string? Niveau, string Contenu, bool AMuette)> planches)
         {
+            // LE NIVEAU EST ÉCRIT À CÔTÉ DE LA CLÉ, et c'est tout l'intérêt de la
+            // colonne : sans lui, le professeur choisissait sur le nom de la clé et
+            // les légendes — « droite-graduee » ne dit pas si c'est du CP ou de la
+            // 6e. Une planche sans niveau ne porte aucune mention : mieux vaut
+            // qu'il n'en sache rien que de lui laisser croire une valeur inventée.
             var lignes = planches.Select(p =>
-                $"- `SCHEMA:{p.Cle}` — montre : {Abreger(p.Contenu)}");
+            {
+                var niveau = string.IsNullOrWhiteSpace(p.Niveau) ? "" : $" ({p.Niveau})";
 
+                // LA MUETTE S'ANNONCE SUR LA LIGNE DE SA LÉGENDÉE, parce que
+                // c'est la même figure : deux lignes se seraient lues comme
+                // deux documents, et le professeur aurait cru devoir choisir.
+                var muette = p.AMuette
+                    ? $" — VERSION MUETTE : `SCHEMA:{p.Cle}/muette`"
+                    : "";
+
+                return $"- `SCHEMA:{p.Cle}`{niveau} — montre : {Abreger(p.Contenu)}{muette}";
+            });
+
+            // LA PLANCHE DE SA CLASSE D'ABORD — Camara, le 17/09/2026 : un élève
+            // de 6e s'est vu proposer la droite graduée du CP, avec les nombres de
+            // 0 à 10.
+            //
+            // UNE PRIORITÉ, PAS UN FILTRE, et Camara y tient : revenir sur une
+            // planche de niveau inférieur pour débloquer un prérequis est une bonne
+            // façon d'enseigner. Ce qui est fautif est de le faire SANS LE VOULOIR,
+            // en prenant la première planche qui porte le bon mot.
+            //
+            // LA CONSIGNE DISAIT LITTÉRALEMENT LE CONTRAIRE : « ni le niveau de
+            // l'élève, ni le programme du jour ne sont des raisons de dire non ».
+            // Elle protégeait d'un vrai défaut — un professeur qui refuse
+            // d'afficher quoi que ce soit — mais elle ratissait trop large.
+            //
+            // CE N'EST QU'UNE CONSIGNE, ET UNE CONSIGNE NE VAUT PAS UN FAIT. Le
+            // vrai correctif est de ne PAS ANNONCER les planches d'un autre niveau,
+            // ce qui suppose de connaître celui de l'élève : la bibliothèque est
+            // construite par matière seulement, et le niveau d'une planche n'existe
+            // nulle part en base — il ne vit que dans l'écran d'import. Tant que
+            // c'est le cas, cette consigne est tout ce qu'on a.
             return $"""
                 ## LES PLANCHES QUE TU PEUX AFFICHER
 
@@ -190,10 +240,49 @@ namespace SchoolWebApp.Api.Services
                 MONTRER, de reconnaître à la forme, de nommer de mémoire. C'est
                 d'ailleurs un bien meilleur exercice.
 
-                Et afficher une planche ne se refuse jamais : c'est une clé de
-                vingt caractères, elle ne coûte aucun temps de séance. Ni le
-                niveau de l'élève, ni le programme du jour ne sont des raisons de
-                dire non.
+                **LE NIVEAU EST ÉCRIT ENTRE PARENTHÈSES** après la clé, quand il est
+                connu : `SCHEMA:math-droite-graduee (CP)`. La règle du niveau est
+                dans tes consignes générales — « ce que tu montres est au niveau de
+                ta classe » — et cette mention est ce qui te permet de
+                l'appliquer ici plutôt que de deviner d'après le nom de la clé.
+
+                Une planche SANS mention de niveau ne dit rien de son âge : juges-en
+                par ses légendes.
+
+                ## LA VERSION MUETTE, POUR INTERROGER
+
+                Certaines lignes ci-dessus se terminent par **VERSION MUETTE**,
+                suivie d'une clé en `/muette`. C'est EXACTEMENT LA MÊME FIGURE,
+                au même cadrage, dont on a effacé tous les mots.
+
+                **La légendée sert à enseigner. La muette sert à vérifier.**
+                On montre, on nomme, on explique sur celle qui porte les mots ;
+                puis on affiche la muette et on demande à l'élève de retrouver
+                ce qu'il vient de voir.
+
+                [ARDOISE]
+                SCHEMA:une-cle-de-la-liste/muette
+                [/ARDOISE]
+
+                **SUR LA MUETTE, TU NE PRONONCES PAS LES NOMS.** Tu les connais —
+                ils sont écrits plus haut — et c'est précisément ce que tu fais
+                chercher. « Montre-moi la Bretagne » est une consigne ; « la
+                Bretagne est à gauche, montre-la » est la réponse donnée.
+
+                **TU SAURAS S'IL A JUSTE.** L'élève clique, et le nom exact de
+                l'endroit qu'il a montré t'est donné, calculé — comme sur la
+                légendée. Tu corriges sans avoir à deviner : « oui, c'est bien la
+                Bretagne » ou « non, là c'est la Normandie, la Bretagne est
+                juste en dessous ».
+
+                **UNE À LA FOIS AU TABLEAU.** Afficher la muette efface la
+                légendée, et inversement. Si l'élève sèche, réaffiche la légendée
+                pour qu'il relise, puis remets la muette : c'est une bonne façon
+                de faire, et ça ne coûte qu'une ligne.
+
+                Cela mis à part, afficher une planche ne se refuse jamais : c'est
+                une clé de vingt caractères, elle ne coûte aucun temps de séance, et
+                le programme du jour n'est pas une raison de dire non.
                 """;
         }
 

@@ -35,8 +35,71 @@ namespace SchoolWebApp.Domain.Services
         ///
         /// 0,14 en fraction de la diagonale : environ un septième de la figure,
         /// mesuré large parce qu'une étiquette désigne une ZONE, pas un point.
+        ///
+        /// PLANCHER, ET NON PLUS VALEUR UNIQUE, depuis le 17/09/2026. Voir
+        /// <see cref="Portée"/> : sur une carte de France à treize régions, cette
+        /// valeur-là refusait des clics tombés en plein milieu de la bonne.
         /// </summary>
-        private const double PortéeMax = 0.14;
+        private const double PortéeMin = 0.14;
+
+        /// <summary>
+        /// Au-delà, on nommerait n'importe quoi. Une planche à deux étiquettes
+        /// aurait sinon une portée qui couvre toute la figure, et le moindre clic
+        /// dans une marge recevrait un nom.
+        /// </summary>
+        private const double PortéeMaxAbsolue = 0.35;
+
+        /// <summary>
+        /// LA PORTÉE DÉPEND DE LA DENSITÉ DES ÉTIQUETTES, ET IL LE FAUT.
+        ///
+        /// 0,14 était réglé sur les planches d'anatomie : trente mots serrés sur
+        /// une coupe, où une étiquette désigne un organe de quelques pour cent de
+        /// large. Sur une carte de France à treize régions, les mots sont espacés
+        /// de près de 0,18 et une région couvre le quart de l'image — mesuré le
+        /// 17/09/2026 sur la carte des régions : un clic sur le Pays basque tombe
+        /// à 0,20 de « Nouvelle-Aquitaine », un clic vers La Rochelle à 0,16.
+        /// Deux clics parfaitement justes, tous les deux sans réponse.
+        ///
+        /// LA FIGURE PORTE ELLE-MÊME SON ÉCHELLE : l'espacement entre étiquettes
+        /// voisines dit la taille des zones. On prend la MÉDIANE des distances au
+        /// plus proche voisin — pas la moyenne, qu'une étiquette isolée dans un
+        /// coin ferait tripler — et on en garde une fois trois quarts.
+        ///
+        /// Sur une coupe d'anatomie, la médiane tourne autour de 0,07 : une fois
+        /// trois quarts font 0,12, le plancher reprend la main à 0,14 et RIEN NE
+        /// CHANGE sur les cinquante planches déjà en base. Sur la carte de France,
+        /// elle donne 0,24 (mesuré), et le clic sur le Pays basque reçoit son nom.
+        /// </summary>
+        private static double Portée(IReadOnlyList<Repere> reperes)
+        {
+            if (reperes.Count < 3) return PortéeMin;
+
+            var voisins = new List<double>(reperes.Count);
+
+            foreach (var a in reperes)
+            {
+                var plusProche = double.MaxValue;
+
+                foreach (var b in reperes)
+                {
+                    if (ReferenceEquals(a, b)) continue;
+
+                    var d = Math.Sqrt(((a.X - b.X) * (a.X - b.X)) + ((a.Y - b.Y) * (a.Y - b.Y)));
+                    if (d < plusProche) plusProche = d;
+                }
+
+                // Deux étiquettes au même endroit — ça arrive quand un mot est
+                // relevé deux fois — ne disent rien de l'échelle de la figure.
+                if (plusProche > 0 && plusProche < double.MaxValue) voisins.Add(plusProche);
+            }
+
+            if (voisins.Count == 0) return PortéeMin;
+
+            voisins.Sort();
+            var mediane = voisins[voisins.Count / 2];
+
+            return Math.Clamp(mediane * 1.75, PortéeMin, PortéeMaxAbsolue);
+        }
 
         /// <summary>
         /// LA CASSE NE COMPTE PAS, ET C'EST INDISPENSABLE.
@@ -61,12 +124,15 @@ namespace SchoolWebApp.Domain.Services
         /// </summary>
         public static Repere? PlusProche(string? json, double x, double y)
         {
+            var reperes = Lire(json);
+            var portee = Portée(reperes);
+
             // Pas de tri : une planche porte trente étiquettes au plus, et on ne
             // garde que la meilleure. Un parcours suffit.
             Repere? meilleur = null;
             var meilleure = double.MaxValue;
 
-            foreach (var repere in Lire(json))
+            foreach (var repere in reperes)
             {
                 var dx = repere.X - x;
                 var dy = repere.Y - y;
@@ -79,7 +145,7 @@ namespace SchoolWebApp.Domain.Services
                 }
             }
 
-            return meilleure <= PortéeMax ? meilleur : null;
+            return meilleure <= portee ? meilleur : null;
         }
 
         /// <summary>

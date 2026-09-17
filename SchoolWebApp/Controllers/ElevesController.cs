@@ -1129,6 +1129,30 @@ namespace SchoolWebApp.Api.Controllers
                 // l'usage laisserait un enfant visible mais inutilisable, ce
                 // qui se lit comme une panne et pas comme une limite d'offre.
                 var parent = await resolver.ResoudreParentAsync();
+
+                // LE DROIT AVANT LA CAPACITÉ, et les deux refus ne disent pas la
+                // même chose : la formule peut très bien couvrir trois enfants
+                // pendant que ce compte-ci n'a plus le droit d'en ajouter. Parler
+                // de formule dans ce cas enverrait le parent changer d'offre pour
+                // rien.
+                //
+                // 403 ET NON 409 : le conflit dit « votre formule ne suffit pas »,
+                // ce qui appelle une action du parent. Ici il ne PEUT pas, quoi
+                // qu'il fasse — c'est une permission retirée, pas une limite à
+                // repousser.
+                if (!parent.PeutAjouterEnfant)
+                {
+                    _logger.LogInformation(
+                        "Ajout d'enfant REFUSE pour le parent {ParentId} : droit retire.",
+                        parent.Id);
+
+                    return StatusCode(403, new
+                    {
+                        message = "L'ajout d'un enfant n'est pas autorisé sur ce compte. "
+                                  + "Contactez-nous si vous pensez que c'est une erreur.",
+                    });
+                }
+
                 var capacite = await abonnements.CapaciteAsync(parent.Id);
 
                 if (!capacite.PeutAjouter)

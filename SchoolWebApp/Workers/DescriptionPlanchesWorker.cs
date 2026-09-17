@@ -636,7 +636,7 @@ namespace SchoolWebApp.Api.Workers
 
                 // Par la clé, et non par la file : `GetADecrireAsync` ramènerait
                 // un lot entier AVEC ses octets pour en retrouver une seule.
-                var planche = await planches.GetAsync(cle, ct);
+                var planche = await planches.GetAsync(cle, null, ct);
 
                 // Disparue entre-temps, ou déjà décrite — l'import remet le
                 // contenu à null, donc une description présente ici signifie
@@ -656,7 +656,7 @@ namespace SchoolWebApp.Api.Workers
                 // La planche est rechargée : `DecrireUneAsync` a pu remplacer
                 // ses octets en mémoire par l'image extraite d'une enveloppe
                 // SVG, et le repérage doit repartir de l'original.
-                var fraiche = await planches.GetAsync(cle, ct);
+                var fraiche = await planches.GetAsync(cle, null, ct);
                 if (fraiche is not null) await ReperUneAsync(fraiche, planches, ct);
 
                 scope.ServiceProvider

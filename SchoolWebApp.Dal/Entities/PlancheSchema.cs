@@ -28,6 +28,24 @@ namespace SchoolWebApp.Dal.Entities
         public string Cle { get; set; } = string.Empty;
 
         /// <summary>
+        /// `legende` ou `muette` — voir <c>VariantePlanche</c>.
+        ///
+        /// UNE PLANCHE, DEUX FICHIERS. La légendée sert à enseigner ; la muette,
+        /// qui est la même figure sans ses mots, sert à interroger. L'unicité
+        /// porte donc sur (clé, variante) et non plus sur la clé seule.
+        ///
+        /// LA MUETTE N'A NI DESCRIPTION NI CARTE DE REPÈRES À ELLE, et c'est le
+        /// cœur du montage : elle n'a aucune légende à lire, donc rien à en
+        /// extraire. Elle emprunte celles de sa légendée — même fond, même
+        /// cadrage, donc mêmes coordonnées — et l'exercice se corrige tout seul.
+        ///
+        /// Les files de description, de cartographie et de langue ignorent les
+        /// muettes. Sans ça, elles y resteraient éternellement : rien à lire, donc
+        /// rien à écrire, donc toujours en attente.
+        /// </summary>
+        public string Variante { get; set; } = "legende";
+
+        /// <summary>
         /// Le code de la matière, tel qu'en base : SVT, PHYSIQUE_CHIMIE…
         ///
         /// Redondant avec le préfixe de la clé, et c'est voulu : l'écran
@@ -36,6 +54,22 @@ namespace SchoolWebApp.Dal.Entities
         /// </summary>
         public string MatiereCode { get; set; } = string.Empty;
 
+
+
+
+        /// <summary>
+        /// La classe pour laquelle cette planche a été faite — « CP », « 3e ».
+        ///
+        /// LU PAR LE PROFESSEUR, PAS UTILISÉ POUR FILTRER. Une même notion se
+        /// retrouve à plusieurs niveaux, et revenir exprès sur une planche plus
+        /// simple pour débloquer un prérequis est une bonne façon d'enseigner.
+        /// Ce niveau lui dit seulement laquelle prendre EN PREMIER.
+        ///
+        /// NULL POUR LES PLANCHES IMPORTÉES AVANT LE 17/09/2026 : elles sont
+        /// annoncées sans mention, comme avant. Une valeur inventée serait pire
+        /// que rien — le professeur la croirait vraie.
+        /// </summary>
+        public string? Niveau { get; set; }
         public string? NomFichier { get; set; }
 
         /// <summary>image/svg+xml, image/png, image/jpeg…</summary>

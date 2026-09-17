@@ -69,8 +69,32 @@ namespace SchoolWebApp.Api.Controllers
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
-        /// <summary>Ouvre l'écoute d'une séance. WebSocket uniquement.</summary>
+        /// <summary>
+        /// Ouvre l'écoute d'une séance. WebSocket uniquement.
+        ///
+        /// OUVERTE AUX ENFANTS, ET C'EST UNE CORRECTION DU 17/09/2026. Elle ne
+        /// l'était pas, et le filtre des sessions enfant ferme tout ce qui ne porte
+        /// pas cet attribut : un enfant entré par son code recevait 403 à chaque
+        /// tentative d'ouverture, en boucle. Le cours se déroulait normalement — le
+        /// professeur parlait, le texte passait — mais AUCUNE parole ne pouvait
+        /// partir du micro, et rien ne le disait à l'écran.
+        ///
+        /// C'est le défaut que trois familles ont remonté sous le nom « le micro ne
+        /// marche pas ». Il ne se reproduisait pas chez Camara, qui teste depuis le
+        /// compte parent : le parent porte « Bearer », il passe ; seul le code
+        /// enfant portait « Eleve », et lui seul se faisait fermer la porte.
+        ///
+        /// LA DICTÉE, ELLE, L'AVAIT DEPUIS LE 15/09 — d'où un micro qui marchait
+        /// dans le formulaire de contrôle et pas en cours, sur la même machine.
+        ///
+        /// OUVRIR NE RELÂCHE RIEN : l'appartenance se vérifie juste en dessous,
+        /// dans `VerifierQuotaAsync`, qui remonte de la conversation à son élève ;
+        /// et `ChatContexteResolver.ResoudreEleveAsync` refuse à une session enfant
+        /// tout élève qui ne serait pas elle-même. Un enfant ne peut donc pas
+        /// écouter la séance de son frère en changeant le chiffre.
+        /// </summary>
         [HttpGet("{conversationId:int}")]
+        [SchoolWebApp.Api.Auth.AutoriseEleve]
         public async Task Ecouter(int conversationId)
         {
             if (!HttpContext.WebSockets.IsWebSocketRequest)
@@ -85,6 +109,16 @@ namespace SchoolWebApp.Api.Controllers
             var verdict = await _chatBuilder.VerifierQuotaAsync(conversationId, HttpContext.RequestAborted);
             if (!verdict.Autorise)
             {
+                // TRACÉ, PARCE QU'UN REFUS MUET COÛTE DES JOURS. Ce 403 ne dit rien à
+                // l'élève — le navigateur affiche « WebSocket failed » et c'est tout —
+                // et ne disait rien au serveur non plus. Trois familles ont cherché du
+                // côté de leur matériel un défaut qui était ici. Le motif du refus
+                // distingue le quota épuisé de la séance qui n'appartient pas à
+                // l'appelant : deux causes opposées derrière le même code.
+                _logger.LogWarning(
+                    "Ecoute REFUSEE (conversation {ConversationId}) : {Motif}.",
+                    conversationId, verdict.Motif);
+
                 HttpContext.Response.StatusCode = StatusCodes.Status403Forbidden;
                 return;
             }

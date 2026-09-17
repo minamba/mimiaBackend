@@ -15,6 +15,16 @@ namespace SchoolWebApp.Domain.Models
 
         public string MatiereCode { get; set; } = string.Empty;
 
+        /// <summary>
+        /// `legende` (celle qu'on montre) ou `muette` (la même sans ses mots,
+        /// pour interroger). Voir <see cref="VariantePlanche"/>.
+        /// </summary>
+        public string Variante { get; set; } = VariantePlanche.Legende;
+
+        /// <summary>La classe pour laquelle elle a été faite — « CP », « 3e ». Lue par
+        /// le professeur pour choisir en priorité celle du niveau de son élève.</summary>
+        public string? Niveau { get; set; }
+
         public string? NomFichier { get; set; }
 
         public string? TypeMime { get; set; }

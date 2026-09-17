@@ -64,6 +64,36 @@ namespace SchoolWebApp.Dal.Entities
         /// </summary>
         public bool EstAdministrateur { get; set; }
 
+        /// <summary>
+        /// Les sections du tableau de bord ouvertes à cet administrateur, séparées
+        /// par des virgules — `stats,parents,idees`.
+        ///
+        /// NULL VEUT DIRE AUCUNE, et c'est le défaut voulu : un compte qu'on
+        /// vient de passer administrateur ne voit RIEN tant que le
+        /// super-administrateur n'a rien coché. On donne ce qu'on veut donner ; on
+        /// n'enlève pas ce qu'on aurait oublié d'enlever.
+        ///
+        /// SANS EFFET SUR LE SUPER-ADMINISTRATEUR, qui voit tout : ses droits ne
+        /// sont écrits nulle part parce que lui seul pourrait se les rendre.
+        ///
+        /// Voir <c>OngletsAdmin</c> pour la lecture et les clés connues.
+        /// </summary>
+        public string? OngletsAdmin { get; set; }
+
+        /// <summary>
+        /// Ce parent a-t-il le droit d'enregistrer un enfant de plus ?
+        ///
+        /// VRAI PAR DÉFAUT : c'est l'état normal. On le retire à un compte
+        /// précis, on ne l'accorde pas un par un.
+        ///
+        /// CE N'EST PAS LA CAPACITÉ DE LA FORMULE, qui est une autre limite et
+        /// vit ailleurs (`IAbonnementRepository.CapaciteAsync`). Celle-ci dit
+        /// combien la formule COUVRE ; celle-là dit si on autorise ce parent à
+        /// s'en servir. Les deux se vérifient, et le refus ne dit pas la même
+        /// chose dans les deux cas.
+        /// </summary>
+        public bool PeutAjouterEnfant { get; set; } = true;
+
         public virtual ICollection<Eleve> Eleves { get; set; } = new List<Eleve>();
 
         public virtual ICollection<Abonnement> Abonnements { get; set; } = new List<Abonnement>();

@@ -216,6 +216,9 @@ namespace SchoolWebApp.Domain.Models
         /// </summary>
         public bool EstAdministrateur { get; set; }
 
+        /// <summary>Ce parent peut-il enregistrer un enfant de plus ?</summary>
+        public bool PeutAjouterEnfant { get; set; } = true;
+
         /// <summary>
         /// Ce compte est-il celui du super-administrateur ?
         ///

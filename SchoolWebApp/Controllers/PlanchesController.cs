@@ -69,13 +69,25 @@ namespace SchoolWebApp.Api.Controllers
         /// Sert une planche. 404 si elle n'a pas été importée — c'est ce
         /// signal qui fait retomber le tableau sur le dessin du professeur.
         /// </summary>
+        /// <remarks>
+        /// DEUX ROUTES POUR UNE MÊME MÉTHODE, ET NON UN PARAMÈTRE DE REQUÊTE.
+        ///
+        /// `/planches/hg-france-regions` et `/planches/hg-france-regions/muette`
+        /// sont deux images différentes : elles méritent deux adresses, chacune
+        /// avec son étiquette de cache. Une chaîne `?variante=` aurait marché
+        /// aussi, mais les caches intermédiaires n'en tiennent pas toujours
+        /// compte, et servir la légendée à la place de la muette au milieu
+        /// d'un exercice donnerait la réponse à l'élève.
+        /// </remarks>
         [HttpGet("{cle}")]
+        [HttpGet("{cle}/{variante:regex(^(legende|muette)$)}")]
         [AllowAnonymous]
         [SwaggerResponse(200, "La planche.")]
         [SwaggerResponse(404, "Aucune planche importée pour cette clé.")]
-        public async Task<IActionResult> Get(string cle)
+        public async Task<IActionResult> Get(string cle, string? variante = null)
         {
-            var planche = await _planches.GetAsync(cle, HttpContext.RequestAborted);
+            var planche = await _planches.GetAsync(
+                cle, variante, HttpContext.RequestAborted);
             if (planche?.Donnees is not { Length: > 0 }) return NotFound();
 
             // REVALIDATION PLUTÔT QUE CACHE LONG.
@@ -125,13 +137,15 @@ namespace SchoolWebApp.Api.Controllers
         /// dessinée par nous.
         /// </summary>
         [HttpGet("{cle}/credit")]
+        [HttpGet("{cle}/{variante:regex(^(legende|muette)$)}/credit")]
         [AllowAnonymous]
         [SwaggerResponse(200, "Le crédit à afficher sous la planche.")]
         [SwaggerResponse(204, "Planche sans crédit à afficher.")]
         [SwaggerResponse(404, "Aucune planche importée pour cette clé.")]
-        public async Task<IActionResult> Credit(string cle)
+        public async Task<IActionResult> Credit(string cle, string? variante = null)
         {
-            var planche = await _planches.GetSansDonneesAsync(cle, HttpContext.RequestAborted);
+            var planche = await _planches.GetSansDonneesAsync(
+                cle, variante, HttpContext.RequestAborted);
             if (planche is null) return NotFound();
 
             // Une planche maison a bien quelque chose à dire — la propriété —
@@ -241,15 +255,51 @@ namespace SchoolWebApp.Api.Controllers
         public async Task<IActionResult> Importer(
             [FromForm] string cle,
             [FromForm] string matiereCode,
+
             IFormFile fichier,
             [FromForm] string? auteur = null,
             [FromForm] string? source = null,
             [FromForm] string? licence = null,
-            [FromForm] bool maison = false)
+            [FromForm] bool maison = false,
+
+            // ENVOYÉ PAR L'ÉCRAN D'IMPORT, qui le connaît : son catalogue porte le
+            // niveau de chaque clé depuis le début. Il ne remontait simplement
+            // jamais jusqu'ici, et le professeur ne pouvait donc pas en tenir
+            // compte — voir la migration 20261012000000_PlancheNiveau.
+            [FromForm] string? niveau = null,
+
+            // `legende` (le défaut, celle de toujours) ou `muette` : la même
+            // figure sans ses mots, déposée SOUS sa légendée dans l'écran
+            // d'import. Voir la migration 20261013000000_PlancheVariante.
+            [FromForm] string? variante = null)
         {
             if (string.IsNullOrWhiteSpace(cle) || string.IsNullOrWhiteSpace(matiereCode))
             {
                 return BadRequest(new { message = "Clé et matière obligatoires." });
+            }
+
+            var variantePropre = Domain.Models.VariantePlanche.Normaliser(variante);
+            var muette = variantePropre == Domain.Models.VariantePlanche.Muette;
+
+            // UNE MUETTE SANS SA LÉGENDÉE N'A AUCUN SENS, et serait pire
+            // qu'inutile : elle n'a pas de carte de repères à elle — elle lit
+            // celle de sa parente — donc l'élève cliquerait dessus sans que
+            // personne ne puisse dire ce qu'il a montré.
+            if (muette)
+            {
+                var parente = await _planches.GetSansDonneesAsync(
+                    cle.Trim().ToLowerInvariant(),
+                    Domain.Models.VariantePlanche.Legende,
+                    HttpContext.RequestAborted);
+
+                if (parente is null)
+                {
+                    return BadRequest(new
+                    {
+                        message = "Importez d'abord la planche légendée : "
+                               + "la muette emprunte ses repères.",
+                    });
+                }
             }
 
             if (fichier is null || fichier.Length == 0)
@@ -278,8 +328,12 @@ namespace SchoolWebApp.Api.Controllers
                 var planche = await _planches.ImporterAsync(new Planche
                 {
                     Cle = cle.Trim().ToLowerInvariant(),
+                    Variante = variantePropre,
                     MatiereCode = matiereCode.Trim().ToUpperInvariant(),
-                    NomFichier = $"{cle.Trim().ToLowerInvariant()}{Extension(fichier.ContentType)}",
+                    Niveau = string.IsNullOrWhiteSpace(niveau) ? null : niveau.Trim(),
+                    NomFichier = muette
+                        ? $"{cle.Trim().ToLowerInvariant()}-muette{Extension(fichier.ContentType)}"
+                        : $"{cle.Trim().ToLowerInvariant()}{Extension(fichier.ContentType)}",
                     TypeMime = fichier.ContentType,
                     Taille = (int)fichier.Length,
                     Donnees = flux.ToArray(),
@@ -325,8 +379,15 @@ namespace SchoolWebApp.Api.Controllers
                 // son onglet, la description doit se terminer quand même — elle
                 // est déjà payée, et l'abandonner laisserait exactement le trou
                 // qu'on vient de fermer.
-                await _worker.DecrireMaintenantAsync(planche.Cle, CancellationToken.None);
-                _reveil.Sonner();
+                // SAUF POUR UNE MUETTE : elle n'a rien à lire. L'y envoyer paierait
+                // une lecture de vision pour s'entendre répondre « aucun mot »,
+                // et surtout ÉCRASERAIT la description de sa légendée, puisque
+                // le worker travaille par clé.
+                if (!muette)
+                {
+                    await _worker.DecrireMaintenantAsync(planche.Cle, CancellationToken.None);
+                    _reveil.Sonner();
+                }
 
                 // RELUE APRÈS LA LECTURE, ET C EST TOUT L INTÉRÊT.
                 //
@@ -339,12 +400,14 @@ namespace SchoolWebApp.Api.Controllers
                 // Sans octets : la relire avec eux renverrait le fichier qu on
                 // vient d envoyer.
                 var relue = await _planches.GetSansDonneesAsync(
-                    planche.Cle, CancellationToken.None) ?? planche;
+                    planche.Cle, variantePropre, CancellationToken.None) ?? planche;
 
                 _logger.LogInformation(
-                    "Planche {Cle} importee ({Type}, {Taille} octets), description {Etat}.",
-                    planche.Cle, planche.TypeMime, planche.Taille,
-                    string.IsNullOrWhiteSpace(relue.Contenu) ? "ABSENTE" : "extraite");
+                    "Planche {Cle} [{Variante}] importee ({Type}, {Taille} octets), description {Etat}.",
+                    planche.Cle, variantePropre, planche.TypeMime, planche.Taille,
+                    muette
+                        ? "sans objet (muette)"
+                        : string.IsNullOrWhiteSpace(relue.Contenu) ? "ABSENTE" : "extraite");
 
                 return Ok(relue);
             }
@@ -356,17 +419,19 @@ namespace SchoolWebApp.Api.Controllers
         }
 
         [HttpDelete("{cle}")]
+        [HttpDelete("{cle}/{variante:regex(^(legende|muette)$)}")]
         [Authorize(Policy = "EstAdmin")]
         [SwaggerResponse(204, "Planche retirée — le professeur redessine.")]
         [SwaggerResponse(404, "Aucune planche pour cette clé.")]
-        public async Task<IActionResult> Supprimer(string cle)
+        public async Task<IActionResult> Supprimer(string cle, string? variante = null)
         {
             // La matière se lit AVANT la suppression : après, la ligne n'existe
             // plus et on ne saurait plus quel bloc oublier.
-            var matiere = (await _planches.GetSansDonneesAsync(cle, HttpContext.RequestAborted))
-                ?.MatiereCode;
+            var matiere = (await _planches.GetSansDonneesAsync(
+                cle, variante, HttpContext.RequestAborted))?.MatiereCode;
 
-            var retiree = await _planches.SupprimerAsync(cle, HttpContext.RequestAborted);
+            var retiree = await _planches.SupprimerAsync(
+                cle, variante, HttpContext.RequestAborted);
             if (!retiree) return NotFound();
 
             // Retirer une planche compte autant qu'en poser une : sans cet

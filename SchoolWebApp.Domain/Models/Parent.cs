@@ -30,5 +30,16 @@ namespace SchoolWebApp.Domain.Models
         /// l'instant, sans attendre que le parent se reconnecte.
         /// </summary>
         public bool EstAdministrateur { get; set; }
+
+        /// <summary>
+        /// Les sections du tableau de bord qui lui sont ouvertes.
+        ///
+        /// Vide pour un administrateur qu'on vient de nommer : le
+        /// super-administrateur coche ce qu'il veut lui ouvrir.
+        /// </summary>
+        public string[] OngletsAdmin { get; set; } = [];
+
+        /// <summary>Ce parent peut-il enregistrer un enfant de plus ?</summary>
+        public bool PeutAjouterEnfant { get; set; } = true;
     }
 }

@@ -284,6 +284,7 @@ namespace SchoolWebApp.Dal.Repositories
             StripeClientId = entity.StripeClientId,
             DateCreation = entity.DateCreation,
             EstAdministrateur = entity.EstAdministrateur,
+            PeutAjouterEnfant = entity.PeutAjouterEnfant,
         };
     }
 }

@@ -69,11 +69,24 @@ namespace SchoolWebApp.IdentityServer.Controllers
         /// Camara, le 16/09/2026 : « je peux tout faire sauf créer un parent
         /// et lui donner un rôle ».
         ///
-        /// AUCUN MOT DE PASSE NE TRANSITE PAR L'ADMINISTRATEUR. Le compte naît
-        /// avec un mot de passe aléatoire que personne ne connaît, et le parent
-        /// reçoit le courriel de réinitialisation — le même que « mot de passe
-        /// oublié » — pour choisir le sien. Un mot de passe fixé ici aurait
-        /// circulé par oral ou par message, et serait resté dans une boîte.
+        /// DEUX FAÇONS DE NAÎTRE, ET C'EST L'ADMINISTRATEUR QUI CHOISIT.
+        ///
+        /// AVEC UN MOT DE PASSE — Camara, le 17/09/2026 : « je dois créer aussi
+        /// le mot de passe… et quand je crée le compte, il doit être directement
+        /// actif ». Le compte est utilisable dans la seconde, aucun courriel ne
+        /// part, et le parent se connecte avec ce que l'administrateur lui a
+        /// donné. C'est le cas des comptes créés en face à face ou au téléphone.
+        ///
+        /// CE QUE ÇA COÛTE, ET C'EST ASSUMÉ : le mot de passe passe par le
+        /// navigateur de l'administrateur, et il le connaît. Il circulera donc
+        /// par oral ou par message. Il reste changeable par le parent depuis son
+        /// compte, et « mot de passe oublié » fonctionne comme pour tout le
+        /// monde.
+        ///
+        /// SANS MOT DE PASSE, le comportement d'avant est conservé : le compte
+        /// naît avec un mot de passe aléatoire que personne ne connaît, et le
+        /// parent reçoit le courriel de réinitialisation — le même que « mot de
+        /// passe oublié » — pour choisir le sien.
         ///
         /// Le mot de passe aléatoire n'est pas un détail : sans lui, le compte
         /// n'aurait « pas de mot de passe » au sens d'Identity, et « mot de
@@ -120,7 +133,10 @@ namespace SchoolWebApp.IdentityServer.Controllers
                 EmailConfirmed = true,
             };
 
-            var creation = await _userManager.CreateAsync(utilisateur, MotDePasseAleatoire());
+            var choisi = !string.IsNullOrWhiteSpace(requete.MotDePasse);
+
+            var creation = await _userManager.CreateAsync(
+                utilisateur, choisi ? requete.MotDePasse! : MotDePasseAleatoire());
 
             if (!creation.Succeeded)
             {
@@ -128,10 +144,47 @@ namespace SchoolWebApp.IdentityServer.Controllers
                     "Echec de la creation admin d'un compte : {Erreurs}.",
                     string.Join(" ", creation.Errors.Select(e => e.Description)));
 
+                // LES RAISONS REMONTENT QUAND LE MOT DE PASSE VIENT DE LUI.
+                //
+                // « Le compte n'a pas pu être créé » était suffisant tant que le
+                // mot de passe était aléatoire : un échec ne pouvait alors venir
+                // que du serveur, et l'administrateur n'y pouvait rien. Depuis
+                // qu'il le saisit, la cause la plus probable est sa politique —
+                // trop court, pas de chiffre — et il doit lire laquelle pour
+                // corriger. Un message générique le ferait réessayer à
+                // l'aveugle.
+                if (choisi)
+                {
+                    return BadRequest(new
+                    {
+                        message = string.Join(" ", creation.Errors.Select(e => e.Description)),
+                    });
+                }
+
                 return StatusCode(500, new { message = "Le compte de connexion n'a pas pu être créé." });
             }
 
-            _logger.LogWarning("Compte {UserId} cree par un administrateur.", utilisateur.Id);
+            _logger.LogWarning(
+                "Compte {UserId} cree par un administrateur ({Origine}).",
+                utilisateur.Id,
+                choisi ? "mot de passe fixe par l administrateur" : "courriel de choix du mot de passe");
+
+            // AUCUN COURRIEL QUAND LE MOT DE PASSE EST DÉJÀ CHOISI.
+            //
+            // Envoyer quand même un lien de réinitialisation dirait au parent
+            // que son compte attend quelque chose de lui, alors qu'il est prêt.
+            // Et le lien resterait valable deux heures dans une boîte, pour un
+            // mot de passe qu'on vient de lui donner de vive voix.
+            if (choisi)
+            {
+                return StatusCode(StatusCodes.Status201Created, new
+                {
+                    id = utilisateur.Id,
+                    email,
+                    courrielParti = false,
+                    motDePasseDefini = true,
+                });
+            }
 
             // LE COURRIEL PART APRÈS LA CRÉATION, et son échec ne la défait pas :
             // le compte existe, le parent peut toujours demander un lien depuis
@@ -163,7 +216,117 @@ namespace SchoolWebApp.IdentityServer.Controllers
                 id = utilisateur.Id,
                 email,
                 courrielParti,
+                motDePasseDefini = false,
             });
+        }
+
+        /// <summary>
+        /// RÉINITIALISE LE MOT DE PASSE D'UN PARENT — Camara, le 17/09/2026 :
+        /// « en tant qu'admin, je peux réinitialiser le mot de passe du parent
+        /// directement quand je vais dans les modifications ».
+        ///
+        /// PAR UN JETON, ET NON EN ÉCRIVANT LE HACHAGE. `ResetPasswordAsync` est
+        /// le chemin prévu par Identity pour poser un mot de passe sans connaître
+        /// l'ancien : il applique la politique, refait le hachage avec les
+        /// paramètres courants, et — le point important — RENOUVELLE LE TAMPON DE
+        /// SÉCURITÉ. Les sessions ouvertes ailleurs tombent donc à leur prochaine
+        /// validation, ce qu'on attend d'une réinitialisation.
+        ///
+        /// TROIS COMPTES SONT HORS DE PORTÉE, et chacun pour sa raison :
+        ///
+        /// — LE SIEN. Changer son propre mot de passe se fait sur sa page de
+        ///   profil, avec l'ancien mot de passe demandé. Le faire d'ici serait un
+        ///   contournement de cette vérification.
+        ///
+        /// — UN SUPER-ADMINISTRATEUR. Un administrateur ordinaire qui pourrait
+        ///   poser le mot de passe du compte au-dessus du sien prendrait la main
+        ///   sur tout le site en un clic. C'est la seule prise de contrôle
+        ///   complète que cette route rendrait possible, et elle est fermée pour
+        ///   TOUT LE MONDE, super-administrateur compris : lui non plus ne passe
+        ///   pas par ici, il a sa page de profil.
+        ///
+        /// — LE COMPTE DE DÉMONSTRATION. Il est partagé et son mot de passe est
+        ///   celui du semis : le changer casserait la démonstration pour tout le
+        ///   monde, sans que personne ne comprenne pourquoi.
+        /// </summary>
+        [HttpPut("{email}/mot-de-passe")]
+        public async Task<IActionResult> ReinitialiserMotDePasse(
+            string email, [FromBody] ChangerMotDePasseRequest requete)
+        {
+            // Le rôle se lit dans le claim `role` et le refus est rendu
+            // directement — mêmes raisons que pour la suppression plus bas.
+            if (!User.HasClaim("role", "Admin"))
+            {
+                return StatusCode(StatusCodes.Status403Forbidden);
+            }
+
+            if (!ModelState.IsValid) return BadRequest(ModelState);
+            if (string.IsNullOrWhiteSpace(email)) return BadRequest();
+
+            var utilisateur = await _userManager.FindByEmailAsync(email.Trim());
+            if (utilisateur is null) return NotFound();
+
+            var soi = User.FindFirst("sub")?.Value;
+            if (!string.IsNullOrWhiteSpace(soi) && soi == utilisateur.Id)
+            {
+                return BadRequest(new
+                {
+                    message = "Pour changer votre propre mot de passe, passez par "
+                              + "votre page de profil.",
+                });
+            }
+
+            if (await _userManager.IsInRoleAsync(utilisateur, "SuperAdmin"))
+            {
+                return BadRequest(new
+                {
+                    message = "Le mot de passe d'un super-administrateur ne se "
+                              + "change pas depuis l'administration.",
+                });
+            }
+
+            if (EstCompteDemonstration(utilisateur.Email))
+            {
+                return BadRequest(new
+                {
+                    message = "Le mot de passe du compte de démonstration ne peut "
+                              + "pas être changé : il est partagé.",
+                });
+            }
+
+            var jeton = await _userManager.GeneratePasswordResetTokenAsync(utilisateur);
+            var resultat = await _userManager.ResetPasswordAsync(
+                utilisateur, jeton, requete.MotDePasse!);
+
+            if (!resultat.Succeeded)
+            {
+                // LES RAISONS REMONTENT. La cause la plus probable est la
+                // politique — trop court, pas de chiffre — et l'administrateur
+                // doit lire laquelle pour corriger.
+                return BadRequest(new
+                {
+                    message = string.Join(" ", resultat.Errors.Select(e => e.Description)),
+                });
+            }
+
+            // Tracé en avertissement : un acte d'administration sur le compte de
+            // quelqu'un d'autre, et celui-ci lui coupe ses sessions en cours.
+            _logger.LogWarning(
+                "Mot de passe du compte {UserId} reinitialise par un administrateur.",
+                utilisateur.Id);
+
+            return NoContent();
+        }
+
+        public class ChangerMotDePasseRequest
+        {
+            /// <summary>
+            /// PAS DE `MinLength` ICI : la longueur minimale est celle de la
+            /// politique d'Identity, déclarée une seule fois au démarrage. La
+            /// répéter en annotation ferait deux règles à tenir d'accord.
+            /// </summary>
+            [Required, StringLength(200)]
+            public string? MotDePasse { get; set; }
         }
 
         /// <summary>
@@ -183,6 +346,22 @@ namespace SchoolWebApp.IdentityServer.Controllers
 
             [StringLength(100)]
             public string? Nom { get; set; }
+
+            /// <summary>
+            /// Le mot de passe choisi par l'administrateur, ou null.
+            ///
+            /// FACULTATIF, et les deux cas sont voulus : renseigné, le compte est
+            /// utilisable tout de suite et aucun courriel ne part ; absent, le
+            /// parent reçoit le lien pour choisir le sien.
+            ///
+            /// PAS DE `MinLength` ICI. La longueur minimale est celle de la
+            /// politique d'Identity, déclarée une seule fois au démarrage ; la
+            /// répéter en annotation ferait deux règles à tenir d'accord, et
+            /// celle-ci mentirait le jour où l'autre changerait. La borne haute,
+            /// elle, ne protège que contre un envoi absurde.
+            /// </summary>
+            [StringLength(200)]
+            public string? MotDePasse { get; set; }
         }
 
         /// <summary>

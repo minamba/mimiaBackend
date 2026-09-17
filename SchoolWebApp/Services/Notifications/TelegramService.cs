@@ -89,6 +89,20 @@ namespace SchoolWebApp.Api.Services.Notifications
             string categorie, string? mail, string? description, string? eleve);
 
         /// <summary>
+        /// Une idée d'évolution vient d'être notée — voulu par Camara le
+        /// 17/09/2026.
+        ///
+        /// DANS LE SALON DES SIGNALEMENTS, comme les pannes de fournisseur :
+        /// c'est celui qu'on regarde pour savoir ce qui bouge sur le produit, et
+        /// une idée notée entre deux séances n'a pas de meilleur endroit où
+        /// atterrir. Ouvrir un salon de plus reviendrait à en avoir un que
+        /// personne ne lit.
+        /// </summary>
+        /// <param name="auteur">Prénom et nom de qui l'a notée, ou null.</param>
+        Task NotifierIdeeAsync(
+            string titre, string urgence, string? description, string? auteur);
+
+        /// <summary>
         /// Anthropic ou OpenAI vient de passer au rouge ou à l'orange — ou
         /// fonctionne de nouveau.
         ///
@@ -341,6 +355,33 @@ namespace SchoolWebApp.Api.Services.Notifications
             sb.AppendLine($"— Le : {Horodatage()}");
             sb.AppendLine("———————————————");
             sb.AppendLine(Echapper(Borner(description)));
+
+            return EnvoyerAsync(_contactToken, _contactChatId, sb.ToString());
+        }
+
+        public Task NotifierIdeeAsync(
+            string titre, string urgence, string? description, string? auteur)
+        {
+            var sb = new StringBuilder();
+            sb.AppendLine("💡 *Nouvelle idée*");
+            sb.AppendLine($"— {Echapper(titre)}");
+            sb.AppendLine($"— Urgence : {Echapper(urgence)}");
+
+            if (!string.IsNullOrWhiteSpace(auteur))
+            {
+                sb.AppendLine($"— Par : {Echapper(auteur)}");
+            }
+
+            sb.AppendLine($"— Le : {Horodatage()}");
+
+            // LA DESCRIPTION EST FACULTATIVE : un titre suffit à noter une idée.
+            // Sans ce test, le message se terminait par une ligne de tirets et un
+            // blanc, ce qui se lit comme un envoi tronqué.
+            if (!string.IsNullOrWhiteSpace(description))
+            {
+                sb.AppendLine("———————————————");
+                sb.AppendLine(Echapper(Borner(description)));
+            }
 
             return EnvoyerAsync(_contactToken, _contactChatId, sb.ToString());
         }

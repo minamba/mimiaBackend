@@ -343,6 +343,7 @@ builder.Services.AddScoped<IMaitriseService, MaitriseService>();
 builder.Services.AddScoped<IAdminService, AdminService>();
 builder.Services.AddScoped<IAvisRepository, AvisRepository>();
 builder.Services.AddScoped<IPromoRepository, PromoRepository>();
+builder.Services.AddScoped<IIdeeRepository, IdeeRepository>();
 builder.Services.AddScoped<IModeleMailRepository, ModeleMailRepository>();
 // Sans état, et appuyé sur le service de diffusion qui est lui-même un
 // singleton : un template se compose comme un message tapé à la main.

@@ -446,6 +446,138 @@ namespace SchoolWebApp.Api.Controllers
         public record DefinirAdministrateurRequest(bool Actif);
 
         /// <summary>
+        /// Les sections du tableau de bord ouvertes à un administrateur, et la
+        /// liste complète de celles qui existent — c'est elle qui dessine les
+        /// cases à cocher.
+        ///
+        /// RENDRE LES DEUX DANS LE MÊME APPEL évite que l'écran tienne sa propre
+        /// copie de la liste : une section ajoutée au produit apparaît dans la
+        /// fenêtre sans qu'on y touche, décochée pour tout le monde.
+        /// </summary>
+        [HttpGet("parents/{id:int}/onglets")]
+        [Authorize(Policy = "EstSuperAdmin")]
+        [SwaggerResponse(200, "Sections ouvertes, et sections possibles.")]
+        [SwaggerResponse(404, "Parent inexistant.")]
+        public async Task<IActionResult> LireOnglets(int id)
+        {
+            var accordes = await _adminService.GetOngletsAdminAsync(id);
+            if (accordes is null) return NotFound();
+
+            return Ok(new { accordes, toutes = Domain.Models.OngletsAdmin.Toutes });
+        }
+
+        /// <summary>
+        /// Remplace les sections ouvertes à un administrateur — voulu par Camara
+        /// le 17/09/2026.
+        ///
+        /// RÉSERVÉE AU SUPER-ADMINISTRATEUR, pour la même raison que le droit
+        /// d'administrer lui-même : un administrateur qui pourrait s'ouvrir une
+        /// section de plus n'aurait aucune limite, et la délégation ne voudrait
+        /// plus rien dire.
+        /// </summary>
+        [HttpPut("parents/{id:int}/onglets")]
+        [Authorize(Policy = "EstSuperAdmin")]
+        [SwaggerResponse(204, "Sections mises à jour.")]
+        [SwaggerResponse(404, "Parent inexistant.")]
+        public async Task<IActionResult> DefinirOnglets(
+            int id, [FromBody] DefinirOngletsRequest requete)
+        {
+            var refus = await RefuserSiCompteProtegeAsync(id, "changement de droits");
+            if (refus is not null) return refus;
+
+            try
+            {
+                var fait = await _adminService.DefinirOngletsAdminAsync(id, requete?.Onglets);
+                if (!fait) return NotFound();
+
+                // TRACÉ EN AVERTISSEMENT, comme les autres changements de pouvoir :
+                // ce sont les lignes qu'on relit quand on se demande qui a eu accès
+                // à quoi, et quand.
+                _logger.LogWarning(
+                    "Droits du parent {ParentId} redefinis : {Onglets}.",
+                    id,
+                    Domain.Models.OngletsAdmin.Ecrire(requete?.Onglets) is { Length: > 0 } l
+                        ? l
+                        : "AUCUN");
+
+                return NoContent();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex,
+                    "Echec de la mise a jour des droits du parent {ParentId}.", id);
+
+                return StatusCode(500, new { message = "Une erreur est survenue, veuillez réessayer." });
+            }
+        }
+
+        /// <param name="Onglets">Les clés cochées. Vide ou absent = aucune section.</param>
+        public record DefinirOngletsRequest(string[]? Onglets);
+
+        /// <summary>
+        /// Les sections que la personne connectée a le droit de voir.
+        ///
+        /// POURQUOI UN APPEL ET NON UN CLAIM DANS LE JETON. Un claim se fige à la
+        /// connexion : le super-administrateur cocherait une section, et
+        /// l'intéressé ne la verrait qu'après s'être déconnecté et reconnecté —
+        /// sans savoir pourquoi, ni que c'est ce qu'il faut faire.
+        ///
+        /// LE SUPER-ADMINISTRATEUR REÇOIT TOUT. Ses droits ne sont écrits nulle
+        /// part : il est le seul à pouvoir se les rendre, donc les lui retirer
+        /// n'aurait aucun sens — et fermerait la maison sur une fausse manœuvre.
+        /// </summary>
+        [HttpGet("mes-onglets")]
+        [SwaggerResponse(200, "Les sections ouvertes à la personne connectée.")]
+        public async Task<IActionResult> MesOnglets(
+            [FromServices] Api.Utils.ICurrentUserAccessor utilisateur)
+        {
+            if (User.IsInRole("SuperAdmin"))
+            {
+                return Ok(new { onglets = Domain.Models.OngletsAdmin.Toutes });
+            }
+
+            var onglets = await _adminService.GetOngletsAdminParMailAsync(utilisateur?.Mail);
+
+            return Ok(new { onglets });
+        }
+
+        /// <summary>
+        /// Autorise ou interdit à un parent d'enregistrer un enfant de plus —
+        /// voulu par Camara le 17/09/2026.
+        ///
+        /// ADMINISTRATEUR ET NON SUPER-ADMINISTRATEUR, contrairement au droit
+        /// d'administration juste au-dessus : celui-ci donne les clés du site,
+        /// celui-là règle un compte client. Les deux ne se protègent pas de la
+        /// même manière.
+        ///
+        /// PAS DE GARDE SUR LES COMPTES PROTÉGÉS : retirer à un administrateur
+        /// le droit d'ajouter un enfant ne lui ôte aucun pouvoir sur le site, et
+        /// il peut se le rendre lui-même. Le verrou n'aurait rien verrouillé.
+        /// </summary>
+        [HttpPut("parents/{id:int}/ajout-enfant")]
+        [SwaggerResponse(204, "Droit mis à jour.")]
+        [SwaggerResponse(404, "Parent inexistant.")]
+        public async Task<IActionResult> DefinirAjoutEnfant(
+            int id, [FromBody] DefinirAjoutEnfantRequest requete)
+        {
+            try
+            {
+                var fait = await _adminService.DefinirAjoutEnfantAsync(id, requete?.Autorise ?? true);
+                return fait ? NoContent() : NotFound();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex,
+                    "Echec de la mise a jour du droit d ajout d enfant du parent {ParentId}.", id);
+
+                return StatusCode(500, new { message = "Une erreur est survenue, veuillez réessayer." });
+            }
+        }
+
+        /// <param name="Autorise">Vrai pour autoriser, faux pour interdire.</param>
+        public record DefinirAjoutEnfantRequest(bool Autorise);
+
+        /// <summary>
         /// LA FICHE D'UN PARENT CRÉÉ PAR L'ADMINISTRATION — Camara, le
         /// 16/09/2026. Le navigateur enchaîne, comme pour la suppression mais
         /// dans l'autre sens : l'identité d'abord (serveur d'identité), la

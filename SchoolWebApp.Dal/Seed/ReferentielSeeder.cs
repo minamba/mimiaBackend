@@ -342,12 +342,17 @@ namespace SchoolWebApp.Dal.Seed
                 ReferentielArtsVisuels.HDA1.Concat(ReferentielArtsVisuels.HDAT).ToArray(), ct);
             await SeedCompetencesAsync(context, "CINEMA_AUDIOVISUEL",
                 ReferentielArtsVisuels.CAV1.Concat(ReferentielArtsVisuels.CAVT).ToArray(), ct);
-            await SeedCompetencesAsync(context, "MUSIQUE",
-                ReferentielArtsSpectacleVivant.MUS1.Concat(ReferentielArtsSpectacleVivant.MUST).ToArray(), ct);
+            // MUSIQUE ET DANSE : APPEL CONSERVÉ, TABLEAU VIDE — 17/09/2026.
+            // Supprimer l'appel aurait laissé en base les compétences déjà semées, et
+            // TOUJOURS ACTIVES : le semeur ne touche jamais une matière dont il ne sait
+            // plus rien. Avec un tableau vide il fait exactement ce qu'il faut — il
+            // désactive tout ce que le fichier ne cite plus (voir la boucle des
+            // orphelines dans SeedCompetencesAsync). À retirer le jour où plus aucune
+            // base en service ne porte ces lignes.
+            await SeedCompetencesAsync(context, "MUSIQUE", [], ct);
+            await SeedCompetencesAsync(context, "DANSE", [], ct);
             await SeedCompetencesAsync(context, "THEATRE",
                 ReferentielArtsSpectacleVivant.THEA1.Concat(ReferentielArtsSpectacleVivant.THEAT).ToArray(), ct);
-            await SeedCompetencesAsync(context, "DANSE",
-                ReferentielArtsSpectacleVivant.DANSE1.Concat(ReferentielArtsSpectacleVivant.DANSET).ToArray(), ct);
             await SeedCompetencesAsync(context, "LLCA_LATIN",
                 ReferentielLlca.LATIN1.Concat(ReferentielLlca.LATINT).ToArray(), ct);
             await SeedCompetencesAsync(context, "LLCA_GREC",
@@ -687,9 +692,7 @@ namespace SchoolWebApp.Dal.Seed
                 ("ARTS_PLASTIQUES",       "Arts plastiques",                                 "agent-arts-plastiques",       "Jeanne",  "jeanne",  "#86198F", 27, true, 11, 12, "Regarder, analyser et penser les œuvres"),
                 ("HISTOIRE_ARTS",         "Histoire des arts",                               "agent-histoire-arts",         "Jeanne",  "jeanne",  "#86198F", 28, true, 11, 12, "Les œuvres dans leur histoire"),
                 ("CINEMA_AUDIOVISUEL",    "Cinéma-audiovisuel",                              "agent-cinema-audiovisuel",    "Jeanne",  "jeanne",  "#86198F", 29, true, 11, 12, "Analyser et écrire le cinéma"),
-                ("MUSIQUE",               "Musique",                                         "agent-musique",               "Jeanne",  "jeanne",  "#86198F", 30, true, 11, 12, "Écouter, analyser et comprendre la musique"),
                 ("THEATRE",               "Théâtre",                                         "agent-theatre",               "Jeanne",  "jeanne",  "#86198F", 31, true, 11, 12, "Le texte, la scène et le spectateur"),
-                ("DANSE",                 "Danse",                                           "agent-danse",                 "Jeanne",  "jeanne",  "#86198F", 32, true, 11, 12, "Le corps, la création et les œuvres chorégraphiques"),
                 ("ARTS_CIRQUE",           "Arts du cirque",                                  "agent-arts-cirque",           "Jeanne",  "jeanne",  "#86198F", 33, true, 11, 12, "Les disciplines, la création et les spectacles de cirque"),
             };
 
@@ -756,8 +759,13 @@ namespace SchoolWebApp.Dal.Seed
             // de la table ci-dessus ne suffisait pas : le semeur ne touche
             // jamais une matière qu'il ne connaît plus, et elle restait
             // ouverte. `VoiesScolaires` les écarte aussi de toute grille.
+            // Musique et danse rejoignent la liste le 17/09/2026, pour une autre
+            // raison : non pas l'absence de référentiel, mais le choix de Camara de ne
+            // pas les faire enseigner. Le mécanisme, lui, est le même.
             foreach (var retiree in existants.Where(x =>
-                         x.Code is "INGENIERIE" or "PHYSIQUE_CHIMIE_MATHS" && x.Active))
+                         (x.Code is "INGENIERIE" or "PHYSIQUE_CHIMIE_MATHS"
+                              or "MUSIQUE" or "DANSE")
+                         && x.Active))
             {
                 retiree.Active = false;
             }

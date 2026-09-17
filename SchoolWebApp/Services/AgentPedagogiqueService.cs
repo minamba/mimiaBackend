@@ -360,12 +360,17 @@ namespace SchoolWebApp.Api.Services
             var trouve = Pointage().Match(messageEleve ?? string.Empty);
             if (!trouve.Success) return null;
 
-            var x = int.Parse(trouve.Groups[2].Value) / 100.0;
-            var y = int.Parse(trouve.Groups[3].Value) / 100.0;
+            var x = int.Parse(trouve.Groups[3].Value) / 100.0;
+            var y = int.Parse(trouve.Groups[4].Value) / 100.0;
 
             try
             {
-                var planche = await _planches.GetAsync(trouve.Groups[1].Value, ct);
+                // LA VARIANTE COMPTE ICI : si l'élève clique sur la carte muette,
+                // c'est la muette qu'il faut joindre. Lui envoyer la légendée
+                // reviendrait à montrer au professeur une image que l'enfant n'a
+                // pas sous les yeux — et à lui souffler la réponse.
+                var planche = await _planches.GetAsync(
+                    trouve.Groups[1].Value, trouve.Groups[2].Value, ct);
 
                 if (planche?.Donnees is not { Length: > 0 }) return null;
 
@@ -451,13 +456,24 @@ namespace SchoolWebApp.Api.Services
                 var trouve = Pointage().Match(messageEleve ?? string.Empty);
                 if (!trouve.Success) return string.Empty;
 
-                var planche = await _planches.GetSansDonneesAsync(trouve.Groups[1].Value, ct);
+                // TOUJOURS LA CARTE DE LA LÉGENDÉE, MÊME QUAND LE CLIC EST SUR LA
+                // MUETTE — et c'est tout le montage.
+                //
+                // Une muette n'a aucun mot à lire : on ne peut rien en extraire,
+                // donc elle n'a pas de carte à elle. Mais les deux images sont le
+                // même fond au même cadrage, à ceci près que l'une porte les mots
+                // et l'autre pas. Les positions relevées sur la légendée valent
+                // donc sur la muette, et l'exercice se corrige tout seul :
+                // l'enfant montre une région vide, le professeur reçoit son nom.
+                var planche = await _planches.GetSansDonneesAsync(
+                    trouve.Groups[1].Value, Domain.Models.VariantePlanche.Legende, ct);
+
                 if (planche?.Reperes is null) return string.Empty;
 
                 var repere = Domain.Services.CarteReperes.PlusProche(
                     planche.Reperes,
-                    int.Parse(trouve.Groups[2].Value) / 100.0,
-                    int.Parse(trouve.Groups[3].Value) / 100.0);
+                    int.Parse(trouve.Groups[3].Value) / 100.0,
+                    int.Parse(trouve.Groups[4].Value) / 100.0);
 
                 if (repere is null)
                 {
@@ -521,15 +537,34 @@ namespace SchoolWebApp.Api.Services
                 // La dernière figure affichée, et elle seule : le professeur en
                 // a peut-être montré trois dans la séance, une seule est à
                 // l'écran.
-                var cle = historique
+                var derniere = historique
                     .Where(m => m.Role == "assistant" && m.Contenu is not null)
                     .Select(m => CleSchema().Match(m.Contenu!))
-                    .LastOrDefault(t => t.Success)
-                    ?.Groups[1].Value;
+                    .LastOrDefault(t => t.Success);
 
+                var cle = derniere?.Groups[1].Value;
                 if (string.IsNullOrWhiteSpace(cle)) return string.Empty;
 
-                var planche = await _planches.GetSansDonneesAsync(cle, ct);
+                // LA MUETTE EST AU TABLEAU : ON NE LUI RAPPELLE SURTOUT PAS LES
+                // MOTS.
+                //
+                // Le relevé est celui de la légendée, et il est exact — mais
+                // l'enfant, lui, regarde une figure vide. Le lui réciter serait
+                // lui donner la réponse de l'exercice en cours, et c'est
+                // exactement ce que le rappel aurait fait tout seul, puisqu'il
+                // travaille par clé.
+                if (Domain.Models.VariantePlanche.Normaliser(derniere?.Groups[2].Value)
+                    == Domain.Models.VariantePlanche.Muette)
+                {
+                    return "\n\n[LA FIGURE AU TABLEAU EST LA VERSION MUETTE : "
+                         + "elle ne porte AUCUN mot. Ne demande pas de lire, et ne "
+                         + "prononce pas les noms que tu connais de la version "
+                         + "légendée — c'est ce que tu fais deviner. Demande de "
+                         + "MONTRER. Quand l'élève montre, le nom exact t'est "
+                         + "donné : tu sauras s'il a juste.]";
+                }
+
+                var planche = await _planches.GetSansDonneesAsync(cle, null, ct);
                 var releve = planche?.Contenu?.Trim();
 
                 if (string.IsNullOrWhiteSpace(releve)) return string.Empty;
@@ -561,10 +596,18 @@ namespace SchoolWebApp.Api.Services
             }
         }
 
-        [System.Text.RegularExpressions.GeneratedRegex(@"SCHEMA:([a-z0-9-]+)")]
+        /// <summary>
+        /// `SCHEMA:hg-france-regions` ou `SCHEMA:hg-france-regions/muette`.
+        ///
+        /// Le suffixe est FACULTATIF et absent de toutes les figures écrites
+        /// avant le 17/09/2026 : sans lui, c'est la légendée.
+        /// </summary>
+        [System.Text.RegularExpressions.GeneratedRegex(@"SCHEMA:([a-z0-9-]+)(?:/(legende|muette))?")]
         private static partial System.Text.RegularExpressions.Regex CleSchema();
 
-        [System.Text.RegularExpressions.GeneratedRegex(@"POINTAGE:([a-z0-9-]+)@(\d{1,3}),(\d{1,3})")]
+        /// <summary>`POINTAGE:cle@x,y` ou `POINTAGE:cle/muette@x,y`.</summary>
+        [System.Text.RegularExpressions.GeneratedRegex(
+            @"POINTAGE:([a-z0-9-]+)(?:/(legende|muette))?@(\d{1,3}),(\d{1,3})")]
         private static partial System.Text.RegularExpressions.Regex Pointage();
 
         /// <summary>

@@ -27,6 +27,25 @@ namespace SchoolWebApp.Domain.Repositories
         /// </summary>
         Task<bool> DefinirAdministrateurAsync(int parentId, bool actif);
 
+        /// <summary>
+        /// Les sections du tableau de bord ouvertes à ce compte. Null si le parent
+        /// n'existe pas, vide s'il n'a rien reçu.
+        /// </summary>
+        Task<string[]?> GetOngletsAdminAsync(int parentId);
+
+        /// <summary>Remplace la liste des sections ouvertes à ce compte.</summary>
+        Task<bool> DefinirOngletsAdminAsync(int parentId, IEnumerable<string>? onglets);
+
+        /// <summary>
+        /// Les sections ouvertes au titulaire de cette adresse, pour l'appliquer à
+        /// la personne connectée.
+        ///
+        /// PAR L'ADRESSE ET NON PAR L'IDENTIFIANT : c'est ce que porte le jeton.
+        /// Vide si le compte est inconnu OU s'il n'est pas administrateur — dans
+        /// les deux cas, il n'a droit à aucune section.
+        /// </summary>
+        Task<string[]> GetOngletsAdminParMailAsync(string? mail);
+
         /// <summary>Le tunnel : visiteurs, essais lancés, essais convertis.</summary>
         Task<Tunnel> GetTunnelAsync(DateTime debut, DateTime fin);
 
@@ -85,6 +104,12 @@ namespace SchoolWebApp.Domain.Repositories
         Task<bool> SupprimerEleveAsync(int id);
 
         Task<ParentAdmin?> ModifierParentAsync(int id, string? prenom, string? nom, string? mail);
+
+        /// <summary>
+        /// Accorde ou retire à un parent le droit d'enregistrer un enfant.
+        /// Faux si le compte n'existe pas.
+        /// </summary>
+        Task<bool> DefinirAjoutEnfantAsync(int parentId, bool autorise);
 
         /// <summary>Fiche complète d'un élève, ou null s'il n'existe pas.</summary>
         Task<FicheEleve?> GetFicheEleveAsync(int eleveId, int? niveauScolaireId = null);
