@@ -34,6 +34,39 @@ namespace SchoolWebApp.Api.Request
         public int? PieceJointeId { get; set; }
 
         /// <summary>
+        /// Combien de documents au plus dans un même message. Six : un exercice
+        /// sur plusieurs pages, une copie recto-verso photographiée en deux fois,
+        /// l'énoncé à côté. Chaque photo repart au modèle à CHAQUE tour tant
+        /// qu'elle est dans l'historique : au-delà, la séance devient chère.
+        /// </summary>
+        public const int PiecesMax = 6;
+
+        /// <summary>
+        /// PLUSIEURS DOCUMENTS D'UN COUP — Camara, le 16/09/2026 : « le
+        /// professeur reçoit tous les documents d'un coup et a tout en tête ».
+        /// Dans l'ordre où l'élève les a ajoutés. L'ancien champ reste accepté :
+        /// un navigateur resté sur la version précédente continue d'envoyer sa
+        /// pièce unique, et les deux se fondent dans <see cref="Pieces"/>.
+        /// </summary>
+        [MaxLength(PiecesMax, ErrorMessage = "Au plus six documents par message.")]
+        public int[]? PieceJointeIds { get; set; }
+
+        /// <summary>Les identifiants à rattacher, dédoublonnés, ordre conservé.</summary>
+        public IReadOnlyList<int> Pieces()
+        {
+            var liste = new List<int>();
+
+            if (PieceJointeId is int seul) liste.Add(seul);
+
+            foreach (var id in PieceJointeIds ?? Array.Empty<int>())
+            {
+                if (!liste.Contains(id)) liste.Add(id);
+            }
+
+            return liste;
+        }
+
+        /// <summary>
         /// Temps restant dans la séance, en secondes. Facultatif — une séance
         /// sans minuteur n'en envoie pas.
         ///

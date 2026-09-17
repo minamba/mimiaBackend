@@ -236,11 +236,17 @@ namespace SchoolWebApp.Api.Builders.impl
             {
                 var parMessage = pieces
                     .Where(p => p.MessageId.HasValue)
-                    .ToDictionary(p => p.MessageId!.Value, Projeter);
+                    .GroupBy(p => p.MessageId!.Value)
+                    .ToDictionary(g => g.Key, g => g.Select(Projeter).ToList());
 
                 foreach (var vue in vues)
                 {
-                    if (parMessage.TryGetValue(vue.Id, out var piece)) vue.PieceJointe = piece;
+                    if (!parMessage.TryGetValue(vue.Id, out var liste)) continue;
+
+                    vue.PiecesJointes = liste;
+                    // Le singulier garde la première : un navigateur resté sur
+                    // la version précédente ne connaît que lui.
+                    vue.PieceJointe = liste.FirstOrDefault();
                 }
             }
 
@@ -384,10 +390,10 @@ namespace SchoolWebApp.Api.Builders.impl
         }
 
         public IAsyncEnumerable<string> StreamReponseAsync(
-            int conversationId, string contenu, int? pieceJointeId,
+            int conversationId, string contenu, IReadOnlyList<int> pieceJointeIds,
             int? secondesRestantes, string? vitesseEcoute, CancellationToken ct) =>
             StreamTourAsync(conversationId, contenu, accueil: false, ct,
-                secondesRestantes: secondesRestantes, pieceJointeId: pieceJointeId,
+                secondesRestantes: secondesRestantes, pieceJointeIds: pieceJointeIds,
                 vitesseEcoute: vitesseEcoute);
 
         /// <summary>
@@ -1454,6 +1460,98 @@ namespace SchoolWebApp.Api.Builders.impl
         [GeneratedRegex(@"dict[ée]e|dictation|dictado|dettato|diktat|听写", RegexOptions.IgnoreCase)]
         private static partial Regex MentionDictee();
 
+        /// <summary>Le dernier bloc écrit au tableau, dans un message donné.</summary>
+        [GeneratedRegex(@"\[ARDOISE\](?<corps>.*?)\[/ARDOISE\]", RegexOptions.Singleline)]
+        private static partial Regex ArdoiseEcrite();
+
+        /// <summary>
+        /// CE QU'IL Y A VRAIMENT AU TABLEAU, DIT AU PROFESSEUR À CHAQUE TOUR.
+        ///
+        /// Relevé par Camara le 16/09/2026 : le professeur d'histoire ouvre par
+        /// « on reprend le repérage des régions françaises, la carte est toujours
+        /// affichée », puis demande à l'élève de cliquer dessus. Le tableau était
+        /// noir — et la carte des régions n'existe même pas dans la bibliothèque :
+        /// il ne pouvait ni la retrouver, ni la réafficher, ni s'en rendre compte.
+        ///
+        /// LA RÈGLE EXISTAIT DÉJÀ, ÉCRITE DEUX FOIS — « le tableau est vide au
+        /// début de chaque séance », « on ne clique pas sur un tableau vide » —
+        /// et le Noyau décrit même cet incident-ci, survenu une première fois le
+        /// 13/09. Un rappel partait déjà à l'arrivée. Rien n'a tenu, et c'est
+        /// instructif : tout cela demande au professeur de SE SOUVENIR d'un état
+        /// que rien ne lui dit. Il devine, et il devine mal.
+        ///
+        /// On le lui DIT donc, à chaque tour. Une ligne, une dizaine de jetons.
+        ///
+        /// MÊME RÈGLE QUE L'ÉCRAN, à la lettre (`tableauAuto`, dans Chat.js) : on
+        /// remonte les messages du professeur, le dernier bloc [ARDOISE] gagne, un
+        /// effacement rencontré avant veut dire vide, et ON S'ARRÊTE AU PREMIER
+        /// GESTE — sans quoi la gomme ne gommerait rien et l'on retrouverait
+        /// l'exercice d'avant. Deux calculs divergents afficheraient une chose à
+        /// l'élève en en annonçant une autre au professeur : c'est précisément le
+        /// défaut qu'on répare.
+        /// </summary>
+        private static string EtatDuTableau(List<DomainMessage> historique)
+        {
+            string? contenu = null;
+            var geste = false;
+
+            for (var i = historique.Count - 1; i >= 0 && !geste; i--)
+            {
+                if (!string.Equals(historique[i].Role, "assistant", StringComparison.Ordinal)) continue;
+
+                var texte = historique[i].Contenu ?? string.Empty;
+                var ardoises = ArdoiseEcrite().Matches(texte);
+
+                if (ardoises.Count > 0)
+                {
+                    contenu = ardoises[^1].Groups["corps"].Value.Trim();
+                    geste = true;
+                }
+                else if (texte.Contains("[TABLEAU_EFFACE]", StringComparison.Ordinal))
+                {
+                    geste = true;
+                }
+            }
+
+            // VIDE EST LE CAS QUI COMPTE, et il mérite sa consigne : c'est là que
+            // le professeur invente un support et met l'élève en échec devant un
+            // écran noir.
+            if (!geste || string.IsNullOrWhiteSpace(contenu))
+            {
+                return "\n\n[TABLEAU : VIDE — l'élève a un tableau noir sous les yeux. "
+                     + "Ne dis d'AUCUN support qu'il est affiché, et ne fais rien "
+                     + "pointer ni cliquer : écris-le d'abord dans un bloc [ARDOISE] "
+                     + "de CE message. Une figure absente de ta liste de planches ne "
+                     + "peut pas être affichée du tout — dans ce cas, change "
+                     + "d'exercice au lieu de la décrire comme si elle était là.]";
+            }
+
+            var quoi = contenu.StartsWith("SCHEMA:", StringComparison.OrdinalIgnoreCase)
+                ? $"la planche « {contenu[7..].Trim()} »"
+                : $"« {ResumerTableau(contenu)} »";
+
+            return $"\n\n[TABLEAU : il affiche {quoi}. C'est la SEULE chose que "
+                 + "l'élève voit. Tout autre support dont tu parlerais n'est pas "
+                 + "devant lui : remets-le au tableau avant d'en parler.]";
+        }
+
+        /// <summary>
+        /// Le tableau tient en une ligne dans le contexte : on l'abrège.
+        ///
+        /// Le professeur n'a pas besoin de relire ce qu'il a écrit — il l'a dans
+        /// son historique. Il a besoin de savoir CE QUI EST LÀ. Une amorce suffit,
+        /// et le contexte ne gonfle pas d'un exercice entier à chaque tour.
+        /// </summary>
+        private static string ResumerTableau(string contenu)
+        {
+            var plat = EspacesMultiples().Replace(contenu, " ").Trim();
+
+            return plat.Length <= 160 ? plat : string.Concat(plat.AsSpan(0, 160), "…");
+        }
+
+        [GeneratedRegex(@"\s+")]
+        private static partial Regex EspacesMultiples();
+
         /// <summary>
         /// LA DICTÉE REMISE AU TABLEAU, DÉPLIÉE POUR LE PROFESSEUR.
         ///
@@ -1836,7 +1934,7 @@ namespace SchoolWebApp.Api.Builders.impl
             [EnumeratorCancellation] CancellationToken ct,
             TypeAccueil annonce = TypeAccueil.Aucun,
             int? secondesRestantes = null,
-            int? pieceJointeId = null,
+            IReadOnlyList<int>? pieceJointeIds = null,
             string? vitesseEcoute = null)
         {
             var contexte = await _resolver.ResoudreConversationAsync(conversationId)
@@ -1873,8 +1971,10 @@ namespace SchoolWebApp.Api.Builders.impl
             // marqueur voyage alors avec le message d'accueil lui-même.
             var marquerAbandonDictee = false;
 
-            // Le document joint à CE tour, s'il a passé les contrôles.
-            Domain.Models.PieceJointe? pieceDuTour = null;
+            // LES documents joints à CE tour, ceux qui ont passé les contrôles,
+            // dans l'ordre où l'élève les a ajoutés — Camara, le 16/09/2026 :
+            // « le professeur reçoit tous les documents d'un coup ».
+            var piecesDuTour = new List<Domain.Models.PieceJointe>();
 
             // Son identifiant, une fois RÉELLEMENT attaché au message — c'est
             // la preuve dont la copie de contrôle a besoin.
@@ -1971,7 +2071,7 @@ namespace SchoolWebApp.Api.Builders.impl
                 //
                 // La pièce est revérifiée : rien n'empêche un client d'envoyer
                 // l'identifiant d'un document déposé sur une AUTRE conversation.
-                if (pieceJointeId is int idPiece)
+                foreach (var idPiece in pieceJointeIds ?? Array.Empty<int>())
                 {
                     var piece = await _conversationService.GetPieceJointeAsync(idPiece, ct);
 
@@ -1979,14 +2079,19 @@ namespace SchoolWebApp.Api.Builders.impl
                         && piece.MessageId is null)
                     {
                         await _conversationService.AttacherAuMessageAsync(idPiece, messageEleve.Id, ct);
-                        pieceAttachee = idPiece;
+                        // LA COPIE DE CONTRÔLE NE RETIENT QUE LA PREMIÈRE, pour
+                        // l'instant : une copie en plusieurs pages toucherait
+                        // l'évaluation et demanderait une migration. Chantier à part.
+                        pieceAttachee ??= idPiece;
 
                         // L'historique a été lu AVANT d'écrire ce message : le
                         // document n'y est donc pas. On le porte à part pour ce
                         // tour-ci ; dès le tour suivant il arrivera par
                         // l'historique comme n'importe quel autre.
-                        pieceDuTour = await _conversationService
+                        var avecDonnees = await _conversationService
                             .GetPieceJointeAvecDonneesAsync(idPiece, ct);
+
+                        if (avecDonnees is not null) piecesDuTour.Add(avecDonnees);
                     }
                     else
                     {
@@ -2110,7 +2215,20 @@ namespace SchoolWebApp.Api.Builders.impl
                     + "message, juste après les avoir dits. Le bloc ne se "
                     + "prononce pas : il ne compte pas dans la longueur de ton "
                     + "message. Seule exception, comme toujours : le texte d'une "
-                    + "dictée ne va jamais au tableau.]";
+                    + "dictée ne va jamais au tableau. Une FIGURE, elle, ne se "
+                    + "réécrit pas : elle se remet par sa clé, [ARDOISE] "
+                    + "SCHEMA:la-cle [/ARDOISE]. Et si la figure dont tu te "
+                    + "souviens n'est PAS dans ta liste de planches, tu ne peux "
+                    + "pas la réafficher du tout : change d'exercice plutôt que "
+                    + "de faire chercher à l'élève ce que personne ne voit.]";
+            }
+            else
+            {
+                // PAS UNE ARRIVÉE, ET POURTANT LA MÊME FAUTE. Le rappel ci-dessus
+                // ne partait qu'au premier message : un professeur qui invente un
+                // support au dixième passait au travers. On lui dit donc l'état
+                // réel du tableau à CHAQUE tour — voir `EtatDuTableau`.
+                declencheur += EtatDuTableau(historique);
             }
 
             // AU MOMENT DE CONCLURE, LE CONTRÔLE REVIENT SOUS SES YEUX.
@@ -2307,9 +2425,13 @@ namespace SchoolWebApp.Api.Builders.impl
             var piecesHistorique = await _conversationService.GetPiecesDesMessagesAsync(
                 historique.Where(m => m.Id > 0).Select(m => m.Id), ct);
 
+            // GROUPÉES PAR MESSAGE, et non une par message : un tour peut en
+            // porter plusieurs depuis le 16/09/2026. Un dictionnaire à clé
+            // unique aurait levé à la deuxième.
             var parMessage = piecesHistorique
                 .Where(p => p.MessageId.HasValue)
-                .ToDictionary(p => p.MessageId!.Value);
+                .GroupBy(p => p.MessageId!.Value)
+                .ToDictionary(g => g.Key, g => (IReadOnlyList<Domain.Models.PieceJointe>)g.ToList());
 
             // LA GOMME, POSÉE AVANT QUE LE MODÈLE N'AIT ÉCRIT UN SEUL MOT.
             //
@@ -2327,7 +2449,7 @@ namespace SchoolWebApp.Api.Builders.impl
             await foreach (var fragment in _agent.RepondreAsync(
                 contexte.Eleve, contexte.Conversation, historique, declencheur, bilan,
                 TypeTache.Dialogue, typeAccueil, depuis, secondesRestantes,
-                parMessage, pieceDuTour, ct))
+                parMessage, piecesDuTour, ct))
             {
                 yield return fragment.Texte;
             }

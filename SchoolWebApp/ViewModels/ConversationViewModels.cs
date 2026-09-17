@@ -43,6 +43,14 @@ namespace SchoolWebApp.Api.ViewModels
         /// </summary>
         public PieceJointeViewModel? PieceJointe { get; set; }
 
+        /// <summary>
+        /// TOUS les documents joints à ce message, dans l'ordre d'envoi —
+        /// Camara, le 16/09/2026 : plusieurs photos ou fichiers d'un coup.
+        /// <see cref="PieceJointe"/> garde le premier, pour un navigateur resté
+        /// sur la version précédente.
+        /// </summary>
+        public List<PieceJointeViewModel>? PiecesJointes { get; set; }
+
         // Les compteurs de tokens ne sont pas exposés : ils servent au suivi
         // de coût côté opérateur, pas à l'élève.
     }

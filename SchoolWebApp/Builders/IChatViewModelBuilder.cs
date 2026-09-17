@@ -28,7 +28,7 @@ namespace SchoolWebApp.Api.Builders
         /// ni dire qu'il lit déjà au plus lent.
         /// </param>
         IAsyncEnumerable<string> StreamReponseAsync(
-            int conversationId, string contenu, int? pieceJointeId,
+            int conversationId, string contenu, IReadOnlyList<int> pieceJointeIds,
             int? secondesRestantes, string? vitesseEcoute, CancellationToken ct);
 
         /// <summary>

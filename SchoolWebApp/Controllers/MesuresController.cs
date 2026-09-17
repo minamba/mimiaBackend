@@ -95,5 +95,94 @@ namespace SchoolWebApp.Api.Controllers
 
             return NoContent();
         }
+
+        public class MesureMicroRequest
+        {
+            [Required]
+            [StringLength(36, MinimumLength = 8)]
+            public string Seance { get; set; } = string.Empty;
+
+            [StringLength(20)]
+            public string? Moteur { get; set; }
+
+            /// <summary>Aucun son au-dessus du bruit de fond pendant l'observation.</summary>
+            public bool Muet { get; set; }
+
+            /// <summary>
+            /// Muette AUX YEUX DU SYSTÈME (`MediaStreamTrack.muted`) : le
+            /// navigateur a bien obtenu le micro, mais l'ordinateur ne lui donne
+            /// rien — confidentialité Windows, antivirus, touche « muet ».
+            /// </summary>
+            public bool PisteMuette { get; set; }
+
+            [StringLength(60)]
+            public string? Erreur { get; set; }
+
+            [StringLength(120)]
+            public string? Peripherique { get; set; }
+
+            [StringLength(400)]
+            public string? Entrees { get; set; }
+
+            [StringLength(20)]
+            public string? EtatPiste { get; set; }
+
+            [Range(0, 400_000)]
+            public int? FrequencePiste { get; set; }
+
+            [Range(0, 400_000)]
+            public int? FrequenceContexte { get; set; }
+
+            [Range(0, 10)]
+            public double? NiveauMax { get; set; }
+
+            [Range(0, 3600)]
+            public double? Secondes { get; set; }
+
+            [StringLength(300)]
+            public string? Navigateur { get; set; }
+        }
+
+        /// <summary>
+        /// CE QUE LE MICRO A DONNÉ CHEZ L'ÉLÈVE — Camara, le 16/09/2026 : trois
+        /// familles, trois PC, « comme si leur micro était en mute », casque ou
+        /// haut-parleur, et rien à reproduire de son côté.
+        ///
+        /// JOURNALISÉ, PAS ENREGISTRÉ. Pas de table ni de migration à la veille
+        /// du lancement : un avertissement par relevé, à lire dans les logs du
+        /// conteneur (`docker logs mimia | grep "Diagnostic micro"`). Le jour
+        /// où il faudra des statistiques, on ajoutera la table — pas avant
+        /// d'avoir vu à quoi ressemblent les premiers relevés.
+        ///
+        /// En avertissement quand quelque chose cloche, en information sinon :
+        /// un relevé sain sert de point de comparaison, pas d'alerte.
+        /// </summary>
+        [HttpPost("micro")]
+        [SwaggerResponse(204, "Relevé journalisé, ou ignoré sans bruit.")]
+        public IActionResult Micro([FromBody] MesureMicroRequest requete)
+        {
+            try
+            {
+                var gravite = requete.Muet || requete.PisteMuette || requete.Erreur is not null
+                    ? LogLevel.Warning
+                    : LogLevel.Information;
+
+                _logger.Log(gravite,
+                    "Diagnostic micro [{Seance}] moteur={Moteur} muet={Muet} pisteMuette={PisteMuette} "
+                    + "erreur={Erreur} peripherique=\"{Peripherique}\" etat={Etat} "
+                    + "freqPiste={FreqPiste} freqContexte={FreqContexte} niveauMax={NiveauMax} "
+                    + "secondes={Secondes} entrees=\"{Entrees}\" navigateur=\"{Navigateur}\"",
+                    requete.Seance, requete.Moteur ?? "-", requete.Muet, requete.PisteMuette,
+                    requete.Erreur ?? "-", requete.Peripherique ?? "-", requete.EtatPiste ?? "-",
+                    requete.FrequencePiste, requete.FrequenceContexte, requete.NiveauMax,
+                    requete.Secondes, requete.Entrees ?? "-", requete.Navigateur ?? "-");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Diagnostic micro non journalise.");
+            }
+
+            return NoContent();
+        }
     }
 }

@@ -114,10 +114,25 @@ namespace SchoolWebApp.Api.Controllers
 
             // Un tour vide reste refusé — mais un document SANS texte est un
             // tour plein : l'élève montre sa feuille, c'est un message.
+            var pieces = model.Pieces();
+
             if (!ModelState.IsValid
-                || (string.IsNullOrWhiteSpace(model.Contenu) && model.PieceJointeId is null))
+                || (string.IsNullOrWhiteSpace(model.Contenu) && pieces.Count == 0))
             {
                 await EcrireEvenementAsync(new { type = "erreur", message = "Message vide ou invalide." });
+                return;
+            }
+
+            // Le plafond est aussi vérifié ici, et pas seulement par l'attribut :
+            // l'ancien champ et le nouveau se cumulent, et l'attribut ne voit
+            // que le nouveau.
+            if (pieces.Count > EnvoyerMessageRequest.PiecesMax)
+            {
+                await EcrireEvenementAsync(new
+                {
+                    type = "erreur",
+                    message = $"Au plus {EnvoyerMessageRequest.PiecesMax} documents par message.",
+                });
                 return;
             }
 
@@ -126,7 +141,7 @@ namespace SchoolWebApp.Api.Controllers
             try
             {
                 await foreach (var fragment in _chatBuilder.StreamReponseAsync(
-                    id, model.Contenu ?? string.Empty, model.PieceJointeId,
+                    id, model.Contenu ?? string.Empty, pieces,
                     model.SecondesRestantes, model.VitesseEcoute,
                     HttpContext.RequestAborted))
                 {
@@ -472,21 +487,33 @@ namespace SchoolWebApp.Api.Controllers
             {
                 if (await _chatBuilder.ResoudreEnTeteScanAsync(id) is null) return NotFound();
 
-                var (etat, pieceId) = _jetonsScan.Etat(jeton, id, DateTime.UtcNow);
+                var (etat, pieceIds, termine) = _jetonsScan.Etat(jeton, id, DateTime.UtcNow);
 
-                var piece = pieceId is int idPiece
-                    ? await _chatBuilder.GetApercuPieceAsync(id, idPiece, HttpContext.RequestAborted)
-                    : null;
+                // TOUTES les photos reçues jusqu'ici, dans l'ordre. L'ordinateur
+                // les montre au fur et à mesure ; `termine` dit que le téléphone
+                // a appuyé sur Envoyer, et c'est ce signal-là qui déclenche
+                // l'envoi au professeur — pas la première photo.
+                var pieces = new List<PieceJointeViewModel>();
+
+                foreach (var idPiece in pieceIds)
+                {
+                    var p = await _chatBuilder.GetApercuPieceAsync(id, idPiece, HttpContext.RequestAborted);
+                    if (p is not null) pieces.Add(p);
+                }
 
                 return Ok(new
                 {
                     etat = etat switch
                     {
-                        Services.ScanMobile.EtatJetonScan.Recu when piece is not null => "recu",
+                        Services.ScanMobile.EtatJetonScan.Recu when pieces.Count > 0 => "recu",
                         Services.ScanMobile.EtatJetonScan.Attente => "attente",
                         _ => "expire",
                     },
-                    piece,
+                    // L'ancien champ : la première, pour un navigateur resté sur
+                    // la version précédente.
+                    piece = pieces.FirstOrDefault(),
+                    pieces,
+                    termine,
                 });
             }
             catch (Exception ex)

@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using SchoolWebApp.Api.Builders;
 using SchoolWebApp.Api.Services.PiecesJointes;
 using SchoolWebApp.Api.Services.ScanMobile;
+using SchoolWebApp.Domain.Repositories;
 using Swashbuckle.AspNetCore.Annotations;
 
 namespace SchoolWebApp.Api.Controllers
@@ -41,10 +42,33 @@ namespace SchoolWebApp.Api.Controllers
         [HttpGet("{jeton}")]
         [SwaggerResponse(200, "À qui la photo sera envoyée.", typeof(InfoScanMobile))]
         [SwaggerResponse(404, "QR code inconnu ou expiré.")]
-        public IActionResult Lire(string jeton)
+        public async Task<IActionResult> Lire(
+            string jeton, [FromServices] IReglageRepository reglages, CancellationToken ct)
         {
             var info = _jetons.Lire(jeton, DateTime.UtcNow);
-            return info is null ? NotFound() : Ok(info);
+            if (info is null) return NotFound();
+
+            // LE STYLE DU SITE VOYAGE AVEC LA PAGE — Camara, le 17/09/2026 :
+            // « un mode normal et un mode Blue Sky qui s'adaptera ». Le
+            // téléphone arrive sans compte et sans rien en mémoire ; il ne
+            // saurait donc pas que le site a changé d'allure. Le drapeau part
+            // dans CETTE réponse plutôt que dans une seconde requête : la page
+            // est encore vide quand il arrive, et la bascule ne se voit pas.
+            var blueSky = false;
+
+            try
+            {
+                blueSky = await reglages.EstActifAsync(ReglagesController.BlueSky, false, ct);
+            }
+            catch (Exception ex)
+            {
+                // Le style d'origine sur une panne de lecture, comme sur la
+                // route publique : un réglage illisible ne doit pas empêcher
+                // l'enfant d'envoyer sa copie.
+                _logger.LogWarning(ex, "Lecture du style pour la page de scan impossible.");
+            }
+
+            return Ok(info with { BlueSky = blueSky });
         }
 
         [HttpPost("{jeton}")]
@@ -68,7 +92,11 @@ namespace SchoolWebApp.Api.Controllers
             // même QR code ne passent pas tous les deux.
             if (!_jetons.Reserver(jeton, DateTime.UtcNow, out var conversationId))
             {
-                return NotFound(new { message = "Ce QR code a expiré ou a déjà servi." });
+                return NotFound(new
+                {
+                    message = "Ce QR code a expiré, l'envoi est déjà terminé, ou tu as atteint "
+                            + $"le maximum de {JetonsScanMobile.PiecesMax} photos.",
+                });
             }
 
             try
@@ -101,6 +129,25 @@ namespace SchoolWebApp.Api.Controllers
                 _logger.LogError(ex, "Echec de l'envoi d'une photo par QR code sur {ConversationId}.", conversationId);
                 return StatusCode(500, new { message = "La photo n'a pas pu être envoyée. Tu peux réessayer ?" });
             }
+        }
+
+        /// <summary>
+        /// LE TÉLÉPHONE A FINI — Camara, le 16/09/2026 : « prendre plusieurs
+        /// photos et les envoyer en une seule fois ». Les photos montent une
+        /// par une ; c'est cet appel, et lui seul, qui dit à l'ordinateur que
+        /// tout est là et qu'il peut expédier le message au professeur.
+        /// </summary>
+        [HttpPost("{jeton}/terminer")]
+        [SwaggerResponse(200, "L'envoi est clos.")]
+        [SwaggerResponse(404, "QR code inconnu ou expiré.")]
+        public IActionResult Terminer(string jeton)
+        {
+            if (!_jetons.Terminer(jeton, DateTime.UtcNow))
+            {
+                return NotFound(new { message = "Ce QR code a expiré." });
+            }
+
+            return Ok(new { termine = true });
         }
     }
 }

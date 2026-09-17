@@ -36,8 +36,8 @@ namespace SchoolWebApp.Api.Services
             TypeAccueil accueil = TypeAccueil.Aucun,
             TimeSpan? depuisDerniereSeance = null,
             int? secondesRestantes = null,
-            IReadOnlyDictionary<int, PieceJointe>? piecesHistorique = null,
-            PieceJointe? pieceDuTour = null,
+            IReadOnlyDictionary<int, IReadOnlyList<PieceJointe>>? piecesHistorique = null,
+            IReadOnlyList<PieceJointe>? piecesDuTour = null,
             CancellationToken ct = default);
     }
 
@@ -107,14 +107,19 @@ namespace SchoolWebApp.Api.Services
             TypeAccueil accueil = TypeAccueil.Aucun,
             TimeSpan? depuisDerniereSeance = null,
             int? secondesRestantes = null,
-            IReadOnlyDictionary<int, PieceJointe>? piecesHistorique = null,
-            PieceJointe? pieceDuTour = null,
+            IReadOnlyDictionary<int, IReadOnlyList<PieceJointe>>? piecesHistorique = null,
+            IReadOnlyList<PieceJointe>? piecesDuTour = null,
             [EnumeratorCancellation] CancellationToken ct = default)
         {
             var system = await ConstruireSystemAsync(
                 eleve, conversation, accueil, depuisDerniereSeance, ct);
             // Quand l'élève montre du doigt, la planche part avec son geste.
-            var pointage = pieceDuTour ?? await PlancheMontreeAsync(messageEleve, ct);
+            // Sans document joint, la planche montrée du doigt tient ce rôle.
+            var pointage = piecesDuTour is { Count: > 0 }
+                ? piecesDuTour
+                : await PlancheMontreeAsync(messageEleve, ct) is { } planche
+                    ? new[] { planche }
+                    : null;
 
             var messages = ConstruireMessages(
                 historique,
@@ -832,8 +837,8 @@ namespace SchoolWebApp.Api.Services
         private static List<MessageParam> ConstruireMessages(
             IEnumerable<DomainMessage> historique,
             string messageEleve,
-            IReadOnlyDictionary<int, PieceJointe>? piecesHistorique,
-            PieceJointe? pieceDuTour)
+            IReadOnlyDictionary<int, IReadOnlyList<PieceJointe>>? piecesHistorique,
+            IReadOnlyList<PieceJointe>? piecesDuTour)
         {
             // La fenêtre arrive déjà taillée par paliers : c'est le dépôt qui
             // s'en charge, à partir du nombre total de messages. La couper ici,
@@ -854,8 +859,8 @@ namespace SchoolWebApp.Api.Services
                 var role = utiles[i].Role == "assistant" ? Role.Assistant : Role.User;
                 var dernier = i == utiles.Count - 1;
 
-                PieceJointe? piece = null;
-                piecesHistorique?.TryGetValue(utiles[i].Id, out piece);
+                IReadOnlyList<PieceJointe>? pieces = null;
+                piecesHistorique?.TryGetValue(utiles[i].Id, out pieces);
 
                 // UN MARQUEUR DE SUPPORT NE VAUT QUE POUR SON TOUR.
                 //
@@ -873,7 +878,7 @@ namespace SchoolWebApp.Api.Services
                 // subsiste est celui du tour courant, ajoute plus bas avec le
                 // message de l eleve.
                 var contenu = SansMarqueurDeSupport(utiles[i].Contenu);
-                var blocs = ConstruireBlocs(contenu, piece, marquerCache: dernier);
+                var blocs = ConstruireBlocs(contenu, pieces, marquerCache: dernier);
 
                 // Le marqueur de cache se pose sur le DERNIER message de
                 // l'historique et sur lui seul : le préfixe mis en cache doit
@@ -883,7 +888,7 @@ namespace SchoolWebApp.Api.Services
                 // page de PDF pèse des milliers de jetons et repart à CHAQUE
                 // tour tant qu'elle est dans la fenêtre ; relue depuis le
                 // cache, elle est facturée un dixième.
-                messages.Add(blocs.Count == 1 && !dernier && piece is null
+                messages.Add(blocs.Count == 1 && !dernier && pieces is not { Count: > 0 }
                     ? new MessageParam { Role = role, Content = contenu! }
                     : new MessageParam { Role = role, Content = blocs });
             }
@@ -891,7 +896,7 @@ namespace SchoolWebApp.Api.Services
             messages.Add(new MessageParam
             {
                 Role = Role.User,
-                Content = ConstruireBlocs(messageEleve, pieceDuTour, marquerCache: false),
+                Content = ConstruireBlocs(messageEleve, piecesDuTour, marquerCache: false),
             });
 
             return messages;
@@ -926,58 +931,64 @@ namespace SchoolWebApp.Api.Services
         /// que le document. Un bloc de texte vide, lui, ferait échouer l'appel.
         /// </summary>
         private static List<ContentBlockParam> ConstruireBlocs(
-            string? texte, PieceJointe? piece, bool marquerCache)
+            string? texte, IReadOnlyList<PieceJointe>? pieces, bool marquerCache)
         {
             var blocs = new List<ContentBlockParam>();
             var cache = marquerCache ? new CacheControlEphemeral() : null;
 
-            // LES OCTETS ONT ÉTÉ PURGÉS : ON ENVOIE LE TEXTE.
-            //
-            // Au-delà de quelques jours, seule la transcription subsiste. Ce
-            // n'est pas un repli dégradé mais le comportement voulu : à ce
-            // stade le document est sorti de la fenêtre d'historique et n'était
-            // plus envoyé de toute façon. S'il y revient — l'élève rouvre une
-            // vieille conversation — le professeur retrouve au moins de quoi
-            // dire sur quoi on avait travaillé.
-            //
-            // Le préfixe est explicite : sans lui, le modèle prendrait un
-            // énoncé recopié pour une parole de l'élève.
-            if (piece is not null && !piece.Consultable
-                && !string.IsNullOrWhiteSpace(piece.Transcription))
+            // TOUS LES DOCUMENTS, DANS L'ORDRE, PUIS LE TEXTE — Camara, le
+            // 16/09/2026 : « le professeur reçoit tous les documents d'un coup
+            // et a tout en tête ». L'ordre est celui où l'élève les a ajoutés :
+            // page 1, page 2, l'énoncé — c'est le sien, il faut le respecter.
+            foreach (var piece in pieces ?? Array.Empty<PieceJointe>())
             {
-                blocs.Add(new TextBlockParam
+                // LES OCTETS ONT ÉTÉ PURGÉS : ON ENVOIE LE TEXTE.
+                //
+                // Au-delà de quelques jours, seule la transcription subsiste. Ce
+                // n'est pas un repli dégradé mais le comportement voulu : à ce
+                // stade le document est sorti de la fenêtre d'historique et
+                // n'était plus envoyé de toute façon. S'il y revient — l'élève
+                // rouvre une vieille conversation — le professeur retrouve au
+                // moins de quoi dire sur quoi on avait travaillé.
+                //
+                // Le préfixe est explicite : sans lui, le modèle prendrait un
+                // énoncé recopié pour une parole de l'élève.
+                if (!piece.Consultable && !string.IsNullOrWhiteSpace(piece.Transcription))
                 {
-                    Text = $"[Document envoyé le {piece.DateCreation:d} — "
-                           + $"« {piece.NomFichier} ». L'image n'est plus disponible, "
-                           + $"voici son contenu tel qu'il avait été relevé :]\n\n"
-                           + piece.Transcription,
-                });
-            }
-            else if (piece?.Donnees is { Length: > 0 } donnees)
-            {
-                var base64 = Convert.ToBase64String(donnees);
-
-                if (piece.EstPdf)
-                {
-                    blocs.Add(new DocumentBlockParam
+                    blocs.Add(new TextBlockParam
                     {
-                        Source = new Base64PdfSource { Data = base64 },
-
-                        // Le nom du fichier voyage avec le document : c'est
-                        // souvent lui qui dit ce que c'est — « DM4_fractions ».
-                        Title = piece.NomFichier,
+                        Text = $"[Document envoyé le {piece.DateCreation:d} — "
+                               + $"« {piece.NomFichier} ». L'image n'est plus disponible, "
+                               + $"voici son contenu tel qu'il avait été relevé :]\n\n"
+                               + piece.Transcription,
                     });
                 }
-                else
+                else if (piece.Donnees is { Length: > 0 } donnees)
                 {
-                    blocs.Add(new ImageBlockParam
+                    var base64 = Convert.ToBase64String(donnees);
+
+                    if (piece.EstPdf)
                     {
-                        Source = new Base64ImageSource
+                        blocs.Add(new DocumentBlockParam
                         {
-                            Data = base64,
-                            MediaType = MediaTypeDepuis(piece.TypeMime),
-                        },
-                    });
+                            Source = new Base64PdfSource { Data = base64 },
+
+                            // Le nom du fichier voyage avec le document : c'est
+                            // souvent lui qui dit ce que c'est — « DM4_fractions ».
+                            Title = piece.NomFichier,
+                        });
+                    }
+                    else
+                    {
+                        blocs.Add(new ImageBlockParam
+                        {
+                            Source = new Base64ImageSource
+                            {
+                                Data = base64,
+                                MediaType = MediaTypeDepuis(piece.TypeMime),
+                            },
+                        });
+                    }
                 }
             }
 

@@ -4,7 +4,17 @@ using SchoolWebApp.Api.Auth;
 namespace SchoolWebApp.Api.Services.ScanMobile
 {
     /// <summary>Ce que la page du téléphone a le droit de savoir : à qui il envoie, rien de plus.</summary>
-    public record InfoScanMobile(string? ProfPrenom, string? Matiere, DateTime ExpireLe, bool DejaEnvoye);
+    /// <summary>
+    /// Ce que le téléphone apprend du QR code avant d'afficher quoi que ce soit.
+    ///
+    /// <c>BlueSky</c> n'est pas du ressort du jeton — il ne le connaît pas et
+    /// le laisse à sa valeur par défaut. C'est le contrôleur qui le pose, en
+    /// lisant le réglage : le téléphone n'a ni compte ni mémoire, et cet
+    /// aller-retour est le SEUL qu'il fait avant de se dessiner.
+    /// </summary>
+    public record InfoScanMobile(
+        string? ProfPrenom, string? Matiere, DateTime ExpireLe, bool DejaEnvoye,
+        bool BlueSky = false);
 
     /// <summary>Où en est un QR code, vu de l'ordinateur.</summary>
     public enum EtatJetonScan { Attente, Recu, Expire }
@@ -53,7 +63,12 @@ namespace SchoolWebApp.Api.Services.ScanMobile
             public string? Matiere { get; init; }
             public DateTime ExpireLe { get; init; }
             public bool EnCours { get; set; }
-            public int? PieceJointeId { get; set; }
+
+            // PLUSIEURS PHOTOS PAR QR CODE — Camara, le 16/09/2026. Le jeton
+            // n'est plus « consommé » à la première : il reste ouvert tant que
+            // le téléphone n'a pas dit « terminé », dans la limite du plafond.
+            public List<int> PiecesJointes { get; } = new();
+            public bool Termine { get; set; }
         }
 
         private readonly ConcurrentDictionary<string, Entree> _entrees = new();
@@ -73,7 +88,7 @@ namespace SchoolWebApp.Api.Services.ScanMobile
             {
                 foreach (var (cle, entree) in _entrees)
                 {
-                    if (entree.ConversationId == conversationId && entree.PieceJointeId is null && !entree.EnCours)
+                    if (entree.ConversationId == conversationId && entree.PiecesJointes.Count == 0 && !entree.EnCours)
                     {
                         _entrees.TryRemove(cle, out _);
                     }
@@ -100,7 +115,7 @@ namespace SchoolWebApp.Api.Services.ScanMobile
             if (!TrouverValide(jeton, maintenant, out var entree)) return null;
 
             return new InfoScanMobile(
-                entree!.ProfPrenom, entree.Matiere, entree.ExpireLe, entree.PieceJointeId is not null);
+                entree!.ProfPrenom, entree.Matiere, entree.ExpireLe, entree.Termine);
         }
 
         /// <summary>
@@ -115,7 +130,9 @@ namespace SchoolWebApp.Api.Services.ScanMobile
             lock (_verrou)
             {
                 if (!TrouverValide(jeton, maintenant, out var entree)) return false;
-                if (entree!.PieceJointeId is not null || entree.EnCours) return false;
+                // Un envoi à la fois — le téléphone les enchaîne —, plus rien
+                // après « terminé », et jamais au-delà du plafond par message.
+                if (entree!.Termine || entree.EnCours || entree.PiecesJointes.Count >= PiecesMax) return false;
 
                 entree.EnCours = true;
                 conversationId = entree.ConversationId;
@@ -130,7 +147,7 @@ namespace SchoolWebApp.Api.Services.ScanMobile
             {
                 if (!_entrees.TryGetValue(AuthentificationEleve.Hacher(jeton), out var entree)) return;
 
-                entree.PieceJointeId = pieceJointeId;
+                entree.PiecesJointes.Add(pieceJointeId);
                 entree.EnCours = false;
             }
         }
@@ -152,20 +169,51 @@ namespace SchoolWebApp.Api.Services.ScanMobile
         /// « expiré » : on ne dit jamais à quelqu'un qu'un jeton existe
         /// ailleurs.
         /// </summary>
-        public (EtatJetonScan Etat, int? PieceJointeId) Etat(string? jeton, int conversationId, DateTime maintenant)
+        /// <summary>Le plafond de photos par QR code : celui d'un message.</summary>
+        public const int PiecesMax = Request.EnvoyerMessageRequest.PiecesMax;
+
+        /// <summary>
+        /// Le téléphone a appuyé sur « Envoyer » : plus aucune photo n'entre,
+        /// et c'est ce signal — pas la première photo — que l'ordinateur
+        /// attend pour expédier le tout au professeur.
+        /// </summary>
+        public bool Terminer(string? jeton, DateTime maintenant)
+        {
+            lock (_verrou)
+            {
+                if (!TrouverValide(jeton, maintenant, out var entree)) return false;
+
+                entree!.Termine = true;
+                return true;
+            }
+        }
+
+        public (EtatJetonScan Etat, IReadOnlyList<int> PiecesJointes, bool Termine) Etat(
+            string? jeton, int conversationId, DateTime maintenant)
         {
             if (string.IsNullOrWhiteSpace(jeton)
                 || !_entrees.TryGetValue(AuthentificationEleve.Hacher(jeton), out var entree)
                 || entree.ConversationId != conversationId)
             {
-                return (EtatJetonScan.Expire, null);
+                return (EtatJetonScan.Expire, Array.Empty<int>(), false);
             }
 
-            if (entree.PieceJointeId is int piece) return (EtatJetonScan.Recu, piece);
+            int[] recues;
+            bool termine;
+
+            lock (_verrou)
+            {
+                recues = entree.PiecesJointes.ToArray();
+                termine = entree.Termine;
+            }
+
+            // Reçu dès la première : l'ordinateur les montre au fur et à mesure.
+            // Une photo arrivée n'expire pas — elle est déjà en base.
+            if (recues.Length > 0) return (EtatJetonScan.Recu, recues, termine);
 
             return entree.ExpireLe > maintenant
-                ? (EtatJetonScan.Attente, null)
-                : (EtatJetonScan.Expire, null);
+                ? (EtatJetonScan.Attente, recues, termine)
+                : (EtatJetonScan.Expire, recues, termine);
         }
 
         private bool TrouverValide(string? jeton, DateTime maintenant, out Entree? entree)
