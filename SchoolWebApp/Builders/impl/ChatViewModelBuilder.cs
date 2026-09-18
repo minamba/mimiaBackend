@@ -98,6 +98,7 @@ namespace SchoolWebApp.Api.Builders.impl
         private readonly IDicteeRepository _dictees;
         private readonly IComprehensionOraleRepository _comprehensionsOrales;
         private readonly IExpressionOraleRepository _expressionsOrales;
+        private readonly IExpressionEcriteRepository _expressionsEcrites;
         private readonly ISyntheseVocaleService _syntheseVocale;
         private readonly IEvaluationPrevueRepository _evaluationsPrevues;
         private readonly IControleScolaireRepository _controles;
@@ -122,6 +123,7 @@ namespace SchoolWebApp.Api.Builders.impl
             IDicteeRepository dictees,
             IComprehensionOraleRepository comprehensionsOrales,
             IExpressionOraleRepository expressionsOrales,
+            IExpressionEcriteRepository expressionsEcrites,
             ISyntheseVocaleService syntheseVocale,
             IEvaluationPrevueRepository evaluationsPrevues,
             IControleScolaireRepository controles,
@@ -137,6 +139,7 @@ namespace SchoolWebApp.Api.Builders.impl
             _dictees = dictees ?? throw new ArgumentNullException(nameof(dictees));
             _comprehensionsOrales = comprehensionsOrales ?? throw new ArgumentNullException(nameof(comprehensionsOrales));
             _expressionsOrales = expressionsOrales ?? throw new ArgumentNullException(nameof(expressionsOrales));
+            _expressionsEcrites = expressionsEcrites ?? throw new ArgumentNullException(nameof(expressionsEcrites));
             _syntheseVocale = syntheseVocale ?? throw new ArgumentNullException(nameof(syntheseVocale));
             _evaluationsPrevues = evaluationsPrevues ?? throw new ArgumentNullException(nameof(evaluationsPrevues));
             _controles = controles ?? throw new ArgumentNullException(nameof(controles));
@@ -660,6 +663,57 @@ namespace SchoolWebApp.Api.Builders.impl
         }
 
         /// <summary>
+        /// UNE COPIE RESTÉE EN PHOTO SE RECOPIE AU COURS SUIVANT — voulu par
+        /// Camara le 18/09/2026 : « le prof pourra quand même refaire la
+        /// transcription si elle a pas été faite. »
+        ///
+        /// PORTÉE AVEC L'IMAGE, et c'est tout l'enjeu : le texte peut dater de
+        /// plusieurs séances et ne plus figurer dans la fenêtre d'historique que
+        /// le professeur a sous les yeux. Une consigne seule lui demanderait de
+        /// recopier ce qu'il ne voit pas — exactement le défaut évité sur la
+        /// dictée en attente, dont on reprend ici la mécanique.
+        ///
+        /// LA PHOTO EST JOINTE AU TOUR, comme un document que l'élève viendrait
+        /// d'envoyer : c'est le seul chemin par lequel une image entre dans le
+        /// raisonnement du modèle.
+        /// </summary>
+        private async Task<(string Consigne, Domain.Models.PieceJointe Photo)?>
+            TexteATranscrireAsync(int eleveId, int matiereId, CancellationToken ct)
+        {
+            try
+            {
+                var attente = await _expressionsEcrites.ATranscrireAsync(eleveId, matiereId, ct);
+                if (attente is null) return null;
+
+                var consigne =
+                    $"[Un texte écrit le {attente.DateCreation:dd/MM} (n° {attente.Id}) attend "
+                    + "encore d'être RECOPIÉ : sa photo est jointe à ce tour, et elle est la "
+                    + "seule trace qui reste de son travail. Tu COMMENCES la séance par lui.\n"
+                    + $"Ce qui était demandé : {attente.Consigne}\n"
+                    + "Recopie son texte mot pour mot, fautes comprises, montre-le-lui au "
+                    + "tableau sous « Ton texte », corrige-le comme d'habitude, puis écris le "
+                    + "bloc [EXPRESSION_ECRITE] avec la ligne `numero: " + attente.Id + "` — "
+                    + "titre, langue et consigne sont déjà enregistrés, tu n'as pas à les "
+                    + "réécrire. Sans ce bloc, la photo finira par être effacée et son texte "
+                    + "sera perdu.]";
+
+                return (consigne, new Domain.Models.PieceJointe
+                {
+                    NomFichier = "copie.jpg",
+                    TypeMime = attente.TypeMime,
+                    Taille = attente.Photo.Length,
+                    Donnees = attente.Photo,
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex,
+                    "Echec de la lecture des textes a transcrire de l'eleve {EleveId}.", eleveId);
+                return null;
+            }
+        }
+
+        /// <summary>
         /// UN CONTRÔLE À VENIR SE PROPOSE À CHAQUE ARRIVÉE — voulu par
         /// Camara le 12/09/2026, TANT QUE la date n'est pas dépassée.
         /// Contrairement à la dictée en attente, il n'y a pas de garde
@@ -817,6 +871,140 @@ namespace SchoolWebApp.Api.Builders.impl
         ///
         /// Marque la séance de préparation, comme pour un contrôle.
         /// </summary>
+        /// <summary>
+        /// LA MAÎTRISE DE LA LANGUE COMPTE DANS TOUTES LES ÉPREUVES — voulu par
+        /// Camara le 18/09/2026.
+        ///
+        /// POSÉE ICI ET NON DANS CHAQUE ÉPREUVE DU SEEDER. Camara : « quelle que
+        /// soit la spécialité du bac ou du brevet, c'est partout ». Recopiée dans
+        /// la quinzaine d'épreuves, elle aurait manqué à la première qu'on
+        /// ajouterait ; ici, elle part avec chaque préparation, sans exception et
+        /// sans entretien.
+        ///
+        /// CHACUN SON RÔLE, ET C'EST LE POINT PÉDAGOGIQUE. Le professeur de
+        /// français ENTRAÎNE la compétence ; les autres RAPPELLENT de
+        /// l'appliquer. Un cours de rédaction donné par le professeur de
+        /// mathématiques prendrait le temps des mathématiques pour faire moins
+        /// bien que celui qui sait le faire.
+        ///
+        /// SOURCE, ET CE QUI RESTE À VÉRIFIER. Annonce du ministre de
+        /// l'Éducation nationale Édouard Geffray, interview au Figaro du
+        /// 17/09/2026, reprise par 20 Minutes le même jour : la maîtrise de la
+        /// langue entre explicitement dans les barèmes « quelle que soit la
+        /// discipline », avec une grille commune (orthographe, syntaxe,
+        /// vocabulaire, clarté) et jusqu'à deux points de pénalité, y compris en
+        /// mathématiques ; en français et en histoire-géographie, une copie très
+        /// mal rédigée ne peut pas avoir la moyenne. L'article renvoie au
+        /// **Bulletin officiel du 17 septembre 2026**.
+        ///
+        /// CE BO N'A PAS PU ÊTRE LU : `education.gouv.fr` a répondu 403 le
+        /// 18/09/2026, au User-Agent de navigateur ET à celui du worker — qui
+        /// passait encore le 13/09. À confirmer contre le texte lui-même à la
+        /// prochaine passe de vérification des référentiels, avec les barèmes
+        /// par épreuve. En attendant, la formulation ci-dessous reste sur ce que
+        /// la source dit, sans inventer de détail par épreuve.
+        /// </summary>
+        private const string MaitriseDeLaLangue =
+            "LA QUALITÉ DE L'EXPRESSION EST NOTÉE DANS CETTE ÉPREUVE, comme dans "
+            + "toutes les autres depuis la session 2027 : orthographe, syntaxe, "
+            + "vocabulaire, clarté du propos. Jusqu'à DEUX POINTS s'y jouent, y "
+            + "compris en mathématiques et en sciences ; en français et en "
+            + "histoire-géographie, une copie très mal rédigée ne peut pas avoir "
+            + "la moyenne.\n"
+            + "CE QUE TU EN FAIS DÉPEND DE TA MATIÈRE. Si tu es professeur de "
+            + "FRANÇAIS, c'est une compétence que tu ENTRAÎNES : elle fait partie "
+            + "de ta préparation au même titre que le reste. Sinon, tu ne donnes "
+            + "AUCUN cours de rédaction — tu le RAPPELLES, en une phrase, quand il "
+            + "vient de rédiger une réponse : « pense à rédiger clairement, ça "
+            + "compte aussi dans le barème ». Une remarque, pas une leçon.\n"
+            + "ET JAMAIS SUR UN CALCUL OU UN MOT JETÉ. Reprendre l'orthographe "
+            + "d'un élève qui répond « 42 » à une question de calcul mental est du "
+            + "harcèlement, pas de la préparation.\n";
+
+        /// <summary>
+        /// LES CLASSES QUI PASSENT L'ÉPREUVE CETTE ANNÉE-LÀ — et elles seules.
+        ///
+        /// PAR PRÉFIXE ET NON PAR ÉNUMÉRATION : il existe PREMIERE_TECHNO,
+        /// TERMINALE_STMG, TROISIEME_PREPA et quelques autres. Une liste en dur
+        /// aurait oublié la moitié des élèves de la voie technologique, et le
+        /// silence aurait été impossible à remarquer.
+        /// </summary>
+        private static bool ClasseDExamen(string? niveauCode)
+        {
+            var code = niveauCode ?? string.Empty;
+
+            return code.StartsWith("TROISIEME", StringComparison.Ordinal)
+                || code.StartsWith("PREMIERE", StringComparison.Ordinal)
+                || code.StartsWith("TERMINALE", StringComparison.Ordinal);
+        }
+
+        /// <summary>
+        /// LE RAPPEL DE LA MAÎTRISE DE LA LANGUE EN COURS NORMAL — voulu par
+        /// Camara le 18/09/2026, après discussion.
+        ///
+        /// POURQUOI IL NE SUFFISAIT PAS DE L'AVOIR EN PRÉPARATION D'EXAMEN. Ce
+        /// mode-là s'ouvre exprès, et l'essentiel des séances sont des cours
+        /// normaux : un élève de 3e qui travaille les maths toute l'année sans
+        /// jamais ouvrir la préparation ne l'aurait appris qu'en juin, en lisant
+        /// son barème. Et ça ne se rattrape pas : deux points d'orthographe sur
+        /// une copie de mathématiques, c'est une habitude d'écriture, elle se
+        /// prend sur des mois.
+        ///
+        /// TROIS FILTRES, ET LE PREMIER N'EST PAS NÉGOCIABLE :
+        ///
+        ///   1. SEULEMENT EN 3e, 1re ET TERMINALE. Pour un élève de 5e, « ça
+        ///      compte dans le barème » est FAUX — et une raison fausse donnée à
+        ///      un enfant est pire que pas de raison du tout. Avant la 3e, c'est
+        ///      le professeur de français qui s'en occupe, et il le fait déjà.
+        ///   2. PAS EN PRÉPARATION D'EXAMEN : le bloc complet y est déjà, et le
+        ///      dire deux fois dans la même séance le transformerait en bruit.
+        ///   3. NI AU FRANÇAIS NI AUX LANGUES. Le professeur de français a sa
+        ///      section entière — il ENTRAÎNE, il ne rappelle pas. Et dans un
+        ///      cours d'anglais, ce qui s'écrit s'écrit en anglais : un rappel
+        ///      sur la rédaction en français y serait hors sujet.
+        ///
+        /// LE RAPPEL EST CONDITIONNEL, JAMAIS SYSTÉMATIQUE : « quand il vient
+        /// d'écrire une réponse développée ». Une séance de calcul pur ne le
+        /// déclenche pas, et il ne revient pas trois fois — au troisième, un
+        /// enfant l'entend comme un reproche.
+        /// </summary>
+        private async Task<string?> RappelMaitriseLangueAsync(
+            string? niveauCode, int matiereId, string mode, CancellationToken ct)
+        {
+            if (mode == ModesSeance.Examen || !ClasseDExamen(niveauCode)) return null;
+
+            try
+            {
+                var matieres = await _referentielService.GetMatieresAsync(activesSeulement: false);
+                var slug = matieres.FirstOrDefault(m => m.Id == matiereId)?.AgentSlug;
+
+                // Le français et les langues vivantes sont écartés du même coup :
+                // `LangueDe` rend un code pour les neuf agents de langue, dont
+                // `agent-francais`.
+                if (slug is null || PromptsPedagogiques.LangueDe(slug) is not null) return null;
+
+                _ = ct;
+
+                return "[LA QUALITÉ DE SON EXPRESSION ÉCRITE COMPTE DANS TOUTES LES ÉPREUVES "
+                    + "de son examen depuis la session 2027, y compris la tienne : orthographe, "
+                    + "syntaxe, vocabulaire, clarté. Jusqu'à deux points s'y jouent.\n"
+                    + "TU NE DONNES AUCUN COURS DE RÉDACTION — ce n'est pas ta matière, et le "
+                    + "professeur de français le fait mieux que toi. Tu le RAPPELLES, EN UNE "
+                    + "PHRASE, UNE SEULE FOIS DANS LA SÉANCE, et seulement s'il vient d'écrire "
+                    + "une réponse développée : « pense à rédiger clairement, ça compte aussi "
+                    + "dans le barème ».\n"
+                    + "S'IL N'A ÉCRIT QUE DES CALCULS OU DES MOTS ISOLÉS, TU NE DIS RIEN. "
+                    + "Reprendre l'orthographe d'un élève qui répond « 42 » à une question de "
+                    + "calcul mental est du harcèlement, pas de la préparation.]";
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex,
+                    "Echec du rappel de maitrise de la langue (matiere {MatiereId}).", matiereId);
+                return null;
+            }
+        }
+
         private async Task<string?> ExamenAVenirAsync(
             int eleveId, string? niveauCode, int matiereId, string epreuveCode, CancellationToken ct)
         {
@@ -843,6 +1031,7 @@ namespace SchoolWebApp.Api.Builders.impl
                         ? ""
                         : $"CE QUE DEMANDE L'ÉPREUVE : {epreuve.Description}\n")
                     + (string.IsNullOrWhiteSpace(epreuve.Remarque) ? "" : $"À SAVOIR : {epreuve.Remarque}\n")
+                    + MaitriseDeLaLangue
                     + (autres.Count > 0
                         ? $"Cette épreuve se prépare aussi avec le professeur de {string.Join(" et de ", autres)} : "
                             + "tu ne prépares QUE ta matière.\n"
@@ -1843,6 +2032,7 @@ namespace SchoolWebApp.Api.Builders.impl
             // archivé lui-même est toujours meilleur que ce qu'on reconstitue.
             await RattraperComprehensionsOralesAsync(conversationId, ct);
             await RattraperExpressionsOralesAsync(conversationId, ct);
+            await RattraperExpressionsEcritesAsync(conversationId, ct);
         }
 
         /// <summary>
@@ -1925,6 +2115,100 @@ namespace SchoolWebApp.Api.Builders.impl
                     + "{ConversationId}).", conversationId);
             }
         }
+
+        /// <summary>
+        /// LE FILET DES TEXTES ÉCRITS, le troisième de la famille.
+        ///
+        /// IL RATTRAPE DEUX CHOSES DIFFÉRENTES, selon le support :
+        ///
+        ///   - AU CLAVIER, le texte lui-même — le message de l'enfant est en
+        ///     base, il n'y a rien à deviner ;
+        ///   - AU CAHIER, sa PHOTO, recopiée dans l'archive. Voulu par Camara le
+        ///     18/09/2026 : « comme ça on perdra rien et le prof pourra quand
+        ///     même refaire la transcription si elle a pas été faite. » La ligne
+        ///     naît alors sans texte, et le professeur la reprend au cours
+        ///     suivant — voir `TexteATranscrireAsync`.
+        ///
+        /// IL NE RATTRAPE JAMAIS LA CORRECTION, dans un cas comme dans l'autre :
+        /// les reprises du professeur sont mêlées à sa pédagogie en français
+        /// courant, et les redécouper en genres reviendrait à deviner.
+        ///
+        /// CE QU'IL SAUVE EST LA MOITIÉ QUI NE SE RETROUVE NULLE PART AILLEURS :
+        /// le travail de l'enfant. Une archive sans reprises se lit encore ; un
+        /// texte perdu, non.
+        /// </summary>
+        private async Task RattraperExpressionsEcritesAsync(
+            int conversationId, CancellationToken ct)
+        {
+            try
+            {
+                var contexte = await _resolver.ResoudreConversationAsync(conversationId);
+                if (contexte is null) return;
+
+                var manquants = (await _expressionsEcrites.GetNonArchiveesAsync(
+                    conversationId, contexte.Eleve.Id, ct)).ToList();
+
+                if (manquants.Count == 0) return;
+
+                // LA LANGUE VIENT DE LA MATIÈRE QUAND ELLE N'EST PAS DANS LES
+                // MESSAGES, et c'est le cas le plus fréquent : une consigne de
+                // rédaction se donne en français, sans qu'aucune balise de
+                // langue ne soit écrite. Sans ce repli, tous les textes
+                // rattrapés seraient perdus faute de savoir dans quelle langue
+                // ils étaient écrits.
+                var matieres = await _referentielService.GetMatieresAsync(activesSeulement: false);
+                var slug = matieres
+                    .FirstOrDefault(m => m.Id == contexte.Conversation.MatiereId)?.AgentSlug;
+
+                var langueMatiere = PromptsPedagogiques.LangueDe(slug);
+
+                var rattrapes = 0;
+
+                foreach (var texte in manquants)
+                {
+                    var langue = string.IsNullOrWhiteSpace(texte.Langue)
+                        ? langueMatiere
+                        : texte.Langue;
+
+                    // UNE MATIÈRE QUI N'EST PAS UNE LANGUE N'A RIEN À FAIRE ICI.
+                    // L'exercice n'existe que dans les matières de langue ; si on
+                    // ne sait pas laquelle, c'est que quelque chose ne colle pas,
+                    // et on préfère ne rien écrire.
+                    if (string.IsNullOrWhiteSpace(langue)) continue;
+
+                    await _expressionsEcrites.AjouterAsync(
+                        contexte.Eleve.Id, conversationId,
+                        TitreDeTexteEcrit(texte.DateExercice),
+                        langue, texte.Consigne, texte.Texte,
+                        corrections: [], remarque: null, texte.DateExercice,
+                        texte.Photo, texte.PhotoTypeMime, ct);
+
+                    rattrapes++;
+                }
+
+                if (rattrapes > 0)
+                {
+                    _logger.LogInformation(
+                        "{Total} texte(s) ecrit(s) rattrape(s) pour la conversation {ConversationId}.",
+                        rattrapes, conversationId);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex,
+                    "Echec du rattrapage des expressions ecrites (conversation "
+                    + "{ConversationId}).", conversationId);
+            }
+        }
+
+        /// <summary>
+        /// Le titre d'un texte que le professeur n'a pas nommé. La date, comme
+        /// pour une conversation rattrapée, et pour la même raison : un titre
+        /// deviné dirait à l'enfant que le professeur a nommé son texte.
+        /// </summary>
+        private static string TitreDeTexteEcrit(DateTime quand) =>
+            "Texte du " + quand.ToLocalTime().ToString(
+                "d MMMM", new System.Globalization.CultureInfo("fr-FR"));
 
         /// <summary>
         /// Le titre d'une conversation que le professeur n'a pas nommée.
@@ -2240,6 +2524,28 @@ namespace SchoolWebApp.Api.Builders.impl
                     contexte.Eleve.Id, contexte.Conversation.MatiereId, ct);
 
                 if (copieACorriger is not null) declencheur += "\n\n" + copieACorriger;
+
+                // ET LA COPIE QUI N'EST QU'UNE PHOTO : elle part avec son image,
+                // jointe à ce tour. C'est la plus urgente des trois — les deux
+                // autres ont leur texte en base, celle-ci n'a que des pixels qui
+                // finiront par être effacés.
+                var aTranscrire = await TexteATranscrireAsync(
+                    contexte.Eleve.Id, contexte.Conversation.MatiereId, ct);
+
+                if (aTranscrire is not null)
+                {
+                    declencheur += "\n\n" + aTranscrire.Value.Consigne;
+                    piecesDuTour.Add(aTranscrire.Value.Photo);
+                }
+
+                // ET LE RAPPEL DE LA MAÎTRISE DE LA LANGUE, en cours normal, pour
+                // les seules classes qui passent une épreuve cette année-là. Posé
+                // AU TOUR D'ARRIVÉE et nulle part ailleurs : une fois par séance,
+                // pas une fois par message.
+                var rappelLangue = await RappelMaitriseLangueAsync(
+                    contexte.Eleve.NiveauCode, contexte.Conversation.MatiereId, mode, ct);
+
+                if (rappelLangue is not null) declencheur += "\n\n" + rappelLangue;
             }
 
             // Et la liste de ses dictées, quand il pourrait vouloir y revenir :
@@ -2667,6 +2973,9 @@ namespace SchoolWebApp.Api.Builders.impl
                 await EnregistrerExpressionOraleAsync(
                     conversationId, contexte.Eleve.Id, resultat.TexteComplet, ct);
 
+                await EnregistrerExpressionEcriteAsync(
+                    conversationId, contexte.Eleve.Id, resultat.TexteComplet, ct);
+
                 await EnregistrerEvaluationPrevueAsync(
                     conversationId, contexte.Eleve.Id, resultat.TexteComplet, ct);
 
@@ -2729,6 +3038,7 @@ namespace SchoolWebApp.Api.Builders.impl
                     // n'est pas archivé maintenant ne le sera jamais.
                     await RattraperComprehensionsOralesAsync(conversationId, ct);
                     await RattraperExpressionsOralesAsync(conversationId, ct);
+                    await RattraperExpressionsEcritesAsync(conversationId, ct);
                 }
             }
 
@@ -3020,6 +3330,138 @@ namespace SchoolWebApp.Api.Builders.impl
                     "Echec de l'archivage de l'expression orale (conversation "
                     + "{ConversationId}).", conversationId);
             }
+        }
+
+        /// <summary>
+        /// Archive le texte écrit que le professeur vient de corriger.
+        ///
+        /// SA CONTRE-VÉRIFICATION EST L'INVERSE DES AUTRES. Ailleurs, on
+        /// rattrape ce que le modèle OUBLIE ; ici, on rattrape ce qu'il
+        /// CORRIGE. La consigne lui demande de recopier la copie « mot pour
+        /// mot, fautes comprises » — or corriger en recopiant est son réflexe
+        /// le plus profond, et il détruit exactement ce qu'on voulait garder :
+        /// une copie nettoyée rend la correction d'à côté incompréhensible,
+        /// puisqu'elle parle de fautes devenues invisibles.
+        ///
+        /// Quand le texte a été TAPÉ, il n'y a rien à deviner : le message de
+        /// l'enfant est en base, et on le préfère à la transcription.
+        ///
+        /// Silencieux en cas d'échec, comme les autres blocs.
+        /// </summary>
+        private async Task EnregistrerExpressionEcriteAsync(
+            int conversationId, int eleveId, string texte, CancellationToken ct)
+        {
+            var declaree = LecteurExpressionEcrite.Lire(texte);
+
+            if (declaree is null)
+            {
+                // La balise est là mais le contenu n'a pas été retenu : même
+                // filet que pour les deux autres exercices. `Lire` est
+                // silencieux par conception ; c'est ici qu'on distingue « la
+                // balise n'a jamais été posée » de « posée mais rejetée ».
+                if (texte.Contains("[EXPRESSION_ECRITE]", StringComparison.OrdinalIgnoreCase))
+                {
+                    _logger.LogWarning(
+                        "Bloc [EXPRESSION_ECRITE] present mais non retenu (conversation "
+                        + "{ConversationId}) -- titre, langue, consigne ou texte manquant.",
+                        conversationId);
+                }
+
+                return;
+            }
+
+            try
+            {
+                var copie = declaree.Texte;
+
+                // SA COPIE TELLE QU'IL L'A TAPÉE, quand elle existe en base.
+                //
+                // ON NE LA SUBSTITUE QUE SI ELLE DIFFÈRE VRAIMENT : un simple
+                // écart d'espaces ou de retours à la ligne ne justifie pas de
+                // remplacer ce que le professeur a recopié, et le journal ne
+                // doit crier que quand il s'est réellement passé quelque chose.
+                var tape = await _expressionsEcrites.TexteTapeAsync(conversationId, eleveId, ct);
+
+                if (!string.IsNullOrWhiteSpace(tape) && !MemeTexte(tape, copie))
+                {
+                    _logger.LogInformation(
+                        "Texte de l'eleve repris depuis ses messages : la transcription "
+                        + "du professeur differait (conversation {ConversationId}).",
+                        conversationId);
+
+                    copie = tape;
+                }
+
+                var corrections = declaree.Corrections
+                    .Select(c => new Domain.Models.RepriseEcrite(c.Genre, c.Texte))
+                    .ToList();
+
+                // IL REPREND UNE COPIE RESTÉE EN PHOTO, il n'en archive pas une
+                // neuve. La ligne existe déjà, avec son titre et sa consigne du
+                // jour de l'exercice : on ne fait qu'y poser la transcription et
+                // la correction.
+                if (declaree.Numero is { } numero)
+                {
+                    var completee = await _expressionsEcrites.CompleterAsync(
+                        numero, eleveId, copie, corrections, declaree.Remarque, ct);
+
+                    if (completee is not null)
+                    {
+                        _logger.LogInformation(
+                            "Expression ecrite {Id} enfin transcrite ({Reprises} reprise(s)) "
+                            + "pour l'eleve {EleveId}.",
+                            numero, corrections.Count, eleveId);
+                    }
+                    else
+                    {
+                        // ELLE N'EXISTE PAS, N'EST PAS LA SIENNE, OU A DÉJÀ SON
+                        // TEXTE. On n'écrase jamais une transcription — et on ne
+                        // crée pas une ligne neuve en repli, ce qui doublerait le
+                        // texte au lieu de le compléter.
+                        _logger.LogWarning(
+                            "Expression ecrite {Id} non completee (inexistante, deja "
+                            + "transcrite, ou d'un autre eleve) -- eleve {EleveId}.",
+                            numero, eleveId);
+                    }
+
+                    return;
+                }
+
+                var enregistree = await _expressionsEcrites.AjouterAsync(
+                    eleveId, conversationId, declaree.Titre, declaree.Langue,
+                    declaree.Consigne, copie, corrections, declaree.Remarque, ct: ct);
+
+                if (enregistree is not null)
+                {
+                    _logger.LogInformation(
+                        "Expression ecrite {Id} archivee ({Reprises} reprise(s), {Langue}) "
+                        + "pour l'eleve {EleveId}.",
+                        enregistree.Id, corrections.Count, declaree.Langue, eleveId);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex,
+                    "Echec de l'archivage de l'expression ecrite (conversation "
+                    + "{ConversationId}).", conversationId);
+            }
+        }
+
+        /// <summary>
+        /// Deux textes qui ne diffèrent que par leurs espaces sont le même.
+        ///
+        /// LA CASSE ET LA PONCTUATION COMPTENT, ELLES : « frend » contre
+        /// « friend », « i » contre « I », un point oublié — ce sont justement
+        /// les fautes qu'on veut voir survivre. On ne tolère que ce qui ne veut
+        /// rien dire : les blancs.
+        /// </summary>
+        private static bool MemeTexte(string a, string b)
+        {
+            static string Serrer(string t) =>
+                string.Join(" ", t.Split(
+                    [' ', '\t', '\n', '\r'], StringSplitOptions.RemoveEmptyEntries));
+
+            return string.Equals(Serrer(a), Serrer(b), StringComparison.Ordinal);
         }
 
         private async Task EnregistrerComprehensionOraleAsync(

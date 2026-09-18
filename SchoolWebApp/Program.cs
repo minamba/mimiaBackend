@@ -293,6 +293,7 @@ builder.Services.AddSingleton<SchoolWebApp.Domain.Services.IArchiveAudio,
 
 builder.Services.AddScoped<IComprehensionOraleRepository, ComprehensionOraleRepository>();
 builder.Services.AddScoped<IExpressionOraleRepository, ExpressionOraleRepository>();
+builder.Services.AddScoped<IExpressionEcriteRepository, ExpressionEcriteRepository>();
 builder.Services.AddScoped<IEvaluationPrevueRepository, EvaluationPrevueRepository>();
 builder.Services.AddScoped<IControleScolaireRepository, ControleScolaireRepository>();
 builder.Services.AddScoped<IExamenRepository, ExamenRepository>();

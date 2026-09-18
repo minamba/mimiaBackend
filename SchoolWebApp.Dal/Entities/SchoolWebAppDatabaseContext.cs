@@ -45,6 +45,8 @@ namespace SchoolWebApp.Dal.Entities
         public virtual DbSet<Dictee> Dictees { get; set; }
         public virtual DbSet<ComprehensionOrale> ComprehensionsOrales { get; set; }
 
+        public virtual DbSet<ExpressionEcrite> ExpressionsEcrites { get; set; }
+
         public virtual DbSet<ExpressionOrale> ExpressionsOrales { get; set; }
         public virtual DbSet<EvaluationPrevue> EvaluationsPrevues { get; set; }
         public virtual DbSet<ControleScolaire> ControlesScolaires { get; set; }
@@ -918,6 +920,77 @@ namespace SchoolWebApp.Dal.Entities
                 // quand le détail des échanges a disparu.
                 entity.HasOne(e => e.Conversation)
                       .WithMany(c => c.ComprehensionsOrales)
+                      .HasForeignKey(e => e.ConversationId)
+                      .OnDelete(DeleteBehavior.NoAction);
+
+                entity.HasIndex(e => new { e.EleveId, e.MatiereId, e.DateCreation });
+            });
+
+            // ---------------------------------------------------------------
+            // ExpressionEcrite
+            // ---------------------------------------------------------------
+            modelBuilder.Entity<ExpressionEcrite>(entity =>
+            {
+                entity.ToTable("ExpressionEcrite");
+                entity.HasKey(e => e.Id);
+
+                entity.Property(e => e.Id).HasColumnName("id");
+                entity.Property(e => e.EleveId).HasColumnName("eleve_id");
+                entity.Property(e => e.MatiereId).HasColumnName("matiere_id");
+                entity.Property(e => e.ConversationId).HasColumnName("conversation_id");
+
+                entity.Property(e => e.Titre)
+                      .IsRequired().HasMaxLength(300).HasColumnName("titre");
+
+                entity.Property(e => e.Langue)
+                      .IsRequired().HasMaxLength(10).HasColumnName("langue");
+
+                // Obligatoire : un texte sans sa consigne ne se relit pas.
+                entity.Property(e => e.Consigne)
+                      .IsRequired().HasMaxLength(1000).HasColumnName("consigne");
+
+                // LA PAIRE, et c'est tout l'intérêt de l'archive : ce qu'il a
+                // écrit, fautes comprises, à côté de ce qu'il fallait écrire.
+                // PAS DE `IsRequired` : null veut dire « pas encore recopié ».
+                entity.Property(e => e.Texte).HasColumnName("texte");
+                entity.Property(e => e.Corrections).IsRequired().HasColumnName("corrections");
+
+                entity.Property(e => e.Photo).HasColumnName("photo");
+                entity.Property(e => e.PhotoTypeMime)
+                      .HasMaxLength(100).HasColumnName("photo_type_mime");
+                entity.Property(e => e.PhotoEffaceeLe).HasColumnName("photo_effacee_le");
+
+                // L'index de la purge : les photos encore présentes, les plus
+                // anciennes d'abord.
+                entity.HasIndex(e => new { e.PhotoEffaceeLe, e.DateCreation });
+
+                entity.Property(e => e.Remarque).HasMaxLength(2000).HasColumnName("remarque");
+                entity.Property(e => e.DateCreation).HasColumnName("date_creation");
+                entity.Property(e => e.DateConsultation).HasColumnName("date_consultation");
+                entity.Property(e => e.NiveauScolaireId).HasColumnName("niveau_scolaire_id");
+
+                // Sans collection inverse, comme l'expression orale : on part
+                // toujours de l'élève ET de la matière, jamais de la conversation.
+                entity.HasOne(e => e.Eleve)
+                      .WithMany()
+                      .HasForeignKey(e => e.EleveId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne<NiveauScolaire>()
+                      .WithMany()
+                      .HasForeignKey(e => e.NiveauScolaireId)
+                      .OnDelete(DeleteBehavior.NoAction);
+
+                // Restrict : trois chemins de suppression convergeraient ici,
+                // et SQL Server refuse les cascades multiples.
+                entity.HasOne(e => e.Matiere)
+                      .WithMany()
+                      .HasForeignKey(e => e.MatiereId)
+                      .OnDelete(DeleteBehavior.Restrict);
+
+                // NoAction : une conversation purgée ne doit pas emporter le texte.
+                entity.HasOne(e => e.Conversation)
+                      .WithMany()
                       .HasForeignKey(e => e.ConversationId)
                       .OnDelete(DeleteBehavior.NoAction);
 

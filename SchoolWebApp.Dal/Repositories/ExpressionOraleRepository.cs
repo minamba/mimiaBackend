@@ -236,12 +236,6 @@ namespace SchoolWebApp.Dal.Repositories
                 System.Text.RegularExpressions.RegexOptions.IgnoreCase
                     | System.Text.RegularExpressions.RegexOptions.Compiled);
 
-        /// <summary>Tout bloc technique, à retirer de la parole de l'élève.</summary>
-        private static readonly System.Text.RegularExpressions.Regex Technique =
-            new(@"\[/?[A-ZÉÈÀÇ_0-9]{2,}\]",
-                System.Text.RegularExpressions.RegexOptions.IgnoreCase
-                    | System.Text.RegularExpressions.RegexOptions.Compiled);
-
         public async Task<string?> PremiereRepliqueAsync(
             int conversationId, int eleveId, CancellationToken ct = default)
         {
@@ -315,6 +309,31 @@ namespace SchoolWebApp.Dal.Repositories
 
             messages.Reverse();
 
+            // LA SÉANCE EN COURS, ET ELLE SEULE. Sans cette borne, un exercice
+            // abandonné il y a trois semaines était réarchivé à la fin de chaque
+            // séance suivante — voir `FenetreExercice.DebutDeSeance`.
+            var depuis = FenetreExercice.DebutDeSeance(
+                messages,
+                m => string.Equals(m.Role, "assistant", StringComparison.OrdinalIgnoreCase),
+                m => m.Contenu ?? string.Empty);
+
+            if (depuis > 0) messages = messages.Skip(depuis).ToList();
+
+            // ET CE QUI EST DÉJÀ RANGÉ POUR CETTE SÉANCE, pour ne rien doubler.
+            //
+            // LA CEINTURE EN PLUS DES BRETELLES, et elle a sa raison : la borne
+            // ci-dessus dépend d'un [FIN_SEANCE] que le professeur peut oublier
+            // d'écrire. L'horodatage d'ouverture, lui, ne dépend de personne —
+            // il vient du message, il est le même à chaque relecture, et il est
+            // recopié tel quel dans `DateCreation` par le rattrapage.
+            var dejaRangees = await _context.ExpressionsOrales
+                .AsNoTracking()
+                .Where(e => e.ConversationId == conversationId && e.EleveId == eleveId)
+                .Select(e => e.DateCreation)
+                .ToListAsync(ct);
+
+            var connues = dejaRangees.ToHashSet();
+
             var retrouvees = new List<ExpressionOraleReconstituee>();
 
             var tours = new List<TourExpressionOrale>();
@@ -325,15 +344,33 @@ namespace SchoolWebApp.Dal.Repositories
 
             void Fermer()
             {
-                // DEUX TOURS AU MOINS, ET LES DEUX VOIX. Une réplique isolée du
-                // professeur — « Ready? » — n'est pas une conversation, et
-                // l'archiver donnerait à l'élève une ligne vide à ouvrir.
-                var deuxVoix = tours.Any(t => t.Qui == "eleve")
-                                && tours.Any(t => t.Qui == "professeur");
+                // UN VRAI ALLER-RETOUR, PAS UNE OUVERTURE RESTÉE SANS SUITE.
+                //
+                // LE DÉFAUT — Camara, le 18/09/2026 : dix archives portant pour
+                // tout contenu « C'est bon pour moi. » et « Salut Bilal ! Alors,
+                // dis-moi, qu'est-ce que tu as fait le week-end dernier ? ». Il
+                // avait choisi la vitesse, puis demandé autre chose : la
+                // conversation n'a jamais eu lieu.
+                //
+                // « LES DEUX VOIX » NE SUFFISAIT PAS À L'ÉCARTER, parce que la
+                // phrase du bouton de vitesse EST un message de l'élève. Ce qui
+                // distingue une conversation d'une ouverture, c'est que le
+                // professeur y REBONDIT : il parle, l'enfant répond, il repart.
+                // D'où deux répliques de sa part au minimum.
+                //
+                // Une archive vide n'est pas neutre : l'enfant clique, ne trouve
+                // rien, et apprend que ses archives ne veulent rien dire.
+                var vraiEchange = tours.Count(t => t.Qui == "professeur") >= 2
+                                   && tours.Any(t => t.Qui == "eleve");
 
-                if (ouverte && !dejaArchivee && langue is not null && deuxVoix)
+                if (ouverte && !dejaArchivee && langue is not null && vraiEchange
+                    && !connues.Contains(debutLe))
                 {
                     retrouvees.Add(new ExpressionOraleReconstituee(langue, tours.ToList(), debutLe));
+
+                    // Deux ouvertures au même instant n'existent pas, mais une
+                    // même passe pourrait sinon rendre deux fois la même.
+                    connues.Add(debutLe);
                 }
 
                 tours.Clear();
@@ -360,13 +397,21 @@ namespace SchoolWebApp.Dal.Repositories
 
                 if (!ouverte) continue;
 
-                // LE PROFESSEUR L'A ARCHIVÉE LUI-MÊME : on ne double pas. Le
-                // drapeau est posé sans sortir de la boucle, pour que la
-                // conversation SUIVANTE de la même séance soit quand même vue.
-                if (duProfesseur
-                    && contenu.Contains("[EXPRESSION_ORALE]", StringComparison.OrdinalIgnoreCase))
+                // TOUT CE QUI N'EST PAS LA CONVERSATION LA REFERME — son archivage
+                // comme n'importe quel autre exercice. Voir `FenetreExercice` :
+                // une conversation qu'on abandonne ne s'archive jamais, et la
+                // fenêtre restait ouverte jusqu'à la fin de la séance.
+                //
+                // LA NUANCE EST DANS LE DRAPEAU. Le bloc d'archivage dit « déjà
+                // rangée », donc on ne double pas. Un AUTRE exercice ne dit que
+                // « on est passé à autre chose » : si un vrai échange a eu lieu
+                // avant, il doit être sauvé — c'est le rôle même de ce filet.
+                if (duProfesseur && FenetreExercice.OuvreAutreChose(
+                        contenu, FenetreExercice.Conversation))
                 {
-                    dejaArchivee = true;
+                    dejaArchivee = contenu.Contains(
+                        "[EXPRESSION_ORALE]", StringComparison.OrdinalIgnoreCase);
+
                     Fermer();
                     continue;
                 }
@@ -390,9 +435,11 @@ namespace SchoolWebApp.Dal.Repositories
                 }
 
                 // L'ÉLÈVE, LUI, PARLE SANS BALISE : sa voix arrive transcrite, ou
-                // tapée. On retire seulement les marqueurs techniques que
-                // l'application a pu accrocher à son message.
-                var dit = Technique.Replace(contenu, " ").Trim();
+                // tapée. TOUT CE QUI EST ENTRE CROCHETS PART — voir
+                // `FenetreExercice.SansCrochets` : ce sont les faits que
+                // l'application accroche à ses messages, et Camara les a vus
+                // s'afficher en clair dans l'archive d'un enfant.
+                var dit = FenetreExercice.SansCrochets(contenu);
                 if (dit.Length > 0) tours.Add(new TourExpressionOrale("eleve", dit));
             }
 

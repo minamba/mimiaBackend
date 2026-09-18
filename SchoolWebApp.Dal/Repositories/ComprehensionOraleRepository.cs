@@ -343,11 +343,17 @@ namespace SchoolWebApp.Dal.Repositories
 
                 enConversation[i] = ouverte == 1;
 
-                // L'archivage la referme, et le message qui le porte en fait
-                // encore partie : c'est souvent celui où le professeur dit sa
-                // dernière phrase avant de ranger l'échange.
-                if (duProfesseur
-                    && contenu.Contains("[EXPRESSION_ORALE]", StringComparison.OrdinalIgnoreCase))
+                // TOUT CE QUI N'EST PAS LA CONVERSATION LA REFERME — l'archivage
+                // comme n'importe quel autre exercice. Voir `OuvreAutreChose` :
+                // une conversation qu'on abandonne ne s'archive jamais, et la
+                // fenêtre restait ouverte jusqu'à la fin de la séance.
+                //
+                // LE MESSAGE QUI LA FERME EN FAIT ENCORE PARTIE, et c'est voulu :
+                // c'est souvent celui où le professeur dit sa dernière phrase
+                // avant de ranger l'échange. C'est pour ça que la fermeture est
+                // testée APRÈS le marquage, et non avant.
+                if (duProfesseur && FenetreExercice.OuvreAutreChose(
+                        contenu, FenetreExercice.Conversation))
                 {
                     ouverte = 0;
                 }

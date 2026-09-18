@@ -895,6 +895,133 @@ namespace SchoolWebApp.Api.Controllers
         }
 
         /// <summary>
+        /// Les textes d'expression écrite d'un enfant dans une matière.
+        ///
+        /// LE TROISIÈME DE LA FAMILLE : la compréhension orale garde ce qu'il a
+        /// ENTENDU, l'expression orale ce qu'il a DIT, celle-ci ce qu'il a ÉCRIT.
+        /// C'est la seule où son orthographe se voit.
+        ///
+        /// Sans `matiereId`, renvoie le NOMBRE par matière.
+        /// </summary>
+        [HttpGet("{id:int}/expressions-ecrites")]
+        [SchoolWebApp.Api.Auth.AutoriseEleve]
+        [SwaggerResponse(200, "Les textes, ou leur nombre par matière.")]
+        [SwaggerResponse(404, "Profil inexistant ou n'appartenant pas à ce compte.")]
+        public async Task<IActionResult> GetExpressionsEcrites(
+            int id,
+            [FromQuery] int? matiereId,
+            [FromServices] IExpressionEcriteRepository expressionsEcrites)
+        {
+            try
+            {
+                var eleve = await _eleveBuilder.GetEleveByIdAsync(id);
+                if (eleve is null) return NotFound();
+
+                if (matiereId is null) return Ok(await expressionsEcrites.CompterParMatiereAsync(id));
+
+                return Ok(await expressionsEcrites.GetParMatiereAsync(id, matiereId.Value));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex,
+                    "Erreur lors du chargement des expressions ecrites de l'eleve {EleveId}.", id);
+                return StatusCode(500, new { message = "Une erreur est survenue, veuillez réessayer." });
+            }
+        }
+
+        /// <summary>Un texte complet, avec sa correction.</summary>
+        [HttpGet("{id:int}/expressions-ecrites/{expressionEcriteId:int}")]
+        [SchoolWebApp.Api.Auth.AutoriseEleve]
+        [SwaggerResponse(200, "Le texte et sa correction.", typeof(ExpressionEcriteEleve))]
+        [SwaggerResponse(404, "Texte inexistant, ou enfant n'appartenant pas à ce compte.")]
+        public async Task<IActionResult> GetExpressionEcrite(
+            int id, int expressionEcriteId,
+            [FromServices] IExpressionEcriteRepository expressionsEcrites)
+        {
+            try
+            {
+                var eleve = await _eleveBuilder.GetEleveByIdAsync(id);
+                if (eleve is null) return NotFound();
+
+                var texte = await expressionsEcrites.GetDetailAsync(expressionEcriteId, id);
+                return texte is null ? NotFound() : Ok(texte);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex,
+                    "Erreur lors du chargement de l'expression ecrite {ExpressionEcriteId} "
+                    + "de l'eleve {EleveId}.", expressionEcriteId, id);
+                return StatusCode(500, new { message = "Une erreur est survenue, veuillez réessayer." });
+            }
+        }
+
+        /// <summary>
+        /// LA PHOTO DE SON CAHIER, tant qu'elle n'a pas été recopiée.
+        ///
+        /// 404 QUAND ELLE A ÉTÉ PURGÉE, et c'est le cas normal d'un texte déjà
+        /// transcrit : on ne garde pas indéfiniment l'écriture manuscrite d'un
+        /// enfant. L'écran affiche alors le texte recopié, qui est ce qu'on relit
+        /// à froid.
+        /// </summary>
+        [HttpGet("{id:int}/expressions-ecrites/{expressionEcriteId:int}/photo")]
+        [SchoolWebApp.Api.Auth.AutoriseEleve]
+        [SwaggerResponse(200, "La photo de sa copie.")]
+        [SwaggerResponse(404, "Photo purgée, ou enfant n'appartenant pas à ce compte.")]
+        public async Task<IActionResult> GetExpressionEcritePhoto(
+            int id, int expressionEcriteId,
+            [FromServices] IExpressionEcriteRepository expressionsEcrites)
+        {
+            try
+            {
+                var eleve = await _eleveBuilder.GetEleveByIdAsync(id);
+                if (eleve is null) return NotFound();
+
+                var photo = await expressionsEcrites.GetPhotoAsync(expressionEcriteId, id);
+                if (photo is null) return NotFound();
+
+                // PRIVÉ, JAMAIS PARTAGÉ : c'est la page d'un cahier d'enfant, avec
+                // souvent son nom écrit en haut. Et pas d'`immutable` non plus,
+                // contrairement à l'audio : celle-ci finit par être effacée.
+                Response.Headers.CacheControl = "private, max-age=600";
+
+                return File(photo.Value.Donnees, photo.Value.TypeMime);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex,
+                    "Erreur lors du chargement de la photo de l'expression ecrite "
+                    + "{ExpressionEcriteId} de l'eleve {EleveId}.", expressionEcriteId, id);
+                return StatusCode(500, new { message = "Une erreur est survenue, veuillez réessayer." });
+            }
+        }
+
+        /// <summary>L'élève vient d'ouvrir son texte : la pastille s'éteint.</summary>
+        [HttpPost("{id:int}/expressions-ecrites/{expressionEcriteId:int}/vue")]
+        [SchoolWebApp.Api.Auth.AutoriseEleve]
+        [SwaggerResponse(204, "C'est noté.")]
+        [SwaggerResponse(404, "Texte inexistant, ou enfant n'appartenant pas à ce compte.")]
+        public async Task<IActionResult> MarquerExpressionEcriteVue(
+            int id, int expressionEcriteId,
+            [FromServices] IExpressionEcriteRepository expressionsEcrites)
+        {
+            try
+            {
+                var eleve = await _eleveBuilder.GetEleveByIdAsync(id);
+                if (eleve is null) return NotFound();
+
+                return await expressionsEcrites.MarquerVueAsync(expressionEcriteId, id)
+                    ? NoContent() : NotFound();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex,
+                    "Erreur lors du marquage de l'expression ecrite {ExpressionEcriteId} "
+                    + "de l'eleve {EleveId}.", expressionEcriteId, id);
+                return StatusCode(500, new { message = "Une erreur est survenue, veuillez réessayer." });
+            }
+        }
+
+        /// <summary>
         /// Les compréhensions orales d'un enfant dans une matière.
         ///
         /// Sans `matiereId`, renvoie le NOMBRE de compréhensions orales par

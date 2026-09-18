@@ -124,6 +124,7 @@ namespace SchoolWebApp.Api.Workers
                     await PurgerOrphelinesAsync(ct);
                     await AllegerDocumentsAsync(ct);
                     await PurgerAudiosAsync(ct);
+                    await PurgerPhotosEcritesAsync(ct);
                 }
                 catch (OperationCanceledException) when (ct.IsCancellationRequested)
                 {
@@ -393,6 +394,68 @@ namespace SchoolWebApp.Api.Workers
                     "{Effaces} audio de comprehension orale efface(s) apres {Jours} jours. "
                     + "Les passages et les reponses des eleves sont conserves.",
                     effaces, AncienneteAudio.TotalDays);
+            }
+        }
+
+        /// <summary>
+        /// Efface les photos de cahier DÉJÀ RECOPIÉES, passé le délai de
+        /// conservation des documents.
+        ///
+        /// LES DEUX MOITIÉS DE LA RÈGLE COMPTENT AUTANT, et elles sont reprises
+        /// mot pour mot de la purge des pièces jointes, où elles ont été payées.
+        ///
+        /// « DÉJÀ RECOPIÉES » : effacer les octets d'une copie dont le texte n'a
+        /// pas encore été extrait la perdrait définitivement, et sans bruit. Une
+        /// photo que le professeur n'a jamais transcrite reste donc en base
+        /// indéfiniment — mieux vaut de la place occupée qu'un travail d'enfant
+        /// effacé.
+        ///
+        /// « PASSÉ LE DÉLAI » : au-delà, conserver l'écriture manuscrite d'un
+        /// enfant et son nom en haut de la copie n'a plus aucune justification.
+        /// C'est le texte qu'on relit à froid, jamais la photo.
+        ///
+        /// MÊME DÉLAI QUE LES DOCUMENTS, et non celui des audio : c'est la même
+        /// nature de donnée, et la même raison de la faire partir.
+        /// </summary>
+        private async Task PurgerPhotosEcritesAsync(CancellationToken ct)
+        {
+            var effacees = 0L;
+            var octets = 0L;
+
+            for (var lot = 0; lot < LotsMax; lot++)
+            {
+                using var scope = _scopes.CreateScope();
+                var archives = scope.ServiceProvider
+                    .GetRequiredService<Domain.Repositories.IExpressionEcriteRepository>();
+                var options = scope.ServiceProvider
+                    .GetRequiredService<Microsoft.Extensions.Options.IOptions<Services.OptionsClaude>>()
+                    .Value;
+
+                var (faits, poids) = await archives.PurgerPhotosAsync(
+                    TimeSpan.FromDays(options.JoursConservationDocuments), TailleLot, ct);
+
+                effacees += faits;
+                octets += poids;
+
+                if (faits == 0) break;
+
+                if (lot == LotsMax - 1)
+                {
+                    _logger.LogError(
+                        "Purge des photos de textes ecrits ARRETEE au plafond de {Lots} lots.",
+                        LotsMax);
+                }
+
+                try { await Task.Delay(Respiration, ct); }
+                catch (OperationCanceledException) { break; }
+            }
+
+            if (effacees > 0)
+            {
+                _logger.LogInformation(
+                    "{Effacees} photo(s) de texte ecrit effacee(s), {Mo:F1} Mo recuperes. "
+                    + "Seules les copies DEJA recopiees sont concernees.",
+                    effacees, octets / (1024.0 * 1024.0));
             }
         }
 
