@@ -1469,6 +1469,74 @@ namespace SchoolWebApp.Dal.Migrations
                     b.ToTable("EvaluationPrevue", (string)null);
                 });
 
+            modelBuilder.Entity("SchoolWebApp.Dal.Entities.ExpressionOrale", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasColumnName("id");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("ConversationId")
+                        .HasColumnType("int")
+                        .HasColumnName("conversation_id");
+
+                    b.Property<DateTime?>("DateConsultation")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("date_consultation");
+
+                    b.Property<DateTime>("DateCreation")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("date_creation");
+
+                    b.Property<string>("Echange")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)")
+                        .HasColumnName("echange");
+
+                    b.Property<int>("EleveId")
+                        .HasColumnType("int")
+                        .HasColumnName("eleve_id");
+
+                    b.Property<string>("Langue")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("nvarchar(10)")
+                        .HasColumnName("langue");
+
+                    b.Property<int>("MatiereId")
+                        .HasColumnType("int")
+                        .HasColumnName("matiere_id");
+
+                    b.Property<int?>("NiveauScolaireId")
+                        .HasColumnType("int")
+                        .HasColumnName("niveau_scolaire_id");
+
+                    b.Property<string>("Remarque")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)")
+                        .HasColumnName("remarque");
+
+                    b.Property<string>("Titre")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)")
+                        .HasColumnName("titre");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ConversationId");
+
+                    b.HasIndex("MatiereId");
+
+                    b.HasIndex("NiveauScolaireId");
+
+                    b.HasIndex("EleveId", "MatiereId", "DateCreation");
+
+                    b.ToTable("ExpressionOrale", (string)null);
+                });
+
             modelBuilder.Entity("SchoolWebApp.Dal.Entities.FicheRevision", b =>
                 {
                     b.Property<int>("Id")
@@ -3226,6 +3294,38 @@ namespace SchoolWebApp.Dal.Migrations
                         .HasForeignKey("MatiereId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.Navigation("Conversation");
+
+                    b.Navigation("Eleve");
+
+                    b.Navigation("Matiere");
+                });
+
+            modelBuilder.Entity("SchoolWebApp.Dal.Entities.ExpressionOrale", b =>
+                {
+                    b.HasOne("SchoolWebApp.Dal.Entities.Conversation", "Conversation")
+                        .WithMany()
+                        .HasForeignKey("ConversationId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+
+                    b.HasOne("SchoolWebApp.Dal.Entities.Eleve", "Eleve")
+                        .WithMany()
+                        .HasForeignKey("EleveId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("SchoolWebApp.Dal.Entities.Matiere", "Matiere")
+                        .WithMany()
+                        .HasForeignKey("MatiereId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("SchoolWebApp.Dal.Entities.NiveauScolaire", null)
+                        .WithMany()
+                        .HasForeignKey("NiveauScolaireId")
+                        .OnDelete(DeleteBehavior.NoAction);
 
                     b.Navigation("Conversation");
 

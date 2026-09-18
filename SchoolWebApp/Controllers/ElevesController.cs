@@ -802,6 +802,99 @@ namespace SchoolWebApp.Api.Controllers
         }
 
         /// <summary>
+        /// Les conversations d'expression orale d'un enfant dans une matière —
+        /// voulu par Camara le 18/09/2026.
+        ///
+        /// CE N'EST PAS LA COMPRÉHENSION ORALE, juste en dessous : là-bas le
+        /// professeur lit un passage et l'élève explique EN FRANÇAIS ce qu'il a
+        /// compris ; ici les deux parlent DANS LA LANGUE du cours, et ce sont ces
+        /// échanges qu'on relit.
+        ///
+        /// Sans `matiereId`, renvoie le NOMBRE par matière — même principe que
+        /// les dictées.
+        /// </summary>
+        [HttpGet("{id:int}/expressions-orales")]
+        [SchoolWebApp.Api.Auth.AutoriseEleve]
+        [SwaggerResponse(200, "Les conversations, ou leur nombre par matière.")]
+        [SwaggerResponse(404, "Profil inexistant ou n'appartenant pas à ce compte.")]
+        public async Task<IActionResult> GetExpressionsOrales(
+            int id,
+            [FromQuery] int? matiereId,
+            [FromServices] IExpressionOraleRepository expressionsOrales)
+        {
+            try
+            {
+                var eleve = await _eleveBuilder.GetEleveByIdAsync(id);
+                if (eleve is null) return NotFound();
+
+                if (matiereId is null) return Ok(await expressionsOrales.CompterParMatiereAsync(id));
+
+                return Ok(await expressionsOrales.GetParMatiereAsync(id, matiereId.Value));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex,
+                    "Erreur lors du chargement des expressions orales de l'eleve {EleveId}.", id);
+                return StatusCode(500, new { message = "Une erreur est survenue, veuillez réessayer." });
+            }
+        }
+
+        /// <summary>Une conversation complète, avec tous ses tours de parole.</summary>
+        [HttpGet("{id:int}/expressions-orales/{expressionOraleId:int}")]
+        [SchoolWebApp.Api.Auth.AutoriseEleve]
+        [SwaggerResponse(200, "La conversation.", typeof(ExpressionOraleEleve))]
+        [SwaggerResponse(404, "Conversation inexistante, ou enfant n'appartenant pas à ce compte.")]
+        public async Task<IActionResult> GetExpressionOrale(
+            int id, int expressionOraleId,
+            [FromServices] IExpressionOraleRepository expressionsOrales)
+        {
+            try
+            {
+                var eleve = await _eleveBuilder.GetEleveByIdAsync(id);
+                if (eleve is null) return NotFound();
+
+                var conversation = await expressionsOrales.GetDetailAsync(expressionOraleId, id);
+                return conversation is null ? NotFound() : Ok(conversation);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex,
+                    "Erreur lors du chargement de l'expression orale {ExpressionOraleId} "
+                    + "de l'eleve {EleveId}.", expressionOraleId, id);
+                return StatusCode(500, new { message = "Une erreur est survenue, veuillez réessayer." });
+            }
+        }
+
+        /// <summary>
+        /// L'élève vient d'ouvrir la conversation : la pastille « à consulter »
+        /// s'éteint.
+        /// </summary>
+        [HttpPost("{id:int}/expressions-orales/{expressionOraleId:int}/vue")]
+        [SchoolWebApp.Api.Auth.AutoriseEleve]
+        [SwaggerResponse(204, "C'est noté.")]
+        [SwaggerResponse(404, "Conversation inexistante, ou enfant n'appartenant pas à ce compte.")]
+        public async Task<IActionResult> MarquerExpressionOraleVue(
+            int id, int expressionOraleId,
+            [FromServices] IExpressionOraleRepository expressionsOrales)
+        {
+            try
+            {
+                var eleve = await _eleveBuilder.GetEleveByIdAsync(id);
+                if (eleve is null) return NotFound();
+
+                return await expressionsOrales.MarquerVueAsync(expressionOraleId, id)
+                    ? NoContent() : NotFound();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex,
+                    "Erreur lors du marquage de l'expression orale {ExpressionOraleId} "
+                    + "de l'eleve {EleveId}.", expressionOraleId, id);
+                return StatusCode(500, new { message = "Une erreur est survenue, veuillez réessayer." });
+            }
+        }
+
+        /// <summary>
         /// Les compréhensions orales d'un enfant dans une matière.
         ///
         /// Sans `matiereId`, renvoie le NOMBRE de compréhensions orales par

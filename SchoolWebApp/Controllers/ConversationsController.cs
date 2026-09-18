@@ -232,6 +232,7 @@ namespace SchoolWebApp.Api.Controllers
                 "fin-imminente" => TypeAccueil.FinImminente,
                 "cloture-proche" => TypeAccueil.ClotureProche,
                 "cloture-forcee" => TypeAccueil.ClotureForcee,
+                "copie-attendue" => TypeAccueil.CopieAttendue,
                 _ => TypeAccueil.FinProche,
             };
 

@@ -98,6 +98,19 @@ namespace SchoolWebApp.Dal.Repositories
         /// balise est déclaré côté prompt (voir <c>PromptsPedagogiques</c>) ;
         /// ici on ne fait que les reconnaître dans un message déjà écrit.
         /// </summary>
+        /// <summary>
+        /// La balise qui ouvre une conversation d'expression orale.
+        ///
+        /// ELLE NE SERT QU'À EXCLURE, ici : pendant une conversation, les
+        /// répliques du professeur portent les mêmes balises de langue qu'un
+        /// passage lu, et ce filet les prendrait pour des compréhensions orales
+        /// jamais archivées.
+        /// </summary>
+        private static readonly System.Text.RegularExpressions.Regex Conversation =
+            new(@"\[CONVERSATION\]",
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase
+                    | System.Text.RegularExpressions.RegexOptions.Compiled);
+
         private static readonly System.Text.RegularExpressions.Regex Ecoute =
             new(@"\[(EN|FR|ES|DE|IT|ZH)\](?<passage>.*?)\[/\1\]",
                 System.Text.RegularExpressions.RegexOptions.Singleline
@@ -302,10 +315,50 @@ namespace SchoolWebApp.Dal.Repositories
             // archive, quel que soit le nombre d'écoutes.
             var occurrences = new List<(int Index, string Langue, string Cle, string Passage, DateTime Quand)>();
 
+            // UNE CONVERSATION N'EST PAS UNE COMPRÉHENSION ORALE — Camara, le
+            // 18/09/2026 : « je viens de faire un exercice d'expression orale et
+            // je vois qu'il apparaît dans compréhension orale ».
+            //
+            // LE DÉFAUT ÉTAIT INÉVITABLE, ET IL FALLAIT Y PENSER ICI. Ce filet
+            // ramasse TOUT passage entre balises de langue, parce que c'est ce
+            // qui identifie un texte lu à voix haute. Or depuis l'expression
+            // orale, les RÉPLIQUES du professeur portent exactement les mêmes
+            // balises : c'est ce qui les fait prononcer en anglais. Vues d'ici,
+            // elles ressemblent trait pour trait à des passages jamais archivés,
+            // et le filet les a rangées comme tels — en volant au passage le
+            // début de la conversation, qui n'a donc plus été archivé au bon
+            // endroit.
+            //
+            // Rien ne les distingue SAUF la balise qui ouvre la conversation.
+            // On calcule donc, une fois, la fenêtre où l'on ne ramasse rien.
+            var enConversation = new bool[messages.Count];
+
+            for (int i = 0, ouverte = 0; i < messages.Count; i++)
+            {
+                var contenu = messages[i].Contenu ?? string.Empty;
+                var duProfesseur = string.Equals(
+                    messages[i].Role, "assistant", StringComparison.OrdinalIgnoreCase);
+
+                if (duProfesseur && Conversation.IsMatch(contenu)) ouverte = 1;
+
+                enConversation[i] = ouverte == 1;
+
+                // L'archivage la referme, et le message qui le porte en fait
+                // encore partie : c'est souvent celui où le professeur dit sa
+                // dernière phrase avant de ranger l'échange.
+                if (duProfesseur
+                    && contenu.Contains("[EXPRESSION_ORALE]", StringComparison.OrdinalIgnoreCase))
+                {
+                    ouverte = 0;
+                }
+            }
+
             for (var i = 0; i < messages.Count; i++)
             {
                 if (!string.Equals(messages[i].Role, "assistant", StringComparison.OrdinalIgnoreCase))
                     continue;
+
+                if (enConversation[i]) continue;
 
                 foreach (System.Text.RegularExpressions.Match bloc
                     in Ecoute.Matches(messages[i].Contenu ?? string.Empty))

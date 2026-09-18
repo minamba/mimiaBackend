@@ -52,6 +52,19 @@ namespace SchoolWebApp.Api.Services
         ClotureForcee = 7,
 
         /// <summary>
+        /// Deux minutes avant la fin, l'élève compose AU CAHIER et sa copie
+        /// n'est toujours pas arrivée — voulu par Camara le 18/09/2026.
+        ///
+        /// UNE SEULE FOIS, JAMAIS RÉPÉTÉ : « il ne fera qu'une fois ce rappel,
+        /// c'est tout ». Un contrôle n'est pas un endroit où l'on se fait
+        /// harceler, et le drapeau est posé côté écran pour la séance entière.
+        ///
+        /// N'EXISTE PAS À L'ORDINATEUR : chaque réponse y arrive au fil des
+        /// questions, il ne peut pas rester de copie sur la table.
+        /// </summary>
+        CopieAttendue = 12,
+
+        /// <summary>
         /// L'élève revient après être parti EN PLEIN CONTRÔLE.
         ///
         /// Un retour comme un autre ne suffit pas : il y a quelque chose à

@@ -97,6 +97,7 @@ namespace SchoolWebApp.Api.Builders.impl
         private readonly IFicheRepository _fiches;
         private readonly IDicteeRepository _dictees;
         private readonly IComprehensionOraleRepository _comprehensionsOrales;
+        private readonly IExpressionOraleRepository _expressionsOrales;
         private readonly ISyntheseVocaleService _syntheseVocale;
         private readonly IEvaluationPrevueRepository _evaluationsPrevues;
         private readonly IControleScolaireRepository _controles;
@@ -120,6 +121,7 @@ namespace SchoolWebApp.Api.Builders.impl
             IFicheRepository fiches,
             IDicteeRepository dictees,
             IComprehensionOraleRepository comprehensionsOrales,
+            IExpressionOraleRepository expressionsOrales,
             ISyntheseVocaleService syntheseVocale,
             IEvaluationPrevueRepository evaluationsPrevues,
             IControleScolaireRepository controles,
@@ -134,6 +136,7 @@ namespace SchoolWebApp.Api.Builders.impl
             _fiches = fiches ?? throw new ArgumentNullException(nameof(fiches));
             _dictees = dictees ?? throw new ArgumentNullException(nameof(dictees));
             _comprehensionsOrales = comprehensionsOrales ?? throw new ArgumentNullException(nameof(comprehensionsOrales));
+            _expressionsOrales = expressionsOrales ?? throw new ArgumentNullException(nameof(expressionsOrales));
             _syntheseVocale = syntheseVocale ?? throw new ArgumentNullException(nameof(syntheseVocale));
             _evaluationsPrevues = evaluationsPrevues ?? throw new ArgumentNullException(nameof(evaluationsPrevues));
             _controles = controles ?? throw new ArgumentNullException(nameof(controles));
@@ -1839,6 +1842,7 @@ namespace SchoolWebApp.Api.Builders.impl
             // APRÈS lui avoir laissé sa chance, et pas avant : ce qu'il a
             // archivé lui-même est toujours meilleur que ce qu'on reconstitue.
             await RattraperComprehensionsOralesAsync(conversationId, ct);
+            await RattraperExpressionsOralesAsync(conversationId, ct);
         }
 
         /// <summary>
@@ -1873,6 +1877,67 @@ namespace SchoolWebApp.Api.Builders.impl
         /// est écrit noir sur blanc dans son message — il n'y a rien à
         /// deviner. Silencieux en cas d'échec, comme tous les archivages.
         /// </summary>
+        /// <summary>
+        /// LE FILET DES CONVERSATIONS — Camara, le 18/09/2026 : « je veux que tu
+        /// mettes le filet directement ».
+        ///
+        /// Je ne l'avais pas construit, en me disant qu'on verrait d'abord si le
+        /// bloc passait. Camara a tranché, et il a raison : la compréhension
+        /// orale a déjà payé pour l'apprendre — trois exercices disparus le
+        /// 10/09/2026, alors que la séance avait bien son compte rendu. Attendre
+        /// que ça arrive une seconde fois n'apprend rien de neuf.
+        ///
+        /// CE QUI MANQUE À UNE CONVERSATION RATTRAPÉE : son TITRE et la remarque
+        /// du professeur. Le titre se compose à partir de la date — « Conversation
+        /// du 18 septembre » — plutôt que d'être inventé : un titre deviné dirait
+        /// à l'enfant que le professeur a nommé leur échange, ce qui serait faux.
+        /// </summary>
+        private async Task RattraperExpressionsOralesAsync(
+            int conversationId, CancellationToken ct)
+        {
+            try
+            {
+                var contexte = await _resolver.ResoudreConversationAsync(conversationId);
+                if (contexte is null) return;
+
+                var manquantes = (await _expressionsOrales.GetNonArchiveesAsync(
+                    conversationId, contexte.Eleve.Id, ct)).ToList();
+
+                if (manquantes.Count == 0) return;
+
+                foreach (var conversation in manquantes)
+                {
+                    await _expressionsOrales.AjouterAsync(
+                        contexte.Eleve.Id, conversationId,
+                        TitreDeConversation(conversation.DateExercice),
+                        conversation.Langue, conversation.Echange,
+                        remarque: null, conversation.DateExercice, ct);
+                }
+
+                _logger.LogInformation(
+                    "{Total} conversation(s) rattrapee(s) pour la conversation {ConversationId}.",
+                    manquantes.Count, conversationId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex,
+                    "Echec du rattrapage des expressions orales (conversation "
+                    + "{ConversationId}).", conversationId);
+            }
+        }
+
+        /// <summary>
+        /// Le titre d'une conversation que le professeur n'a pas nommée.
+        ///
+        /// LA DATE PLUTÔT QU'UN TITRE DEVINÉ. On pourrait prendre les premiers
+        /// mots de l'échange — « Hello, how are you » — mais dix conversations
+        /// commencent ainsi, et l'enfant ne distinguerait rien. La date, elle,
+        /// distingue toujours.
+        /// </summary>
+        private static string TitreDeConversation(DateTime quand) =>
+            "Conversation du " + quand.ToLocalTime().ToString(
+                "d MMMM", new System.Globalization.CultureInfo("fr-FR"));
+
         private async Task RattraperComprehensionsOralesAsync(
             int conversationId, CancellationToken ct)
         {
@@ -2121,6 +2186,8 @@ namespace SchoolWebApp.Api.Builders.impl
                 TypeAccueil.FinImminente => "[Il reste trente secondes de séance.]",
                 TypeAccueil.ClotureProche => "[Le contrôle dépasse l'horaire depuis dix minutes.]",
                 TypeAccueil.ClotureForcee => "[Le délai supplémentaire est épuisé, il faut clôturer.]",
+                TypeAccueil.CopieAttendue =>
+                    "[Il reste deux minutes de séance et sa copie n'est pas arrivée.]",
                 TypeAccueil.RetourControleAbandonne =>
                     "[L'élève revient. Il était parti en plein contrôle : celui-ci est annulé.]",
                 TypeAccueil.RetourDicteeInterrompue =>
@@ -2243,6 +2310,10 @@ namespace SchoolWebApp.Api.Builders.impl
             // C'est le professeur qui juge si la séance concernait le contrôle
             // — « c'est lui qui sait ce qu'on fait ». Le code lui donne de quoi
             // juger, au seul tour où ça compte : le programme, et la question.
+            // `CopieAttendue` N'EST PAS UNE CONCLUSION, et c'est le point : le
+            // professeur rappelle la copie, l'élève continue d'écrire, et la
+            // séance suit son cours. La ranger ici ferait dire au revoir deux
+            // minutes avant la fin, au milieu du contrôle.
             var conclusion = typeAccueil is TypeAccueil.FinSeance
                 or TypeAccueil.FinImminente
                 or TypeAccueil.ClotureProche
@@ -2593,6 +2664,9 @@ namespace SchoolWebApp.Api.Builders.impl
                 await SupprimerComprehensionOraleAsync(
                     conversationId, contexte.Eleve.Id, resultat.TexteComplet, ct);
 
+                await EnregistrerExpressionOraleAsync(
+                    conversationId, contexte.Eleve.Id, resultat.TexteComplet, ct);
+
                 await EnregistrerEvaluationPrevueAsync(
                     conversationId, contexte.Eleve.Id, resultat.TexteComplet, ct);
 
@@ -2654,6 +2728,7 @@ namespace SchoolWebApp.Api.Builders.impl
                     // Même filet pour l'écoute : la séance se referme, ce qui
                     // n'est pas archivé maintenant ne le sera jamais.
                     await RattraperComprehensionsOralesAsync(conversationId, ct);
+                    await RattraperExpressionsOralesAsync(conversationId, ct);
                 }
             }
 
@@ -2850,6 +2925,103 @@ namespace SchoolWebApp.Api.Builders.impl
         /// (quota, panne), on archive quand même le texte : mieux vaut une
         /// fiche sans audio qu'aucune fiche du tout.
         /// </summary>
+        /// <summary>
+        /// Archive la conversation d'expression orale si le professeur vient
+        /// d'en conclure une — voulu par Camara le 18/09/2026.
+        ///
+        /// BEAUCOUP PLUS SIMPLE QUE LA COMPRÉHENSION ORALE juste en dessous :
+        /// aucun audio à synthétiser, et rien à contre-vérifier dans les messages
+        /// bruts. Ce que le professeur recopie EST la conversation — les deux
+        /// ont parlé, il rend les deux voix.
+        ///
+        /// Silencieux en cas d'échec, comme les autres blocs : c'est la trace
+        /// qui manque, jamais la conversation qui échoue.
+        /// </summary>
+        private async Task EnregistrerExpressionOraleAsync(
+            int conversationId, int eleveId, string texte, CancellationToken ct)
+        {
+            var declaree = LecteurExpressionOrale.Lire(texte);
+
+            if (declaree is null)
+            {
+                // LA BALISE EST LÀ MAIS LE CONTENU N'A PAS ÉTÉ RETENU.
+                //
+                // Même filet que pour la compréhension orale, et pour la même
+                // raison : un bloc mal formé disparaissait sans laisser de trace,
+                // et il a fallu un exercice perdu pour s'en apercevoir. `Lire`
+                // reste silencieux par conception ; c'est ici qu'on distingue
+                // « la balise n'a jamais été posée » de « posée mais rejetée ».
+                if (texte.Contains("[EXPRESSION_ORALE]", StringComparison.OrdinalIgnoreCase))
+                {
+                    _logger.LogWarning(
+                        "Bloc [EXPRESSION_ORALE] present mais non retenu (conversation "
+                        + "{ConversationId}) -- titre, langue ou tours manquants.",
+                        conversationId);
+                }
+
+                return;
+            }
+
+            try
+            {
+                var tours = declaree.Echange
+                    .Select(t => new Domain.Models.TourExpressionOrale(t.Qui, t.Texte))
+                    .ToList();
+
+                // SA PREMIÈRE PHRASE NE SE PERD PAS — Camara, le 18/09/2026.
+                //
+                // Le professeur recopie la conversation lui-même, et il commence
+                // systématiquement par la réponse de l'enfant : son propre
+                // « Hello! What would you like? » disparaissait, et l'échange relu
+                // s'ouvrait sur une réponse à une question absente.
+                //
+                // LA CONSIGNE A ÉTÉ CORRIGÉE — son exemple commençait par
+                // `eleve:`, ce qui lui montrait exactement quoi faire — mais une
+                // consigne ne vaut pas un fait. Sa vraie première réplique est
+                // dans les messages : on la relit, et on la remet devant si elle
+                // manque.
+                if (tours.Count > 0 && tours[0].Qui == LecteurExpressionOrale.Eleve)
+                {
+                    var premiere = await _expressionsOrales.PremiereRepliqueAsync(
+                        conversationId, eleveId, ct);
+
+                    // ELLE NE DOIT PAS DÉJÀ Y ÊTRE PLUS BAS : le professeur peut
+                    // avoir décalé son tour au lieu de l'oublier. La comparer
+                    // évite de la compter deux fois.
+                    if (!string.IsNullOrWhiteSpace(premiere)
+                        && !tours.Any(t => string.Equals(
+                            t.Texte.Trim(), premiere.Trim(), StringComparison.OrdinalIgnoreCase)))
+                    {
+                        tours.Insert(0, new Domain.Models.TourExpressionOrale(
+                            LecteurExpressionOrale.Professeur, premiere));
+
+                        _logger.LogInformation(
+                            "Premiere replique du professeur remise en tete de "
+                            + "l'expression orale (conversation {ConversationId}).",
+                            conversationId);
+                    }
+                }
+
+                var enregistree = await _expressionsOrales.AjouterAsync(
+                    eleveId, conversationId, declaree.Titre, declaree.Langue,
+                    tours, declaree.Remarque, ct: ct);
+
+                if (enregistree is not null)
+                {
+                    _logger.LogInformation(
+                        "Expression orale {Id} archivee ({Tours} tours, {Langue}) "
+                        + "pour l'eleve {EleveId}.",
+                        enregistree.Id, tours.Count, declaree.Langue, eleveId);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex,
+                    "Echec de l'archivage de l'expression orale (conversation "
+                    + "{ConversationId}).", conversationId);
+            }
+        }
+
         private async Task EnregistrerComprehensionOraleAsync(
             int conversationId, int eleveId, int matiereId, int age, string texte, CancellationToken ct)
         {

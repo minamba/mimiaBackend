@@ -44,6 +44,8 @@ namespace SchoolWebApp.Dal.Entities
         public virtual DbSet<FicheRevision> FichesRevision { get; set; }
         public virtual DbSet<Dictee> Dictees { get; set; }
         public virtual DbSet<ComprehensionOrale> ComprehensionsOrales { get; set; }
+
+        public virtual DbSet<ExpressionOrale> ExpressionsOrales { get; set; }
         public virtual DbSet<EvaluationPrevue> EvaluationsPrevues { get; set; }
         public virtual DbSet<ControleScolaire> ControlesScolaires { get; set; }
         public virtual DbSet<ControleNotion> ControlesNotions { get; set; }
@@ -916,6 +918,71 @@ namespace SchoolWebApp.Dal.Entities
                 // quand le détail des échanges a disparu.
                 entity.HasOne(e => e.Conversation)
                       .WithMany(c => c.ComprehensionsOrales)
+                      .HasForeignKey(e => e.ConversationId)
+                      .OnDelete(DeleteBehavior.NoAction);
+
+                entity.HasIndex(e => new { e.EleveId, e.MatiereId, e.DateCreation });
+            });
+
+            // ---------------------------------------------------------------
+            // ExpressionOrale
+            // ---------------------------------------------------------------
+            modelBuilder.Entity<ExpressionOrale>(entity =>
+            {
+                entity.ToTable("ExpressionOrale");
+                entity.HasKey(e => e.Id);
+
+                entity.Property(e => e.Id).HasColumnName("id");
+                entity.Property(e => e.EleveId).HasColumnName("eleve_id");
+                entity.Property(e => e.MatiereId).HasColumnName("matiere_id");
+                entity.Property(e => e.ConversationId).HasColumnName("conversation_id");
+
+                // OBLIGATOIRE, contrairement au titre d'une compréhension orale :
+                // celle-ci se reconnaît aux premiers mots de son passage, une
+                // conversation non.
+                entity.Property(e => e.Titre)
+                      .IsRequired().HasMaxLength(300).HasColumnName("titre");
+
+                entity.Property(e => e.Langue)
+                      .IsRequired().HasMaxLength(10).HasColumnName("langue");
+
+                // nvarchar(max) : une conversation de quinze tours dépasse
+                // largement 4000 caractères une fois en JSON.
+                entity.Property(e => e.Echange).IsRequired().HasColumnName("echange");
+
+                entity.Property(e => e.Remarque).HasMaxLength(2000).HasColumnName("remarque");
+                entity.Property(e => e.DateCreation).HasColumnName("date_creation");
+                entity.Property(e => e.DateConsultation).HasColumnName("date_consultation");
+                entity.Property(e => e.NiveauScolaireId).HasColumnName("niveau_scolaire_id");
+
+                // SANS COLLECTION INVERSE, contrairement à la compréhension orale.
+                // Trois entités auraient gagné une propriété de plus pour une
+                // archive qu'on ne lit jamais depuis elles — on part toujours de
+                // l'élève ET de la matière, jamais de la conversation.
+                entity.HasOne(e => e.Eleve)
+                      .WithMany()
+                      .HasForeignKey(e => e.EleveId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                // NoAction : un niveau scolaire est de référence, la contrainte
+                // empêche un identifiant fantaisiste sans propager de suppression.
+                entity.HasOne<NiveauScolaire>()
+                      .WithMany()
+                      .HasForeignKey(e => e.NiveauScolaireId)
+                      .OnDelete(DeleteBehavior.NoAction);
+
+                // Restrict, pas Cascade : trois chemins de suppression
+                // convergeraient sinon ici (élève, matière, conversation), et SQL
+                // Server refuse les cascades multiples.
+                entity.HasOne(e => e.Matiere)
+                      .WithMany()
+                      .HasForeignKey(e => e.MatiereId)
+                      .OnDelete(DeleteBehavior.Restrict);
+
+                // NoAction : une conversation purgée au bout d'un an ne doit pas
+                // emporter l'archive.
+                entity.HasOne(e => e.Conversation)
+                      .WithMany()
                       .HasForeignKey(e => e.ConversationId)
                       .OnDelete(DeleteBehavior.NoAction);
 
