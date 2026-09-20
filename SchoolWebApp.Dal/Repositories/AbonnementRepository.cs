@@ -55,10 +55,38 @@ namespace SchoolWebApp.Dal.Repositories
         /// </summary>
         private readonly string? _sel;
 
-        public AbonnementRepository(SchoolWebAppDatabaseContext context, string? selEmpreinte = null)
+        /// <summary>
+        /// Le super-administrateur n'a pas de limite d'enfants — Camara, le
+        /// 20/09/2026 : « quel que soit l'abonnement qu'il a, ne jamais
+        /// l'empêcher d'ajouter des enfants ». Null : personne n'est exempté.
+        /// </summary>
+        private readonly IComptesProteges? _comptesProteges;
+
+        public AbonnementRepository(
+            SchoolWebAppDatabaseContext context,
+            string? selEmpreinte = null,
+            IComptesProteges? comptesProteges = null)
         {
             _context = context ?? throw new ArgumentNullException(nameof(context));
             _sel = selEmpreinte;
+            _comptesProteges = comptesProteges;
+        }
+
+        /// <summary>
+        /// Ce parent est-il le super-administrateur ? Lu par son adresse, la
+        /// seule chose qui porte le rôle (voir `ComptesProteges` dans l'API).
+        /// </summary>
+        private async Task<bool> SansLimiteDEnfantsAsync(int parentId, CancellationToken ct)
+        {
+            if (_comptesProteges is null) return false;
+
+            var mail = await _context.Parents
+                .AsNoTracking()
+                .Where(p => p.Id == parentId)
+                .Select(p => p.Mail)
+                .FirstOrDefaultAsync(ct);
+
+            return _comptesProteges.Protege(mail);
         }
 
         // ------------------------------------------------------------ catalogue
@@ -508,7 +536,13 @@ namespace SchoolWebApp.Dal.Repositories
             // plein. Les places se prennent à l'usage, dans l'ordre d'arrivée
             // sur la période — le premier à travailler garde la sienne jusqu'au
             // renouvellement.
-            if (!await PlaceDisponibleAsync(abonnement, eleveId, offre.NombreEnfantsMax, ct))
+            //
+            // SAUF POUR LE SUPER-ADMINISTRATEUR : ses enfants sont sans nombre
+            // à l'inscription (voir CapaciteAsync), ils le sont aussi à l'usage —
+            // sinon le cinquième profil ajouté serait refusé à sa première
+            // séance, ce qui se lirait comme une panne.
+            if (!await SansLimiteDEnfantsAsync(parentId.Value, ct)
+                && !await PlaceDisponibleAsync(abonnement, eleveId, offre.NombreEnfantsMax, ct))
             {
                 return VerdictQuota.Refus(MotifRefus.TropDEnfants);
             }
@@ -569,6 +603,15 @@ namespace SchoolWebApp.Dal.Repositories
 
             var abonnement = await Courant(parentId).FirstOrDefaultAsync(ct);
             if (abonnement is not null) await RafraichirAsync(abonnement, ct);
+
+            // LE SUPER-ADMINISTRATEUR N'A PAS DE LIMITE — Camara, le 20/09/2026 :
+            // « il peut en ajouter à l'infini, quel que soit son abonnement ».
+            // Ni la formule ni le droit retiré ne le concernent ; l'exception
+            // ne vaut que pour ce compte-là.
+            if (await SansLimiteDEnfantsAsync(parentId, ct))
+            {
+                return new CapaciteEnfants(actuels, int.MaxValue, abonnement?.Offre?.Libelle);
+            }
 
             // Une place sans abonnement : de quoi créer le premier profil et
             // lancer l'essai. Zéro bloquerait l'inscription sur elle-même.

@@ -51,6 +51,7 @@ namespace SchoolWebApp.Dal.Repositories
             DateTime? dateExercice = null,
             byte[]? photo = null,
             string? photoTypeMime = null,
+            string? texteSurligne = null,
             CancellationToken ct = default)
         {
             // La matière vient de la conversation, jamais du texte du modèle.
@@ -90,6 +91,7 @@ namespace SchoolWebApp.Dal.Repositories
                 // NULL ET NON CHAÎNE VIDE : « pas encore recopié » n'est pas
                 // « il n'a rien écrit ». La photo, elle, est là.
                 Texte = string.IsNullOrWhiteSpace(texte) ? null : texte.Trim(),
+                TexteSurligne = string.IsNullOrWhiteSpace(texteSurligne) ? null : texteSurligne.Trim(),
                 Photo = photo is { Length: > 0 } ? photo : null,
                 PhotoTypeMime = photo is { Length: > 0 } ? photoTypeMime : null,
                 Corrections = JsonSerializer.Serialize(propres, Json),
@@ -178,6 +180,7 @@ namespace SchoolWebApp.Dal.Repositories
                     e.Langue,
                     e.Consigne,
                     e.Texte,
+                    e.TexteSurligne,
                     e.Corrections,
                     APhoto = e.Photo != null && e.PhotoEffaceeLe == null,
                     e.Remarque,
@@ -202,6 +205,7 @@ namespace SchoolWebApp.Dal.Repositories
                 Langue = ligne.Langue,
                 Consigne = ligne.Consigne,
                 Texte = ligne.Texte,
+                TexteSurligne = ligne.TexteSurligne,
                 APhoto = ligne.APhoto,
                 Transcrit = ligne.Texte != null,
                 Corrections = corrections,
@@ -239,6 +243,7 @@ namespace SchoolWebApp.Dal.Repositories
             string texte,
             IReadOnlyList<RepriseEcrite> corrections,
             string? remarque,
+            string? texteSurligne = null,
             CancellationToken ct = default)
         {
             if (string.IsNullOrWhiteSpace(texte)) return null;
@@ -256,6 +261,7 @@ namespace SchoolWebApp.Dal.Repositories
                 .Where(e => e.Id == id && e.EleveId == eleveId && e.Texte == null)
                 .ExecuteUpdateAsync(
                     m => m.SetProperty(e => e.Texte, texte.Trim())
+                          .SetProperty(e => e.TexteSurligne, string.IsNullOrWhiteSpace(texteSurligne) ? null : texteSurligne.Trim())
                           .SetProperty(e => e.Corrections, JsonSerializer.Serialize(propres, Json))
                           .SetProperty(e => e.Remarque,
                               string.IsNullOrWhiteSpace(remarque) ? null : Borner(remarque, 2000)),

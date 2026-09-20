@@ -88,8 +88,16 @@ namespace SchoolWebApp.Domain.Services.impl
             string? recherche, DateTime debut, DateTime fin) =>
             _adminRepository.GetParentsAsync(recherche, debut, fin);
 
+        public Task<IReadOnlyList<LigneTarif>> GetTarifsAsync() => _adminRepository.GetTarifsAsync();
+
+        public Task<LigneTarif?> ModifierTarifAsync(int id, decimal? prixEntree, decimal? prixSortie, decimal? prixMinute) =>
+            _adminRepository.ModifierTarifAsync(id, prixEntree, prixSortie, prixMinute);
+
         public Task<CoutPeriode> GetCoutAsync(DateTime debut, DateTime fin) =>
             _adminRepository.GetCoutAsync(debut, fin);
+
+        public Task<RevenuPeriode> GetRevenuAsync(DateTime debut, DateTime fin) =>
+            _adminRepository.GetRevenuAsync(debut, fin);
 
         public Task<EtatBase> GetEtatBaseAsync() =>
             _adminRepository.GetEtatBaseAsync();

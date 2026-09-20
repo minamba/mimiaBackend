@@ -67,6 +67,7 @@ namespace SchoolWebApp.Domain.Repositories
             DateTime? dateExercice = null,
             byte[]? photo = null,
             string? photoTypeMime = null,
+            string? texteSurligne = null,
             CancellationToken ct = default);
 
         /// <summary>
@@ -90,6 +91,7 @@ namespace SchoolWebApp.Domain.Repositories
             string texte,
             IReadOnlyList<RepriseEcrite> corrections,
             string? remarque,
+            string? texteSurligne = null,
             CancellationToken ct = default);
 
         /// <summary>

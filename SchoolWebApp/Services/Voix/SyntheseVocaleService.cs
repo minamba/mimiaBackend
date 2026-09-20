@@ -50,24 +50,74 @@ namespace SchoolWebApp.Api.Services.Voix
 
             // L'ÉQUIPE DES SÉRIES TECHNOLOGIQUES (14/09/2026). Timbres choisis
             // pour ne pas doubler un collègue de la même grille — un élève de
-            // STMG n'entend jamais Karim et Adrien avec la même voix. Pas
-            // encore mesurés en sauts par seconde comme les autres : à faire
-            // avant d'en juger la propreté (voir les bips de juillet).
-            ["lucia"] = "alloy",   // espagnol — non mesurée
-            ["karim"] = "verse",   // économie-gestion
-            ["elodie"] = "nova",   // sanitaire et social
+            // STMG n'entend jamais Karim et Adrien avec la même voix.
+            //
+            // LUCÍA PARLAIT COMME UN HOMME — Camara, le 20/09/2026 : « la voix
+            // de la professeure d'espagnol est trop masculine ». Mesuré le jour
+            // même sur la même phrase espagnole, fréquence fondamentale médiane
+            // par autocorrélation : `alloy` sort à 140 Hz, en plein registre
+            // masculin (85-155 Hz), quand une voix de femme tient entre 165 et
+            // 255 Hz. Ces timbres avaient été répartis à l'oreille des noms,
+            // jamais mesurés — d'où l'erreur.
+            //
+            // Les treize voix, mesurées ce jour-là : coral 211, marin 202,
+            // ballad 200, sage 186, nova 173, shimmer 173 — puis fable 146,
+            // cedar 145, verse 141, alloy 140, echo 119, ash 112, onyx 93.
+            //
+            // UNE PRISE NE SUFFIT PAS À JUGER UNE VOIX, et `ballad` l'a prouvé
+            // le jour même : donnée à Lucía sur ce relevé à 200 Hz, elle a
+            // sonné masculine à l'oreille de Camara quelques minutes plus tard.
+            // Remesurée sur TROIS prises du même texte, elle oscille entre 161
+            // et 174 Hz — les 200 Hz étaient la prise haute. Le modèle rejoue
+            // la phrase à chaque appel et le timbre bouge avec ; c'est donc la
+            // PLUS BASSE des prises qui compte, puisque l'enfant les entend
+            // toutes.
+            //
+            // Sur trois prises (plus basse / médiane / étendue) :
+            //   coral   202 / 207 / 29 Hz      nova    182 / 182 /  1 Hz
+            //   marin   200 / 203 /  9 Hz      shimmer 163 / 166 /  8 Hz
+            //   sage    189 / 194 / 16 Hz      ballad  161 / 169 / 13 Hz
+            //
+            // Lucía prend `marin` : plancher à 200 Hz et la plus stable des
+            // treize (9 Hz d'étendue). Le timbre compte plus pour elle que pour
+            // quiconque — un professeur de langue parle espagnol toute la
+            // séance, et l'enfant écoute la voix autant que les mots.
+            ["lucia"] = "marin",   // espagnol — 200-209 Hz, 19 sauts/s
+            ["karim"] = "verse",   // économie-gestion — 141 Hz
+            ["elodie"] = "nova",   // sanitaire et social — 173 Hz
 
-            // Spécialités de la voie générale : les deux timbres encore libres.
-            // Non mesurés, comme ceux ci-dessus.
-            ["theo"] = "ballad",   // EPPCS
-            ["jeanne"] = "fable",  // arts
+            // THÉO RÉCUPÈRE LE TIMBRE DE LUCÍA, et c'est le même échange vu de
+            // l'autre bout : `ballad` (200 Hz) est une voix de femme, portée
+            // jusqu'ici par un professeur d'EPPCS. Les deux étaient mal
+            // distribués ; ils se rendent leur voix.
+            ["theo"] = "alloy",    // EPPCS — 140 Hz
+            ["jeanne"] = "fable",  // arts — 146 Hz, voir la note ci-dessous
 
             // La NSI, confiée à Nora jusqu'au 15/09/2026, a son professeur :
             // « une matière à part entière » (Camara). Les onze timbres
             // historiques étant pris, il reçoit l'un des deux plus récents,
-            // masculin. Non mesuré.
-            ["minamba"] = "cedar", // NSI
+            // masculin. Mesuré depuis : 145 Hz, c'est bien une voix d'homme.
+            ["minamba"] = "cedar", // NSI — 145 Hz
+
+            // CAMILLE N'AVAIT AUCUNE VOIX — trouvé le 20/09/2026 en mesurant
+            // celle de Lucía. Absente de cette table, elle prenait la voix par
+            // défaut : `coral`, c'est-à-dire CELLE DE NORA. Deux professeurs
+            // que le même élève de terminale entend le même jour parlaient à
+            // l'identique, ce que cette table existe précisément pour éviter.
+            // Elle reçoit `ballad`, le timbre que Lucía vient de rendre. C'est
+            // le plus bas des six timbres féminins (161 Hz au plus bas), et
+            // c'est un choix par défaut plutôt qu'un bon choix : six voix de
+            // femme pour sept professeures, quelqu'un prend la moins haute.
+            // Camille enseigne la philosophie en terminale seulement — la moins
+            // entendue des sept, et elle n'avait aucune voix à elle jusqu'ici.
+            ["camille"] = "ballad", // philosophie — 161-174 Hz
         };
+
+        // IL MANQUE UNE VOIX DE FEMME, ET C'EST ARITHMÉTIQUE. Sept professeures
+        // pour six timbres féminins : l'une d'elles doit prendre le moins
+        // masculin des autres. C'est Jeanne (arts), sur `fable` à 146 Hz —
+        // spécialité de la voie générale, donc la moins entendue des sept. À
+        // rouvrir le jour où le fournisseur ajoute une voix.
 
         /// <summary>
         /// Les voix du mode de secours, et elles ne sont PAS les mêmes.
@@ -90,12 +140,23 @@ namespace SchoolWebApp.Api.Services.Voix
             ["yann"] = "echo",      // 255 — contre 578
             ["ines"] = "shimmer",   // 175 — contre 212
 
-            // Séries technologiques : non mesurées, voir la table principale.
-            ["lucia"] = "shimmer",
+            // LE SECOURS AUSSI PARLAIT MASCULIN — mesuré le 20/09/2026 : sur
+            // `tts-1`, `shimmer` tombe à 149 Hz, alors qu'il en fait 173 sur le
+            // modèle principal. Lucía aurait donc retrouvé une voix d'homme dès
+            // que le secours prenait la main. `sage` (197 Hz) était libre ici.
+            //
+            // Trois timbres féminins seulement sur ce modèle — coral 200,
+            // sage 197, nova 182 — pour sept professeures : les doublons y sont
+            // inévitables, et assumés. C'est un mode dégradé.
+            ["lucia"] = "sage",    // 197 Hz
             ["karim"] = "fable",
             ["elodie"] = "nova",
             ["theo"] = "echo",
             ["jeanne"] = "shimmer",
+
+            // Sans cette ligne, Camille héritait de `onyx` — la voix par défaut
+            // du secours, à 94 Hz. Elle double Marine, faute de mieux.
+            ["camille"] = "coral", // 200 Hz
             // `cedar` n'existe pas sur `tts-1` : le timbre masculin encore
             // libre de cette table le remplace. Non mesuré.
             ["minamba"] = "ash",

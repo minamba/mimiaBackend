@@ -326,6 +326,31 @@ namespace SchoolWebApp.Api.Controllers
         }
 
         /// <summary>
+        /// Ce que le produit a rapporté sur la période — la même fenêtre que
+        /// `cout`, pour que l'écran puisse soustraire l'un de l'autre.
+        ///
+        /// AU MOIS ET À L'ANNÉE SEULEMENT. Au jour ou à la semaine, la réponse
+        /// dit « non disponible » plutôt qu'un chiffre : un abonnement ne se
+        /// découpe pas en jours, et un revenu inventé rassurerait à tort.
+        /// </summary>
+        [HttpGet("revenu")]
+        [SwaggerResponse(200, "Revenu de la période.", typeof(RevenuPeriode))]
+        public async Task<IActionResult> GetRevenu(
+            [FromQuery] string periode = "mois",
+            [FromQuery] int decalage = 0)
+        {
+            var (debut, fin) = FenetreNommee(periode, decalage);
+            var calculable = periode?.ToLowerInvariant() is "mois" or "annee" or "année";
+
+            if (!calculable)
+            {
+                return Ok(new RevenuPeriode { Debut = debut, Fin = fin, Disponible = false });
+            }
+
+            return await Executer(() => _adminService.GetRevenuAsync(debut, fin));
+        }
+
+        /// <summary>
         /// La place occupée par la base, et la part des documents.
         ///
         /// SANS CET ÉCRAN, LE CHIFFRE DEMANDE UN CLIENT SQL SUR LA PRODUCTION.
@@ -345,6 +370,48 @@ namespace SchoolWebApp.Api.Controllers
         /// ordinaire ; on sait seulement si un appel payant passe, et sinon
         /// pourquoi. Le solde se lit sur leurs sites, dont l'écran donne le lien.
         /// </summary>
+        /// <summary>
+        /// La grille tarifaire des fournisseurs d'IA : le prix officiel relevé,
+        /// le prix appliqué dans nos calculs, et le statut qui les compare.
+        /// </summary>
+        [HttpGet("tarifs")]
+        [SwaggerResponse(200, "La grille tarifaire.", typeof(IEnumerable<LigneTarif>))]
+        public async Task<IActionResult> GetTarifs() =>
+            await Executer(() => _adminService.GetTarifsAsync());
+
+        /// <summary>Le corps de la modification d'un prix officiel.</summary>
+        public sealed class RequeteTarif
+        {
+            public decimal? PrixEntree { get; set; }
+
+            public decimal? PrixSortie { get; set; }
+
+            public decimal? PrixMinute { get; set; }
+        }
+
+        /// <summary>
+        /// Corrige un prix à la main, en secours de la veille automatique : il est
+        /// appliqué aussitôt à nos calculs, et la date de mise à jour change.
+        /// </summary>
+        [HttpPut("tarifs/{id:int}")]
+        [SwaggerResponse(200, "La ligne mise à jour.", typeof(LigneTarif))]
+        [SwaggerResponse(400, "Un prix négatif.")]
+        [SwaggerResponse(404, "Ligne introuvable.")]
+        public async Task<IActionResult> ModifierTarif(int id, [FromBody] RequeteTarif requete)
+        {
+            if (requete is null) return BadRequest(new { message = "Aucun prix reçu." });
+
+            if (requete.PrixEntree < 0 || requete.PrixSortie < 0 || requete.PrixMinute < 0)
+            {
+                return BadRequest(new { message = "Un prix ne peut pas être négatif." });
+            }
+
+            var ligne = await _adminService.ModifierTarifAsync(
+                id, requete.PrixEntree, requete.PrixSortie, requete.PrixMinute);
+
+            return ligne is null ? NotFound() : Ok(ligne);
+        }
+
         [HttpGet("fournisseurs")]
         [SwaggerResponse(200, "L'état des fournisseurs d'IA.", typeof(IEnumerable<SchoolWebApp.Api.Services.Fournisseurs.EtatFournisseur>))]
         public IActionResult GetFournisseurs(

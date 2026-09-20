@@ -26,8 +26,15 @@ namespace SchoolWebApp.Dal.Entities
         /// <summary>Tokens servis depuis le cache de prompt (facturés ~0,1x).</summary>
         public int TokensCacheLecture { get; set; }
 
-        /// <summary>Tokens écrits dans le cache de prompt (facturés ~1,25x).</summary>
+        /// <summary>Tokens écrits dans le cache de prompt : 1,25x pour cinq minutes, 2x pour une heure.</summary>
         public int TokensCacheEcriture { get; set; }
+
+        /// <summary>
+        /// La part de <see cref="TokensCacheEcriture"/> écrite pour UNE HEURE
+        /// (facturée 2x) ; le reste l'a été pour cinq minutes (1,25x). NULL
+        /// pour les tours antérieurs au 19/09/2026 : détail inconnu.
+        /// </summary>
+        public int? TokensCacheEcriture1h { get; set; }
 
         public DateTime DateCreation { get; set; }
 

@@ -172,6 +172,13 @@ namespace SchoolWebApp.Dal.Repositories
 
             var specialites = VoiesScolaires.LireSpecialites(profil?.Specialites);
 
+            // COMBIEN IL EN MANQUE, et non « y en a-t-il au moins une ». La
+            // classe dit combien la voie générale en attend (3 en première,
+            // 2 en terminale) ; tout ce qui n'y est pas est une épreuve que
+            // l'élève ne voit pas et qu'il passera quand même.
+            var manquantes = Math.Max(
+                0, VoiesScolaires.NombreSpecialites(niveauCode) - specialites.Count);
+
             var epreuves = await AssemblerAsync(
                 eleveId, examen,
                 examen.Epreuves.Where(e => ConcerneEleve(e, specialites)).OrderBy(e => e.Ordre).ToList(), ct);
@@ -186,7 +193,8 @@ namespace SchoolWebApp.Dal.Repositories
                 TitreSection = examen.TitreSection,
                 Session = examen.Session,
                 Pourcent = epreuves.Count == 0 ? 0 : (int)Math.Round(epreuves.Average(e => (double)e.Pourcent)),
-                SpecialitesARenseigner = specialites.Count == 0 && examen.Epreuves.Any(DependDesSpecialites),
+                SpecialitesARenseigner = manquantes > 0 && examen.Epreuves.Any(DependDesSpecialites),
+                SpecialitesManquantes = manquantes,
                 NotesControleContinu = NotesControleContinu(examen, niveauCode, profil?.Lv2Espagnol == true, specialites),
                 Epreuves = epreuves,
             };

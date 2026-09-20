@@ -30,13 +30,19 @@ namespace SchoolWebApp.Api.Services
             RegexOptions.Singleline | RegexOptions.IgnoreCase)]
         private static partial Regex Bloc();
 
-        [GeneratedRegex(@"^\s*dicte\s*:\s*$", RegexOptions.IgnoreCase | RegexOptions.Multiline)]
+        // LES SÉPARATEURS ACCEPTENT DU TEXTE SUR LA MÊME LIGNE — corrigé le
+        // 20/09/2026. Ils exigeaient « remarque: » SEUL sur sa ligne ; le
+        // professeur a écrit « remarque: Deux erreurs corrigées… » à la suite,
+        // le séparateur n'a pas été reconnu, et toute la remarque est partie
+        // dans la COPIE de l'élève. Remise au tableau, la comparaison posait
+        // des badges sur des mots que l'enfant n'avait jamais écrits.
+        [GeneratedRegex(@"^[ \t]*dicte[ \t]*:[ \t]*", RegexOptions.IgnoreCase | RegexOptions.Multiline)]
         private static partial Regex SeparateurDicte();
 
-        [GeneratedRegex(@"^\s*copie\s*:\s*$", RegexOptions.IgnoreCase | RegexOptions.Multiline)]
+        [GeneratedRegex(@"^[ \t]*copie[ \t]*:[ \t]*", RegexOptions.IgnoreCase | RegexOptions.Multiline)]
         private static partial Regex SeparateurCopie();
 
-        [GeneratedRegex(@"^\s*remarque\s*:\s*$", RegexOptions.IgnoreCase | RegexOptions.Multiline)]
+        [GeneratedRegex(@"^[ \t]*remarque[ \t]*:[ \t]*", RegexOptions.IgnoreCase | RegexOptions.Multiline)]
         private static partial Regex SeparateurRemarque();
 
         /// <summary>La dictée archivée dans ce message, ou null.</summary>
@@ -78,7 +84,10 @@ namespace SchoolWebApp.Api.Services
                 ? apresCopie[(coupureRemarque.Index + coupureRemarque.Length)..].Trim()
                 : null;
 
-            if (string.IsNullOrWhiteSpace(dicte) || string.IsNullOrWhiteSpace(copie)) return null;
+            // `dicte` ET `copie` PEUVENT ÊTRE VIDES — depuis le 19/09/2026 : le
+            // professeur n'a plus à les retaper, l'application les remplit
+            // depuis les messages (voir EnregistrerDicteeAsync). Un texte vide
+            // ici n'est plus un bloc rejeté, c'est un bloc à compléter.
 
             return new DicteeDeclaree(
                 titre, etat, dicte, copie, string.IsNullOrWhiteSpace(remarque) ? null : remarque);
@@ -131,6 +140,66 @@ namespace SchoolWebApp.Api.Services
         [GeneratedRegex(@"\[DICTEE_AU_TABLEAU\]\s*(?:n°\s*)?(?<id>\d+)\s*\[/DICTEE_AU_TABLEAU\]",
             RegexOptions.IgnoreCase)]
         public static partial Regex AuTableau();
+
+        /// <summary>
+        /// Le tableau de comparaison — « La dictée » puis « Ta copie » dans un
+        /// même bloc — qui ouvre la correction.
+        /// </summary>
+        [GeneratedRegex(
+            @"\[ARDOISE\][\s\S]*?^[ \t]*La dictée[ \t]*\r?$[\s\S]*?^[ \t]*Ta copie[ \t]*\r?$[\s\S]*?\[/ARDOISE\]",
+            RegexOptions.IgnoreCase | RegexOptions.Multiline)]
+        private static partial Regex ComparaisonAuTableau();
+
+        /// <summary>
+        /// LE TABLEAU DE COMPARAISON, ÉCRIT PAR L'APPLICATION — Camara, le
+        /// 19/09/2026, pour réduire le coût des cours de langue : le professeur
+        /// retapait les deux textes (3 900 jetons de sortie dans une séance),
+        /// avec le risque d'altérer la copie. Ici, mot pour mot.
+        /// </summary>
+        public static string TableauDeComparaison(string dicte, string copie) =>
+            "[ARDOISE]\nLa dictée\n" + dicte.Trim() + "\n\nTa copie\n" + copie.Trim() + "\n[/ARDOISE]";
+
+        /// <summary>
+        /// Retire un tableau de comparaison que le professeur aurait écrit quand
+        /// même : celui de l'application, déjà au tableau, fait foi.
+        /// </summary>
+        public static string SansComparaison(string? texte) =>
+            string.IsNullOrEmpty(texte)
+                ? string.Empty
+                : Regex.Replace(ComparaisonAuTableau().Replace(texte, string.Empty), @"\n{3,}", "\n\n").Trim();
+
+        /// <summary>
+        /// UNE CORRECTION DE DICTÉE EST EN COURS : le professeur a mis les deux
+        /// textes au tableau et n'a pas encore écrit [DICTEE_CORRIGEE].
+        ///
+        /// Sert au rappel joint à chaque tour — Camara, le 19/09/2026 : vingt-
+        /// quatre écarts numérotés, et le professeur a commencé par le n° 5.
+        /// « Dans l'ordre du texte » était dans sa consigne ; comme pour le
+        /// contrôle et l'expression écrite, il faut le lui redire au tour même.
+        ///
+        /// Une nouvelle dictée, un abandon, une fin de séance ou un tableau
+        /// effacé referment la correction.
+        /// </summary>
+        public static bool CorrectionOuverte(IEnumerable<string?> messagesProfesseur)
+        {
+            foreach (var message in messagesProfesseur.Reverse())
+            {
+                if (string.IsNullOrEmpty(message)) continue;
+
+                if (message.Contains("[DICTEE_CORRIGEE]", StringComparison.OrdinalIgnoreCase)
+                    || message.Contains(Abandon, StringComparison.Ordinal)
+                    || message.Contains("[FIN_SEANCE]", StringComparison.Ordinal)
+                    || message.Contains("[TABLEAU_EFFACE]", StringComparison.Ordinal)
+                    || message.Contains("[DICTEE]", StringComparison.OrdinalIgnoreCase))
+                {
+                    return false;
+                }
+
+                if (ComparaisonAuTableau().IsMatch(message)) return true;
+            }
+
+            return false;
+        }
 
         /// <summary>
         /// La dictée que l'élève ne veut plus — voulu par Camara le

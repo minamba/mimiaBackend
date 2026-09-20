@@ -22,7 +22,7 @@ namespace SchoolWebApp.Api.Services
     /// les deux réponses au premier changement d'adresse, et la garde
     /// protégerait alors un compte qui n'est plus le bon.
     /// </summary>
-    public sealed class ComptesProteges
+    public sealed class ComptesProteges : SchoolWebApp.Domain.Services.IComptesProteges
     {
         private readonly HashSet<string> _adresses;
 

@@ -825,7 +825,8 @@ namespace SchoolWebApp.Api.Builders.impl
                     + $"[COPIE_CONTROLE] controle: {passe.Id} [/COPIE_CONTROLE] — l'écran lui "
                     + "demande alors si l'énoncé et sa copie sont séparés et lui donne les boutons "
                     + "pour les envoyer : ne lui explique pas comment faire, et n'écris PAS "
-                    + "[DEMANDE_DOCUMENT] pour cette copie. "
+                    + "[DEMANDE_DOCUMENT] pour cette copie. S'IL N'A PAS DE COPIE et veut "
+                    + "seulement t'envoyer l'énoncé, écris [ENONCE_EXERCICE] à la place. "
                     + $"Dès que tu apprends quelque chose — la note, son ressenti, ce qui a été réussi "
                     + $"ou raté —, écris [CONTROLE_RESULTAT] avec controle: {passe.Id}. S'il ne veut "
                     + "finalement pas en parler, tu n'insistes pas : un `ressenti` qui le dit suffit. "
@@ -1222,7 +1223,9 @@ namespace SchoolWebApp.Api.Builders.impl
                 $"[SÉANCE DE BILAN DU CONTRÔLE n° {controleId}, déjà passé : l'élève est entré par « Faire le "
                 + "point sur ce contrôle ». NE PARLE JAMAIS d'un examen, ni d'un contrôle à venir. Sa copie "
                 + $"et l'énoncé passent par [COPIE_CONTROLE] controle: {controleId}, jamais par "
-                + $"[DEMANDE_DOCUMENT] ; ce que tu apprends va dans [CONTROLE_RESULTAT] controle: {controleId}.]",
+                + $"[DEMANDE_DOCUMENT] ; ce que tu apprends va dans [CONTROLE_RESULTAT] controle: {controleId}."
+                + " SAUF S'IL N'A PAS DE COPIE : dès qu'il dit ne vouloir envoyer QUE l'énoncé, écris "
+                + "[ENONCE_EXERCICE] à la place de [COPIE_CONTROLE] et cesse de réclamer la copie.]",
 
             ModesSeance.Examen =>
                 $"[SÉANCE DE PRÉPARATION DE L'ÉPREUVE {epreuveCode} : l'élève est entré par le bouton de "
@@ -1247,7 +1250,11 @@ namespace SchoolWebApp.Api.Builders.impl
             + "message — JAMAIS [DEMANDE_DOCUMENT] : c'est ce bloc qui lui affiche la question "
             + "« L'énoncé et ta copie sont-ils séparés ? » et les boutons d'envoi. Ne lui "
             + "explique pas comment envoyer. Ce contrôle est PASSÉ : ne le confonds pas avec un "
-            + "contrôle à venir.]";
+            + "contrôle à venir. "
+            + "S'IL N'A PAS DE COPIE et ne veut t'envoyer que l'énoncé — pour comprendre un "
+            + "exercice, pas pour être corrigé — écris [ENONCE_EXERCICE] À LA PLACE : c'est "
+            + "lui qui affiche les boutons d'envoi de l'énoncé, sans reposer la question de la "
+            + "copie.]";
 
         private static string MarqueurCopieControle(ControleScolaireEleve c)
         {
@@ -2181,7 +2188,7 @@ namespace SchoolWebApp.Api.Builders.impl
                         TitreDeTexteEcrit(texte.DateExercice),
                         langue, texte.Consigne, texte.Texte,
                         corrections: [], remarque: null, texte.DateExercice,
-                        texte.Photo, texte.PhotoTypeMime, ct);
+                        texte.Photo, texte.PhotoTypeMime, ct: ct);
 
                     rattrapes++;
                 }
@@ -2587,8 +2594,8 @@ namespace SchoolWebApp.Api.Builders.impl
                     + "avant —, RÉÉCRIS-LES dans un bloc [ARDOISE] dans CE "
                     + "message, juste après les avoir dits. Le bloc ne se "
                     + "prononce pas : il ne compte pas dans la longueur de ton "
-                    + "message. Seule exception, comme toujours : le texte d'une "
-                    + "dictée ne va jamais au tableau. Une FIGURE, elle, ne se "
+                    + "message. Seule exception, comme toujours : un texte à "
+                    + "dicter ne va jamais au tableau. Une FIGURE, elle, ne se "
                     + "réécrit pas : elle se remet par sa clé, [ARDOISE] "
                     + "SCHEMA:la-cle [/ARDOISE]. Et si la figure dont tu te "
                     + "souviens n'est PAS dans ta liste de planches, tu ne peux "
@@ -2720,10 +2727,48 @@ namespace SchoolWebApp.Api.Builders.impl
             // Il s'éteint tout seul : `EstOuvert` devient faux dès que le bloc
             // [EVALUATION] est fermé, et le professeur retrouve alors le droit
             // de corriger et d'encourager — c'est même là que ça sert.
-            if (LecteurEvaluation.EstOuvert(
-                    historique.Where(m => m.Role == "assistant").Select(m => m.Contenu)))
+            var controleOuvert = LecteurEvaluation.EstOuvert(
+                historique.Where(m => m.Role == "assistant").Select(m => m.Contenu));
+
+            if (controleOuvert)
             {
                 declencheur += "\n\n" + PromptsPedagogiques.MarqueurEvaluationEnCours();
+            }
+
+            // UN RÉSULTAT DONNÉ PAR L'ÉLÈVE SE VÉRIFIE AVANT D'ÊTRE JUGÉ — voir
+            // `ReponseChiffree` : le 19/09/2026, « six » pour 3 × 2 a été reçu
+            // par « Presque ! », sans que le professeur ait rien calculé.
+            if (ReponseChiffree.Contient(contenu))
+            {
+                declencheur += "\n\n" + (controleOuvert
+                    ? ReponseChiffree.RappelControle
+                    : ReponseChiffree.Rappel);
+            }
+
+            // UNE EXPRESSION ÉCRITE EN COURS DE CORRECTION SE RAPPELLE AUSSI À
+            // CHAQUE TOUR, et pour la même raison que le contrôle juste au-dessus :
+            // le serveur sait qu'elle est ouverte, la mémoire du modèle non.
+            //
+            // Relevé par Camara le 18/09/2026 : API redémarrée, page rechargée, le
+            // professeur reprend le texte d'une séance précédente, le remet au
+            // tableau — et ne surligne rien. La consigne était là ; le rappel qui
+            // part avec l'envoi du texte, lui, ne part pas sur une reprise, puisque
+            // l'élève n'a rien envoyé.
+            if (LecteurExpressionEcrite.EstOuvert(
+                    historique.Where(m => m.Role == "assistant").Select(m => m.Contenu)))
+            {
+                declencheur += "\n\n" + PromptsPedagogiques.MarqueurExpressionEcriteEnCours();
+            }
+
+            // LA CORRECTION D'UNE DICTÉE SE FAIT DANS L'ORDRE DES NUMÉROS — voir
+            // `LecteurDictee.CorrectionOuverte`. Relevé par Camara le 19/09/2026 :
+            // vingt-quatre écarts numérotés au tableau, et le professeur a
+            // commencé par le 5. « Dans l'ordre du texte » était dans sa consigne ;
+            // il fallait le lui redire au tour même, comme pour le contrôle.
+            if (LecteurDictee.CorrectionOuverte(
+                    historique.Where(m => m.Role == "assistant").Select(m => m.Contenu)))
+            {
+                declencheur += "\n\n" + PromptsPedagogiques.MarqueurCorrectionDicteeEnCours();
             }
 
             // UNE COPIE DE CONTRÔLE EN COURS D'ENVOI : ce qui est déjà arrivé,
@@ -2737,11 +2782,34 @@ namespace SchoolWebApp.Api.Builders.impl
             var agitSurLaCopie = LecteurCopieControle.LireChoix(contenu) is not null
                 || LecteurCopieControle.LirePiece(contenu) is not null;
 
-            var copieEnCours = mode == ModesSeance.Bilan || agitSurLaCopie
+            // L'ÉLÈVE A DÉCLARÉ N'AVOIR QUE L'ÉNONCÉ : la réclamation de copie
+            // s'arrête ici, et un fait contraire prend sa place.
+            //
+            // Sans cela, le rappel repartait à chaque tour et le professeur
+            // réécrivait [COPIE_CONTROLE] juste après avoir dit « d'accord,
+            // envoie-moi juste l'énoncé » — relevé par Camara le 20/09/2026,
+            // deux fois de suite, API redémarrée et consigne bien chargée. Une
+            // règle du préfixe ne pèse rien contre un fait répété au tour.
+            // Voir LecteurEnonceExercice.
+            //
+            // LE CLIC « TA COPIE ET L'ÉNONCÉ » REFERME LA FENÊTRE AU TOUR MÊME.
+            // Sans cette garde, le tour où l'enfant demande les deux portait
+            // encore le fait « il n'a pas de copie » : le professeur recevait
+            // deux ordres contraires dans le même message.
+            var enonceSeul = !LecteurEnonceExercice.VeutAussiSaCopie(contenu)
+                && LecteurEnonceExercice.DemandeOuverte(
+                    historique.Where(m => m.Role == "assistant").Select(m => m.Contenu));
+
+            var copieEnCours = !enonceSeul && (mode == ModesSeance.Bilan || agitSurLaCopie)
                 ? await CopieControleAsync(contexte.Eleve.Id, contexte.Conversation.MatiereId, ct)
                 : null;
 
             if (copieEnCours is not null) declencheur += "\n\n" + copieEnCours;
+
+            if (enonceSeul)
+            {
+                declencheur += "\n\n" + LecteurEnonceExercice.Marqueur(controleMode);
+            }
 
             // LE CONTRÔLE DU BILAN, MÊME CLOS — son numéro est ce qui permet
             // d'écrire [COPIE_CONTROLE]. Relevé par Camara le 13/09/2026 : le
@@ -2755,7 +2823,9 @@ namespace SchoolWebApp.Api.Builders.impl
                     contexte.Eleve.Id, contexte.Conversation.MatiereId, controleMode!.Value, ct)
                 : null;
 
-            if (controleRecent is not null && copieEnCours is null)
+            // Ce rappel porte lui aussi « demande-lui sa copie » : il se tait
+            // quand l'élève vient de dire qu'il n'en a aucune.
+            if (controleRecent is not null && copieEnCours is null && !enonceSeul)
             {
                 declencheur += "\n\n" + MarqueurControleRecent(controleRecent);
             }
@@ -2819,6 +2889,30 @@ namespace SchoolWebApp.Api.Builders.impl
             // qu'elles trouvent est encore celui de ce cours-ci.
             if (nouvelleArrivee) yield return TableauEfface;
 
+            // LE TABLEAU DE COMPARAISON DE LA DICTÉE, ÉCRIT PAR L'APPLICATION —
+            // Camara, le 19/09/2026, pour le coût des cours de langue. Quand la
+            // copie tapée arrive, le professeur retapait les deux textes au
+            // tableau : 3 900 jetons de sortie dans une séance, et le risque de
+            // ne pas recopier la copie à l'identique. Ici : le texte dicté relu
+            // dans ses balises, la copie exactement telle qu'elle vient d'être
+            // rendue. Il est envoyé AVANT sa réponse, et persisté avec elle. Au
+            // cahier (photo), rien ne change : c'est lui qui transcrit.
+            string? blocDicteeAjoute = null;
+            var indexMarqueurClavier = contenu?.IndexOf("[DICTÉE AU CLAVIER", StringComparison.Ordinal) ?? -1;
+
+            if (indexMarqueurClavier > 0)
+            {
+                var copieTapee = contenu![..indexMarqueurClavier].Trim();
+                var texteDicte = await _dictees.TexteDicteCompletAsync(conversationId, contexte.Eleve.Id, ct);
+
+                if (copieTapee.Length > 0 && !string.IsNullOrWhiteSpace(texteDicte))
+                {
+                    blocDicteeAjoute = LecteurDictee.TableauDeComparaison(texteDicte, copieTapee) + "\n\n";
+                    declencheur += "\n\n" + PromptsPedagogiques.MarqueurTableauDicteeEcrit();
+                    yield return blocDicteeAjoute;
+                }
+            }
+
             // L'écran doit l'apprendre aussi : il garde la copie deux heures,
             // et la rouvrirait pour une dictée que le professeur déclare perdue.
             if (marquerAbandonDictee) yield return LecteurDictee.Abandon;
@@ -2874,6 +2968,35 @@ namespace SchoolWebApp.Api.Builders.impl
                     ? TableauEfface + resultat.TexteComplet
                     : resultat.TexteComplet;
 
+                // Le tableau écrit par l'application rejoint le texte persisté,
+                // devant la réponse — et si le professeur en a écrit un quand
+                // même, le sien part : celui de l'application fait foi.
+                if (blocDicteeAjoute is not null)
+                {
+                    contenuPersiste = (nouvelleArrivee ? TableauEfface : string.Empty)
+                        + blocDicteeAjoute
+                        + LecteurDictee.SansComparaison(resultat.TexteComplet);
+                }
+                else if (LecteurDictee.CorrectionOuverte(
+                             historique.Where(m => m.Role == "assistant").Select(m => m.Contenu)))
+                {
+                    // PENDANT LA CORRECTION, LE TABLEAU NE SE RÉÉCRIT PAS — Camara,
+                    // le 19/09/2026, comme pour l'expression écrite : les deux
+                    // textes réécrits à chaque faute réglée, sept cents jetons
+                    // par tour pour rien. Le doublon part de l'historique ;
+                    // l'écran garde le premier tableau (voir `tableauFige`).
+                    var sansDoublon = LecteurDictee.SansComparaison(resultat.TexteComplet);
+
+                    if (sansDoublon.Length < resultat.TexteComplet.Trim().Length)
+                    {
+                        contenuPersiste = (nouvelleArrivee ? TableauEfface : string.Empty) + sansDoublon;
+
+                        _logger.LogInformation(
+                            "Tableau de dictee reecrit pendant la correction : retire du message persiste (conversation {ConversationId}).",
+                            conversationId);
+                    }
+                }
+
                 // Le bloc ajouté par le filet rejoint le texte PERSISTÉ, pour
                 // qu'une page rechargée retrouve la carte. Le signal générique
                 // part avec : la carte a ses propres boutons, et laisser le
@@ -2907,6 +3030,24 @@ namespace SchoolWebApp.Api.Builders.impl
                     contenuPersiste = SansTexteLibre(contenuPersiste);
                 }
 
+                // LE TABLEAU DE CORRECTION D'UNE EXPRESSION ÉCRITE NE SE RÉÉCRIT
+                // PAS — Camara, le 19/09/2026 : six réécritures en une séance,
+                // malgré la consigne et malgré le rappel par tour. Le bloc réécrit
+                // est retiré de ce qui est persisté : l'écran garde le premier
+                // tableau avec ses badges, et l'historique ne relit pas six fois
+                // le même texte. Voir `LecteurExpressionEcrite.SansTableauReecrit`.
+                contenuPersiste = LecteurExpressionEcrite.SansTableauReecrit(
+                    contenuPersiste,
+                    historique.Where(m => m.Role == "assistant").Select(m => m.Contenu),
+                    out var tableauRetire);
+
+                if (tableauRetire)
+                {
+                    _logger.LogInformation(
+                        "Tableau de correction reecrit par le professeur : retire du message persiste (conversation {ConversationId}).",
+                        conversationId);
+                }
+
                 await _conversationService.AddMessageAsync(new DomainMessage
                 {
                     ConversationId = conversationId,
@@ -2917,6 +3058,7 @@ namespace SchoolWebApp.Api.Builders.impl
                     TokensSortie = resultat.TokensSortie,
                     TokensCacheLecture = resultat.TokensCacheLecture,
                     TokensCacheEcriture = resultat.TokensCacheEcriture,
+                    TokensCacheEcriture1h = resultat.TokensCacheEcriture1h,
                     DateCreation = DateTime.UtcNow
                 });
 
@@ -2974,7 +3116,8 @@ namespace SchoolWebApp.Api.Builders.impl
                     conversationId, contexte.Eleve.Id, resultat.TexteComplet, ct);
 
                 await EnregistrerExpressionEcriteAsync(
-                    conversationId, contexte.Eleve.Id, resultat.TexteComplet, ct);
+                    conversationId, contexte.Eleve.Id, resultat.TexteComplet,
+                    historique.Where(m => m.Role == "assistant").Select(m => m.Contenu), ct);
 
                 await EnregistrerEvaluationPrevueAsync(
                     conversationId, contexte.Eleve.Id, resultat.TexteComplet, ct);
@@ -3140,12 +3283,47 @@ namespace SchoolWebApp.Api.Builders.impl
 
             try
             {
+                // LE TEXTE DICTÉ ET LA COPIE VIENNENT DES MESSAGES, PAS DE CE QUE
+                // LE PROFESSEUR RECOPIE.
+                //
+                // Relevé le 11/09/2026 : une dictée de plusieurs phrases archivée
+                // avec UNE SEULE — celle qu'il venait de relire. Depuis le
+                // 19/09/2026 il peut laisser `dicte` et `copie` VIDES : les
+                // balises de dictée portent le texte mot pour mot, et la copie
+                // rendue est dans le message de l'élève. S'il les écrit quand
+                // même, on ne prend le texte relu que s'il en dit plus.
+                var dicte = declaree.Dicte;
+
+                // LE TEXTE RELU L'EMPORTE DÈS QU'IL EXISTE — et non plus seulement
+                // s'il est plus long (corrigé le 20/09/2026) : « plus long » avait
+                // gardé une copie du professeur gonflée de sa propre remarque.
+                // Les balises et le message de l'élève sont la source ; ce que le
+                // professeur recopie n'est qu'un repli.
+                var relu = await _dictees.TexteDicteCompletAsync(conversationId, eleveId, ct);
+                if (!string.IsNullOrWhiteSpace(relu) && relu != dicte)
+                {
+                    _logger.LogInformation(
+                        "Texte dicte repris depuis les messages : {Avant} -> {Apres} caracteres "
+                        + "(conversation {ConversationId}).",
+                        dicte.Length, relu.Length, conversationId);
+
+                    dicte = relu;
+                }
+
+                if (string.IsNullOrWhiteSpace(dicte))
+                {
+                    _logger.LogWarning(
+                        "Dictee non archivee : aucun texte dicte, ni dans le bloc ni dans les messages "
+                        + "(conversation {ConversationId}).", conversationId);
+                    return;
+                }
+
                 // UNE DICTÉE SANS COPIE NE S'ARCHIVE PAS, QUOI QUE LE MODÈLE
                 // ÉCRIVE. La consigne le dit ; le code le garantit. Sans copie
                 // arrivée — tapée et rendue, ou en photo —, un bloc
                 // [DICTEE_CORRIGEE] porterait une copie inventée, ou une
                 // réplique de l'élève prise pour elle.
-                if (!await _dictees.PeutArchiverAsync(conversationId, eleveId, declaree.Dicte, ct))
+                if (!await _dictees.PeutArchiverAsync(conversationId, eleveId, dicte, ct))
                 {
                     _logger.LogWarning(
                         "Dictee non archivee : aucune copie recue pour la conversation {ConversationId}.",
@@ -3153,51 +3331,27 @@ namespace SchoolWebApp.Api.Builders.impl
                     return;
                 }
 
-                // LE TEXTE DICTE NE DEPEND PLUS DE CE QUE LE PROFESSEUR RECOPIE.
-                //
-                // Releve le 11/09/2026 : une dictee de plusieurs phrases
-                // archivee avec UNE SEULE — celle qu il venait de relire parce
-                // que l eleve ne l avait pas retenue. En archivant, il recopie
-                // ce qu il a sous les yeux, pas ce qu il a dicte depuis le
-                // debut. Meme mecanique que pour la comprehension orale : on
-                // relit les balises des messages, ou le texte est mot pour mot.
-                //
-                // ON NE PREND LE TEXTE RELU QUE S IL EN DIT PLUS. Le professeur
-                // a raison la plupart du temps, et il connait le titre et les
-                // coupures ; le filet ne sert qu au cas ou il tronque.
-                var dicte = declaree.Dicte;
-
-                var relu = await _dictees.TexteDicteCompletAsync(conversationId, eleveId, ct);
-                if (!string.IsNullOrWhiteSpace(relu) && relu.Length > dicte.Length)
-                {
-                    _logger.LogInformation(
-                        "Texte dicte complete depuis les messages : {Avant} -> {Apres} caracteres "
-                        + "(conversation {ConversationId}).",
-                        dicte.Length, relu.Length, conversationId);
-
-                    dicte = relu;
-                }
-
-                // ET LA COPIE DE L ELEVE, POUR LA MEME RAISON.
-                //
-                // Elle etait tronquee comme le texte : dix lignes ecrites, une
-                // seule archivee. La relecture exige que le texte partage des
-                // mots avec ce qui a ete dicte — sans quoi une phrase de
-                // conversation passerait pour une copie, ce qui est arrive le
-                // 08/09/2026 avec « Il est place avant. ».
                 var copie = declaree.Copie;
 
                 var copieRelue = await _dictees.CopieCompleteAsync(
                     conversationId, eleveId, dicte, ct);
 
-                if (!string.IsNullOrWhiteSpace(copieRelue) && copieRelue.Length > copie.Length)
+                if (!string.IsNullOrWhiteSpace(copieRelue) && copieRelue != copie)
                 {
                     _logger.LogInformation(
-                        "Copie completee depuis les messages : {Avant} -> {Apres} caracteres "
+                        "Copie reprise depuis les messages : {Avant} -> {Apres} caracteres "
                         + "(conversation {ConversationId}).",
                         copie.Length, copieRelue.Length, conversationId);
 
                     copie = copieRelue;
+                }
+
+                if (string.IsNullOrWhiteSpace(copie))
+                {
+                    _logger.LogWarning(
+                        "Dictee non archivee : aucune copie, ni dans le bloc ni dans les messages "
+                        + "(conversation {ConversationId}).", conversationId);
+                    return;
                 }
 
                 var enregistree = await _dictees.AjouterAsync(
@@ -3349,7 +3503,8 @@ namespace SchoolWebApp.Api.Builders.impl
         /// Silencieux en cas d'échec, comme les autres blocs.
         /// </summary>
         private async Task EnregistrerExpressionEcriteAsync(
-            int conversationId, int eleveId, string texte, CancellationToken ct)
+            int conversationId, int eleveId, string texte,
+            IEnumerable<string?> messagesProfesseur, CancellationToken ct)
         {
             var declaree = LecteurExpressionEcrite.Lire(texte);
 
@@ -3363,7 +3518,7 @@ namespace SchoolWebApp.Api.Builders.impl
                 {
                     _logger.LogWarning(
                         "Bloc [EXPRESSION_ECRITE] present mais non retenu (conversation "
-                        + "{ConversationId}) -- titre, langue, consigne ou texte manquant.",
+                        + "{ConversationId}) -- titre, langue ou consigne manquant.",
                         conversationId);
                 }
 
@@ -3392,9 +3547,38 @@ namespace SchoolWebApp.Api.Builders.impl
                     copie = tape;
                 }
 
+                // SUR CAHIER, le texte n'est que sur la photo — et au tableau,
+                // sous « Ton texte », transcrit par le professeur. Depuis le
+                // 19/09/2026 il peut laisser `texte` vide : on le reprend là.
+                if (string.IsNullOrWhiteSpace(copie))
+                {
+                    copie = LecteurExpressionEcrite.TexteDuTableau(messagesProfesseur.Append(texte)) ?? string.Empty;
+
+                    if (copie.Length == 0)
+                    {
+                        _logger.LogWarning(
+                            "Expression ecrite non archivee : aucun texte, ni tape, ni au tableau "
+                            + "(conversation {ConversationId}).", conversationId);
+                        return;
+                    }
+
+                    _logger.LogInformation(
+                        "Texte de l'eleve repris du tableau pour l'archive (conversation {ConversationId}).",
+                        conversationId);
+                }
+
                 var corrections = declaree.Corrections
                     .Select(c => new Domain.Models.RepriseEcrite(c.Genre, c.Texte))
                     .ToList();
+
+                // LES BADGES DANS L'ARCHIVE — Camara, le 19/09/2026. La section
+                // « Ton texte » du premier tableau surligné, gardée telle quelle ;
+                // seulement si c'est bien la même copie que celle archivée, sans
+                // quoi les badges tomberaient sur les mauvais mots.
+                var surligne = LecteurExpressionEcrite.TexteSurligneDuTableau(messagesProfesseur.Append(texte));
+                var texteSurligne = surligne is not null && MemeTexte(SansSurlignes(surligne), copie)
+                    ? surligne
+                    : null;
 
                 // IL REPREND UNE COPIE RESTÉE EN PHOTO, il n'en archive pas une
                 // neuve. La ligne existe déjà, avec son titre et sa consigne du
@@ -3403,7 +3587,8 @@ namespace SchoolWebApp.Api.Builders.impl
                 if (declaree.Numero is { } numero)
                 {
                     var completee = await _expressionsEcrites.CompleterAsync(
-                        numero, eleveId, copie, corrections, declaree.Remarque, ct);
+                        numero, eleveId, copie, corrections, declaree.Remarque,
+                        texteSurligne: texteSurligne, ct: ct);
 
                     if (completee is not null)
                     {
@@ -3429,7 +3614,8 @@ namespace SchoolWebApp.Api.Builders.impl
 
                 var enregistree = await _expressionsEcrites.AjouterAsync(
                     eleveId, conversationId, declaree.Titre, declaree.Langue,
-                    declaree.Consigne, copie, corrections, declaree.Remarque, ct: ct);
+                    declaree.Consigne, copie, corrections, declaree.Remarque,
+                    texteSurligne: texteSurligne, ct: ct);
 
                 if (enregistree is not null)
                 {
@@ -3455,6 +3641,10 @@ namespace SchoolWebApp.Api.Builders.impl
         /// les fautes qu'on veut voir survivre. On ne tolère que ce qui ne veut
         /// rien dire : les blancs.
         /// </summary>
+        /// <summary>Le texte sans ses marques <c>==mot==</c>.</summary>
+        private static string SansSurlignes(string texte) =>
+            System.Text.RegularExpressions.Regex.Replace(texte, @"==([^=\n]+?)==", "$1");
+
         private static bool MemeTexte(string a, string b)
         {
             static string Serrer(string t) =>

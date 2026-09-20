@@ -280,6 +280,35 @@ namespace SchoolWebApp.Domain.Models
         public decimal? CoutDialogueDollars { get; set; }
 
         /// <summary>
+        /// LE TEMPS RÉELLEMENT PASSÉ EN COURS sur la période affichée, EN
+        /// SECONDES (« à la seconde près »). Voulu par Camara le 19/09/2026 : « un parent m'a coûté
+        /// 6,69 $ le 17 septembre, mais je ne sais pas les minutes réelles qu'il
+        /// a consommées ».
+        ///
+        /// PAS LA DURÉE CHOISIE EN ENTRANT, ET C'EST TOUT LE POINT : un enfant
+        /// peut prendre une séance de quinze minutes, en faire cinq et partir.
+        /// C'est recalculé depuis les échanges, avec la même règle que le temps
+        /// de cours du tableau de bord : un tour du professeur compte l'écart
+        /// avec le message précédent, entre vingt secondes et trois minutes. Une
+        /// pause plus longue n'est pas du temps de cours.
+        ///
+        /// À NE PAS CONFONDRE AVEC <see cref="MinutesConsommees"/>, qui est la
+        /// consommation du FORFAIT sur sa période d'abonnement. Les deux ne se
+        /// recoupent pas, et c'est voulu : l'un dit ce que le forfait a décompté,
+        /// l'autre ce que l'enfant a réellement fait sur les dates regardées.
+        /// </summary>
+        public int SecondesReellesPeriode { get; set; }
+
+        /// <summary>
+        /// LES ÉCHANGES FACTURÉS sur la période affichée : chaque réponse du
+        /// professeur est un appel payé, et c'est exactement ce que compte
+        /// <see cref="CoutDollars"/> sur la même fenêtre — voulu par Camara le
+        /// 19/09/2026. À ne pas confondre avec <see cref="NombreRequetes"/>,
+        /// compté depuis l'inscription.
+        /// </summary>
+        public int ToursPeriode { get; set; }
+
+        /// <summary>
         /// Ce que la famille paie par mois, en centimes.
         ///
         /// SANS LUI, LE COÛT NE VEUT RIEN DIRE. « 22 $ » est un chiffre nu :

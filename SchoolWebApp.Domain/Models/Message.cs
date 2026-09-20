@@ -21,6 +21,9 @@ namespace SchoolWebApp.Domain.Models
 
         public int TokensCacheEcriture { get; set; }
 
+        /// <summary>Part écrite pour une heure ; NULL = tour antérieur au détail.</summary>
+        public int? TokensCacheEcriture1h { get; set; }
+
         public DateTime DateCreation { get; set; }
     }
 }

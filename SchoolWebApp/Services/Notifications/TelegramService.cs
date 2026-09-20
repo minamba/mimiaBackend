@@ -115,6 +115,20 @@ namespace SchoolWebApp.Api.Services.Notifications
         /// <param name="retabli">Vrai pour annoncer le retour à la normale.</param>
         Task NotifierFournisseurAsync(
             SchoolWebApp.Api.Services.Fournisseurs.EtatFournisseur etat, string libelleStatut, bool retabli);
+
+        /// <summary>
+        /// Un fournisseur d'IA a changé un prix, et la veille l'a appliqué à nos
+        /// calculs — voulu par Camara le 19/09/2026. Dans le salon des messages
+        /// de contact, avec les autres alertes des fournisseurs.
+        /// </summary>
+        /// <param name="lignes">Une ligne par prix changé : « Entrée : 2 $ → 2,50 $ ».</param>
+        Task NotifierTarifAsync(string fournisseur, string modele, IReadOnlyList<string> lignes);
+
+        /// <summary>
+        /// La veille des tarifs n'arrive plus à lire la page d'un fournisseur,
+        /// ou y lit un prix douteux qu'elle refuse d'appliquer.
+        /// </summary>
+        Task NotifierVeilleTarifsAsync(string fournisseur, string probleme);
     }
 
     public class TelegramService : ITelegramService
@@ -456,6 +470,29 @@ namespace SchoolWebApp.Api.Services.Notifications
             sb.AppendLine($"— Prénom : {Echapper(parent.Prenom)}");
             sb.AppendLine($"— Nom : {Echapper(parent.Nom)}");
             sb.AppendLine($"— Email : {Echapper(parent.Mail)}");
+        }
+
+        public Task NotifierTarifAsync(string fournisseur, string modele, IReadOnlyList<string> lignes)
+        {
+            var sb = new StringBuilder();
+            sb.AppendLine($"💶 *Tarif {Echapper(fournisseur)} mis à jour*");
+            sb.AppendLine($"— Modèle : {Echapper(modele)}");
+            foreach (var ligne in lignes) sb.AppendLine($"— {Echapper(ligne)}");
+            sb.AppendLine("— Nos coûts utilisent ce prix dès maintenant, sur tout l'historique.");
+            sb.AppendLine($"— Le : {Horodatage()}");
+
+            return EnvoyerAsync(_contactToken, _contactChatId, sb.ToString());
+        }
+
+        public Task NotifierVeilleTarifsAsync(string fournisseur, string probleme)
+        {
+            var sb = new StringBuilder();
+            sb.AppendLine($"🟠 *Veille des tarifs {Echapper(fournisseur)}*");
+            sb.AppendLine($"— {Echapper(probleme)}");
+            sb.AppendLine("— Le dernier prix connu reste appliqué. À vérifier dans Administration › Anthropic / OpenAI › Tarifs.");
+            sb.AppendLine($"— Le : {Horodatage()}");
+
+            return EnvoyerAsync(_contactToken, _contactChatId, sb.ToString());
         }
 
         private static string Horodatage() =>

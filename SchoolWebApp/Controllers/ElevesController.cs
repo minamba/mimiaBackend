@@ -1339,7 +1339,8 @@ namespace SchoolWebApp.Api.Controllers
         public async Task<IActionResult> AddEleve(
             [FromBody] EleveRequest model,
             [FromServices] IAbonnementRepository abonnements,
-            [FromServices] IChatContexteResolver resolver)
+            [FromServices] IChatContexteResolver resolver,
+            [FromServices] ComptesProteges comptesProteges)
         {
             if (!ModelState.IsValid) return BadRequest(ModelState);
 
@@ -1360,7 +1361,11 @@ namespace SchoolWebApp.Api.Controllers
                 // ce qui appelle une action du parent. Ici il ne PEUT pas, quoi
                 // qu'il fasse — c'est une permission retirée, pas une limite à
                 // repousser.
-                if (!parent.PeutAjouterEnfant)
+                //
+                // LE SUPER-ADMINISTRATEUR PASSE OUTRE — Camara, le 20/09/2026 : rien
+                // ne doit jamais l'empêcher d'ajouter un enfant, ni la formule ni ce
+                // droit. La capacité, lue juste après, l'exempte de la même façon.
+                if (!parent.PeutAjouterEnfant && !comptesProteges.Protege(parent.Mail))
                 {
                     _logger.LogInformation(
                         "Ajout d'enfant REFUSE pour le parent {ParentId} : droit retire.",

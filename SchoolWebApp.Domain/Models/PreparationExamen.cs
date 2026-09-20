@@ -29,10 +29,25 @@ namespace SchoolWebApp.Domain.Models
 
         /// <summary>
         /// Des épreuves de l'examen dépendent des spécialités, et la famille ne
-        /// les a pas encore cochées : l'écran le dit, plutôt que de laisser
+        /// les a pas TOUTES cochées : l'écran le dit, plutôt que de laisser
         /// croire que le bac se réduit à ce qu'il affiche.
+        ///
+        /// À MOITIÉ RENSEIGNÉ COMPTE AUTANT QUE PAS DU TOUT — Camara, le
+        /// 20/09/2026 : « c'est pas normal que dans sa préparation au bac
+        /// général il y ait que la philosophie et sa spécialité, où sont les
+        /// autres matières ? » Une seule des deux spécialités de terminale
+        /// était cochée ; l'alerte ne se déclenchait qu'à zéro, l'écran se
+        /// taisait, et le bac paraissait amputé sans dire pourquoi.
         /// </summary>
         public bool SpecialitesARenseigner { get; set; }
+
+        /// <summary>
+        /// Combien de spécialités manquent à l'appel. Porté jusqu'à l'écran
+        /// pour que le message distingue « aucune n'est cochée » de « il en
+        /// manque une » : les deux n'appellent pas la même phrase, et le
+        /// second cas est le plus déroutant des deux.
+        /// </summary>
+        public int SpecialitesManquantes { get; set; }
 
         /// <summary>
         /// CE QUI COMPTE AU BAC SANS ÉPREUVE FINALE, dit à l'élève — l'espagnol en

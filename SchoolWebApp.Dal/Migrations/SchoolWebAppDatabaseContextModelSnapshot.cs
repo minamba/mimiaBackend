@@ -1541,6 +1541,10 @@ namespace SchoolWebApp.Dal.Migrations
                         .HasColumnType("nvarchar(max)")
                         .HasColumnName("texte");
 
+                    b.Property<string>("TexteSurligne")
+                        .HasColumnType("nvarchar(max)")
+                        .HasColumnName("texte_surligne");
+
                     b.Property<string>("Titre")
                         .IsRequired()
                         .HasMaxLength(300)
@@ -1960,6 +1964,10 @@ namespace SchoolWebApp.Dal.Migrations
                     b.Property<int>("TokensCacheEcriture")
                         .HasColumnType("int")
                         .HasColumnName("tokens_cache_ecriture");
+
+                    b.Property<int?>("TokensCacheEcriture1h")
+                        .HasColumnType("int")
+                        .HasColumnName("tokens_cache_ecriture_1h");
 
                     b.Property<int>("TokensCacheLecture")
                         .HasColumnType("int")
@@ -2860,6 +2868,82 @@ namespace SchoolWebApp.Dal.Migrations
                     b.HasIndex("AbonnementId", "PeriodeDebut");
 
                     b.ToTable("Recharge", (string)null);
+                });
+
+            modelBuilder.Entity("SchoolWebApp.Dal.Entities.TarifFournisseur", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasColumnName("id");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("DateMiseAJour")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("date_mise_a_jour");
+
+                    b.Property<DateTime?>("DerniereVerification")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("derniere_verification");
+
+                    b.Property<string>("Fournisseur")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)")
+                        .HasColumnName("fournisseur");
+
+                    b.Property<string>("Modele")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("nvarchar(80)")
+                        .HasColumnName("modele");
+
+                    b.Property<int>("Ordre")
+                        .HasColumnType("int")
+                        .HasColumnName("ordre");
+
+                    b.Property<decimal?>("PrixEntree")
+                        .HasPrecision(10, 4)
+                        .HasColumnType("decimal(10,4)")
+                        .HasColumnName("prix_entree");
+
+                    b.Property<decimal?>("PrixEntreeApplique")
+                        .HasPrecision(10, 4)
+                        .HasColumnType("decimal(10,4)")
+                        .HasColumnName("prix_entree_applique");
+
+                    b.Property<decimal?>("PrixMinute")
+                        .HasPrecision(10, 5)
+                        .HasColumnType("decimal(10,5)")
+                        .HasColumnName("prix_minute");
+
+                    b.Property<decimal?>("PrixMinuteApplique")
+                        .HasPrecision(10, 5)
+                        .HasColumnType("decimal(10,5)")
+                        .HasColumnName("prix_minute_applique");
+
+                    b.Property<decimal?>("PrixSortie")
+                        .HasPrecision(10, 4)
+                        .HasColumnType("decimal(10,4)")
+                        .HasColumnName("prix_sortie");
+
+                    b.Property<decimal?>("PrixSortieApplique")
+                        .HasPrecision(10, 4)
+                        .HasColumnType("decimal(10,4)")
+                        .HasColumnName("prix_sortie_applique");
+
+                    b.Property<string>("Usage")
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)")
+                        .HasColumnName("usage");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Fournisseur", "Modele")
+                        .IsUnique();
+
+                    b.ToTable("TarifFournisseur", (string)null);
                 });
 
             modelBuilder.Entity("SchoolWebApp.Dal.Entities.Reglage", b =>

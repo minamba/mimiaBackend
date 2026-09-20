@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Caching.Memory;
 using System.Text.RegularExpressions;
 using System.Runtime.CompilerServices;
 using System.Text;
@@ -17,7 +18,8 @@ namespace SchoolWebApp.Api.Services
 
     /// <summary>Bilan d'un tour, une fois le streaming terminé.</summary>
     public record BilanTour(string TexteComplet, string Modele, int TokensEntree, int TokensSortie,
-                            int TokensCacheLecture, int TokensCacheEcriture);
+                            int TokensCacheLecture, int TokensCacheEcriture,
+                            int? TokensCacheEcriture1h = null);
 
     public interface IAgentPedagogiqueService
     {
@@ -74,6 +76,7 @@ namespace SchoolWebApp.Api.Services
         private readonly IBibliothequePlanchesService _bibliotheque;
         private readonly IPlancheRepository _planches;
         private readonly IReglageRepository _reglages;
+        private readonly IMemoryCache _memoire;
         private readonly OptionsClaude _options;
         private readonly ILogger<AgentPedagogiqueService> _logger;
 
@@ -84,10 +87,12 @@ namespace SchoolWebApp.Api.Services
             IBibliothequePlanchesService bibliotheque,
             IPlancheRepository planches,
             IReglageRepository reglages,
+            IMemoryCache memoire,
             IOptions<OptionsClaude> options,
             ILogger<AgentPedagogiqueService> logger)
         {
             _reglages = reglages ?? throw new ArgumentNullException(nameof(reglages));
+            _memoire = memoire ?? throw new ArgumentNullException(nameof(memoire));
             _client = client ?? throw new ArgumentNullException(nameof(client));
             _maitriseService = maitriseService ?? throw new ArgumentNullException(nameof(maitriseService));
             _fiches = fiches ?? throw new ArgumentNullException(nameof(fiches));
@@ -111,8 +116,13 @@ namespace SchoolWebApp.Api.Services
             IReadOnlyList<PieceJointe>? piecesDuTour = null,
             [EnumeratorCancellation] CancellationToken ct = default)
         {
+            // LES EXERCICES DE LANGUE QUI CONCERNENT CE TOUR — leurs consignes
+            // complètes ne partent que s'ils sont demandés, proposés ou en cours.
+            // Voir `DetecteurExercicesLangue`.
+            var exercices = DetecteurExercicesLangue.Concernes(historique, messageEleve);
+
             var system = await ConstruireSystemAsync(
-                eleve, conversation, accueil, depuisDerniereSeance, ct);
+                eleve, conversation, accueil, depuisDerniereSeance, exercices, ct);
             // Quand l'élève montre du doigt, la planche part avec son geste.
             // Sans document joint, la planche montrée du doigt tient ce rôle.
             var pointage = piecesDuTour is { Count: > 0 }
@@ -149,11 +159,14 @@ namespace SchoolWebApp.Api.Services
                 OutputConfig = new OutputConfig { Effort = ConvertirEffort(_options.Effort(tache)) },
             };
 
+            var empreintes = EmpreintesDuPrompt(system, messages);
+
             var texte = new StringBuilder();
             var tokensEntree = 0;
             var tokensSortie = 0;
             var cacheLecture = 0;
             var cacheEcriture = 0;
+            int? cacheEcriture1h = null;
 
             await foreach (var evenement in _client.Messages.CreateStreaming(parameters, cancellationToken: ct))
             {
@@ -163,6 +176,12 @@ namespace SchoolWebApp.Api.Services
                     tokensEntree = (int)usage.InputTokens;
                     cacheLecture = (int)(usage.CacheReadInputTokens ?? 0);
                     cacheEcriture = (int)(usage.CacheCreationInputTokens ?? 0);
+
+                    // LE DÉTAIL PAR DURÉE, pour un coût exact : une heure se
+                    // paie 2x, cinq minutes 1,25x. Sans détail rendu, on garde
+                    // NULL — « inconnu » —, jamais zéro, qui mentirait.
+                    var uneHeure = usage.CacheCreation?.Ephemeral1hInputTokens;
+                    cacheEcriture1h = uneHeure is null ? null : (int)uneHeure;
                 }
                 else if (evenement.TryPickContentBlockDelta(out var delta) && delta.Delta.TryPickText(out var bloc))
                 {
@@ -176,7 +195,8 @@ namespace SchoolWebApp.Api.Services
             }
 
             var resultat = new BilanTour(
-                texte.ToString(), modele, tokensEntree, tokensSortie, cacheLecture, cacheEcriture);
+                texte.ToString(), modele, tokensEntree, tokensSortie, cacheLecture, cacheEcriture,
+                cacheEcriture1h);
 
             // cache-lu à 0 sur plusieurs tours consécutifs = le préfixe stable
             // n'atteint pas le minimum cacheable (1024 tokens sur Sonnet 5),
@@ -185,10 +205,22 @@ namespace SchoolWebApp.Api.Services
                 "Tour termine (conversation {ConversationId}, {Modele}) : {In} in / {Out} out / {CacheR} cache-lu.",
                 conversation.Id, modele, tokensEntree, tokensSortie, cacheLecture);
 
+            // QUEL BLOC A CHANGÉ — voulu par Camara le 19/09/2026, après la
+            // mesure qui a montré qu’un tour sur deux cassait le cache en route.
+            // Une empreinte courte par bloc : deux tours consécutifs dont une
+            // empreinte diffère désignent le coupable, sans deviner.
+            _logger.LogInformation(
+                "Cache du tour (conversation {ConversationId}) : {Ecrit} ecrits dont {UneHeure} pour 1 h, {Lu} relus | {Empreintes}",
+                conversation.Id, cacheEcriture, cacheEcriture1h, cacheLecture, empreintes);
+
             bilan.TrySetResult(resultat);
         }
 
-        private static Effort ConvertirEffort(string valeur) => valeur?.ToLowerInvariant() switch
+        /// <summary>
+        /// Public pour le réchauffeur du cache : il doit envoyer le MÊME effort que
+        /// le cours, sinon son préfixe ne sert pas — voir RechauffeurCacheWorker.
+        /// </summary>
+        public static Effort ConvertirEffort(string valeur) => valeur?.ToLowerInvariant() switch
         {
             "low" => Effort.Low,
             "medium" => Effort.Medium,
@@ -240,19 +272,50 @@ namespace SchoolWebApp.Api.Services
         /// </summary>
         private async Task<MessageCreateParamsSystem> ConstruireSystemAsync(
             Eleve eleve, Conversation conversation, TypeAccueil accueil,
-            TimeSpan? depuisDerniereSeance, CancellationToken ct)
+            TimeSpan? depuisDerniereSeance,
+            IReadOnlyCollection<PromptsPedagogiques.ExerciceLangue> exercices,
+            CancellationToken ct)
         {
+            // L’ORDRE DES BLOCS EST DICTÉ PAR LE CACHE, ET IL A CHANGÉ LE 19/09/2026.
+            //
+            // Le cache de prompt est un PRÉFIXE, partagé entre toutes les requêtes
+            // qui commencent par le même texte au caractère près — tous élèves et
+            // toutes matières confondus. Ce qui est commun doit donc passer
+            // AVANT ce qui est propre.
+            //
+            // LE NOYAU EST PASSÉ EN TÊTE, DEVANT L’IDENTITÉ DU PROFESSEUR — idée de
+            // Camara : « charger une fois, tout garder en cache ». Il fait ~38 000
+            // jetons et il est IDENTIQUE pour toutes les matières ; or l’identité
+            // (« tu t’appelles Salim, professeur d’histoire-géo ») le précédait. Le
+            // noyau était donc mis en cache à part pour chaque professeur, et une
+            // matière que personne n’avait ouverte depuis une heure le réécrivait
+            // au prix fort, alors qu’il était peut-être chaud pour une autre.
+            // Désormais une seule copie sert tout le monde.
+            //
+            // LE TEXTE DU NOYAU N’EST PAS TOUCHÉ, et c’est une décision de Camara :
+            // « c’est le cœur du produit ». Seule sa place change.
+            //
+            // QUATRE POINTS DE CÉSURE, LE MAXIMUM ACCEPTÉ PAR L’API :
+            //   1. après le noyau          — commun à TOUT le monde ;
+            //   2. après la spécialité     — commun aux élèves d’une même matière ;
+            //   3. sur le dernier bloc propre à l’élève (son contexte, ou les
+            //      consignes d’exercices quand il y en a) ;
+            //   4. l’historique, posé plus loin dans `ConstruireMessages`.
             var blocs = new List<TextBlockParam>
             {
-                // L'identité est stable pour une matière donnée : elle entre
-                // dans le préfixe mis en cache, avant le point de césure.
+                new()
+                {
+                    Text = PromptsPedagogiques.Noyau,
+                    CacheControl = CacheLong(),   // commun à toutes les matières
+                },
+
+                // L’identité juste après : stable pour une matière, elle entre
+                // dans le deuxième préfixe, avec la spécialité.
                 new()
                 {
                     Text = PromptsPedagogiques.Identite(
                         conversation.ProfPrenom, conversation.MatiereLibelle)
                 },
-
-                new() { Text = PromptsPedagogiques.Noyau },
 
                 // La spécialité porte le catalogue des figures ; le bloc des
                 // planches dit ce que celles qui ont été importées contiennent
@@ -262,27 +325,52 @@ namespace SchoolWebApp.Api.Services
                 {
                     Text = PromptsPedagogiques.Specialite(conversation.AgentSlug)
                            + await ConstruireBibliothequeAsync(conversation, ct),
-                    CacheControl = CacheLong(),   // fin du préfixe stable
+                    CacheControl = CacheLong(),   // commun à la matière
                 },
 
                 new() { Text = PromptsPedagogiques.Profil(eleve.NiveauCycle, eleve.Age, eleve.Sexe) },
-
-                // Second point de césure. Le premier s'arrête à la spécialité et
-                // protège le noyau quand les lacunes de l'élève changent ;
-                // celui-ci fait entrer le profil et le contexte dans le préfixe
-                // mis en cache, et c'est lui qui permet à l'historique — placé
-                // juste après — d'être caché à son tour.
-                //
-                // Il est posé ICI et pas sur le dernier bloc de la liste : la
-                // consigne d'accueil, quand elle existe, ne vaut que pour un
-                // tour. Cacher un préfixe qui la contient paierait une écriture
-                // de cache pour une entrée que personne ne relira jamais.
-                new()
-                {
-                    Text = await ConstruireContexteEleveAsync(eleve, conversation, ct),
-                    CacheControl = CacheLong(),
-                },
             };
+
+            var contexteEleve = await ContexteDeLaSeanceAsync(eleve, conversation, accueil, ct);
+
+            // LES CONSIGNES DES EXERCICES DE LANGUE EN COURS — voir
+            // `DetecteurExercicesLangue`.
+            //
+            // APRÈS LE NOYAU ET LE PROFIL, ET C’EST TOUT L’ENJEU. Ce bloc change
+            // quand un exercice commence ou quitte la fenêtre ; placé plus haut,
+            // chaque changement aurait fait réécrire les 38 000 jetons du noyau.
+            //
+            // PAS DANS LE MESSAGE DE L’ÉLÈVE : ce qui est dans le message n’est pas
+            // mis en cache, et pendant une dictée ses 11 000 jetons auraient été
+            // payés plein tarif à chaque tour — dix fois le prix.
+            var consignesExercices = PromptsPedagogiques.ExercicesLangue(conversation.AgentSlug, exercices);
+            var avecExercices = consignesExercices.Length > 0;
+
+            // LE TROISIÈME POINT DE CÉSURE SE POSE SUR LE DERNIER BLOC PROPRE À
+            // L’ÉLÈVE, pas sur chacun : il n’en reste plus qu’un à distribuer.
+            //
+            // QUAND UN EXERCICE S’AJOUTE, RIEN N’EST PERDU POUR AUTANT. L’API
+            // cherche d’elle-même, en remontant les blocs, le plus long préfixe
+            // déjà en cache : elle retrouve celui qui s’arrêtait au contexte, et
+            // n’écrit que les consignes de l’exercice.
+            //
+            // UNE HEURE PARTOUT : un exercice dure souvent plus de cinq minutes
+            // avec des pauses — l’élève écrit sur son cahier —, et le cache court
+            // aurait expiré en plein milieu.
+            blocs.Add(new TextBlockParam
+            {
+                Text = contexteEleve,
+                CacheControl = avecExercices ? null : CacheLong(),
+            });
+
+            if (avecExercices)
+            {
+                blocs.Add(new TextBlockParam
+                {
+                    Text = consignesExercices,
+                    CacheControl = CacheLong(),
+                });
+            }
 
             // La consigne d'accueil arrive en dernier : elle ne concerne qu'un
             // seul tour. Elle est rare — quelques tours par séance — donc son
@@ -635,6 +723,81 @@ namespace SchoolWebApp.Api.Services
 
                 return string.Empty;
             }
+        }
+
+        /// <summary>
+        /// LE CONTEXTE ÉLÈVE, FIGÉ POUR TOUTE LA SÉANCE — voulu par Camara le
+        /// 19/09/2026.
+        ///
+        /// LA MESURE QUI L'A IMPOSÉ. Les 17 et 18/09, 53 et 58 tours sur 105 et
+        /// 122 relisaient le début du prompt puis réécrivaient tout à partir de
+        /// ce bloc : 31 % du coût de dialogue, chaque jour. Ce bloc porte des
+        /// scores que l'observateur met à jour en pleine séance, et des listes
+        /// dont l'ordre n'est pas garanti entre deux notions de même score. Le
+        /// moindre caractère changé fait réécrire le bloc au tarif d'une heure
+        /// (2x) ET tout l'historique qui le suit.
+        ///
+        /// CE QU'ON PERD : RIEN D'UTILE. Un score mis à jour à la dixième
+        /// minute ne dit rien au professeur qu'il ne sache déjà — il vient de
+        /// le voir se produire, c'est dans la conversation. La séance suivante
+        /// repart d'un contexte recalculé.
+        ///
+        /// RECALCULÉ À CHAQUE DÉBUT DE SÉANCE (premier accueil, retour, séance
+        /// enchaînée) et après une heure sans tour — le cache d'Anthropic ne
+        /// vit pas plus longtemps de toute façon. La clé porte la classe et la
+        /// matière : un parent qui change la classe de son enfant n'hérite pas
+        /// d'un contexte périmé.
+        /// </summary>
+        private async Task<string> ContexteDeLaSeanceAsync(
+            Eleve eleve, Conversation conversation, TypeAccueil accueil, CancellationToken ct)
+        {
+            var cle = $"contexte-seance:{conversation.Id}:{eleve.Id}:{eleve.NiveauScolaireId}:{conversation.MatiereId}";
+
+            var debutDeSeance = accueil is TypeAccueil.PremiereSeance
+                or TypeAccueil.Retour
+                or TypeAccueil.NouvelleSeance;
+
+            if (!debutDeSeance && _memoire.TryGetValue(cle, out string? fige) && fige is not null)
+            {
+                return fige;
+            }
+
+            var contexte = await ConstruireContexteEleveAsync(eleve, conversation, ct);
+
+            _memoire.Set(cle, contexte, new MemoryCacheEntryOptions
+            {
+                SlidingExpiration = TimeSpan.FromHours(1),
+                AbsoluteExpirationRelativeToNow = TimeSpan.FromHours(4),
+            });
+
+            return contexte;
+        }
+
+        /// <summary>
+        /// Une empreinte de huit caractères par bloc du prompt système, avec sa
+        /// longueur, puis le nombre de messages d'historique : de quoi dire,
+        /// d'un tour à l'autre, ce qui a bougé.
+        /// </summary>
+        private static string EmpreintesDuPrompt(
+            MessageCreateParamsSystem system, List<MessageParam> messages)
+        {
+            static string Empreinte(string texte) => Convert.ToHexString(
+                System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(texte)))[..8];
+
+            var parties = new List<string>();
+
+            if (system.TryPickTextBlockParams(out var blocs))
+            {
+                var i = 0;
+                foreach (var bloc in blocs)
+                {
+                    parties.Add($"s{++i}={Empreinte(bloc.Text)}({bloc.Text.Length})");
+                }
+            }
+
+            parties.Add($"historique={messages.Count - 1}");
+
+            return string.Join(" ", parties);
         }
 
         /// <summary>

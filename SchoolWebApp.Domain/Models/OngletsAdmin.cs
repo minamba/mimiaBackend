@@ -37,6 +37,17 @@ namespace SchoolWebApp.Domain.Models
             "stats",
             "frequentation",
             "parents",
+
+            // DEUX BLOCS DE L'ONGLET PARENTS, ET NON DES ONGLETS — voulu par
+            // Camara le 19/09/2026 : ce que le produit coûte, ce qu'il
+            // rapporte. Ils ne se montrent qu'aux administrateurs qui les ont
+            // cochés ; masqués, ils restent MONTÉS, parce que la période
+            // qu'ils portent pilote aussi le tableau des parents. Rangés ici
+            // pour profiter de la même colonne et de la même fenêtre des droits
+            // — la barre d'onglets ne les connaît pas, donc ils n'y créent rien.
+            "cout",
+            "revenu",
+
             "mails",
             "promos",
             "eleves",

@@ -68,6 +68,13 @@ namespace SchoolWebApp.Dal.Entities
         public string? Texte { get; set; }
 
         /// <summary>
+        /// La même copie, avec les mots que le professeur a surlignés au tableau
+        /// (<c>==mot==</c>), pour que l'archive montre les badges comme en
+        /// séance — voulu par Camara le 19/09/2026. NULL quand on ne l'a pas.
+        /// </summary>
+        public string? TexteSurligne { get; set; }
+
+        /// <summary>
         /// LA PHOTO DU CAHIER, tant qu'elle n'a pas été transcrite.
         ///
         /// Voulu par Camara le 18/09/2026 : « comme ça on perdra rien et le prof

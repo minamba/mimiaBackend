@@ -332,7 +332,8 @@ builder.Services.AddScoped<IAbonnementRepository>(fournisseur =>
     new AbonnementRepository(
         fournisseur.GetRequiredService<SchoolWebAppDatabaseContext>(),
         builder.Configuration["Essai:Sel"]
-            ?? Environment.GetEnvironmentVariable("MIMIA_SEL_ESSAI")));
+            ?? Environment.GetEnvironmentVariable("MIMIA_SEL_ESSAI"),
+        fournisseur.GetRequiredService<SchoolWebApp.Domain.Services.IComptesProteges>()));
 builder.Services.AddScoped<IAdminRepository, AdminRepository>();
 
 // Le journal des appels de fond : sans lui, seule la moitié de la facture
@@ -366,6 +367,8 @@ builder.Services.AddScoped<IBannissementRepository, BannissementRepository>();
 builder.Services.AddScoped<IVerrouBannissement, VerrouBannissement>();
 builder.Services.AddScoped<IOffreLancementService, OffreLancementService>();
 builder.Services.AddSingleton<SchoolWebApp.Api.Services.ComptesProteges>();
+builder.Services.AddSingleton<SchoolWebApp.Domain.Services.IComptesProteges>(
+    fournisseur => fournisseur.GetRequiredService<SchoolWebApp.Api.Services.ComptesProteges>());
 
 builder.Services.AddScoped<IEleveViewModelBuilder, EleveViewModelBuilder>();
 builder.Services.AddScoped<IReferentielViewModelBuilder, ReferentielViewModelBuilder>();
@@ -523,6 +526,17 @@ builder.Services.AddSingleton<
 // mais personne ne l'appliquait — la base portait une promesse que rien ne
 // tenait, et la politique de confidentialité s'apprêtait à la publier.
 builder.Services.AddHostedService<PurgeConversationsWorker>();
+
+// Garde le noyau du prompt chaud dans le cache d'Anthropic entre deux
+// séances : un appel de 0,0135 $ toutes les cinquante minutes, contre 0,27 $
+// par ouverture à froid — voir RechauffeurCacheWorker.
+builder.Services.AddHostedService<RechauffeurCacheWorker>();
+
+// La veille des tarifs d'Anthropic et d'OpenAI : une lecture par jour de leur
+// page de tarifs, les nouveaux prix appliqués à nos calculs et annoncés sur
+// Telegram — voir VeilleTarifsWorker.
+builder.Services.AddHostedService<VeilleTarifsAnthropicWorker>();
+builder.Services.AddHostedService<VeilleTarifsOpenAiWorker>();
 
 // Le calendrier scolaire officiel (data.education.gouv.fr), resynchronisé
 // une fois par jour — voir CalendrierScolaireSyncWorker pour ce que ça

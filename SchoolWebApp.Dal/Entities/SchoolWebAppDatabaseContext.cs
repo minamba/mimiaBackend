@@ -57,6 +57,8 @@ namespace SchoolWebApp.Dal.Entities
         public virtual DbSet<ConsommationEleve> ConsommationsEleves { get; set; }
         public virtual DbSet<Recharge> Recharges { get; set; }
         public virtual DbSet<Reglage> Reglages { get; set; }
+
+        public virtual DbSet<TarifFournisseur> TarifsFournisseurs { get; set; }
         public virtual DbSet<EssaiConsomme> EssaisConsommes { get; set; }
 
         public virtual DbSet<VisiteSite> VisitesSite { get; set; }
@@ -501,6 +503,7 @@ namespace SchoolWebApp.Dal.Entities
                 entity.Property(e => e.TokensSortie).HasColumnName("tokens_sortie");
                 entity.Property(e => e.TokensCacheLecture).HasColumnName("tokens_cache_lecture");
                 entity.Property(e => e.TokensCacheEcriture).HasColumnName("tokens_cache_ecriture");
+                entity.Property(e => e.TokensCacheEcriture1h).HasColumnName("tokens_cache_ecriture_1h");
                 entity.Property(e => e.DateCreation).HasColumnName("date_creation");
 
                 entity.HasOne(e => e.Conversation)
@@ -953,6 +956,7 @@ namespace SchoolWebApp.Dal.Entities
                 // écrit, fautes comprises, à côté de ce qu'il fallait écrire.
                 // PAS DE `IsRequired` : null veut dire « pas encore recopié ».
                 entity.Property(e => e.Texte).HasColumnName("texte");
+                entity.Property(e => e.TexteSurligne).HasColumnName("texte_surligne");
                 entity.Property(e => e.Corrections).IsRequired().HasColumnName("corrections");
 
                 entity.Property(e => e.Photo).HasColumnName("photo");
@@ -1388,6 +1392,28 @@ namespace SchoolWebApp.Dal.Entities
             // ---------------------------------------------------------------
             // Reglage — les interrupteurs du produit
             // ---------------------------------------------------------------
+            modelBuilder.Entity<TarifFournisseur>(entity =>
+            {
+                entity.ToTable("TarifFournisseur");
+                entity.HasKey(e => e.Id);
+
+                entity.Property(e => e.Id).HasColumnName("id");
+                entity.Property(e => e.Fournisseur).HasMaxLength(20).IsRequired().HasColumnName("fournisseur");
+                entity.Property(e => e.Modele).HasMaxLength(80).IsRequired().HasColumnName("modele");
+                entity.Property(e => e.Usage).HasMaxLength(300).HasColumnName("usage");
+                entity.Property(e => e.PrixEntree).HasPrecision(10, 4).HasColumnName("prix_entree");
+                entity.Property(e => e.PrixSortie).HasPrecision(10, 4).HasColumnName("prix_sortie");
+                entity.Property(e => e.PrixMinute).HasPrecision(10, 5).HasColumnName("prix_minute");
+                entity.Property(e => e.PrixEntreeApplique).HasPrecision(10, 4).HasColumnName("prix_entree_applique");
+                entity.Property(e => e.PrixSortieApplique).HasPrecision(10, 4).HasColumnName("prix_sortie_applique");
+                entity.Property(e => e.PrixMinuteApplique).HasPrecision(10, 5).HasColumnName("prix_minute_applique");
+                entity.Property(e => e.DerniereVerification).HasColumnName("derniere_verification");
+                entity.Property(e => e.Ordre).HasColumnName("ordre");
+                entity.Property(e => e.DateMiseAJour).HasColumnName("date_mise_a_jour");
+
+                entity.HasIndex(e => new { e.Fournisseur, e.Modele }).IsUnique();
+            });
+
             modelBuilder.Entity<Reglage>(entity =>
             {
                 entity.ToTable("Reglage");

@@ -741,9 +741,161 @@ FROM sys.database_files;";
             public int JournalMo { get; set; }
         }
 
+        /// <summary>
+        /// Ce que le produit rapporte sur la période — voir <see cref="RevenuPeriode"/>
+        /// pour les règles : échéances pour les mensuels, douzièmes pour les
+        /// annuels, achats entiers pour les packs.
+        ///
+        /// EN MÉMOIRE, ET C'EST VOULU : une ligne par abonnement payant, soit
+        /// quelques centaines au plus. Écrire les échéances d'un mensuel en SQL
+        /// demanderait une table de nombres et une requête que personne ne
+        /// relirait ; ici, c'est une boucle.
+        /// </summary>
+        public async Task<RevenuPeriode> GetRevenuAsync(DateTime debut, DateTime fin)
+        {
+            var (debutUtc, finUtc, _) = EnUtc(debut, fin);
+            var maintenant = DateTime.UtcNow;
+
+            var abonnements = await _context.Abonnements
+                .AsNoTracking()
+                .Where(a => !a.Offre!.EstEssai
+                            && a.DateDebut < finUtc
+                            && (a.DateFin == null || a.DateFin > debutUtc))
+                .Select(a => new
+                {
+                    a.Id,
+                    a.DateDebut,
+                    a.DateFin,
+                    a.Periodicite,
+                    a.DernierePause,
+                    a.PauseJusquau,
+                    a.ImpayeDepuis,
+                    a.Offre!.Code,
+                    a.Offre.Libelle,
+                    a.Offre.PrixMensuelCentimes,
+                    a.Offre.PrixAnnuelCentimes,
+                })
+                .ToListAsync();
+
+            var lignes = new Dictionary<(string?, string), (LigneRevenu Ligne, HashSet<int> Familles)>();
+
+            void Compter(string? code, string? libelle, string periodicite, int prixCentimes,
+                         int abonnementId, decimal euros)
+            {
+                if (!lignes.TryGetValue((code, periodicite), out var l))
+                {
+                    l = (new LigneRevenu
+                    {
+                        Code = code,
+                        Libelle = libelle,
+                        Periodicite = periodicite,
+                        PrixCentimes = prixCentimes,
+                    }, new HashSet<int>());
+                    lignes[(code, periodicite)] = l;
+                }
+
+                l.Ligne.Nombre++;
+                l.Ligne.Euros += euros;
+                l.Familles.Add(abonnementId);
+            }
+
+            // ------------------------------------------ les mensuels : leurs échéances
+            foreach (var a in abonnements.Where(a => a.Periodicite == PeriodiciteAbonnement.Mensuel))
+            {
+                // Rien après la fin de l'abonnement, ni dans le futur : une
+                // échéance qui n'est pas encore tombée n'a rien rapporté.
+                var borne = new[] { finUtc, a.DateFin ?? DateTime.MaxValue, maintenant }.Min();
+
+                // Borné à cent ans d'échéances : une date aberrante ne doit pas
+                // faire tourner la boucle sans fin.
+                for (var k = 0; k < 1200; k++)
+                {
+                    var echeance = a.DateDebut.AddMonths(k);
+                    if (echeance >= borne) break;
+                    if (echeance < debutUtc) continue;
+
+                    // Une échéance tombée pendant une pause n'est pas prélevée.
+                    if (a.DernierePause is { } pause && a.PauseJusquau is { } reprise
+                        && echeance >= pause && echeance < reprise) continue;
+
+                    // Ni pendant un impayé : on ne compte que ce qui est encaissé.
+                    if (a.ImpayeDepuis is { } impaye && echeance >= impaye) continue;
+
+                    Compter(a.Code, a.Libelle, PeriodiciteAbonnement.Mensuel,
+                            a.PrixMensuelCentimes, a.Id, a.PrixMensuelCentimes / 100m);
+                }
+            }
+
+            // ---------------------------------- les annuels : un douzième par mois
+            var annuels = abonnements.Where(a => a.Periodicite == PeriodiciteAbonnement.Annuel).ToList();
+
+            for (var mois = new DateTime(debut.Year, debut.Month, 1); mois < fin; mois = mois.AddMonths(1))
+            {
+                var (moisDebutUtc, moisFinUtc, _) = EnUtc(mois, mois.AddMonths(1));
+
+                // Les mois à venir de l'année en cours ne comptent pas encore.
+                if (moisDebutUtc > maintenant) break;
+
+                foreach (var a in annuels)
+                {
+                    var couvert = a.DateDebut < moisFinUtc
+                                  && (a.DateFin == null || a.DateFin > moisDebutUtc);
+                    var impaye = a.ImpayeDepuis is { } depuis && depuis <= moisDebutUtc;
+
+                    if (couvert && !impaye)
+                    {
+                        Compter(a.Code, a.Libelle, PeriodiciteAbonnement.Annuel,
+                                a.PrixAnnuelCentimes, a.Id, a.PrixAnnuelCentimes / 1200m);
+                    }
+                }
+            }
+
+            // -------------------------------------- les packs : le mois de l'achat
+            // `PrixCentimes > 0` : un ajustement manuel d'heures n'est pas une vente.
+            var packs = await _context.Recharges
+                .AsNoTracking()
+                .Where(r => r.DateAchat >= debutUtc && r.DateAchat < finUtc
+                            && r.DateRemboursement == null && r.PrixCentimes > 0)
+                .Select(r => r.PrixCentimes)
+                .ToListAsync();
+
+            var detail = lignes.Values
+                .Select(l =>
+                {
+                    l.Ligne.Abonnements = l.Familles.Count;
+                    l.Ligne.Euros = Math.Round(l.Ligne.Euros, 2);
+                    return l.Ligne;
+                })
+                .OrderByDescending(l => l.Euros)
+                .ToList();
+
+            var mensuels = detail.Where(l => l.Periodicite == PeriodiciteAbonnement.Mensuel).ToList();
+            var annuelsLignes = detail.Where(l => l.Periodicite == PeriodiciteAbonnement.Annuel).ToList();
+
+            var revenu = new RevenuPeriode
+            {
+                Debut = debut,
+                Fin = fin,
+                Disponible = true,
+                Lignes = detail,
+                Mensualites = mensuels.Sum(l => l.Nombre),
+                MensuelsEuros = mensuels.Sum(l => l.Euros),
+                AnnuelsAbonnements = annuels.Count(a => lignes.Values.Any(l => l.Familles.Contains(a.Id))),
+                AnnuelsMois = annuelsLignes.Sum(l => l.Nombre),
+                AnnuelsEuros = annuelsLignes.Sum(l => l.Euros),
+                Packs = packs.Count,
+                PacksEuros = packs.Sum() / 100m,
+            };
+
+            revenu.TotalEuros = revenu.MensuelsEuros + revenu.AnnuelsEuros + revenu.PacksEuros;
+
+            return revenu;
+        }
+
         public async Task<CoutPeriode> GetCoutAsync(DateTime debut, DateTime fin)
         {
             var (debutUtc, finUtc, _) = EnUtc(debut, fin);
+            var grille = await GrilleAppliqueeAsync();
 
             var seaux = await _context.Messages
                 .AsNoTracking()
@@ -760,6 +912,8 @@ FROM sys.database_files;";
                     Sortie = g.Sum(m => (long)m.TokensSortie),
                     CacheLu = g.Sum(m => (long)m.TokensCacheLecture),
                     CacheEcrit = g.Sum(m => (long)m.TokensCacheEcriture),
+                    CacheEcritDetaille = g.Sum(m => m.TokensCacheEcriture1h != null ? (long)m.TokensCacheEcriture : 0L),
+                    CacheEcrit1h = g.Sum(m => (long)(m.TokensCacheEcriture1h ?? 0)),
                 })
                 .ToListAsync();
 
@@ -768,17 +922,25 @@ FROM sys.database_files;";
 
             foreach (var s in seaux)
             {
-                var (pe, ps) = Tarif(s.Modele, new DateTime(s.Year, s.Month, 1));
+                var (pe, ps) = Tarif(grille, s.Modele);
 
+                // LES MÊMES CONSTANTES QUE LE COÛT PAR PARENT, et c'est une
+                // correction du 19/09/2026 : ce total comptait encore
+                // l'écriture à 1,25x quand la colonne des parents était
+                // passée à 1,75x. Seul parent actif le 17/09, Camara lisait
+                // 8,29 $ ici et 10,48 $ sur sa ligne, pour les mêmes 105 tours.
+                //
+                // Les tâches de fond, plus bas, gardent 1,25x : elles
+                // n'utilisent pas le cache d'une heure.
                 dialogue += (s.Entree * pe
-                             + s.CacheLu * pe * 0.1m
-                             + s.CacheEcrit * pe * 1.25m
+                             + s.CacheLu * pe * LectureCache
+                             + EcritureEquivalente(s.CacheEcrit, s.CacheEcritDetaille, s.CacheEcrit1h) * pe
                              + s.Sortie * ps) / 1_000_000m;
 
                 tours += s.Tours;
             }
 
-            var voix = VoixDollars(tours);
+            var voix = VoixDollars(tours, grille);
 
             // LES TÂCHES DE FOND, QUI DÉPENSAIENT EN SILENCE.
             //
@@ -814,7 +976,7 @@ FROM sys.database_files;";
 
                 foreach (var f in groupe)
                 {
-                    var (pe, ps) = Tarif(f.Modele, new DateTime(f.Year, f.Month, 1));
+                    var (pe, ps) = Tarif(grille, f.Modele);
 
                     cout += (f.Entree * pe
                              + f.CacheLu * pe * 0.1m
@@ -1081,35 +1243,42 @@ FROM sys.database_files;";
         /// <summary>La lecture de cache : un dixième du tarif d'entrée.</summary>
         private const decimal LectureCache = 0.1m;
 
+        /// <summary>L'écriture en cache pour CINQ MINUTES : 1,25x le tarif d'entrée.</summary>
+        private const decimal EcritureCinqMinutes = 1.25m;
+
+        /// <summary>L'écriture en cache pour UNE HEURE : 2x le tarif d'entrée.</summary>
+        private const decimal EcritureUneHeure = 2m;
+
         /// <summary>
-        /// L'écriture de cache, en multiple du tarif d'entrée.
+        /// L'ESTIMATION, SEULEMENT POUR LES TOURS D'AVANT LE 19/09/2026.
         ///
-        /// 1,75x ET NON 1,25x, ET C'EST UNE APPROXIMATION ASSUMÉE.
-        /// -------------------------------------------------------
-        /// Anthropic facture l'écriture 1,25x pour un cache de cinq minutes
-        /// et 2x pour un cache d'une heure. Le prompt système utilise le TTL
-        /// d'une heure — voir `AgentPedagogiqueService.CacheLong` — pendant
-        /// que l'historique roulant garde les cinq minutes par défaut.
+        /// Jusque-là, `tokens_cache_ecriture` ne portait que le total, sans
+        /// dire quelle part était écrite pour une heure (2x) et laquelle pour
+        /// cinq minutes (1,25x). 1,75x supposait deux tiers d'une heure : le
+        /// gros des écritures vient du prompt système, gardé une heure. Une
+        /// supposition, jamais une mesure.
         ///
-        /// ON NE PEUT PAS LES SÉPARER ICI : la colonne `tokens_cache_ecriture`
-        /// ne porte que le TOTAL rendu par `CacheCreationInputTokens`. Le
-        /// détail par TTL existe dans la réponse de l'API mais n'est ni lu ni
-        /// stocké — il faudrait une colonne de plus, donc une migration.
-        ///
-        /// 1,25x SOUS-ESTIMAIT DE 40 % SUR LES TOURS QUI COMPTENT. Mesuré en
-        /// septembre 2026 : les reprises après plus d'une heure réécrivent le
-        /// préfixe entier — 36 000 jetons, au tarif 2x — et 11 % des tours
-        /// portaient ainsi 65 % des jetons écrits. Les compter à 1,25x
-        /// donnait un coût de dialogue plus bas que la facture réelle, sur
-        /// l’écran même qui sert à fixer les prix.
-        ///
-        /// La pondération retenue penche vers le 2x parce que le gros des
-        /// jetons écrits vient du préfixe système. Elle reste fausse d'un
-        /// côté ou de l’autre selon les séances ; elle est simplement BEAUCOUP
-        /// moins fausse que 1,25x. Le jour où la colonne existera, remplacer
-        /// cette constante par les deux tarifs exacts sera un jeu d’enfant.
+        /// Depuis la colonne `tokens_cache_ecriture_1h`, chaque nouveau tour
+        /// est compté EXACTEMENT — voir <see cref="EcritureEquivalente"/>. Ce
+        /// taux ne sert plus qu'aux anciens tours, faute de détail.
         /// </summary>
         private const decimal EcritureCache = 1.75m;
+
+        /// <summary>
+        /// Les jetons écrits en cache, convertis en jetons d'entrée au prix
+        /// facturé : à multiplier par le tarif d'entrée du modèle.
+        ///
+        /// Voulu par Camara le 19/09/2026 : « j'ai besoin de chiffres
+        /// exacts ». Les tours qui ont le détail sont comptés au tarif réel
+        /// de chaque durée ; les autres gardent l'estimation de 1,75x.
+        /// </summary>
+        /// <param name="total">Tous les jetons écrits.</param>
+        /// <param name="detailles">Ceux des tours qui ont le détail par durée.</param>
+        /// <param name="uneHeure">Parmi ces derniers, ceux écrits pour une heure.</param>
+        private static decimal EcritureEquivalente(long total, long detailles, long uneHeure) =>
+            (detailles - uneHeure) * EcritureCinqMinutes
+            + uneHeure * EcritureUneHeure
+            + (total - detailles) * EcritureCache;
 
         /// <summary>
         /// Le tarif d'un modèle, par million de jetons d'entrée et de sortie.
@@ -1118,20 +1287,115 @@ FROM sys.database_files;";
         /// plus à tenir à jour, pour une grille qui change deux fois par an et
         /// qu'il faut de toute façon relire à la main quand elle bouge.
         ///
-        /// Sonnet 5 a un tarif de lancement jusqu'au 31 août 2026. On applique
-        /// celui qui était en vigueur À LA DATE DU MESSAGE : mettre le tarif
-        /// plein sur tout l'historique gonflerait le passé de moitié, et c'est
-        /// précisément ce passé qu'on compare aux abonnements encaissés.
+        /// SONNET 5 : 2 $ / 10 $, SANS DATE — corrigé le 19/09/2026, facture à
+        /// l'appui. On croyait que 2 $ / 10 $ était un tarif de lancement fini
+        /// le 31 août, et on comptait 3 $ / 15 $ depuis : tous les coûts de
+        /// dialogue étaient gonflés de moitié. La console Anthropic facture
+        /// 9,61 $ pour le 18/09 (UTC) ; nos jetons du même jour donnent 7,17 à
+        /// 9,89 $ à 2 $ / 10 $, et au moins 10,76 $ à 3 $ / 15 $ — impossible.
+        ///
+        /// DEPUIS LE MÊME JOUR, LE PRIX VIENT DE LA GRILLE EN BASE — le prix
+        /// APPLIQUÉ de `TarifFournisseur`, modifiable dans « Anthropic / OpenAI ›
+        /// Tarifs ». Les valeurs écrites ci-dessous ne servent plus qu'en secours.
+        /// La console (Analytique › Coût) reste la seule source qui fait foi.
+        ///
+        /// LIMITE CONNUE : un seul prix pour tout l'historique. Le jour où un
+        /// tarif change, les mois passés seront recalculés au nouveau prix.
         /// </summary>
-        private static (decimal Entree, decimal Sortie) Tarif(string? modele, DateTime quand)
+        private static (decimal Entree, decimal Sortie) Tarif(
+            IReadOnlyList<TarifFournisseur> grille, string? modele)
         {
+            // LA GRILLE D'ABORD — le prix APPLIQUÉ, voir `TarifFournisseur`. Le
+            // début d'identifiant le plus long gagne : « claude-haiku-4-5 » vaut
+            // pour « claude-haiku-4-5-20251001 ».
+            var ligne = grille
+                .Where(t => t.PrixEntreeApplique is not null && t.PrixSortieApplique is not null
+                            && modele is not null
+                            && modele.StartsWith(t.Modele, StringComparison.OrdinalIgnoreCase))
+                .OrderByDescending(t => t.Modele.Length)
+                .FirstOrDefault();
+
+            if (ligne is not null) return (ligne.PrixEntreeApplique!.Value, ligne.PrixSortieApplique!.Value);
+
+            // EN SECOURS, les tarifs au 19/09/2026 : une grille vide ou un
+            // modèle neuf ne doivent pas afficher un coût nul.
             if (modele is not null && modele.Contains("opus", StringComparison.OrdinalIgnoreCase))
             {
                 return (5m, 25m);
             }
 
-            return quand < new DateTime(2026, 9, 1) ? (2m, 10m) : (3m, 15m);
+            if (modele is not null && modele.Contains("haiku", StringComparison.OrdinalIgnoreCase))
+            {
+                return (1m, 5m);
+            }
+
+            return (2m, 10m);
         }
+
+        // ------------------------------------------------------------------
+        // La grille tarifaire, vue et modifiée depuis l'écran « Tarifs »
+        // ------------------------------------------------------------------
+
+        public async Task<IReadOnlyList<LigneTarif>> GetTarifsAsync() =>
+            (await _context.TarifsFournisseurs
+                .AsNoTracking()
+                .OrderBy(t => t.Fournisseur)
+                .ThenBy(t => t.Ordre)
+                .ToListAsync())
+            .Select(VersLigne)
+            .ToList();
+
+        public async Task<LigneTarif?> ModifierTarifAsync(
+            int id, decimal? prixEntree, decimal? prixSortie, decimal? prixMinute)
+        {
+            var tarif = await _context.TarifsFournisseurs.FirstOrDefaultAsync(t => t.Id == id);
+            if (tarif is null) return null;
+
+            // EN SECOURS DE LA VEILLE (voir `VeilleTarifsWorker`) : une correction
+            // à la main s'applique aussitôt à nos calculs, comme un prix lu.
+            // Une ligne qui n'entre dans aucun calcul le reste.
+            var compte = tarif.PrixEntreeApplique is not null || tarif.PrixSortieApplique is not null
+                         || tarif.PrixMinuteApplique is not null;
+
+            tarif.PrixEntree = prixEntree;
+            tarif.PrixSortie = prixSortie;
+            tarif.PrixMinute = prixMinute;
+
+            if (compte)
+            {
+                tarif.PrixEntreeApplique = prixEntree;
+                tarif.PrixSortieApplique = prixSortie;
+                tarif.PrixMinuteApplique = prixMinute;
+            }
+
+            tarif.DateMiseAJour = DateTime.UtcNow;
+
+            await _context.SaveChangesAsync();
+            return VersLigne(tarif);
+        }
+
+        private static LigneTarif VersLigne(TarifFournisseur t) => new()
+        {
+            Id = t.Id,
+            Fournisseur = t.Fournisseur,
+            Modele = t.Modele,
+            Usage = t.Usage,
+            PrixEntree = t.PrixEntree,
+            PrixSortie = t.PrixSortie,
+            PrixMinute = t.PrixMinute,
+            PrixEntreeApplique = t.PrixEntreeApplique,
+            PrixSortieApplique = t.PrixSortieApplique,
+            PrixMinuteApplique = t.PrixMinuteApplique,
+            DateMiseAJour = t.DateMiseAJour,
+            DerniereVerification = t.DerniereVerification,
+        };
+
+        /// <summary>
+        /// La grille, lue une fois par calcul. Quelques lignes : rien à mettre
+        /// en cache, et un prix appliqué depuis l'écran compte tout de suite.
+        /// </summary>
+        private async Task<IReadOnlyList<TarifFournisseur>> GrilleAppliqueeAsync() =>
+            await _context.TarifsFournisseurs.AsNoTracking().ToListAsync();
 
         /// <summary>
         /// Le temps de cours d'une période, recalculé depuis les messages.
@@ -1153,6 +1417,21 @@ FROM sys.database_files;";
         /// dur, et c'est le défaut de cette approche — si elles changent
         /// là-bas, ce chiffre dérive en silence.
         /// </summary>
+        /// <summary>
+        /// LA RÈGLE DU TEMPS DE COURS, en SQL : ce que vaut un tour du professeur.
+        ///
+        /// L’écart avec le message précédent de la même conversation, borné à
+        /// vingt secondes au moins ; au-delà de trois minutes, le forfait de
+        /// vingt secondes — une pause plus longue n’est pas du temps de cours.
+        ///
+        /// ÉCRITE UNE SEULE FOIS, pour le total du tableau de bord ET le temps
+        /// par parent. Deux copies de la même règle auraient fini par donner
+        /// deux chiffres qui ne se recoupent plus, sans que rien ne le signale.
+        /// </summary>
+        private const string SecondesDuTourSql =
+            "CASE WHEN ecart IS NULL OR ecart > 180 THEN 20 "
+            + "WHEN ecart < 20 THEN 20 ELSE ecart END";
+
         private async Task<int> MinutesTravailleesAsync(DateTime debut, DateTime fin)
         {
             var (debutUtc, finUtc, _) = EnUtc(debut, fin);
@@ -1160,9 +1439,16 @@ FROM sys.database_files;";
             const string sql = @"
 WITH avec_ecart AS (
     SELECT  m.role, m.date_creation,
+            -- LA MÊME MESURE QUE LE FORFAIT (voir ImputerQuotaAsync) : l'écart
+            -- depuis le message qui PRÉCÈDE celui de l'élève, c'est-à-dire
+            -- la réponse précédente du professeur. Le temps où l'enfant
+            -- réfléchit et répond compte ; mesuré depuis son message, il ne
+            -- restait que les trois secondes de réponse du professeur.
             DATEDIFF(second,
-                     LAG(m.date_creation) OVER (PARTITION BY m.conversation_id
-                                                ORDER BY m.id),
+                     CASE WHEN LAG(m.role) OVER (PARTITION BY m.conversation_id ORDER BY m.id) = 'user'
+                          THEN LAG(m.date_creation, 2) OVER (PARTITION BY m.conversation_id ORDER BY m.id)
+                          ELSE LAG(m.date_creation) OVER (PARTITION BY m.conversation_id ORDER BY m.id)
+                     END,
                      m.date_creation) AS ecart
     FROM    Message m
     WHERE   m.date_creation >= DATEADD(minute, -3, {0}) AND m.date_creation < {1}
@@ -1171,9 +1457,7 @@ WITH avec_ecart AS (
 -- cherche une colonne portant EXACTEMENT ce nom, et lève une exception
 -- sinon. Le message parle de mapping, pas de nom de colonne, et on cherche
 -- longtemps ailleurs.
-SELECT ISNULL(SUM(CASE WHEN ecart IS NULL OR ecart > 180 THEN 20
-                       WHEN ecart < 20 THEN 20
-                       ELSE ecart END), 0) AS Value
+SELECT ISNULL(SUM(" + SecondesDuTourSql + @"), 0) AS Value
 FROM   avec_ecart
 WHERE  role = 'assistant' AND date_creation >= {0}";
 
@@ -1193,6 +1477,66 @@ WHERE  role = 'assistant' AND date_creation >= {0}";
             return lignes.Count == 0 ? 0 : lignes[0] / 60;
         }
 
+        /// <summary>Une ligne de la requête du temps réel, par parent.</summary>
+        public sealed class SecondesParParent
+        {
+            public int ParentId { get; set; }
+
+            public int Secondes { get; set; }
+        }
+
+        /// <summary>
+        /// LE TEMPS RÉELLEMENT PASSÉ EN COURS, PAR PARENT, sur la période —
+        /// voulu par Camara le 19/09/2026 : « je sais pas les réelles minutes
+        /// qu’il a consommées ». Voir <c>ParentAdmin.SecondesReellesPeriode</c>.
+        ///
+        /// LA MÊME REQUÊTE QUE LE TOTAL, GROUPÉE PAR PARENT, et pour les mêmes
+        /// raisons : `LAG` n’existe pas pour EF, et ramener tous les messages
+        /// en mémoire ne tiendrait pas. UNE requête pour tout le tableau, et non
+        /// une par ligne — l’écran ne doit pas ralentir à mesure que le produit
+        /// marche.
+        ///
+        /// Mêmes bornes aussi : trois minutes de débordement vers le passé, pour
+        /// que le premier tour de la période retrouve son précédent.
+        /// </summary>
+        private async Task<Dictionary<int, int>> SecondesReellesParParentAsync(
+            DateTime debutUtc, DateTime finUtc)
+        {
+            const string sql = @"
+WITH avec_ecart AS (
+    SELECT  e.parent_id, m.role, m.date_creation,
+            -- LA MÊME MESURE QUE LE FORFAIT (voir ImputerQuotaAsync) : l'écart
+            -- depuis le message qui PRÉCÈDE celui de l'élève, c'est-à-dire
+            -- la réponse précédente du professeur. Le temps où l'enfant
+            -- réfléchit et répond compte ; mesuré depuis son message, il ne
+            -- restait que les trois secondes de réponse du professeur.
+            DATEDIFF(second,
+                     CASE WHEN LAG(m.role) OVER (PARTITION BY m.conversation_id ORDER BY m.id) = 'user'
+                          THEN LAG(m.date_creation, 2) OVER (PARTITION BY m.conversation_id ORDER BY m.id)
+                          ELSE LAG(m.date_creation) OVER (PARTITION BY m.conversation_id ORDER BY m.id)
+                     END,
+                     m.date_creation) AS ecart
+    FROM    Message m
+    JOIN    Conversation c ON c.id = m.conversation_id
+    JOIN    Eleve e ON e.id = c.eleve_id
+    WHERE   m.date_creation >= DATEADD(minute, -3, {0}) AND m.date_creation < {1}
+)
+SELECT  parent_id AS ParentId, ISNULL(SUM(" + SecondesDuTourSql + @"), 0) AS Secondes
+FROM    avec_ecart
+WHERE   role = 'assistant' AND date_creation >= {0}
+GROUP BY parent_id";
+
+            // `ToListAsync` et non `FirstAsync` : une requête qui commence par
+            // `WITH` n’est pas composable pour EF — voir `MinutesTravailleesAsync`.
+            var lignes = await _context.Database
+                .SqlQueryRaw<SecondesParParent>(sql, debutUtc, finUtc)
+                .ToListAsync();
+
+            // EN SECONDES, SANS ARRONDI — « à la seconde près », a demandé
+            // Camara. C’est l’écran qui met en forme.
+            return lignes.ToDictionary(l => l.ParentId, l => l.Secondes);
+        }
+
         /// <summary>
         /// Le coût de la synthèse vocale, déduit du nombre de tours de parole.
         ///
@@ -1209,7 +1553,15 @@ WHERE  role = 'assistant' AND date_creation >= {0}";
         /// famille peut laisser un cours ouvert sans parler, et les minutes
         /// consommées gonfleraient alors une voix qui n'a rien dit.
         /// </summary>
-        private static decimal VoixDollars(int tours) => tours * 0.4m * 0.015m;
+        private static decimal VoixDollars(int tours, IReadOnlyList<TarifFournisseur> grille)
+        {
+            // Le prix APPLIQUÉ de la voix, 0,015 $ la minute en secours.
+            var minute = grille
+                .FirstOrDefault(t => t.Modele == "gpt-4o-mini-tts" && t.PrixMinuteApplique is not null)
+                ?.PrixMinuteApplique ?? 0.015m;
+
+            return tours * 0.4m * minute;
+        }
 
         /// <summary>
         /// Additionne le coût réel de chaque famille, d'après les jetons.
@@ -1229,6 +1581,7 @@ WHERE  role = 'assistant' AND date_creation >= {0}";
             if (lignes.Count == 0) return;
 
             var (debutUtc, finUtc, _) = EnUtc(debut, fin);
+            var grille = await GrilleAppliqueeAsync();
 
             var ids = lignes.Select(l => l.Id).ToList();
 
@@ -1259,6 +1612,8 @@ WHERE  role = 'assistant' AND date_creation >= {0}";
                     Sortie = g.Sum(m => (long)m.TokensSortie),
                     CacheLu = g.Sum(m => (long)m.TokensCacheLecture),
                     CacheEcrit = g.Sum(m => (long)m.TokensCacheEcriture),
+                    CacheEcritDetaille = g.Sum(m => m.TokensCacheEcriture1h != null ? (long)m.TokensCacheEcriture : 0L),
+                    CacheEcrit1h = g.Sum(m => (long)(m.TokensCacheEcriture1h ?? 0)),
                 })
                 .ToListAsync();
 
@@ -1266,12 +1621,12 @@ WHERE  role = 'assistant' AND date_creation >= {0}";
 
             foreach (var s in seaux)
             {
-                var (entree, sortie) = Tarif(s.Modele, new DateTime(s.Year, s.Month, 1));
+                var (entree, sortie) = Tarif(grille, s.Modele);
 
                 var cout =
                     (s.Entree * entree
                      + s.CacheLu * entree * LectureCache
-                     + s.CacheEcrit * entree * EcritureCache
+                     + EcritureEquivalente(s.CacheEcrit, s.CacheEcritDetaille, s.CacheEcrit1h) * entree
                      + s.Sortie * sortie) / 1_000_000m;
 
                 dialogue[s.ParentId] = dialogue.GetValueOrDefault(s.ParentId) + cout;
@@ -1285,13 +1640,23 @@ WHERE  role = 'assistant' AND date_creation >= {0}";
                 .GroupBy(s => s.ParentId)
                 .ToDictionary(g => g.Key, g => g.Sum(s => s.Tours));
 
+            var secondesReelles = await SecondesReellesParParentAsync(debutUtc, finUtc);
+
             foreach (var ligne in lignes)
             {
                 var parle = dialogue.GetValueOrDefault(ligne.Id);
 
+                // Le temps réel de la MÊME fenêtre que le coût : les deux se
+                // lisent côte à côte, ils doivent parler des mêmes dates.
+                ligne.SecondesReellesPeriode = secondesReelles.GetValueOrDefault(ligne.Id);
+
+                // Les échanges facturés de la même fenêtre : les tours qui
+                // portent des jetons, ceux-là mêmes que le coût additionne.
+                ligne.ToursPeriode = tours.GetValueOrDefault(ligne.Id);
+
                 ligne.CoutDialogueDollars = Math.Round(parle, 4);
                 ligne.CoutDollars = Math.Round(
-                    parle + VoixDollars(tours.GetValueOrDefault(ligne.Id)), 4);
+                    parle + VoixDollars(tours.GetValueOrDefault(ligne.Id), grille), 4);
 
                 // `MinutesConsommees` n'est PLUS écrasé ici : il vient de la
                 // projection, de la table de consommation, sur la période

@@ -119,6 +119,9 @@ namespace SchoolWebApp.Domain.Models
         /// </summary>
         public string? Texte { get; set; }
 
+        /// <summary>Le même texte avec les mots surlignés en séance (<c>==mot==</c>), ou null.</summary>
+        public string? TexteSurligne { get; set; }
+
         /// <summary>
         /// Sa photo de cahier est-elle encore consultable ?
         ///

@@ -129,6 +129,7 @@ namespace SchoolWebApp.Dal.Repositories
                 TokensSortie = model.TokensSortie,
                 TokensCacheLecture = model.TokensCacheLecture,
                 TokensCacheEcriture = model.TokensCacheEcriture,
+                TokensCacheEcriture1h = model.TokensCacheEcriture1h,
                 DateCreation = model.DateCreation == default ? DateTime.UtcNow : model.DateCreation
             };
 
@@ -695,6 +696,7 @@ namespace SchoolWebApp.Dal.Repositories
             TokensSortie = entity.TokensSortie,
             TokensCacheLecture = entity.TokensCacheLecture,
             TokensCacheEcriture = entity.TokensCacheEcriture,
+            TokensCacheEcriture1h = entity.TokensCacheEcriture1h,
             DateCreation = entity.DateCreation
         };
     }

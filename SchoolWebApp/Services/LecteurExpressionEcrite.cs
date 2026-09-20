@@ -79,6 +79,284 @@ namespace SchoolWebApp.Api.Services
             RegexOptions.IgnoreCase | RegexOptions.Multiline)]
         private static partial Regex Ligne();
 
+        /// <summary>
+        /// Un mot surligné au tableau : <c>==frend==</c>.
+        ///
+        /// LA CONSIGNE DIT DE NE PAS LES RECOPIER DANS L'ARCHIVE, ET ÇA NE SUFFIT
+        /// PAS. Le professeur reprend son texte depuis le tableau — c'est ce qu'on
+        /// lui demande, pour qu'il ne le retape pas de mémoire — et le tableau
+        /// porte justement les marques. Une archive à
+        /// <c>Last weekend I ==go== to the park</c> se relirait dans six mois
+        /// comme des fautes de frappe de l'enfant.
+        ///
+        /// Même motif que le front (`surlignesTableau.js`) : une seule ligne, pas
+        /// de <c>=</c> à l'intérieur — un <c>==</c> orphelin ne mange rien.
+        /// </summary>
+        [GeneratedRegex(@"==([^=\n]+?)==")]
+        private static partial Regex Surligne();
+
+        /// <summary>
+        /// UNE EXPRESSION ÉCRITE EST-ELLE EN COURS, pas encore archivée ?
+        ///
+        /// SERT À LA REDIRE AU PROFESSEUR À CHAQUE TOUR — voir
+        /// <c>MarqueurExpressionEcriteEnCours</c>. Camara, le 18/09/2026 : « j'ai
+        /// redémarré l'API, fait F5, il m'a remis l'expression écrite, mais j'ai
+        /// toujours aucun badge ». Le professeur avait la consigne de surligner,
+        /// et il ne l'a pas appliquée : il REPRENAIT un texte d'une séance
+        /// précédente, de lui-même, sans qu'aucun envoi de l'élève ne vienne le
+        /// lui rappeler. Même patron que <c>LecteurEvaluation.EstOuvert</c>, et
+        /// pour la même raison — le serveur sait, la mémoire du modèle non.
+        ///
+        /// CE QUI L'OUVRE : la question du support, ou la consigne au tableau.
+        /// CE QUI LE REFERME : son archivage, ou un autre exercice qui commence.
+        ///
+        /// LA FIN DE SÉANCE NE LE REFERME PAS, et c'est tout le cas de Camara :
+        /// la séance s'était arrêtée en pleine correction, et il la reprenait à
+        /// la suivante. Un texte non archivé est un texte qu'on n'a pas fini.
+        /// </summary>
+        public static bool EstOuvert(IEnumerable<string?> messagesProfesseur)
+        {
+            foreach (var message in messagesProfesseur.Reverse())
+            {
+                if (string.IsNullOrEmpty(message)) continue;
+
+                if (message.Contains("[EXPRESSION_ECRITE]", StringComparison.OrdinalIgnoreCase)) return false;
+
+                if (message.Contains("[SUPPORT_ECRIT]", StringComparison.OrdinalIgnoreCase)
+                    || ConsigneAuTableau().IsMatch(message))
+                {
+                    return true;
+                }
+
+                if (OuvreAutreExercice(message)) return false;
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// « La consigne » en titre, dans un tableau : le texte à écrire ou à corriger.
+        ///
+        /// LE <c>\r?</c> AVANT <c>$</c> N'EST PAS UNE PRÉCAUTION DE STYLE. En .NET,
+        /// <c>$</c> en mode multiligne s'arrête avant <c>\n</c>, pas avant
+        /// <c>\r</c>. Mesuré sur le message réel : avec des fins de ligne Windows,
+        /// le motif sans lui ne reconnaissait pas le tableau — et le rappel ne
+        /// serait jamais parti.
+        /// </summary>
+        [GeneratedRegex(@"\[ARDOISE\][^\[]*?^[ \t]*la\s+consigne[ \t]*:?[ \t]*\r?$",
+            RegexOptions.IgnoreCase | RegexOptions.Multiline | RegexOptions.Singleline)]
+        private static partial Regex ConsigneAuTableau();
+
+        /// <summary>Le nom d'une balise technique, quelle qu'elle soit.</summary>
+        [GeneratedRegex(@"\[/?([A-Z_]+)(?::[^\]]*)?\]", RegexOptions.IgnoreCase)]
+        private static partial Regex NomDeBalise();
+
+        /// <summary>
+        /// Ce qui ne dit PAS « on est passé à autre chose » : les répliques, le
+        /// tableau, une image — et la fin de séance, qui interrompt un texte sans
+        /// l'abandonner.
+        /// </summary>
+        private static readonly HashSet<string> Neutres = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "EN", "FR", "ES", "DE", "IT", "ZH",
+            "ARDOISE", "TABLEAU_EFFACE", "SCHEMA", "POINTAGE",
+            "SUPPORT_ECRIT", "EXPRESSION_ECRITE",
+            "FIN_SEANCE", "RAPPORT", "FICHE",
+        };
+
+        private static bool OuvreAutreExercice(string message)
+        {
+            foreach (Match trouvee in NomDeBalise().Matches(message))
+            {
+                if (!Neutres.Contains(trouvee.Groups[1].Value)) return true;
+            }
+
+            return false;
+        }
+
+        [GeneratedRegex(@"^(ce qui est r[ée]ussi|[àa] revoir|[àa] r[ée][ée]crire)\s*:?\s*$", RegexOptions.IgnoreCase)]
+        private static partial Regex TitreDeSection();
+
+        /// <summary>
+        /// LE TEXTE DE L'ÉLÈVE, TEL QU'IL EST AU TABLEAU sous « Ton texte », sans
+        /// les surlignés — le dernier tableau qui en porte un. Sert à l'archive
+        /// quand le professeur laisse `texte` vide (voulu le 19/09/2026 : il ne
+        /// retape plus ce que l'application a déjà) et que l'élève a écrit sur
+        /// son cahier — au clavier, c'est son message qui fait foi.
+        /// </summary>
+        public static string? TexteDuTableau(IEnumerable<string?> messagesProfesseur)
+        {
+            foreach (var message in messagesProfesseur.Reverse())
+            {
+                if (string.IsNullOrEmpty(message)) continue;
+
+                foreach (var bloc in BlocArdoise().Matches(message).Select(m => m.Value).Reverse())
+                {
+                    if (SectionTonTexte(bloc) is { } section)
+                    {
+                        return Surligne().Replace(section, "$1").Trim();
+                    }
+                }
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// LE TEXTE AVEC SES BADGES, pour l'archive — Camara, le 19/09/2026 : « je
+        /// veux les badges dans l'archive aussi ». C'est la section « Ton texte »
+        /// du PREMIER tableau surligné de l'exercice en cours — celui qui porte
+        /// toutes les marques, avant que le professeur en retire à mesure de la
+        /// correction. L'exercice en cours est celui du dernier tableau surligné ;
+        /// on reconnaît les tableaux d'un même exercice à leur consigne.
+        /// </summary>
+        public static string? TexteSurligneDuTableau(IEnumerable<string?> messagesProfesseur)
+        {
+            var premiers = new Dictionary<string, string>(StringComparer.Ordinal);
+            string? courante = null;
+
+            foreach (var message in messagesProfesseur)
+            {
+                if (string.IsNullOrEmpty(message)) continue;
+
+                foreach (var bloc in BlocArdoise().Matches(message).Select(m => m.Value))
+                {
+                    if (!bloc.Contains("==", StringComparison.Ordinal)) continue;
+                    if (SectionTonTexte(bloc) is not { } section || !section.Contains("==", StringComparison.Ordinal)) continue;
+
+                    var consigne = ConsigneDe(bloc) ?? string.Empty;
+                    premiers.TryAdd(consigne, section.Trim());
+                    courante = consigne;
+                }
+            }
+
+            return courante is null ? null : premiers[courante];
+        }
+
+        /// <summary>La section « Ton texte » d'un tableau, marques comprises, ou null.</summary>
+        private static string? SectionTonTexte(string bloc)
+        {
+            var lignes = bloc.Split('\n').Select(l => l.TrimEnd('\r')).ToList();
+            var debut = lignes.FindIndex(l => TitreTexte().IsMatch(l.Trim()));
+            if (debut < 0) return null;
+
+            var corps = new List<string>();
+            for (var i = debut + 1; i < lignes.Count; i++)
+            {
+                var l = lignes[i];
+                if (TitreDeSection().IsMatch(l.Trim()) || l.TrimStart().StartsWith("[/", StringComparison.Ordinal)) break;
+                corps.Add(l);
+            }
+
+            var texte = string.Join('\n', corps).Trim();
+            return texte.Length == 0 ? null : texte;
+        }
+
+        // ------------------------------------------------------------------
+        // Le tableau de correction, écrit une seule fois
+        // ------------------------------------------------------------------
+
+        [GeneratedRegex(@"\[ARDOISE\][\s\S]*?\[/ARDOISE\]", RegexOptions.IgnoreCase)]
+        private static partial Regex BlocArdoise();
+
+        [GeneratedRegex(@"^la\s+consigne\s*:?$", RegexOptions.IgnoreCase)]
+        private static partial Regex TitreConsigne();
+
+        [GeneratedRegex(@"^ton\s+texte", RegexOptions.IgnoreCase)]
+        private static partial Regex TitreTexte();
+
+        [GeneratedRegex(@"\s+")]
+        private static partial Regex Blancs();
+
+        /// <summary>
+        /// La consigne d'un tableau, normalisée — la clé qui dit « c'est le même
+        /// exercice ». Null si le tableau n'en porte pas.
+        /// </summary>
+        private static string? ConsigneDe(string bloc)
+        {
+            var lignes = bloc.Split('\n').Select(l => l.Trim()).ToList();
+            var debut = lignes.FindIndex(l => TitreConsigne().IsMatch(l));
+            if (debut < 0) return null;
+
+            var corps = new List<string>();
+            for (var i = debut + 1; i < lignes.Count; i++)
+            {
+                var l = lignes[i];
+                if (l.Length == 0 || TitreTexte().IsMatch(l) || l.StartsWith("[/", StringComparison.Ordinal)) break;
+                corps.Add(l);
+            }
+
+            var texte = Blancs().Replace(Surligne().Replace(string.Join(' ', corps), "$1"), " ").Trim();
+            return texte.Length == 0 ? null : texte;
+        }
+
+        /// <summary>
+        /// La consigne du tableau de correction déjà écrit dans la séance — le
+        /// dernier tableau qui porte une consigne ET des surlignés —, ou null.
+        /// </summary>
+        private static string? ConsigneFigee(IEnumerable<string?> messagesProfesseur)
+        {
+            foreach (var message in messagesProfesseur.Reverse())
+            {
+                if (string.IsNullOrEmpty(message)) continue;
+
+                if (message.Contains("[EXPRESSION_ECRITE]", StringComparison.OrdinalIgnoreCase)
+                    || message.Contains("[TABLEAU_EFFACE]", StringComparison.Ordinal)
+                    || message.Contains("[FIN_SEANCE]", StringComparison.Ordinal)
+                    || OuvreAutreExercice(message))
+                {
+                    return null;
+                }
+
+                foreach (var bloc in BlocArdoise().Matches(message).Select(m => m.Value).Reverse())
+                {
+                    if (bloc.Contains("==", StringComparison.Ordinal) && ConsigneDe(bloc) is { } consigne)
+                    {
+                        return consigne;
+                    }
+                }
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// LE TABLEAU DE CORRECTION NE SE RÉÉCRIT PAS — Camara, le 19/09/2026 :
+        /// « on a déjà les badges pour dire à l'élève où regarder ».
+        ///
+        /// Relevé le jour même : six réécritures en une correction, malgré la
+        /// consigne et malgré le rappel joint à chaque tour — le professeur
+        /// corrigeait le texte lui-même à chaque faute, et une fois a tout
+        /// réécrit sans surligné. Retiré ICI, de ce qui est persisté : l'écran
+        /// garde le premier tableau avec ses badges, et l'historique ne relit
+        /// pas six copies du même texte. La parole du message reste entière.
+        /// </summary>
+        /// <param name="retire">Vrai si un tableau a été retiré.</param>
+        public static string SansTableauReecrit(
+            string? contenu, IEnumerable<string?> messagesProfesseur, out bool retire)
+        {
+            retire = false;
+            if (string.IsNullOrEmpty(contenu)
+                || !contenu.Contains("[ARDOISE]", StringComparison.OrdinalIgnoreCase))
+            {
+                return contenu ?? string.Empty;
+            }
+
+            var figee = ConsigneFigee(messagesProfesseur);
+            if (figee is null) return contenu;
+
+            var supprime = false;
+            var resultat = BlocArdoise().Replace(contenu, m =>
+            {
+                if (ConsigneDe(m.Value) != figee) return m.Value;
+                supprime = true;
+                return string.Empty;
+            });
+
+            retire = supprime;
+            return supprime ? Regex.Replace(resultat, @"\n{3,}", "\n\n").Trim() : contenu;
+        }
+
         /// <summary>Le texte archivé dans ce message, ou null.</summary>
         public static ExpressionEcriteDeclaree? Lire(string? message)
         {
@@ -123,7 +401,7 @@ namespace SchoolWebApp.Api.Services
                     case "titre": titre = valeur; break;
                     case "langue": langue = valeur.ToLowerInvariant(); break;
                     case "consigne": consigne = valeur; break;
-                    case "texte": texte = valeur; break;
+                    case "texte": texte = Surligne().Replace(valeur, "$1"); break;
                     case "remarque": remarque = valeur; break;
 
                     // UN NUMÉRO ILLISIBLE EST IGNORÉ, PAS FATAL : le bloc vaut
@@ -175,7 +453,9 @@ namespace SchoolWebApp.Api.Services
             // là — mais entre un texte d'enfant sans ses reprises et RIEN DU
             // TOUT, le texte gagne : c'est lui qui ne se retrouve nulle part
             // ailleurs, et l'écran sait dire qu'il n'a pas été corrigé.
-            if (texte.Length == 0) return null;
+            // ET LE TEXTE NON PLUS, depuis le 19/09/2026 : vide, il est repris
+            // tel que l'élève l'a tapé, ou tel que le professeur l'a mis au
+            // tableau sous « Ton texte » — voir EnregistrerExpressionEcriteAsync.
 
             // UNE REPRISE N'A QUE SON NUMÉRO ET SON TEXTE À FOURNIR. Le titre, la
             // langue et la consigne sont DÉJÀ EN BASE, écrits le jour de

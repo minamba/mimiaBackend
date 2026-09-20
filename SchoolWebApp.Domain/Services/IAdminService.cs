@@ -52,8 +52,17 @@ namespace SchoolWebApp.Domain.Services
 
         Task<IEnumerable<ParentAdmin>> GetParentsAsync(string? recherche, DateTime debut, DateTime fin);
 
+        /// <summary>La grille tarifaire des fournisseurs d'IA, par fournisseur puis par ordre.</summary>
+        Task<IReadOnlyList<LigneTarif>> GetTarifsAsync();
+
+        /// <summary>Corrige un prix à la main, en secours de la veille : appliqué aussitôt à nos calculs, date de mise à jour à maintenant. Null si la ligne n'existe pas.</summary>
+        Task<LigneTarif?> ModifierTarifAsync(int id, decimal? prixEntree, decimal? prixSortie, decimal? prixMinute);
+
         /// <summary>Ce que le produit a coûté entre deux dates.</summary>
         Task<CoutPeriode> GetCoutAsync(DateTime debut, DateTime fin);
+
+        /// <summary>Ce que le produit a rapporté entre deux dates (mois ou année).</summary>
+        Task<RevenuPeriode> GetRevenuAsync(DateTime debut, DateTime fin);
 
         /// <summary>La place occupée par la base, et la part des documents.</summary>
         Task<EtatBase> GetEtatBaseAsync();
