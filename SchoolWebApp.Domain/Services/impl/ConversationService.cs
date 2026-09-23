@@ -115,6 +115,12 @@ namespace SchoolWebApp.Domain.Services.impl
         public Task<IEnumerable<MaitriseCompetence>> GetARevoirAsync(int eleveId, int? matiereId, int limite) =>
             _maitriseRepository.GetARevoirAsync(eleveId, matiereId, limite);
 
+        // Le seuil de l'ACQUIS, pas celui de la lacune : c'est tout ce qui n'est
+        // pas tenu qui peut se consolider par un jeu.
+        public Task<IEnumerable<MaitriseCompetence>> GetFragilesEnAmontAsync(
+            int eleveId, int matiereId, int rangMax, int limite) =>
+            _maitriseRepository.GetFragilesEnAmontAsync(eleveId, matiereId, rangMax, SeuilAcquis, limite);
+
         // SA CLASSE EXACTE, PAS UNE FENETRE DE NIVEAUX.
         //
         // L observateur remonte cinq niveaux en amont — un blocage en 6e vient

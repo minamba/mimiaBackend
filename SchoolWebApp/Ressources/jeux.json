@@ -1,0 +1,882 @@
+[
+  {
+    "classe": "CP",
+    "cle": "boite-de-dix",
+    "titre": "La boîte de 10",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_CP_CALC_COMPLEMENT",
+      "MATH_CP_CALC_ADD_10"
+    ]
+  },
+  {
+    "classe": "CP",
+    "cle": "marchande",
+    "titre": "La marchande",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_CP_MES_MONNAIE",
+      "MATH_CP_PROB_UNE_ETAPE"
+    ]
+  },
+  {
+    "classe": "CP",
+    "cle": "train-des-nombres",
+    "titre": "Le train des nombres",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_CP_NUM_DEMI_DROITE",
+      "MATH_CP_NUM_SIGNES",
+      "MATH_CP_NUM_100"
+    ]
+  },
+  {
+    "classe": "CP",
+    "cle": "paquets-de-dix",
+    "titre": "Les paquets de dix",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_CP_NUM_DECOMPOSER"
+    ]
+  },
+  {
+    "classe": "CP",
+    "cle": "chantier-des-formes",
+    "titre": "Le chantier des formes",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_CP_GEO_FIGURES"
+    ]
+  },
+  {
+    "classe": "CP",
+    "cle": "horloge",
+    "titre": "L’horloge",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_CP_MES_TEMPS"
+    ]
+  },
+  {
+    "classe": "CP",
+    "cle": "balance",
+    "titre": "La balance",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_CP_MES_MASSE"
+    ]
+  },
+  {
+    "classe": "CP",
+    "cle": "deux-par-deux",
+    "titre": "Deux par deux",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_CP_CALC_DOUBLE"
+    ]
+  },
+  {
+    "classe": "CP",
+    "cle": "peche-aux-sons",
+    "titre": "La pêche aux sons",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_CP_LECT_GRAPHEMES"
+    ]
+  },
+  {
+    "classe": "CP",
+    "cle": "atelier-syllabes",
+    "titre": "L’atelier des syllabes",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_CP_LECT_SYLLABES"
+    ]
+  },
+  {
+    "classe": "CP",
+    "cle": "mots-eclair",
+    "titre": "Les mots éclair",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_CP_LECT_MOTS_OUTILS"
+    ]
+  },
+  {
+    "classe": "CP",
+    "cle": "un-ou-des",
+    "titre": "Un ou des ?",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_CP_LANG_PLURIEL"
+    ]
+  },
+  {
+    "classe": "CE1",
+    "cle": "marchande",
+    "titre": "La marchande",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_CE1_MES_MONNAIE"
+    ]
+  },
+  {
+    "classe": "CE1",
+    "cle": "horloge",
+    "titre": "L’horloge",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_CE1_MES_HEURE"
+    ]
+  },
+  {
+    "classe": "CE1",
+    "cle": "balance",
+    "titre": "La balance",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_CE1_MES_MASSE"
+    ]
+  },
+  {
+    "classe": "CE1",
+    "cle": "coffre-des-centaines",
+    "titre": "Le coffre des centaines",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_CE1_NUM_DECOMPOSER",
+      "MATH_CE1_NUM_1000"
+    ]
+  },
+  {
+    "classe": "CE1",
+    "cle": "course-des-tables",
+    "titre": "La course des tables",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_CE1_TABLES_BASE",
+      "MATH_CE1_MULT_COMMUTATIVE"
+    ]
+  },
+  {
+    "classe": "CE1",
+    "cle": "parts-de-pizza",
+    "titre": "Les parts de pizza",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_CE1_FRAC_SENS",
+      "MATH_CE1_FRAC_COMPARER",
+      "MATH_CE1_FRAC_ADD"
+    ]
+  },
+  {
+    "classe": "CE1",
+    "cle": "machine-a-dix",
+    "titre": "La machine à dix",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_CE1_MULT_DIX"
+    ]
+  },
+  {
+    "classe": "CE1",
+    "cle": "a-ou-a",
+    "titre": "a ou à ? et ou est ?",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_CE1_LANG_A_ET"
+    ]
+  },
+  {
+    "classe": "CE1",
+    "cle": "detective-du-verbe",
+    "titre": "Le détective du verbe",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_CE1_LANG_VERBE_SUJET"
+    ]
+  },
+  {
+    "classe": "CE1",
+    "cle": "roue-des-verbes",
+    "titre": "La roue des verbes",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_CE1_LANG_PRESENT"
+    ]
+  },
+  {
+    "classe": "CE1",
+    "cle": "types-de-phrases",
+    "titre": "Raconte, question ou ordre ?",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_CE1_LANG_TYPES"
+    ]
+  },
+  {
+    "classe": "CE1",
+    "cle": "phrase-qui-dit-non",
+    "titre": "La phrase qui dit non",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_CE1_LANG_NEGATION"
+    ]
+  },
+  {
+    "classe": "CE1",
+    "cle": "contraires-et-jumeaux",
+    "titre": "Contraires et jumeaux",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_CE1_LANG_VOC_RELATIONS"
+    ]
+  },
+  {
+    "classe": "CE2",
+    "cle": "marchande",
+    "titre": "La marchande",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_CE2_MES_MONNAIE"
+    ]
+  },
+  {
+    "classe": "CE2",
+    "cle": "balance",
+    "titre": "La balance",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_CE2_MES_MASSE"
+    ]
+  },
+  {
+    "classe": "CE2",
+    "cle": "un-ou-des",
+    "titre": "Féminin et pluriel",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_CE2_LANG_FEMININ"
+    ]
+  },
+  {
+    "classe": "CE2",
+    "cle": "coffre-des-centaines",
+    "titre": "Le coffre des centaines",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_CE2_NUM_10000"
+    ]
+  },
+  {
+    "classe": "CE2",
+    "cle": "course-des-tables",
+    "titre": "La course des tables",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_CE2_TABLES"
+    ]
+  },
+  {
+    "classe": "CE2",
+    "cle": "parts-de-pizza",
+    "titre": "Les parts de pizza",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_CE2_FRAC_SUP_UN",
+      "MATH_CE2_FRAC_EGALITES",
+      "MATH_CE2_FRAC_ADD"
+    ]
+  },
+  {
+    "classe": "CE2",
+    "cle": "machine-a-dix",
+    "titre": "La machine à dix",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_CE2_MULT_DIX_CENT"
+    ]
+  },
+  {
+    "classe": "CE2",
+    "cle": "a-ou-a",
+    "titre": "son ou sont ? on ou ont ?",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_CE2_LANG_SON_ONT"
+    ]
+  },
+  {
+    "classe": "CE2",
+    "cle": "detective-du-verbe",
+    "titre": "Le détective du verbe",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_CE2_LANG_CLASSES"
+    ]
+  },
+  {
+    "classe": "CE2",
+    "cle": "roue-des-verbes",
+    "titre": "La roue des verbes",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_CE2_LANG_TROIS_TEMPS"
+    ]
+  },
+  {
+    "classe": "CE2",
+    "cle": "phrase-qui-dit-non",
+    "titre": "Transforme la phrase",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_CE2_LANG_FORMES"
+    ]
+  },
+  {
+    "classe": "CE2",
+    "cle": "contraires-et-jumeaux",
+    "titre": "Contraires et jumeaux",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_CE2_LANG_VOC_RELATIONS"
+    ]
+  },
+  {
+    "classe": "CE2",
+    "cle": "partage-des-bonbons",
+    "titre": "Le partage des bonbons",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_CE2_DIV_SENS"
+    ]
+  },
+  {
+    "classe": "CE2",
+    "cle": "metre-ruban",
+    "titre": "Le mètre ruban",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_CE2_MES_CONVERSION"
+    ]
+  },
+  {
+    "classe": "CE2",
+    "cle": "tour-du-jardin",
+    "titre": "Le tour du jardin",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_CE2_MES_PERIMETRE"
+    ]
+  },
+  {
+    "classe": "CE2",
+    "cle": "combien-de-temps",
+    "titre": "Combien de temps ?",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_CE2_MES_DUREE"
+    ]
+  },
+  {
+    "classe": "CE2",
+    "cle": "les-bouteilles",
+    "titre": "Les bouteilles",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_CE2_MES_CONTENANCE"
+    ]
+  },
+  {
+    "classe": "CE2",
+    "cle": "le-miroir",
+    "titre": "Le miroir",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_CE2_GEO_SYMETRIE",
+      "MATH_CE2_GEO_ANGLE_DROIT"
+    ]
+  },
+  {
+    "classe": "CE2",
+    "cle": "le-diagramme",
+    "titre": "Le diagramme",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_CE2_DATA_DIAGRAMME"
+    ]
+  },
+  {
+    "classe": "CE2",
+    "cle": "ou-quand-comment",
+    "titre": "Où, quand, comment ?",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_CE2_LANG_COMPLEMENTS"
+    ]
+  },
+  {
+    "classe": "CE2",
+    "cle": "sujet-qui-s-eloigne",
+    "titre": "Le sujet qui s’éloigne",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_CE2_LANG_ACCORD_SV"
+    ]
+  },
+  {
+    "classe": "CM1",
+    "cle": "un-ou-des",
+    "titre": "L’adjectif s’éloigne",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_CM1_LANG_GN_ELOIGNE"
+    ]
+  },
+  {
+    "classe": "CM1",
+    "cle": "coffre-des-centaines",
+    "titre": "Les grands nombres",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_CM1_NUM_MILLIONS"
+    ]
+  },
+  {
+    "classe": "CM1",
+    "cle": "course-des-tables",
+    "titre": "Le calcul malin",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_CM1_CALC_MENTAL"
+    ]
+  },
+  {
+    "classe": "CM1",
+    "cle": "parts-de-pizza",
+    "titre": "Les fractions",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_CM1_FRAC_SENS",
+      "MATH_CM1_FRAC_SUP_UN",
+      "MATH_CM1_FRAC_OPERATEUR",
+      "MATH_CM1_DEC_FRACTIONS"
+    ]
+  },
+  {
+    "classe": "CM1",
+    "cle": "a-ou-a",
+    "titre": "Ce, se, ces, ses, la, là",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_CM1_LANG_CE_SE"
+    ]
+  },
+  {
+    "classe": "CM1",
+    "cle": "roue-des-verbes",
+    "titre": "Les quatre temps",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_CM1_LANG_TEMPS_SIMPLES"
+    ]
+  },
+  {
+    "classe": "CM1",
+    "cle": "phrase-qui-dit-non",
+    "titre": "Types et formes",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_CM1_LANG_TYPES",
+      "FR_CM1_LANG_FORMES"
+    ]
+  },
+  {
+    "classe": "CM1",
+    "cle": "contraires-et-jumeaux",
+    "titre": "Préfixes et synonymes",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_CM1_LANG_FAMILLES",
+      "FR_CM1_LANG_VOC_SYNONYMES"
+    ]
+  },
+  {
+    "classe": "CM1",
+    "cle": "metre-ruban",
+    "titre": "Masses et contenances",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_CM1_MES_CONVERSION",
+      "MATH_CM1_MES_CONTENANCE"
+    ]
+  },
+  {
+    "classe": "CM1",
+    "cle": "tour-du-jardin",
+    "titre": "L’aire du jardin",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_CM1_MES_AIRE"
+    ]
+  },
+  {
+    "classe": "CM1",
+    "cle": "combien-de-temps",
+    "titre": "Heures, minutes, secondes",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_CM1_MES_DUREE"
+    ]
+  },
+  {
+    "classe": "CM1",
+    "cle": "le-miroir",
+    "titre": "Angles, droites et miroir",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_CM1_MES_ANGLE",
+      "MATH_CM1_GEO_PERPENDICULAIRE",
+      "MATH_CM1_GEO_SYMETRIE"
+    ]
+  },
+  {
+    "classe": "CM1",
+    "cle": "le-diagramme",
+    "titre": "Le tableau du marché",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_CM1_DATA_TABLEAU"
+    ]
+  },
+  {
+    "classe": "CM1",
+    "cle": "ou-quand-comment",
+    "titre": "COD ou COI ?",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_CM1_LANG_COD_COI"
+    ]
+  },
+  {
+    "classe": "CM1",
+    "cle": "sujet-qui-s-eloigne",
+    "titre": "Le passé composé avec être",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_CM1_LANG_PASSE_COMPOSE"
+    ]
+  },
+  {
+    "classe": "CM1",
+    "cle": "regle-des-dixiemes",
+    "titre": "La règle des dixièmes",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_CM1_NUM_DECIMAUX"
+    ]
+  },
+  {
+    "classe": "CM1",
+    "cle": "recette-pour-8",
+    "titre": "La recette pour 8",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_CM1_PROP_IDENTIFIER",
+      "MATH_CM1_PROP_RESOUDRE"
+    ]
+  },
+  {
+    "classe": "CM1",
+    "cle": "boite-mystere",
+    "titre": "La boîte mystère",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_CM1_ALG_INCONNUE"
+    ]
+  },
+  {
+    "classe": "CM1",
+    "cle": "suite-qui-continue",
+    "titre": "La suite qui continue",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_CM1_ALG_MOTIFS"
+    ]
+  },
+  {
+    "classe": "CM1",
+    "cle": "sac-de-billes",
+    "titre": "Le sac de billes",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_CM1_PROBA_ALEATOIRE",
+      "MATH_CM1_PROBA_VOCABULAIRE"
+    ]
+  },
+  {
+    "classe": "CM1",
+    "cle": "le-robot",
+    "titre": "Le robot",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_CM1_ALGO_DEPLACEMENT"
+    ]
+  },
+  {
+    "classe": "CM1",
+    "cle": "le-crible",
+    "titre": "Le crible",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_CM1_NUM_MULTIPLES"
+    ]
+  },
+  {
+    "classe": "CM1",
+    "cle": "a-qui-le-pronom",
+    "titre": "À qui renvoie le pronom ?",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_CM1_LECT_REPRISES"
+    ]
+  },
+  {
+    "classe": "CM1",
+    "cle": "comme-une-image",
+    "titre": "Comme une image",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_CM1_LECT_POESIE"
+    ]
+  },
+  {
+    "classe": "CM1",
+    "cle": "poeme-theatre-recit",
+    "titre": "Poème, théâtre ou récit ?",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_CM1_LECT_GENRES"
+    ]
+  },
+  {
+    "classe": "CM1",
+    "cle": "mots-de-liaison",
+    "titre": "Les mots de liaison",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_CM1_ECR_CONNECTEURS"
+    ]
+  },
+  {
+    "classe": "CM2",
+    "cle": "un-ou-des",
+    "titre": "L’attribut du sujet",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_CM2_LANG_ATTRIBUT"
+    ]
+  },
+  {
+    "classe": "CM2",
+    "cle": "coffre-des-centaines",
+    "titre": "Les grands nombres",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_CM2_NUM_ENTIERS"
+    ]
+  },
+  {
+    "classe": "CM2",
+    "cle": "course-des-tables",
+    "titre": "Les opérations posées",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_CM2_CALC_ADD_SOUS",
+      "MATH_CM2_CALC_MULT",
+      "MATH_CM2_CALC_DIV"
+    ]
+  },
+  {
+    "classe": "CM2",
+    "cle": "parts-de-pizza",
+    "titre": "Les fractions décimales",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_CM2_FRAC_INTRO",
+      "MATH_CM2_FRAC_DECIMALES"
+    ]
+  },
+  {
+    "classe": "CM2",
+    "cle": "a-ou-a",
+    "titre": "Ou, où, leur, quel",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_CM2_LANG_HOMOPHONES"
+    ]
+  },
+  {
+    "classe": "CM2",
+    "cle": "roue-des-verbes",
+    "titre": "Les temps composés",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_CM2_LANG_TEMPS_COMPOSES"
+    ]
+  },
+  {
+    "classe": "CM2",
+    "cle": "phrase-qui-dit-non",
+    "titre": "Simple ou complexe ?",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_CM2_LANG_TYPES",
+      "FR_CM2_LANG_SIMPLE_COMPLEXE"
+    ]
+  },
+  {
+    "classe": "CM2",
+    "cle": "contraires-et-jumeaux",
+    "titre": "Sens et niveaux de langue",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_CM2_LANG_VOC_SYNONYMES",
+      "FR_CM2_LANG_SENS"
+    ]
+  },
+  {
+    "classe": "CM2",
+    "cle": "metre-ruban",
+    "titre": "Les longueurs",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_CM2_MES_LONGUEUR"
+    ]
+  },
+  {
+    "classe": "CM2",
+    "cle": "tour-du-jardin",
+    "titre": "L’aire du rectangle",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_CM2_MES_AIRE"
+    ]
+  },
+  {
+    "classe": "CM2",
+    "cle": "combien-de-temps",
+    "titre": "Problèmes de durée",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_CM2_MES_DUREE"
+    ]
+  },
+  {
+    "classe": "CM2",
+    "cle": "le-miroir",
+    "titre": "Angles et figures",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_CM2_MES_ANGLE",
+      "MATH_CM2_GEO_FIGURES",
+      "MATH_CM2_GEO_PERPENDICULAIRE",
+      "MATH_CM2_GEO_SYMETRIE"
+    ]
+  },
+  {
+    "classe": "CM2",
+    "cle": "le-diagramme",
+    "titre": "Tableaux et diagrammes",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_CM2_DATA_TABLEAU",
+      "MATH_CM2_DATA_DIAGRAMME"
+    ]
+  },
+  {
+    "classe": "CM2",
+    "cle": "ou-quand-comment",
+    "titre": "Complément du verbe ou de phrase",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_CM2_LANG_COMPL_PHRASE"
+    ]
+  },
+  {
+    "classe": "CM2",
+    "cle": "sujet-qui-s-eloigne",
+    "titre": "Le participe avec avoir",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_CM2_LANG_PP_AVOIR"
+    ]
+  },
+  {
+    "classe": "CM2",
+    "cle": "regle-des-dixiemes",
+    "titre": "La loupe des centièmes",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_CM2_NUM_DECIMAUX"
+    ]
+  },
+  {
+    "classe": "CM2",
+    "cle": "recette-pour-8",
+    "titre": "Prix, vitesse, tableau",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_CM2_PROP_RESOUDRE"
+    ]
+  },
+  {
+    "classe": "CM2",
+    "cle": "boite-mystere",
+    "titre": "Le schéma en barres",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_CM2_ALG_EGALITE",
+      "MATH_CM2_ALG_INCONNUE",
+      "MATH_CM2_ALG_SCHEMA"
+    ]
+  },
+  {
+    "classe": "CM2",
+    "cle": "sac-de-billes",
+    "titre": "Deux sacs, les mêmes chances ?",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_CM2_PROBA_COMPARER",
+      "MATH_CM2_PROBA_EQUI"
+    ]
+  },
+  {
+    "classe": "CM2",
+    "cle": "le-robot",
+    "titre": "La boucle du robot",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_CM2_ALGO_PROGRAMME",
+      "MATH_CM2_GEO_DEPLACEMENT"
+    ]
+  },
+  {
+    "classe": "CM2",
+    "cle": "comme-une-image",
+    "titre": "Sens propre, sens figuré",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_CM2_LANG_SENS"
+    ]
+  },
+  {
+    "classe": "CM2",
+    "cle": "poeme-theatre-recit",
+    "titre": "Qui raconte ?",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_CM2_LECT_NARRATEUR"
+    ]
+  }
+]

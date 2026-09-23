@@ -299,6 +299,31 @@ namespace SchoolWebApp.Api.Controllers
         /// </summary>
         public const string FluxSse = "FLUX_SSE";
 
+        /// <summary>
+        /// LES JEUX, CYCLE PAR CYCLE — voulu par Camara le 20/09/2026.
+        ///
+        /// TROIS INTERRUPTEURS ET NON UN, parce que les jeux n'arriveront pas
+        /// tous en même temps : ceux du primaire — très visuels, à manipuler —
+        /// ne ressemblent pas à ceux du lycée, et rien n'oblige à attendre les
+        /// seconds pour livrer les premiers. Un drapeau unique aurait forcé à
+        /// tout ouvrir ou tout fermer.
+        ///
+        /// ÉTEINTS PAR DÉFAUT, LES TROIS : tant qu'aucun jeu n'existe, la porte
+        /// reste fermée. Un réglage absent ou illisible ne doit pas montrer aux
+        /// enfants une page vide.
+        ///
+        /// Ils décident de l'AFFICHAGE DU BOUTON, rien d'autre. La page reste
+        /// joignable par son adresse — cacher un bouton n'est pas une garde de
+        /// sécurité, et il n'y a rien à protéger ici.
+        /// </summary>
+        public const string JeuxPrimaire = "JEUX_PRIMAIRE";
+
+        /// <summary>Voir <see cref="JeuxPrimaire"/>.</summary>
+        public const string JeuxCollege = "JEUX_COLLEGE";
+
+        /// <summary>Voir <see cref="JeuxPrimaire"/>.</summary>
+        public const string JeuxLycee = "JEUX_LYCEE";
+
         /// <summary>Le texte du badge ne doit pas déborder de la carte.</summary>
         private const int LongueurTexteLancementMax = 40;
 
@@ -308,7 +333,8 @@ namespace SchoolWebApp.Api.Controllers
         /// </summary>
         private static readonly string[] ClesConnues =
             [ModeTest, CompteTest, EssaisOuverts, TachesDeFond, Maintenance, VoixDeSecours,
-             OffreLancement, OffreLancementBandeau, BlueSky, ModeDeveloppeur, FluxSse];
+             OffreLancement, OffreLancementBandeau, BlueSky, ModeDeveloppeur, FluxSse,
+             JeuxPrimaire, JeuxCollege, JeuxLycee];
 
         private readonly IReglageRepository _reglages;
         private readonly ILogger<ReglagesController> _logger;
@@ -472,6 +498,13 @@ namespace SchoolWebApp.Api.Controllers
                     // comme éteint priverait tout le monde du temps réel.
                     fluxSse = await _reglages.EstActifAsync(FluxSse, true, ct),
 
+                    // LES JEUX, CYCLE PAR CYCLE. Publics parce que c'est
+                    // l'écran de l'enfant qui décide d'afficher sa porte ou
+                    // non, et éteints par défaut : aucun jeu n'existe encore.
+                    jeuxPrimaire = await _reglages.EstActifAsync(JeuxPrimaire, false, ct),
+                    jeuxCollege = await _reglages.EstActifAsync(JeuxCollege, false, ct),
+                    jeuxLycee = await _reglages.EstActifAsync(JeuxLycee, false, ct),
+
                     // LE BANDEAU EST PUBLIC, et il doit l'être : il annonce
                     // une maintenance ou une panne, c'est-à-dire précisément
                     // ce qu'un visiteur non connecté a besoin de savoir avant
@@ -567,6 +600,11 @@ namespace SchoolWebApp.Api.Controllers
                 // montrer « activé » tant que personne n'a posé le réglage,
                 // puisque c'est bien l'état du produit.
                 fluxSse = await _reglages.EstActifAsync(FluxSse, true, ct),
+
+                // Les trois portes des jeux, éteintes par défaut.
+                jeuxPrimaire = await _reglages.EstActifAsync(JeuxPrimaire, false, ct),
+                jeuxCollege = await _reglages.EstActifAsync(JeuxCollege, false, ct),
+                jeuxLycee = await _reglages.EstActifAsync(JeuxLycee, false, ct),
 
                 // Ici le texte part TOUJOURS, allumé ou non : sans quoi on ne
                 // pourrait ni préparer un message à l'avance, ni relire celui

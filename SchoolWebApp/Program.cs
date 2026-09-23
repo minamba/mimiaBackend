@@ -400,6 +400,16 @@ builder.Services.AddSingleton(_ =>
 
 builder.Services.AddScoped<IAgentPedagogiqueService, AgentPedagogiqueService>();
 
+// LES JEUX QUE LE PROFESSEUR PEUT PROPOSER — Camara, le 23/09/2026. Le
+// catalogue est lu une fois depuis la ressource embarquée (singleton) ; le
+// service qui filtre pour un élève lit les réglages et la maîtrise (scoped).
+builder.Services.AddSingleton<SchoolWebApp.Api.Services.Jeux.CatalogueJeux>();
+builder.Services.AddScoped<SchoolWebApp.Api.Services.Jeux.IJeuxService,
+    SchoolWebApp.Api.Services.Jeux.JeuxService>();
+// Et le catalogue se relit depuis le site toutes les heures : publier le
+// front suffit à ce que les professeurs connaissent un nouveau jeu.
+builder.Services.AddHostedService<SchoolWebApp.Api.Workers.CatalogueJeuxWorker>();
+
 // ---------------------------------------------------------------------------
 // Synthèse vocale — la voix des professeurs.
 //

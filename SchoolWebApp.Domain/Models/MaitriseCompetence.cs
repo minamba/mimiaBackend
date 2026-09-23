@@ -30,6 +30,14 @@ namespace SchoolWebApp.Domain.Models
 
         public string? NiveauLibelle { get; set; }
 
+        /// <summary>
+        /// Le rang de l'année de la compétence, 1 (CP) à 12 (terminale) — celui
+        /// de `NiveauScolaire.Ordre`. Sert à comparer une compétence à la classe
+        /// de l'élève sans passer par son code : « d'une classe d'avant », c'est
+        /// un rang plus petit, quelle que soit la voie.
+        /// </summary>
+        public int NiveauOrdre { get; set; }
+
         public double Score { get; set; }
 
         public double Confiance { get; set; }

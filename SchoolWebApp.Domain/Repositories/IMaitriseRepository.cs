@@ -16,6 +16,15 @@ namespace SchoolWebApp.Domain.Repositories
         Task<IEnumerable<MaitriseCompetence>> GetAcquisesAsync(int eleveId, int? matiereId, double seuil, int limite);
 
         /// <summary>
+        /// Les compétences non tenues (score sous <paramref name="seuil"/>)
+        /// d'une année STRICTEMENT antérieure à <paramref name="rangMax"/>,
+        /// dans une matière, la plus fragile en tête. Ce sont celles qu'un jeu
+        /// d'une classe d'avant peut consolider.
+        /// </summary>
+        Task<IEnumerable<MaitriseCompetence>> GetFragilesEnAmontAsync(
+            int eleveId, int matiereId, int rangMax, double seuil, int limite);
+
+        /// <summary>
         /// Notions dont l'échéance de révision espacée est passée, la plus
         /// fragile en tête. Sans cette lecture, `ProchaineRevision` était
         /// calculée à chaque observation et jamais consultée.

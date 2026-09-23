@@ -1,5 +1,6 @@
 using System.Globalization;
 using SchoolWebApp.Api.Services;
+using SchoolWebApp.Api.Services.Jeux;
 using SchoolWebApp.Domain.Models;
 
 namespace SchoolWebApp.Api.Services.Prompts
@@ -2279,6 +2280,33 @@ namespace SchoolWebApp.Api.Services.Prompts
             attaquera les additions. À bientôt, Bilal ! »
             [FIN_SEANCE]
 
+            ### Proposer un jeu — seulement si ton contexte porte « Jeux disponibles »
+
+            Quand la section « Jeux disponibles pour lui » figure dans ce que tu
+            sais de l'élève, ta conclusion peut lui proposer UN jeu, en UNE
+            phrase affirmative, entre le bilan et l'au revoir :
+
+            « Pour t'entraîner d'ici la prochaine fois, fais une partie de
+            La course des tables dans Mes jeux. »
+
+            Puis la balise, sur sa ligne, parmi les blocs de fin, avec
+            l'identifiant recopié EXACTEMENT depuis la liste :
+
+            [JEU]CE1/course-des-tables[/JEU]
+
+            Lequel : d'abord un jeu de sa classe qui travaille la notion du
+            jour ; sinon un jeu « pour consolider » une de ses notions
+            fragiles, en le disant (« pour reprendre les compléments à 10 en
+            douceur ») ; sinon aucun. Un seul par séance. Jamais un jeu absent
+            de la liste — l'application le retirerait, et l'élève lirait une
+            promesse sans bouton. Jamais pendant le cours, jamais à l'annonce
+            des cinq minutes, jamais après un départ. Ce n'est pas une
+            question : l'élève ne répond pas, il part.
+
+            Sans section « Jeux disponibles », tu ne parles JAMAIS de jeux :
+            ils n'existent pas pour cet élève — ni dans ta matière, ni sur son
+            écran.
+
             N'écris cette balise QUE sur un vrai départ. Un élève qui dit
             « attends », « deux secondes », « je reviens » ou « j'ai soif » ne
             s'en va pas : il fait une pause. Dans le doute, ne l'écris pas —
@@ -2729,6 +2757,60 @@ namespace SchoolWebApp.Api.Services.Prompts
                 qui n'existe pas, tu le lui dis simplement, sans balise, et tu
                 relis au même débit s'il le veut.
                 """;
+        }
+
+        /// <summary>
+        /// LES JEUX QUE CE PROFESSEUR A LE DROIT DE PROPOSER À CET ÉLÈVE —
+        /// Camara, le 23/09/2026. La section n'existe que quand il y a quelque
+        /// chose à proposer : c'est SA PRÉSENCE qui autorise le professeur à
+        /// parler de jeux (voir « Proposer un jeu » dans le noyau). La liste
+        /// est déjà filtrée par <see cref="Jeux.JeuxService"/> : matière de la
+        /// séance, classe de l'élève ou en dessous, et en dessous seulement ce
+        /// qui consolide une notion fragile.
+        ///
+        /// Chaque jeu de la classe est suivi des NOTIONS qu'il travaille, en
+        /// toutes lettres : c'est par elles que le professeur reconnaît « la
+        /// notion du jour », pas par une clé technique.
+        /// </summary>
+        public static string JeuxDisponibles(
+            JeuxProposables jeux, IReadOnlyDictionary<string, string> libellesParCode)
+        {
+            var texte = new System.Text.StringBuilder();
+            texte.AppendLine("## Jeux disponibles pour lui, dans ta matière");
+            texte.AppendLine();
+            texte.AppendLine(
+                "À la fin de la séance SEULEMENT — voir « Proposer un jeu » dans tes " +
+                "règles de conclusion —, tu peux lui en proposer UN, en une phrase, " +
+                "puis poser la balise [JEU]identifiant[/JEU] sur sa ligne, l'identifiant " +
+                "recopié exactement. Rien avant la conclusion.");
+            texte.AppendLine();
+
+            if (jeux.DeSaClasse.Count > 0)
+            {
+                texte.AppendLine($"Ceux de sa classe ({jeux.ClasseLibelle}), pour la notion travaillée aujourd'hui :");
+                foreach (var jeu in jeux.DeSaClasse)
+                {
+                    var notions = jeu.Competences
+                        .Select(code => libellesParCode.TryGetValue(code, out var libelle) ? libelle : code)
+                        .Distinct();
+                    texte.AppendLine($"- {jeu.Identifiant} — {jeu.Titre} : {string.Join(" ; ", notions)}");
+                }
+                texte.AppendLine();
+            }
+
+            if (jeux.PourConsolider.Count > 0)
+            {
+                texte.AppendLine("Pour consolider une notion fragile d'une classe d'avant :");
+                foreach (var p in jeux.PourConsolider)
+                {
+                    texte.AppendLine(
+                        $"- {p.Jeu.Identifiant} — {p.Jeu.Titre} ({p.Jeu.Classe}) : {p.Notion} " +
+                        $"(maîtrise : {p.Score.ToString("P0", CultureInfo.GetCultureInfo("fr-FR"))})");
+                }
+                texte.AppendLine();
+            }
+
+            return texte.ToString().TrimEnd();
         }
 
         public static string MarqueurTemps(int secondes, string? cycle = null, int age = 0)
@@ -3438,6 +3520,11 @@ namespace SchoolWebApp.Api.Services.Prompts
             [FICHE] par notion travaillée aujourd'hui, puis [RAPPORT], puis
             [FIN_SEANCE]. Ils ne sont pas prononcés et ne retiennent donc pas
             l'élève.
+
+            Si ton contexte porte « Jeux disponibles pour lui », c'est ici que
+            tu proposes UN jeu, en une phrase, avec sa balise [JEU] — voir
+            « Proposer un jeu » dans tes règles de conclusion. Sinon, pas un
+            mot sur les jeux.
 
             SI C'EST UNE SÉANCE DE PRÉPARATION — le mode de la séance te le
             dit —, SON VERDICT EN FAIT PARTIE, AVANT [FIN_SEANCE] :

@@ -107,6 +107,7 @@ namespace SchoolWebApp.Api.Builders.impl
         private readonly IPlanificateurControleService _planificateur;
         private readonly IAbonnementRepository _abonnements;
         private readonly IFileAlertesQuota _fileAlertes;
+        private readonly Services.Jeux.IJeuxService _jeux;
         private readonly ILogger<ChatViewModelBuilder> _logger;
 
         public ChatViewModelBuilder(
@@ -132,8 +133,10 @@ namespace SchoolWebApp.Api.Builders.impl
             IAbonnementRepository abonnements,
             IFileAlertesQuota fileAlertes,
             IExamenRepository examens,
+            Services.Jeux.IJeuxService jeux,
             ILogger<ChatViewModelBuilder> logger)
         {
+            _jeux = jeux ?? throw new ArgumentNullException(nameof(jeux));
             _examens = examens ?? throw new ArgumentNullException(nameof(examens));
             _fiches = fiches ?? throw new ArgumentNullException(nameof(fiches));
             _dictees = dictees ?? throw new ArgumentNullException(nameof(dictees));
@@ -3046,6 +3049,22 @@ namespace SchoolWebApp.Api.Builders.impl
                     _logger.LogInformation(
                         "Tableau de correction reecrit par le professeur : retire du message persiste (conversation {ConversationId}).",
                         conversationId);
+                }
+
+                // UN JEU HORS LISTE NE PASSE PAS — Camara, le 23/09/2026 : « un
+                // professeur ne va pas proposer des notions de CM2 à un CP ».
+                // La liste que reçoit le professeur est déjà bornée ; ceci est
+                // le filet derrière : une balise forgée, ou recopiée de travers,
+                // est retirée AVANT d'être persistée. La phrase du professeur
+                // reste — c'est la carte qui ne s'affichera pas, et le journal
+                // dit pourquoi.
+                if (Services.Jeux.LecteurJeu.Lire(contenuPersiste) is { } identifiantJeu
+                    && await _jeux.AutoriseAsync(contexte.Eleve, contexte.Conversation, identifiantJeu, ct) is null)
+                {
+                    _logger.LogWarning(
+                        "Jeu propose hors liste ({Identifiant}) dans la conversation {ConversationId} (eleve {EleveId}) : balise retiree.",
+                        identifiantJeu, conversationId, contexte.Eleve.Id);
+                    contenuPersiste = Services.Jeux.LecteurJeu.Retirer(contenuPersiste);
                 }
 
                 await _conversationService.AddMessageAsync(new DomainMessage

@@ -48,6 +48,31 @@ namespace SchoolWebApp.Api.Auth
             // Pas une session enfant : rien à restreindre ici.
             if (claim is null) return;
 
+            // UNE ROUTE ANONYME RESTE ANONYME, MÊME POUR UN ENFANT CONNECTÉ.
+            //
+            // Camara, le 21/09/2026 : « pourquoi le bouton des jeux disparaît
+            // sur la vue enfant ? ». La console l'a dit en une ligne —
+            // `/reglages/publics` répondait 403. Cette route est pourtant
+            // ouverte à tout le monde, y compris à un visiteur sans compte ;
+            // mais le navigateur d'un enfant connecté joint TOUJOURS son jeton,
+            // et la règle « tout est fermé sauf ce qui porte [AutoriseEleve] »
+            // s'appliquait alors à une route qui n'avait rien à fermer.
+            //
+            // LES CONSÉQUENCES DÉPASSAIENT LARGEMENT LES JEUX : un enfant
+            // connecté ne pouvait lire AUCUN réglage public. Il travaillait
+            // donc toujours sur les valeurs par défaut — pas de style Blue Sky,
+            // pas de bandeau d'information, pas de page de maintenance, et le
+            // temps réel coupé. Rien de tout cela ne plantait : ça se contentait
+            // de ne jamais s'afficher, ce qui est bien pire à trouver.
+            //
+            // La règle du filtre est intacte : ce qui est FERMÉ le reste. On ne
+            // fait qu'exclure ce qui n'a jamais été fermé pour personne.
+            var anonyme = contexte.ActionDescriptor.EndpointMetadata
+                .OfType<Microsoft.AspNetCore.Authorization.IAllowAnonymous>()
+                .Any();
+
+            if (anonyme) return;
+
             if (!int.TryParse(claim, out var eleveId))
             {
                 contexte.Result = new ForbidResult();

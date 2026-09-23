@@ -124,6 +124,16 @@ namespace SchoolWebApp.Api.Controllers
                     eleve.Id,
                     eleve.Prenom,
                     eleve.NiveauLibelle,
+
+                    // LE CYCLE VOYAGE AVEC L'ENFANT — depuis le 20/09/2026 :
+                    // c'est lui qui décide si la porte des jeux s'affiche,
+                    // et le libellé de classe seul ne le donne pas.
+                    eleve.NiveauCycle,
+
+                    // ET LA CLASSE ELLE-MÊME : le cycle ouvre la porte des jeux,
+                    // mais c'est la classe qui décide lesquels. Un CP et un CM2
+                    // ne jouent pas au même jeu derrière le même bouton.
+                    eleve.NiveauCode,
                 },
             });
         }

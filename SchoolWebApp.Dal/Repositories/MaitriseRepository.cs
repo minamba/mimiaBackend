@@ -18,6 +18,19 @@ namespace SchoolWebApp.Dal.Repositories
             int eleveId, int? matiereId, double seuil, int limite) =>
             QueryAsync(eleveId, matiereId, m => m.Score < seuil, ascendant: true, limite);
 
+        // LES CLASSES D'AVANT SEULEMENT — Camara, le 23/09/2026, pour les jeux :
+        // « s'il a des difficultés avec des notions antérieures à sa classe et
+        // qu'il existe des jeux dans les classes inférieures, que le professeur
+        // les lui propose ». Par le RANG et non par le code de classe : une
+        // première STMG et une première générale partagent le rang 11, et
+        // leurs notions de CM2 sont les mêmes.
+        public Task<IEnumerable<MaitriseCompetence>> GetFragilesEnAmontAsync(
+            int eleveId, int matiereId, int rangMax, double seuil, int limite) =>
+            QueryAsync(
+                eleveId, matiereId,
+                m => m.Score < seuil && m.Competence!.NiveauScolaire!.Ordre < rangMax,
+                ascendant: true, limite);
+
         // LE PROFESSEUR ET LE PARENT DOIVENT LIRE LA MEME CHOSE.
         //
         // Cette liste sert a ne pas reexpliquer ce qui est su. Une mesure de
@@ -423,6 +436,7 @@ namespace SchoolWebApp.Dal.Repositories
             MatiereLibelle = m.Competence?.Matiere?.Libelle,
             NiveauCode = m.Competence?.NiveauScolaire?.Code,
             NiveauLibelle = m.Competence?.NiveauScolaire?.Libelle,
+            NiveauOrdre = m.Competence?.NiveauScolaire?.Ordre ?? 0,
             Score = m.Score,
             Confiance = m.Confiance,
             DerniereEvaluation = m.DerniereEvaluation,

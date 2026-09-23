@@ -38,4 +38,12 @@
     <ProjectReference Include="..\SchoolWebApp.Dal\SchoolWebApp.Dal.csproj" />
   </ItemGroup>
 
+  <!-- LE CATALOGUE DES JEUX, EMBARQUÉ DANS LA DLL. Généré par le front
+       (`node scripts/jeux-vers-api.mjs`), jamais écrit à la main. Embarqué et
+       non copié à côté : un fichier à côté peut manquer à la copie FileZilla,
+       une ressource dans l'assembly ne le peut pas. Voir CatalogueJeux.cs. -->
+  <ItemGroup>
+    <EmbeddedResource Include="Ressources\jeux.json" LogicalName="SchoolWebApp.Api.Ressources.jeux.json" />
+  </ItemGroup>
+
 </Project>

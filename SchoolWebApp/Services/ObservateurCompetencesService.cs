@@ -1170,6 +1170,10 @@ namespace SchoolWebApp.Api.Services
             // signe, aucune observation ne se rattachait a l oral.
             texte = BaliseEcoute.Replace(texte, "(passage lu a voix haute : ${passage})");
 
+            // La proposition de jeu est une balise pour l'application, pas un
+            // échange : l'observateur n'a rien à en tirer.
+            texte = Jeux.LecteurJeu.Retirer(texte);
+
             texte = texte
                 .Replace("[ARDOISE]", " ")
                 .Replace("[/ARDOISE]", " ")

@@ -76,6 +76,7 @@ namespace SchoolWebApp.Api.Services
         private readonly IBibliothequePlanchesService _bibliotheque;
         private readonly IPlancheRepository _planches;
         private readonly IReglageRepository _reglages;
+        private readonly Jeux.IJeuxService _jeux;
         private readonly IMemoryCache _memoire;
         private readonly OptionsClaude _options;
         private readonly ILogger<AgentPedagogiqueService> _logger;
@@ -87,10 +88,12 @@ namespace SchoolWebApp.Api.Services
             IBibliothequePlanchesService bibliotheque,
             IPlancheRepository planches,
             IReglageRepository reglages,
+            Jeux.IJeuxService jeux,
             IMemoryCache memoire,
             IOptions<OptionsClaude> options,
             ILogger<AgentPedagogiqueService> logger)
         {
+            _jeux = jeux ?? throw new ArgumentNullException(nameof(jeux));
             _reglages = reglages ?? throw new ArgumentNullException(nameof(reglages));
             _memoire = memoire ?? throw new ArgumentNullException(nameof(memoire));
             _client = client ?? throw new ArgumentNullException(nameof(client));
@@ -1024,6 +1027,32 @@ namespace SchoolWebApp.Api.Services
                     "seconde fiche : réécris CELLE-CI en entier, enrichie de la séance du " +
                     "jour, en reprenant son intitulé À L'IDENTIQUE. N'écris une fiche neuve " +
                     "que pour une notion qui ne figure pas dans cette liste.");
+            }
+
+            // LES JEUX QU'IL PEUT PROPOSER — Camara, le 23/09/2026. La section
+            // n'apparaît que s'il y a quelque chose à proposer : porte ouverte
+            // pour son cycle, et des jeux dans cette matière à sa classe ou en
+            // dessous. Son absence est un ordre de silence (voir le noyau).
+            //
+            // ICI, DANS LE CONTEXTE MIS EN CACHE, et non dans le tour : la
+            // conclusion peut tomber sur n'importe quel tour (« au revoir »
+            // de l'élève), le professeur doit avoir la liste sous les yeux dès
+            // le début. Une vingtaine de lignes, lues depuis le cache.
+            //
+            // Les libellés des notions viennent du programme de sa classe,
+            // déjà lu plus haut : le professeur reconnaît « la notion du jour »
+            // par son nom, pas par un code.
+            var jeux = await _jeux.PourLaSeanceAsync(eleve, conversation, ct);
+
+            if (jeux is not null)
+            {
+                var libelles = programme
+                    .Where(p => p.Code is not null && p.Libelle is not null)
+                    .GroupBy(p => p.Code!, StringComparer.OrdinalIgnoreCase)
+                    .ToDictionary(g => g.Key, g => g.First().Libelle!, StringComparer.OrdinalIgnoreCase);
+
+                contexte.AppendLine(PromptsPedagogiques.JeuxDisponibles(jeux, libelles));
+                contexte.AppendLine();
             }
 
             return contexte.ToString();

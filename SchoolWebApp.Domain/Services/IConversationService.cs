@@ -80,6 +80,15 @@ namespace SchoolWebApp.Domain.Services
         Task<IEnumerable<MaitriseCompetence>> GetARevoirAsync(int eleveId, int? matiereId, int limite);
 
         /// <summary>
+        /// Les notions des classes d'avant qui ne sont pas acquises, dans une
+        /// matière — celles qu'un jeu d'une classe inférieure peut consolider.
+        /// « Pas acquise » et non « lacune » : à 65 %, une notion n'est pas une
+        /// lacune, mais elle mérite qu'on la rejoue.
+        /// </summary>
+        Task<IEnumerable<MaitriseCompetence>> GetFragilesEnAmontAsync(
+            int eleveId, int matiereId, int rangMax, int limite);
+
+        /// <summary>
         /// Les notions du programme officiel, pour le niveau et la matière de
         /// la séance.
         ///
