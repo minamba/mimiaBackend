@@ -186,7 +186,39 @@ namespace SchoolWebApp.Domain.Models
 
         public string? Nom { get; set; }
 
+        /// <summary>
+        /// L'adresse d'AFFICHAGE et d'ENVOI — bilans, relances, rappels.
+        ///
+        /// CE N'EST PAS L'IDENTIFIANT DE CONNEXION, et les deux peuvent
+        /// différer : celui-là vit dans la base d'identité, sous
+        /// `IdentityUserId`. Ils sont tenus d'accord par l'administration,
+        /// mais un compte modifié avant le 23/09/2026 peut encore porter deux
+        /// adresses distinctes — c'est le défaut qu'on a corrigé ce jour-là.
+        /// </summary>
         public string? Mail { get; set; }
+
+        /// <summary>
+        /// LE `sub` DU COMPTE SUR LE SERVEUR D'IDENTITÉ — exposé le
+        /// 23/09/2026, et uniquement à l'administration.
+        ///
+        /// POURQUOI IL A FALLU L'EXPOSER. Les trois actions d'identité —
+        /// renommer, réinitialiser le mot de passe, supprimer — désignaient le
+        /// compte PAR SON ADRESSE, faute de mieux : c'était le seul lien que
+        /// l'administration avait entre les deux bases. Or l'adresse est
+        /// justement ce qui peut diverger, et un compte désynchronisé devenait
+        /// alors irréparable depuis l'écran : les trois routes répondaient 404,
+        /// y compris celle qui aurait remis les choses d'aplomb. Le cas s'est
+        /// produit sur un vrai compte.
+        ///
+        /// LE `sub`, LUI, NE BOUGE JAMAIS. C'est la seule clé sûre, et celle
+        /// qui relie déjà la fiche à l'identité (`ParentService.GetOrCreate`).
+        ///
+        /// IL RESTE HORS DES AUTRES RÉPONSES. Ce n'est pas un secret — c'est un
+        /// identifiant interne sans valeur pour qui n'a pas déjà les droits
+        /// d'administration — mais rien d'autre n'en a l'usage, et une donnée
+        /// qu'on ne publie pas est une donnée qu'on n'a pas à défendre.
+        /// </summary>
+        public string? IdentityUserId { get; set; }
 
         public DateTime DateCreation { get; set; }
 

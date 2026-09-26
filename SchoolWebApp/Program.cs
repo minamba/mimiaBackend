@@ -449,6 +449,14 @@ builder.Services.AddSingleton<IFaconneurEcoute, FaconneurEcoute>();
 // service à durée de vie de requête n'aurait personne à qui parler.
 builder.Services.AddSingleton<IDiffusionReglages, DiffusionReglages>();
 
+// LA SALLE D'ATTENTE, en un seul exemplaire pour la même raison : elle tient
+// la liste de ceux qui sont entrés et de ceux qui patientent. Un service à
+// durée de vie de requête recommencerait la file à zéro à chaque appel.
+builder.Services.AddSingleton<
+    SchoolWebApp.Api.Services.Affluence.ISalleDAttente,
+    SchoolWebApp.Api.Services.Affluence.SalleDAttente>();
+builder.Services.AddSingleton<SchoolWebApp.Api.Services.Affluence.ReglageAffluence>();
+
 builder.Services.AddHttpClient<ISyntheseVocaleService, SyntheseVocaleService>(client =>
 {
     // Une phrase courte revient en moins d'une seconde ; au-delà de 30 s c'est
@@ -936,6 +944,15 @@ app.UseAuthorization();
 // APRES L AUTHENTIFICATION : le verrou a besoin de savoir QUI appelle.
 // Avant les points de terminaison : un banni ne doit atteindre aucun d eux.
 app.UseMiddleware<SchoolWebApp.Api.Middleware.VerrouBannissementMiddleware>();
+
+// LE GARDE DE LA SALLE D'ATTENTE, juste après — et l'ordre compte deux fois.
+//
+// Après l'authentification, parce qu'il laisse toujours entrer
+// l'administrateur : celui qui a allumé la salle doit pouvoir l'éteindre.
+//
+// Après le verrou de bannissement, parce qu'un compte fermé n'a pas à occuper
+// une place dans la file avant de se faire refouler.
+app.UseMiddleware<SchoolWebApp.Api.Middleware.GardeAffluenceMiddleware>();
 // ---------------------------------------------------------------------------
 // Le site React, servi depuis wwwroot/ — le contenu de `npm run build`.
 //
@@ -987,14 +1004,36 @@ app.MapControllers();
 // LE TRI SE FAIT SUR L'INTENTION, PAS SUR L'ADRESSE. Un filtre par préfixe
 // serait plus simple à lire mais faux ici : « /admin » est À LA FOIS le
 // préfixe d'AdminController et une route React. Le même chemin sert donc les
-// deux usages, et seul l'en-tête « Accept » les distingue — une navigation
-// demande du text/html, un appel XHR ne le demande jamais.
+// deux usages, et seul l'en-tête « Accept » les distingue.
+//
+// ON RECONNAÎT UN APPEL D'API À CE QU'IL RÉCLAME DU JSON — et non à ce qu'il
+// omet de réclamer du HTML. La nuance a coûté cher.
+//
+// LA PREMIÈRE VERSION RENDAIT 404 À TOUT CE QUI NE DEMANDAIT PAS EXPRESSÉMENT
+// « text/html ». Or un navigateur est à peu près le seul client au monde à le
+// demander. Tous les autres envoient « */* », ou rien du tout — et recevaient
+// donc une 404 sur la PAGE D'ACCUEIL :
+//
+//   — le validateur de Google, qui a refusé le 25/09/2026 de publier une
+//     application OAuth au motif que « https://mimia.fr ne répond pas » ;
+//   — les aperçus de lien des messageries, les sondes de disponibilité, et
+//     une partie des robots d'indexation.
+//
+// Le site était debout, et invisible pour tout ce qui n'était pas un
+// navigateur. Personne ne l'a vu pendant des mois, parce qu'on ne teste
+// jamais son site avec « curl » sans y penser.
+//
+// « application/json » EST LA BONNE SIGNATURE : axios, qui porte tous les
+// appels du front, envoie « application/json, text/plain, */* ». Le cas
+// d'origine — un écran affichant « 0 compte parent » parce qu'une route
+// n'était pas encore déployée — reste donc couvert. Ce qui change, c'est que
+// l'inconnu reçoit désormais la page plutôt qu'un refus.
 app.Use(async (contexte, suivant) =>
 {
     var versLeSpa = contexte.GetEndpoint()?.Metadata.GetMetadata<ReplieVersLeSpa>() is not null;
 
-    if (versLeSpa && !contexte.Request.Headers.Accept.ToString()
-            .Contains("text/html", StringComparison.OrdinalIgnoreCase))
+    if (versLeSpa && contexte.Request.Headers.Accept.ToString()
+            .Contains("application/json", StringComparison.OrdinalIgnoreCase))
     {
         contexte.Response.StatusCode = StatusCodes.Status404NotFound;
 

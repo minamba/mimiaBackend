@@ -973,10 +973,15 @@ namespace SchoolWebApp.Dal.Entities
                 entity.Property(e => e.DateConsultation).HasColumnName("date_consultation");
                 entity.Property(e => e.NiveauScolaireId).HasColumnName("niveau_scolaire_id");
 
-                // Sans collection inverse, comme l'expression orale : on part
-                // toujours de l'élève ET de la matière, jamais de la conversation.
+                // COLLECTION INVERSE DEPUIS L'ÉLÈVE — ajoutée le 24/09/2026.
+                // Elle n'existait pas, faute d'usage : on part toujours de
+                // l'élève ET de la matière. Le rapprochement d'un rapport de
+                // séance à l'expression qu'il a produite se fait par une
+                // sous-requête corrélée DEPUIS le rapport, qui a besoin de ce
+                // chemin — voir RapportEleve.ExpressionEcriteId. La clé
+                // étrangère, elle, ne bouge pas : rien à migrer.
                 entity.HasOne(e => e.Eleve)
-                      .WithMany()
+                      .WithMany(el => el.ExpressionsEcrites)
                       .HasForeignKey(e => e.EleveId)
                       .OnDelete(DeleteBehavior.Cascade);
 
@@ -1033,11 +1038,13 @@ namespace SchoolWebApp.Dal.Entities
                 entity.Property(e => e.NiveauScolaireId).HasColumnName("niveau_scolaire_id");
 
                 // SANS COLLECTION INVERSE, contrairement à la compréhension orale.
-                // Trois entités auraient gagné une propriété de plus pour une
-                // archive qu'on ne lit jamais depuis elles — on part toujours de
-                // l'élève ET de la matière, jamais de la conversation.
+                // La navigation depuis l'élève, ajoutée le 24/09/2026 pour la
+                // même raison que l'expression écrite juste au-dessus : la
+                // fiche rattache chaque document à sa séance. Les deux autres
+                // relations (matière, conversation) restent sans inverse — on
+                // ne lit jamais une archive depuis elles.
                 entity.HasOne(e => e.Eleve)
-                      .WithMany()
+                      .WithMany(el => el.ExpressionsOrales)
                       .HasForeignKey(e => e.EleveId)
                       .OnDelete(DeleteBehavior.Cascade);
 

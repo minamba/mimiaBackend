@@ -55,6 +55,26 @@ namespace SchoolWebApp.Domain.Models
         /// </summary>
         public int? DicteeId { get; set; }
 
+        /// <summary>
+        /// Les trois autres documents que cette séance a pu produire —
+        /// Camara, le 24/09/2026 : « pour les expressions écrites, comme pour
+        /// les dictées, j'aimerais que le parent y ait accès ».
+        ///
+        /// Rapprochés exactement comme la dictée : même élève, même matière,
+        /// et une écriture à moins de deux minutes de la conclusion de
+        /// séance. Null la plupart du temps — un cours ordinaire ne produit
+        /// aucun de ces documents.
+        ///
+        /// LA COMPRÉHENSION ORALE SE CONSULTE MAIS NE S'IMPRIME PAS : elle
+        /// porte un enregistrement audio, et une feuille de papier ne le
+        /// rejoue pas. Camara l'a tranché en même temps.
+        /// </summary>
+        public int? ExpressionEcriteId { get; set; }
+
+        public int? ExpressionOraleId { get; set; }
+
+        public int? ComprehensionOraleId { get; set; }
+
         public DateTime DateCreation { get; set; }
 
         // ------------------------------------------- l'élève, pour l'en-tête

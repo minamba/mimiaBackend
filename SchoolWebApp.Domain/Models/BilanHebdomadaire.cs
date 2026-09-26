@@ -56,6 +56,19 @@ namespace SchoolWebApp.Domain.Models
         public string? SignatureProf { get; set; }
 
         public string? SignatureMatiere { get; set; }
+
+        /// <summary>
+        /// L'avatar du professeur qui signe — ajouté le 23/09/2026, pour son
+        /// GENRE et rien d'autre.
+        ///
+        /// Le bilan est rédigé à la première personne par le professeur et lu
+        /// par le parent : « je suis ravie de ses progrès » sous la signature
+        /// de Salim est le même défaut que celui signalé en séance, mais à
+        /// l'écrit et hors de toute conversation, donc sans personne pour le
+        /// corriger. Le prénom ne suffit pas à trancher le genre ; l'avatar,
+        /// lui, est la clé de la table.
+        /// </summary>
+        public string? SignatureProfAvatar { get; set; }
     }
 
     public class BilanMatiere
@@ -65,6 +78,9 @@ namespace SchoolWebApp.Domain.Models
         public string? Libelle { get; set; }
 
         public string? ProfPrenom { get; set; }
+
+        /// <summary>Le code stable du professeur : il porte sa voix et son genre.</summary>
+        public string? ProfAvatar { get; set; }
 
         public string? ProfCouleur { get; set; }
 

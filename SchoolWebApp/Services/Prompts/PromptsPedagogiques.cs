@@ -31,20 +31,92 @@ namespace SchoolWebApp.Api.Services.Prompts
         /// Un professeur qui change de nom d'une séance à l'autre ne crée
         /// aucun attachement — et c'est l'attachement qui fait revenir.
         /// </summary>
-        public static string Identite(string? prenom, string? matiere) => $"""
-            # Qui tu es
+        /// <summary>
+        /// LE GENRE DE CHAQUE PROFESSEUR — ajouté le 23/09/2026, après le
+        /// signalement d'un parent : « le professeur Salim s'exprime comme s'il
+        /// était une fille (voix masculine mais expression féminine).
+        /// Ex : "on s'est embrouillée toutes les deux" ».
+        ///
+        /// POURQUOI ÇA ARRIVAIT. Rien, nulle part, ne disait au modèle s'il
+        /// incarnait un homme ou une femme. Le français, lui, accorde à chaque
+        /// phrase. Deux choses poussaient alors vers le féminin :
+        ///
+        ///   — le bloc « Accord grammatical » ordonne d'accorder au féminin
+        ///     TOUT ce qui concerne une élève fille. Sans consigne sur
+        ///     lui-même, le modèle étend l'accord à sa propre personne — d'où
+        ///     le « toutes les deux », qui met les deux au féminin ;
+        ///   — le noyau commun contenait lui-même un « qui t'a mal comprise »,
+        ///     envoyé tel quel aux treize professeurs.
+        ///
+        /// LA VOIX, ELLE, ÉTAIT JUSTE : `onyx` à 93 Hz pour Salim. D'où
+        /// l'étrangeté rapportée — une voix d'homme sur une parole de femme.
+        ///
+        /// LA TABLE EST CELLE DES VOIX. Même clé (l'avatar), mêmes treize
+        /// entrées que `SyntheseVocaleService.Voix`, et le même relevé de
+        /// fréquences en dit le genre : sept professeures, six professeurs. Si
+        /// un professeur est ajouté là-bas, il doit l'être ici — un absent
+        /// retombe sur le masculin, qui est le défaut du modèle et n'apprend
+        /// donc rien.
+        /// </summary>
+        private static readonly HashSet<string> ProfesseuresFemmes =
+            new(StringComparer.OrdinalIgnoreCase)
+            {
+                "nora",    // maths
+                "marine",  // anglais
+                "ines",    // SVT
+                "lucia",   // espagnol
+                "elodie",  // sanitaire et social
+                "jeanne",  // arts
+                "camille", // philosophie
+            };
 
-            Tu t'appelles {prenom ?? "Nora"}. Tu es professeur particulier de
-            {matiere ?? "mathématiques"}, et c'est toi qui suis cet élève depuis
-            le début.
+        /// <summary>Ce professeur est-il une femme ? Défaut : non.</summary>
+        public static bool EstUneProfesseure(string? avatar) =>
+            !string.IsNullOrWhiteSpace(avatar) && ProfesseuresFemmes.Contains(avatar.Trim());
 
-            Tu portes ce prénom à chaque séance. Si l'élève te demande qui tu es,
-            tu réponds avec ton prénom et ta matière — simplement, sans expliquer
-            que tu es une intelligence artificielle, sauf s'il pose franchement
-            la question. Dans ce cas tu es honnête, sans en faire un sujet.
+        public static string Identite(string? prenom, string? matiere, string? avatar = null)
+        {
+            var femme = EstUneProfesseure(avatar);
 
-            Tu ne te présentes pas à chaque message. Une fois suffit.
-            """;
+            // DEUX ACCORDS SE CROISENT DANS LA MÊME PHRASE, et c'est tout le
+            // problème : celui de l'élève (bloc « Profil ») et celui du
+            // professeur. Les exemples ci-dessous portent sur des tournures où
+            // le professeur parle DE LUI — c'est là que ça dérapait, jamais sur
+            // l'élève, qui était déjà traité.
+            var accord = femme
+                ? """
+                  Tu es une FEMME. Accorde au féminin tout ce qui TE concerne :
+                  « je ne suis pas sûre », « je me suis trompée », « je t'ai mal
+                  comprise », « je suis contente ». Tu dis « ta professeure ».
+                  """
+                : """
+                  Tu es un HOMME. Accorde au masculin tout ce qui TE concerne :
+                  « je ne suis pas sûr », « je me suis trompé », « je t'ai mal
+                  compris », « je suis content ». Tu dis « ton professeur ».
+
+                  ATTENTION AU PIÈGE DU PLURIEL : quand tu parles de toi ET de
+                  l'élève ensemble, l'accord suit le masculin même si l'élève
+                  est une fille — « on s'est tous les deux emmêlés », jamais
+                  « toutes les deux ». Un parent a signalé l'erreur.
+                  """;
+
+            return $"""
+                # Qui tu es
+
+                Tu t'appelles {prenom ?? "Nora"}. Tu es professeur particulier de
+                {matiere ?? "mathématiques"}, et c'est toi qui suis cet élève depuis
+                le début.
+
+                {accord}
+
+                Tu portes ce prénom à chaque séance. Si l'élève te demande qui tu es,
+                tu réponds avec ton prénom et ta matière — simplement, sans expliquer
+                que tu es une intelligence artificielle, sauf s'il pose franchement
+                la question. Dans ce cas tu es honnête, sans en faire un sujet.
+
+                Tu ne te présentes pas à chaque message. Une fois suffit.
+                """;
+        }
 
         public const string Noyau = """
             Tu es un professeur particulier. Pas un moteur de réponses : un professeur.
@@ -63,8 +135,8 @@ namespace SchoolWebApp.Api.Services.Prompts
             # Ta seconde règle absolue : tu ne hausses JAMAIS le ton
 
             Quoi qu'il arrive dans la séance — un élève qui répète la même erreur,
-            qui semble ne pas t'écouter, qui te contredit à tort, qui t'a mal
-            comprise ou que tu as mal comprise toi-même — ton ton reste DOUX,
+            qui semble ne pas t'écouter, qui te contredit à tort, un malentendu
+            dans un sens ou dans l'autre — ton ton reste DOUX,
             PATIENT et CHALEUREUX. Sans exception, sans agacement, même léger,
             même une seule fois.
 

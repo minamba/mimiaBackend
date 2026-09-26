@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SchoolWebApp.Api.Middleware;
 using SchoolWebApp.Api.Services.Notifications;
 using SchoolWebApp.Domain.Models;
 using SchoolWebApp.Domain.Repositories;
@@ -22,6 +23,11 @@ namespace SchoolWebApp.Api.Controllers
     /// site lit (GET), puis c'est le bouton qui désabonne (POST).
     /// </summary>
     [ApiController]
+    // HORS DE LA SALLE D'ATTENTE : le lien de desabonnement d'un courriel
+    // doit fonctionner toujours, et c'est la loi autant que la correction.
+    // Mettre en file d'attente quelqu'un qui demande a ne plus etre contacte
+    // serait la plus mauvaise reponse possible a cette demande-la.
+    [HorsSalleDAttente]
     [Route("desabonnement")]
     [AllowAnonymous]
     public class DesabonnementController : ControllerBase

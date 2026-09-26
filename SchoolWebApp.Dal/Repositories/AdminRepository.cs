@@ -1149,6 +1149,8 @@ FROM sys.database_files;";
                     Prenom = p.Prenom,
                     Nom = p.Nom,
                     Mail = p.Mail,
+                    // La clé des actions d'identité — voir `ParentAdmin`.
+                    IdentityUserId = p.IdentityUserId,
                     DateCreation = p.DateCreation,
                     NombreEleves = p.Eleves.Count,
                     NombreRequetes = p.Eleves

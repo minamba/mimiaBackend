@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SchoolWebApp.Api.Middleware;
 using SchoolWebApp.Api.Services;
 using SchoolWebApp.Api.Services.Paiement;
 using SchoolWebApp.Domain.Repositories;
@@ -300,6 +301,27 @@ namespace SchoolWebApp.Api.Controllers
         public const string FluxSse = "FLUX_SSE";
 
         /// <summary>
+        /// LA SALLE D'ATTENTE — voulue par Camara le 25/09/2026 : « mettre les
+        /// personnes dans une file d'attente si le serveur ne supporte pas ».
+        ///
+        /// Allumée, le site n'admet qu'un nombre fixé de visiteurs à la fois
+        /// (<see cref="SchoolWebApp.Api.Services.Affluence.ReglageAffluence.ClePlaces"/>)
+        /// et montre aux suivants leur rang dans la file. Le détail de la
+        /// mécanique est dans <c>Services/Affluence/SalleDAttente.cs</c>.
+        ///
+        /// ÉTEINTE PAR DÉFAUT, et elle doit le rester tant que le test de
+        /// charge n'a pas eu lieu. Allumée avec un plafond choisi au jugé, elle
+        /// ferait patienter des parents que la machine aurait servis sans
+        /// peine — on aurait fabriqué la file qu'on voulait éviter.
+        ///
+        /// SON VRAI USAGE EST LE JOUR DE L'AFFLUX : on l'allume quand le site
+        /// souffre, on l'éteint quand il respire. C'est un robinet, pas un
+        /// réglage qu'on pose une fois pour toutes.
+        /// </summary>
+        public const string Affluence =
+            SchoolWebApp.Api.Services.Affluence.ReglageAffluence.CleActive;
+
+        /// <summary>
         /// LES JEUX, CYCLE PAR CYCLE — voulu par Camara le 20/09/2026.
         ///
         /// TROIS INTERRUPTEURS ET NON UN, parce que les jeux n'arriveront pas
@@ -334,7 +356,7 @@ namespace SchoolWebApp.Api.Controllers
         private static readonly string[] ClesConnues =
             [ModeTest, CompteTest, EssaisOuverts, TachesDeFond, Maintenance, VoixDeSecours,
              OffreLancement, OffreLancementBandeau, BlueSky, ModeDeveloppeur, FluxSse,
-             JeuxPrimaire, JeuxCollege, JeuxLycee];
+             JeuxPrimaire, JeuxCollege, JeuxLycee, Affluence];
 
         private readonly IReglageRepository _reglages;
         private readonly ILogger<ReglagesController> _logger;
@@ -466,6 +488,10 @@ namespace SchoolWebApp.Api.Controllers
         }
 
         /// <summary>Ce que le navigateur a besoin de savoir, sans être connecté.</summary>
+        // HORS DE LA SALLE D'ATTENTE : c'est la route qui habille la page,
+        // maintenance et bandeau compris. La refuser laisserait l'ecran
+        // d'attente lui-meme sans style et sans message.
+        [HorsSalleDAttente]
         [HttpGet("publics")]
         [AllowAnonymous]
         [SwaggerResponse(200, "Les drapeaux publics.")]
@@ -605,6 +631,17 @@ namespace SchoolWebApp.Api.Controllers
                 jeuxPrimaire = await _reglages.EstActifAsync(JeuxPrimaire, false, ct),
                 jeuxCollege = await _reglages.EstActifAsync(JeuxCollege, false, ct),
                 jeuxLycee = await _reglages.EstActifAsync(JeuxLycee, false, ct),
+
+                // LA SALLE D'ATTENTE ET SON PLAFOND. Le nombre part avec
+                // l'interrupteur : un plafond qu'on ne voit pas est un
+                // plafond qu'on allume sans savoir ce qu'on allume.
+                affluence = await _reglages.EstActifAsync(Affluence, false, ct),
+                affluencePlaces = int.TryParse(
+                    await _reglages.LireAsync(
+                        SchoolWebApp.Api.Services.Affluence.ReglageAffluence.ClePlaces, ct),
+                    out var places) && places > 0
+                        ? places
+                        : SchoolWebApp.Api.Services.Affluence.ReglageAffluence.PlacesParDefaut,
 
                 // Ici le texte part TOUJOURS, allumé ou non : sans quoi on ne
                 // pourrait ni préparer un message à l'avance, ni relire celui
@@ -829,7 +866,10 @@ namespace SchoolWebApp.Api.Controllers
         [SwaggerResponse(400, "Clé inconnue.")]
         public async Task<IActionResult> Definir(
             string cle, [FromBody] DefinirReglageRequest requete,
-            [FromServices] IDiffusionReglages diffusion, CancellationToken ct)
+            [FromServices] IDiffusionReglages diffusion,
+            [FromServices] SchoolWebApp.Api.Services.Affluence.ReglageAffluence affluence,
+            [FromServices] SchoolWebApp.Api.Services.Affluence.ISalleDAttente salle,
+            CancellationToken ct)
         {
             var connue = ClesConnues.FirstOrDefault(
                 k => string.Equals(cle, k, StringComparison.OrdinalIgnoreCase));
@@ -846,6 +886,21 @@ namespace SchoolWebApp.Api.Controllers
             // resterait. Ils sont donc prévenus, puis coupés — jamais coupés
             // sans savoir pourquoi.
             if (connue == FluxSse) diffusion.DefinirActif(requete.Actif);
+
+            // LA SALLE S'OUVRE ET SE FERME TOUT DE SUITE, sans attendre la
+            // relecture des dix secondes. Le geste doit se voir : un
+            // administrateur qui coupe la file au moment où elle retient des
+            // gens à tort ne doit pas se demander si son clic a pris.
+            //
+            // ET ON VIDE LA SALLE EN L'ÉTEIGNANT. Sans cela, les places
+            // occupées survivraient à l'extinction, et la rallumer une heure
+            // plus tard ferait patienter les nouveaux venus derrière des
+            // fantômes.
+            if (connue == Affluence)
+            {
+                affluence.Oublier();
+                if (!requete.Actif) salle.Ouvrir();
+            }
 
             _logger.LogWarning(
                 "Reglage {Cle} {Etat} par un administrateur.",

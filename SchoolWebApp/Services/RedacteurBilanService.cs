@@ -121,6 +121,19 @@ namespace SchoolWebApp.Api.Services
                 _ => "Le sexe de l'élève est inconnu : évite les accords.",
             };
 
+            // ET CELUI DU PROFESSEUR, qui écrit à la première personne. Sans
+            // cette ligne, le modèle accorde sur l'élève ou sur rien : le
+            // parent lisait « je suis ravie de ses progrès » signé Salim.
+            // Même table que les prompts de séance — voir
+            // `PromptsPedagogiques.EstUneProfesseure`.
+            var accordProf =
+                Prompts.PromptsPedagogiques.EstUneProfesseure(bilan.SignatureProfAvatar)
+                    ? "Tu es une FEMME : accorde au féminin tout ce qui TE concerne "
+                      + "(« je suis ravie », « je l'ai trouvée appliquée »)."
+                    : "Tu es un HOMME : accorde au masculin tout ce qui TE concerne "
+                      + "(« je suis ravi », « je l'ai trouvé appliqué »). Cet accord "
+                      + "est le tien, il ne dépend pas de celui de l'élève.";
+
             // `$$` et non `$` : le format de réponse contient des accolades JSON,
             // qui seraient prises pour des interpolations. Ici l'interpolation
             // s'écrit {{ }} et une accolade seule reste littérale.
@@ -129,6 +142,8 @@ namespace SchoolWebApp.Api.Services
                 {{bilan.SignatureMatiere}} de {{bilan.Prenom}}, {{bilan.Age}} ans, en
                 {{bilan.NiveauLibelle}}. Tu écris le bilan hebdomadaire destiné à
                 ses parents.
+
+                {{accordProf}}
 
                 {{accord}}
 

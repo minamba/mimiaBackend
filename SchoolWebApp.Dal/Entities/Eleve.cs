@@ -146,6 +146,25 @@ namespace SchoolWebApp.Dal.Entities
 
         public virtual ICollection<ComprehensionOrale> ComprehensionsOrales { get; set; } = new List<ComprehensionOrale>();
 
+        /// <summary>
+        /// Les expressions écrites et orales, ajoutées le 24/09/2026 pour que
+        /// la fiche de l'élève puisse les rattacher à la séance qui les a
+        /// produites — comme elle le fait déjà pour les dictées.
+        ///
+        /// ELLES N'AVAIENT PAS DE COLLECTION INVERSE, et c'était assumé : on
+        /// part toujours de l'élève ET de la matière, jamais de l'élève seul.
+        /// Le rapprochement d'un rapport à son document, lui, se fait dans une
+        /// sous-requête corrélée depuis le rapport — il lui faut donc un
+        /// chemin de navigation depuis l'élève, exactement comme Dictees.
+        ///
+        /// AUCUN CHANGEMENT DE SCHÉMA : la clé étrangère existe déjà en base
+        /// (eleve_id), seule la navigation inverse est déclarée. Rien à
+        /// migrer.
+        /// </summary>
+        public virtual ICollection<ExpressionEcrite> ExpressionsEcrites { get; set; } = new List<ExpressionEcrite>();
+
+        public virtual ICollection<ExpressionOrale> ExpressionsOrales { get; set; } = new List<ExpressionOrale>();
+
         public virtual ICollection<EvaluationPrevue> EvaluationsPrevues { get; set; } = new List<EvaluationPrevue>();
 
         public virtual ICollection<ControleScolaire> ControlesScolaires { get; set; } = new List<ControleScolaire>();

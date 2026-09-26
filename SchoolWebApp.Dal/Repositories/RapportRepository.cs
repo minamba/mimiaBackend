@@ -243,6 +243,27 @@ namespace SchoolWebApp.Dal.Repositories
                                 && d.DateMiseAJour <= r.DateCreation.AddMinutes(2))))
                     .Select(d => (int?)d.Id)
                     .FirstOrDefault(),
+
+                ExpressionEcriteId = r.Eleve!.ExpressionsEcrites
+                    .Where(x => x.MatiereId == r.MatiereId
+                        && x.DateCreation >= r.DateCreation.AddMinutes(-2)
+                        && x.DateCreation <= r.DateCreation.AddMinutes(2))
+                    .Select(x => (int?)x.Id)
+                    .FirstOrDefault(),
+
+                ExpressionOraleId = r.Eleve!.ExpressionsOrales
+                    .Where(x => x.MatiereId == r.MatiereId
+                        && x.DateCreation >= r.DateCreation.AddMinutes(-2)
+                        && x.DateCreation <= r.DateCreation.AddMinutes(2))
+                    .Select(x => (int?)x.Id)
+                    .FirstOrDefault(),
+
+                ComprehensionOraleId = r.Eleve!.ComprehensionsOrales
+                    .Where(x => x.MatiereId == r.MatiereId
+                        && x.DateCreation >= r.DateCreation.AddMinutes(-2)
+                        && x.DateCreation <= r.DateCreation.AddMinutes(2))
+                    .Select(x => (int?)x.Id)
+                    .FirstOrDefault(),
             };
 
         private static readonly Expression<Func<RapportSeance, RapportEleve>> DetailProjection =
@@ -271,6 +292,27 @@ namespace SchoolWebApp.Dal.Repositories
                             || (d.DateMiseAJour >= r.DateCreation.AddMinutes(-2)
                                 && d.DateMiseAJour <= r.DateCreation.AddMinutes(2))))
                     .Select(d => (int?)d.Id)
+                    .FirstOrDefault(),
+
+                ExpressionEcriteId = r.Eleve.ExpressionsEcrites
+                    .Where(x => x.MatiereId == r.MatiereId
+                        && x.DateCreation >= r.DateCreation.AddMinutes(-2)
+                        && x.DateCreation <= r.DateCreation.AddMinutes(2))
+                    .Select(x => (int?)x.Id)
+                    .FirstOrDefault(),
+
+                ExpressionOraleId = r.Eleve.ExpressionsOrales
+                    .Where(x => x.MatiereId == r.MatiereId
+                        && x.DateCreation >= r.DateCreation.AddMinutes(-2)
+                        && x.DateCreation <= r.DateCreation.AddMinutes(2))
+                    .Select(x => (int?)x.Id)
+                    .FirstOrDefault(),
+
+                ComprehensionOraleId = r.Eleve.ComprehensionsOrales
+                    .Where(x => x.MatiereId == r.MatiereId
+                        && x.DateCreation >= r.DateCreation.AddMinutes(-2)
+                        && x.DateCreation <= r.DateCreation.AddMinutes(2))
+                    .Select(x => (int?)x.Id)
                     .FirstOrDefault(),
             };
 

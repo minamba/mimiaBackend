@@ -316,8 +316,11 @@ namespace SchoolWebApp.Api.Services
                 // dans le deuxième préfixe, avec la spécialité.
                 new()
                 {
+                    // L'AVATAR EN TROISIÈME : c'est lui qui porte le genre du
+                    // professeur, et non le prénom — l'avatar est le code
+                    // stable, celui qui sert déjà à choisir sa voix.
                     Text = PromptsPedagogiques.Identite(
-                        conversation.ProfPrenom, conversation.MatiereLibelle)
+                        conversation.ProfPrenom, conversation.MatiereLibelle, conversation.ProfAvatar)
                 },
 
                 // La spécialité porte le catalogue des figures ; le bloc des

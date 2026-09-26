@@ -169,6 +169,9 @@ namespace SchoolWebApp.Dal.Repositories
                     m.ConversationId,
                     MatiereLibelle = m.Conversation.Matiere!.Libelle,
                     ProfPrenom = m.Conversation.Matiere.ProfPrenom,
+                    // Le genre du professeur s'en déduit : le bilan est écrit à
+                    // la première personne, et le français accorde.
+                    ProfAvatar = m.Conversation.Matiere.ProfAvatar,
                     ProfCouleur = m.Conversation.Matiere.ProfCouleur,
                     m.Role,
                     m.Contenu,
@@ -192,6 +195,7 @@ namespace SchoolWebApp.Dal.Repositories
                         MatiereId = groupe.Key,
                         Libelle = premier.MatiereLibelle,
                         ProfPrenom = premier.ProfPrenom,
+                        ProfAvatar = premier.ProfAvatar,
                         ProfCouleur = premier.ProfCouleur,
                         NombreSeances = groupe.Select(m => m.ConversationId).Distinct().Count(),
                         NombreEchanges = groupe.Count(m => m.Role == "assistant"),
@@ -211,6 +215,7 @@ namespace SchoolWebApp.Dal.Repositories
 
                 var principale = bilan.Matieres.FirstOrDefault();
                 bilan.SignatureProf = principale?.ProfPrenom;
+                bilan.SignatureProfAvatar = principale?.ProfAvatar;
                 bilan.SignatureMatiere = principale?.Libelle;
             }
 

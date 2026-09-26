@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SchoolWebApp.Api.Middleware;
 using SchoolWebApp.Api.Builders;
 using SchoolWebApp.Api.Services.PiecesJointes;
 using SchoolWebApp.Api.Services.ScanMobile;
@@ -19,6 +20,11 @@ namespace SchoolWebApp.Api.Controllers
     /// </summary>
     [ApiController]
     [AllowAnonymous]
+    // HORS DE LA SALLE D'ATTENTE : le telephone qui scanne une copie est un
+    // SECOND appareil, sans le billet obtenu sur l'ordinateur. Le garder
+    // dehors couperait le scan en plein milieu, pour un parent deja entre —
+    // il a passe la porte, sa piece jointe la passe avec lui.
+    [HorsSalleDAttente]
     [Route("scan-mobile")]
     public class ScanMobileController : ControllerBase
     {

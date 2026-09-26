@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SchoolWebApp.Api.Middleware;
 using SchoolWebApp.Api.Services.Paiement;
 using Stripe;
 using Swashbuckle.AspNetCore.Annotations;
@@ -15,6 +16,11 @@ namespace SchoolWebApp.Api.Controllers
     /// secret que seuls Stripe et nous connaissons.
     /// </summary>
     [ApiController]
+    // HORS DE LA SALLE D'ATTENTE : ce sont les rappels de Stripe, pas des
+    // visiteurs. Un paiement encaissé dont l'avis n'arrive jamais laisse un
+    // parent débité sans abonnement — Stripe réessaie quelques fois, puis
+    // abandonne. L'argent ne fait pas la queue.
+    [HorsSalleDAttente]
     [Route("stripe")]
     public class StripeController : Controller
     {
