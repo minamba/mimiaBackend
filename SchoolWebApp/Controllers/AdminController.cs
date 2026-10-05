@@ -415,8 +415,34 @@ namespace SchoolWebApp.Api.Controllers
         [HttpGet("fournisseurs")]
         [SwaggerResponse(200, "L'état des fournisseurs d'IA.", typeof(IEnumerable<SchoolWebApp.Api.Services.Fournisseurs.EtatFournisseur>))]
         public IActionResult GetFournisseurs(
-            [FromServices] SchoolWebApp.Api.Services.Fournisseurs.EtatFournisseurs etats) =>
-            Ok(etats.Tous());
+            [FromServices] SchoolWebApp.Api.Services.Fournisseurs.EtatFournisseurs etats,
+            [FromServices] SchoolWebApp.Api.Services.Voix.CompteurGemini compteur,
+            [FromServices] IOptions<SchoolWebApp.Api.Services.Voix.OptionsVoix> voix) =>
+            Ok(AvecJauges(etats.Tous(), compteur, voix.Value));
+
+        /// <summary>
+        /// Ajoute à la carte de Google ses jauges de quota, lues à l'instant — le
+        /// reste de l'état vient de la sonde, qui ne passe que toutes les trente
+        /// minutes ; les jauges, elles, bougent à chaque phrase.
+        /// </summary>
+        private static IEnumerable<SchoolWebApp.Api.Services.Fournisseurs.EtatFournisseur> AvecJauges(
+            IEnumerable<SchoolWebApp.Api.Services.Fournisseurs.EtatFournisseur> etats,
+            SchoolWebApp.Api.Services.Voix.CompteurGemini compteur,
+            SchoolWebApp.Api.Services.Voix.OptionsVoix voix)
+        {
+            var maintenant = DateTime.UtcNow;
+
+            return etats.Select(e =>
+                e.Code == SchoolWebApp.Api.Services.Fournisseurs.EtatFournisseurs.Gemini
+                && !string.IsNullOrWhiteSpace(voix.GeminiApiKey)
+                    ? e with
+                    {
+                        Jauges = compteur.Jauges(voix, maintenant),
+                        RefusDuJour = compteur.RefusDuJour(maintenant),
+                        BloqueJusqua = compteur.BloqueJusqua(maintenant),
+                    }
+                    : e).ToList();
+        }
 
         /// <summary>
         /// Vérifie tout de suite, sans attendre le worker — le bouton qu'on
@@ -426,8 +452,10 @@ namespace SchoolWebApp.Api.Controllers
         [SwaggerResponse(200, "L'état des fournisseurs d'IA, à l'instant.", typeof(IEnumerable<SchoolWebApp.Api.Services.Fournisseurs.EtatFournisseur>))]
         public async Task<IActionResult> VerifierFournisseurs(
             [FromServices] SchoolWebApp.Api.Services.Fournisseurs.SurveillanceFournisseurs surveillance,
+            [FromServices] SchoolWebApp.Api.Services.Voix.CompteurGemini compteur,
+            [FromServices] IOptions<SchoolWebApp.Api.Services.Voix.OptionsVoix> voix,
             CancellationToken ct) =>
-            Ok(await surveillance.VerifierAsync(ct));
+            Ok(AvecJauges(await surveillance.VerifierAsync(ct), compteur, voix.Value));
 
         /// <summary>
         /// Les bornes d'une période nommée, décalée d'autant de crans.

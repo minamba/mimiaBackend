@@ -111,6 +111,15 @@ namespace SchoolWebApp.Api.Services.Voix
             // Camille enseigne la philosophie en terminale seulement — la moins
             // entendue des sept, et elle n'avait aucune voix à elle jusqu'ici.
             ["camille"] = "ballad", // philosophie — 161-174 Hz
+
+            // LES QUATRE PROFESSEURS DE LANGUE DU 04/10/2026. Les treize timbres
+            // d'OpenAI sont tous pris : chacun double un collègue d'une autre
+            // matière, du même genre. Non mesurés — la voix en service est celle
+            // de Gemini, et ces langues naissent masquées.
+            ["jonas"] = "echo",     // allemand — double Yann
+            ["giulia"] = "marin",   // italien — double Lucía
+            ["lin"] = "sage",       // chinois — double Inès
+            ["youssef"] = "onyx",   // arabe — double Salim
         };
 
         // IL MANQUE UNE VOIX DE FEMME, ET C'EST ARITHMÉTIQUE. Sept professeures
@@ -160,6 +169,12 @@ namespace SchoolWebApp.Api.Services.Voix
             // `cedar` n'existe pas sur `tts-1` : le timbre masculin encore
             // libre de cette table le remplace. Non mesuré.
             ["minamba"] = "ash",
+
+            // Les professeurs de langue du 04/10/2026, au même genre. Non mesurés.
+            ["jonas"] = "echo",
+            ["giulia"] = "sage",
+            ["lin"] = "nova",
+            ["youssef"] = "onyx",
         };
 
         private const string VoixParDefaut = "coral";
@@ -187,14 +202,20 @@ namespace SchoolWebApp.Api.Services.Voix
         private readonly IReglageRepository _reglages;
         private readonly IFaconneurEcoute _faconneur;
         private readonly ILogger<SyntheseVocaleService> _logger;
+        private readonly CompteurGemini _compteurGemini;
+        private readonly IJournalClaudeRepository _journal;
 
         public SyntheseVocaleService(
             HttpClient http,
             IOptions<OptionsVoix> options,
             IReglageRepository reglages,
             IFaconneurEcoute faconneur,
-            ILogger<SyntheseVocaleService> logger)
+            ILogger<SyntheseVocaleService> logger,
+            CompteurGemini compteurGemini,
+            IJournalClaudeRepository journal)
         {
+            _compteurGemini = compteurGemini ?? throw new ArgumentNullException(nameof(compteurGemini));
+            _journal = journal ?? throw new ArgumentNullException(nameof(journal));
             _http = http ?? throw new ArgumentNullException(nameof(http));
             _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
             _reglages = reglages ?? throw new ArgumentNullException(nameof(reglages));
@@ -227,14 +248,58 @@ namespace SchoolWebApp.Api.Services.Voix
             }
         }
 
+        /// <summary>
+        /// Gemini prête-t-il sa voix ? L'interrupteur de l'administration
+        /// (<c>VOIX_GEMINI</c>), relu à chaque phrase ; sans valeur enregistrée,
+        /// la configuration (<c>Voix:Fournisseur</c>). Jamais sans clé.
+        /// </summary>
+        private async Task<bool> GeminiAsync(CancellationToken ct)
+        {
+            if (string.IsNullOrWhiteSpace(_options.GeminiApiKey)) return false;
+
+            // LE DISJONCTEUR : Google a dit non, et le dira jusqu'à la remise à
+            // zéro. On ne l'appelle plus d'ici là — et la réponse est notée
+            // OpenAI, ce qui est la vérité pour le coût. Voir CompteurGemini.Bloque.
+            if (_compteurGemini.Bloque(DateTime.UtcNow)) return false;
+
+            var parDefaut = _options.Fournisseur.Equals("gemini", StringComparison.OrdinalIgnoreCase);
+
+            try
+            {
+                return await _reglages.EstActifAsync("VOIX_GEMINI", parDefaut, ct);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Lecture du fournisseur de voix impossible : on suit la configuration.");
+                return parDefaut;
+            }
+        }
+
         public bool Disponible => !string.IsNullOrWhiteSpace(_options.ApiKey);
+
+        public async Task<string> ModeleCourantAsync(CancellationToken ct = default)
+        {
+            if (await SecoursAsync(ct)) return ModeleSecours;
+            return await GeminiAsync(ct) ? _options.GeminiModele : _options.Modele;
+        }
 
         public async Task<byte[]> SynthetiserAsync(
             string texte, string? avatar, int age, bool dictee = false,
             string? langue = null, string? vitesse = null, CancellationToken ct = default)
         {
-            using var reponse = await AppelerAsync(texte, avatar, age, dictee, langue, vitesse, ct);
-            return await reponse.Content.ReadAsByteArrayAsync(ct);
+            var (reponse, modele) = await AppelerAsync(texte, avatar, age, dictee, langue, vitesse, ct);
+            using var _ = reponse;
+            var pcm = await reponse.Content.ReadAsByteArrayAsync(ct);
+
+            // Payé comme le reste, journalisé comme le reste — sans famille :
+            // ce chemin sert aux sondes et aux fichiers, pas aux séances.
+            await _journal.EnregistrerAsync(
+                OrigineVoix, modele,
+                entree: (texte.Length + 3) / 4,
+                sortie: (long)Math.Round(pcm.LongLength / (double)OctetsParSecondePcm / 60d * JetonsAudioParMinuteOpenAI),
+                0, 0, reference: null, CancellationToken.None);
+
+            return pcm;
         }
 
         public async Task<byte[]> SynthetiserWavAsync(
@@ -287,9 +352,51 @@ namespace SchoolWebApp.Api.Services.Voix
         public async Task CopierAudioAsync(
             string texte, string? avatar, int age, Stream destination,
             bool dictee = false, string? langue = null, string? vitesse = null,
-            CancellationToken ct = default)
+            string? reference = null, CancellationToken ct = default)
         {
-            using var reponse = await AppelerAsync(texte, avatar, age, dictee, langue, vitesse, ct);
+            // LA VOIX DE GOOGLE, À L'ESSAI — voir SyntheseGemini. Le mode de
+            // secours garde la main : il existe pour les jours où la voix
+            // principale déraille, quelle qu'elle soit.
+            if (await GeminiAsync(ct) && !await SecoursAsync(ct))
+            {
+                var propre = texte.Trim();
+                if (propre.Length > _options.LongueurMax) propre = propre[.._options.LongueurMax];
+
+                if (!dictee && langue is not null && vitesse is "lent" or "tres_lent" or "rapide")
+                {
+                    propre = await _faconneur.FaconnerAsync(propre, langue, vitesse, ct);
+                }
+
+                // LA GARDE DE REDITE, quand elle a un sens pour ce passage —
+                // voir GardeRedite. La transcription passe par la clé OpenAI.
+                var garde = new GardeRedite(_http, _options.ApiKey, _logger);
+
+                var usage = await SyntheseGemini.CopierAsync(
+                    _http, _options.GeminiApiKey!, _options.GeminiModele, propre, avatar, age,
+                    dictee, langue, vitesse, destination, _logger, ct, _compteurGemini,
+                    garde.Surveille(propre, dictee, langue) ? garde : null);
+
+                if (usage.Ecrit)
+                {
+                    // Les jetons que Google a comptés lui-même : c'est ce que
+                    // l'administration additionne, et ce que la facture dira.
+                    //
+                    // ET LE VERDICT DE LA GARDE DE REDITE, SUR LA MÊME LIGNE —
+                    // Camara, le 04/10/2026 : « pour que tu puisses faire un
+                    // contrôle dessus ». Il ne s'écrivait que dans la console.
+                    // Les deux colonnes de cache ne servent pas à la voix (son
+                    // coût ne lit que l'entrée et la sortie) : elles portent, en
+                    // CENTIÈMES DE SECONDE, le son relu puis le son retiré. Voir
+                    // `AppelClaude` pour la lecture.
+                    await _journal.EnregistrerAsync(
+                        OrigineVoix, _options.GeminiModele, usage.JetonsEntree, usage.JetonsSortie,
+                        garde.CentiemesRelus, garde.CentiemesRetires, reference, CancellationToken.None);
+                    return;
+                }
+            }
+
+            var (reponse, modele) = await AppelerAsync(texte, avatar, age, dictee, langue, vitesse, ct);
+            using var _ = reponse;
             await using var flux = await reponse.Content.ReadAsStreamAsync(ct);
 
             // Petit tampon et vidange explicite : avec les 81 920 octets par
@@ -297,13 +404,44 @@ namespace SchoolWebApp.Api.Services.Voix
             // qu'à la toute fin — exactement ce qu'on cherche à éviter.
             var tampon = new byte[4096];
             int lus;
+            var octets = 0L;
 
-            while ((lus = await flux.ReadAsync(tampon, ct)) > 0)
+            try
             {
-                await destination.WriteAsync(tampon.AsMemory(0, lus), ct);
-                await destination.FlushAsync(ct);
+                while ((lus = await flux.ReadAsync(tampon, ct)) > 0)
+                {
+                    await destination.WriteAsync(tampon.AsMemory(0, lus), ct);
+                    await destination.FlushAsync(ct);
+                    octets += lus;
+                }
+            }
+            finally
+            {
+                // OPENAI NE DIT PAS CE QU'IL FACTURE : l'API de voix ne renvoie
+                // aucun usage. On le déduit de ce qu'on a reçu — les secondes
+                // d'audio, au ratio qu'OpenAI publie (0,015 $ la minute pour
+                // 12 $ le million de jetons audio : 1 250 jetons par minute) —
+                // et du texte envoyé, à quatre caractères le jeton. Mesuré sur
+                // le son, plus deviné sur le nombre de tours.
+                //
+                // DANS LE `finally` : une phrase coupée par l'élève a été
+                // produite, donc facturée, jusqu'à la coupure.
+                await _journal.EnregistrerAsync(
+                    OrigineVoix, modele,
+                    entree: (texte.Length + 3) / 4,
+                    sortie: (long)Math.Round(octets / (double)OctetsParSecondePcm / 60d * JetonsAudioParMinuteOpenAI),
+                    0, 0, reference, CancellationToken.None);
             }
         }
+
+        /// <summary>L'origine, dans le journal des appels, d'un appel de synthèse.</summary>
+        private const string OrigineVoix = "voix";
+
+        /// <summary>24 kHz, 16 bits, mono : le PCM que les deux fournisseurs rendent.</summary>
+        private const int OctetsParSecondePcm = FrequencePcm * CanauxPcm * BitsParEchantillonPcm / 8;
+
+        /// <summary>Le ratio publié par OpenAI pour ses modèles de voix.</summary>
+        private const double JetonsAudioParMinuteOpenAI = 1250d;
 
         /// <summary>
         /// L'appel à OpenAI, sans lire le corps.
@@ -312,7 +450,7 @@ namespace SchoolWebApp.Api.Services.Voix
         /// attend la réponse ENTIÈRE avant de rendre la main, ce qui annulerait
         /// tout le bénéfice de la recopie au fil de l'eau.
         /// </summary>
-        private async Task<HttpResponseMessage> AppelerAsync(
+        private async Task<(HttpResponseMessage Reponse, string Modele)> AppelerAsync(
             string texte, string? avatar, int age, bool dictee, string? langue,
             string? vitesse, CancellationToken ct)
         {
@@ -386,7 +524,7 @@ namespace SchoolWebApp.Api.Services.Voix
                 model = _options.Modele,
                 input = propre,
                 voice = ChoisirVoix(avatar, false),
-                instructions = Jeu(age, dictee, langue) + ConsigneVitesse(vitesse),
+                instructions = Jeu(age, dictee, langue) + Specialite(avatar) + ConsigneVitesse(vitesse),
                 // TROIS ESSAIS EN UNE JOURNÉE, LE 16/09/2026, ET CHACUN A
                 // APPRIS QUELQUE CHOSE :
                 //
@@ -448,7 +586,9 @@ namespace SchoolWebApp.Api.Services.Voix
                     $"La synthèse vocale a répondu {(int)reponse.StatusCode}.");
             }
 
-            return reponse;
+            // Le modèle qui a parlé voyage avec la réponse : c'est lui que le
+            // journal des appels doit nommer, au tarif de sa ligne de grille.
+            return (reponse, secours ? ModeleSecours : _options.Modele);
         }
 
         private static string ChoisirVoix(string? avatar, bool secours)
@@ -514,6 +654,23 @@ namespace SchoolWebApp.Api.Services.Voix
 
             Prononciation française d'un bout à l'autre, y compris sur un mot
             bref ou isolé — jamais un accent anglicisé, même passager.
+
+            SAUF SUR UN MOT ANGLAIS, DANS TOUTES LES MATIÈRES : il se dit avec
+            sa prononciation anglaise, comme le dirait un professeur français
+            qui parle bien anglais. Ce qui est entre accents graves est du code,
+            donc de l'anglais : `deque` se dit « dèk », jamais « dèke » ;
+            `popleft()` se dit « pop left ». Les termes techniques empruntés à
+            l'anglais aussi — feedback, software, design, marketing, timing.
+            Les mots devenus français depuis longtemps — week-end, parking,
+            football — gardent leur prononciation française habituelle. Les
+            accents graves et les parenthèses ne se prononcent jamais.
+
+            QUAND UNE PHRASE MÊLE UNE AUTRE LANGUE ET DU FRANÇAIS — « Hi
+            Zakariya! I'm Marine, ta prof d'anglais » —, les mots étrangers se
+            disent dans leur langue, et LE FRANÇAIS QUI SUIT REPREND AUSSITÔT
+            une prononciation française ordinaire : « ta prof d'anglais » se dit
+            comme le dirait une professeure française, sans traîner l'accent
+            des mots d'avant.
 
             UN SIGLE SE LIT LETTRE PAR LETTRE, JAMAIS COMME UN MOT. « COD »
             se dit « C, O, D », pas « code » ; « ADN » se dit « A, D, N »,
@@ -601,6 +758,45 @@ namespace SchoolWebApp.Api.Services.Voix
             : Naturel + "\n\n" + Registre(age);
 
         /// <summary>
+        /// Ce qu'une matière ajoute à la diction, par professeur — le seul
+        /// indice de matière que reçoit la synthèse.
+        ///
+        /// L'INFORMATIQUE PARLE ANGLAIS. Camara, le 28/09/2026, avec Minamba :
+        /// « quand les termes sont en anglais, le professeur doit les dire avec
+        /// l'accent ». Depuis le 04/10/2026, la consigne générale
+        /// (<see cref="Naturel"/>) fait dire les mots anglais en anglais à TOUS
+        /// les professeurs ; ce bloc reste pour la NSI, où ils sont partout, et
+        /// donne la liste et la façon de les dire. Minamba n'enseigne que la
+        /// NSI : son nom suffit à porter la règle.
+        /// </summary>
+        private static string Specialite(string? avatar) =>
+            avatar is not null && avatar.Equals("minamba", StringComparison.OrdinalIgnoreCase)
+                ? "\n\n" + Informatique
+                : string.Empty;
+
+        private const string Informatique = """
+            LES TERMES D'INFORMATIQUE SONT EN ANGLAIS, ET SE DISENT EN ANGLAIS —
+            c'est l'exception à la règle du français d'un bout à l'autre. enqueue,
+            dequeue, deque, popleft, appendleft, push, pop, append, print, input,
+            range, len, return, def,
+            if, else, while, for, True, False, None, list, dict, string, int,
+            float, bool, import, class, self, index, key, value, sort, split,
+            join, break, continue, stack, queue, array, hash, bug, debug, byte,
+            bit, shell, thread : tu les prononces comme un informaticien
+            francophone les dit, avec leur prononciation anglaise — « enqueue »
+            se dit « ène-kiou », « dequeue » « di-kiou », « deque » « dèk »,
+            « push » « pouch »,
+            « print » « prinnt », « len » « lène », « range » « reïnnj » — puis
+            tu reprends AUSSITÔT une prononciation française pour le reste de la
+            phrase, sans traîner l'accent.
+
+            LES SIGLES DU MÉTIER : TCP, IP, HTTP, SQL, HTML, CSS, CSV, URL, DNS,
+            API, CPU, USB, RSA, ABR, RIP, OSPF se lisent lettre par lettre, à la
+            française. LIFO, FIFO, JSON, RAM, ROM, ASCII se disent comme des mots
+            (« lifo », « fifo », « djaisonne », « ram », « rom », « aski »).
+            """;
+
+        /// <summary>
         /// Une consigne de prononciation par langue étudiée — "en", "es",
         /// "de", "it", "zh" — construite sur UN SEUL GABARIT (voir
         /// <see cref="InstructionEcoute"/>). Le français n'y figure pas : la
@@ -631,6 +827,7 @@ namespace SchoolWebApp.Api.Services.Voix
                 ["de"] = InstructionEcoute("ALLEMAND"),
                 ["it"] = InstructionEcoute("ITALIEN"),
                 ["zh"] = InstructionEcoute("CHINOIS (mandarin), avec les tons corrects d'un locuteur natif"),
+                ["ar"] = InstructionEcoute("ARABE (arabe standard moderne)"),
             };
 
         /// <summary>
@@ -700,40 +897,34 @@ namespace SchoolWebApp.Api.Services.Voix
             silence entre ses morceaux.
             """;
 
-        private static string Registre(int age) => age switch
-        {
-            <= 8 => """
-                Tu es un professeur particulier qui parle à un enfant de sept ans.
-                Débit lent et très articulé, ton chaleureux et rassurant, beaucoup
-                de douceur. Tu souris en parlant. Laisse de vrais silences entre
-                les idées, comme si tu laissais à l'enfant le temps de
-                réfléchir — sans jamais dire que tu marques une pause.
-                """,
-            <= 11 => """
-                Tu es un professeur particulier bienveillant qui parle à un enfant
-                de dix ans. Débit posé mais vivant, articulation nette, ton
-                encourageant et complice. Naturel, jamais scolaire.
-                """,
-
-            // À partir du collège, la lenteur ne rassure plus : elle agace.
-            // Un adolescent entend « on me parle comme à un petit » avant même
-            // d'écouter le contenu.
-            <= 15 => """
-                Tu es un professeur particulier qui parle à un collégien.
-                Débit VIF et fluide, comme dans une vraie conversation entre
-                deux personnes qui se connaissent. Ne ralentis pas, n'articule
-                pas exagérément, ne marque pas de pauses appuyées : tu parles
-                normalement, à vitesse normale.
-                Ton direct et complice, aucune condescendance.
-                """,
-
-            _ => """
-                Tu es un professeur particulier qui parle à un lycéen.
-                Débit vif et naturel, rythme de conversation adulte. Aucune
-                lenteur pédagogique, aucune emphase. Ton posé et respectueux,
-                d'égal à égal, comme avec quelqu'un dont on prend les questions
-                au sérieux.
+        /// <summary>
+        /// LE MÊME DÉBIT POUR TOUS — Camara, le 28/09/2026 : « pas de débit
+        /// ralenti pour les primaires ni les collégiens ; les professeurs parlent
+        /// de manière fluide, comme une discussion dans la vraie vie ».
+        ///
+        /// Le registre ralentissait les moins de douze ans — « débit lent et très
+        /// articulé », « de vrais silences entre les idées » — et c'est cela
+        /// qu'il entendait comme des saccades. Un enfant de sept ans comprend
+        /// très bien une parole à vitesse normale : c'est ainsi qu'on lui parle
+        /// à la maison. L'âge ne règle plus que la CHALEUR du ton, jamais la
+        /// vitesse. La dictée et l'écoute en langue étudiée gardent leur lenteur :
+        /// là, c'est l'exercice lui-même.
+        /// </summary>
+        private static string Registre(int age) => age <= 11
+            ? """
+                Tu es un professeur particulier qui parle à un enfant. Débit VIF et
+                fluide, celui d'une vraie conversation entre deux personnes qui se
+                connaissent : ne ralentis pas, n'articule pas exagérément, ne
+                marque pas de pauses appuyées — tu parles normalement, à vitesse
+                normale. Ton très chaleureux, complice et rassurant ; tu souris en
+                parlant. Naturel, jamais scolaire, jamais « comme à un petit ».
                 """
-        };
+            : """
+                Tu es un professeur particulier qui parle à un adolescent. Débit
+                VIF et fluide, rythme d'une vraie conversation entre deux personnes
+                qui se connaissent : ne ralentis pas, n'articule pas exagérément,
+                ne marque pas de pauses appuyées. Ton chaleureux, direct et
+                complice, d'égal à égal, aucune condescendance.
+                """;
     }
 }

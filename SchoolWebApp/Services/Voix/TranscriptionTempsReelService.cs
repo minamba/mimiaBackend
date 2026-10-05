@@ -17,7 +17,16 @@ namespace SchoolWebApp.Api.Services.Voix
     /// ouvert, l'interface allumée, et rien ne remontait — impossible à
     /// diagnostiquer sans lire les logs du serveur.
     /// </param>
-    public record FragmentTranscription(string Texte, bool Final, string? Erreur = null);
+    /// <param name="Attente">
+    /// Un simple signe de vie : rien n'a été transcrit, mais le relais est là
+    /// et a bien reçu l'ordre. Envoyé quand un ordre de fin de tour tombe sur
+    /// un tampon déjà vidé — sans lui, le navigateur attendait huit secondes
+    /// une réponse qui ne viendrait jamais, puis rappelait le serveur pour rien.
+    /// </param>
+    public record FragmentTranscription(string Texte, bool Final, string? Erreur = null, bool Attente = false)
+    {
+        public static readonly FragmentTranscription EnAttente = new("", false, null, true);
+    }
 
     /// <summary>
     /// Ce qui circule du navigateur vers le fournisseur : de l'audio, ou
@@ -134,7 +143,7 @@ namespace SchoolWebApp.Api.Services.Voix
             // l'autre apprend qu'il a été vidé. Voir TamponFournisseur.
             var tampon = new TamponFournisseur();
 
-            var montant = PousserAudioAsync(fournisseur, audio, surSecondes, tampon, ct);
+            var montant = PousserAudioAsync(fournisseur, audio, surSecondes, surFragment, tampon, ct);
             var descendant = LireTranscriptionsAsync(
                 fournisseur, surFragment, tampon, vocabulaire, ct);
 
@@ -249,6 +258,7 @@ namespace SchoolWebApp.Api.Services.Voix
             ClientWebSocket socket,
             IAsyncEnumerable<BlocAudio> audio,
             Func<double, Task>? surSecondes,
+            Func<FragmentTranscription, Task> surFragment,
             TamponFournisseur tampon,
             CancellationToken ct)
         {
@@ -283,7 +293,16 @@ namespace SchoolWebApp.Api.Services.Voix
                     // tampon et repart avec le tour suivant. C'est d'ailleurs ce
                     // qu'il faut faire d'une syllabe isolée — la recoller à la
                     // suite plutôt que la transcrire seule.
-                    if (tampon.Octets < minimumCommit) continue;
+                    //
+                    // MAIS ON LE DIT AU NAVIGATEUR — Camara, le 28/09/2026. Un ordre
+                    // de fin de tour sans aucune réponse, c'est, pour lui, une
+                    // oreille morte : huit secondes d'attente, le bandeau « petit
+                    // souci de connexion », et un rappel du serveur pour rien.
+                    if (tampon.Octets < minimumCommit)
+                    {
+                        await surFragment(FragmentTranscription.EnAttente);
+                        continue;
+                    }
 
                     tampon.Vider();
                     await EnvoyerAsync(socket, new { type = "input_audio_buffer.commit" }, ct);
@@ -567,7 +586,17 @@ namespace SchoolWebApp.Api.Services.Voix
             {
                 _logger.LogDebug(
                     "Commit sur tampon vide ignore : le fournisseur avait deja clos le tour.");
-                return null;
+
+                // MAIS LE NAVIGATEUR ATTEND UNE RÉPONSE — Camara, le 28/09/2026,
+                // console sous les yeux : « oreille morte, on rappelle » toutes
+                // les huit secondes pendant que la professeure parlait. Le
+                // fournisseur avait clos le tour lui-même, transcrit et répondu
+                // AVANT notre ordre de fin de tour ; notre commit tombait sur
+                // un tampon vide, on jetait l'erreur... et l'ordre restait sans
+                // réponse. Pour le navigateur, c'est une oreille morte : il
+                // rappelle, et la liaison se refait pour rien. Un signe de vie
+                // suffit : le tour est déjà livré.
+                return FragmentTranscription.EnAttente;
             }
 
             _logger.LogError("Erreur de transcription renvoyee par le fournisseur : {Erreur}", detail);

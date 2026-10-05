@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using SchoolWebApp.Dal.Entities;
 using SchoolWebApp.Domain.Repositories;
+using LanguesVivantes = SchoolWebApp.Domain.Models.LanguesVivantes;
 using DomainMatiere = SchoolWebApp.Domain.Models.Matiere;
 using DomainNiveau = SchoolWebApp.Domain.Models.NiveauScolaire;
 using DomainAcademie = SchoolWebApp.Domain.Models.Academie;
@@ -61,7 +62,40 @@ namespace SchoolWebApp.Dal.Repositories
             }
 
             var entities = await query.OrderBy(m => m.Ordre).ToListAsync();
-            return entities.Select(Map).ToList();
+
+            // UNE LANGUE ÉTEINTE N'EXISTE POUR PERSONNE — voir `LanguesVivantes`.
+            // Filtrée ICI, à la source de toutes les listes : la grille, l'équipe
+            // de la page d'accueil, les spécialités proposées, l'ouverture d'un
+            // cours. Y compris quand on demande aussi les inactives : « à venir »
+            // et « éteinte » ne sont pas la même chose.
+            var eteintes = await MatieresEteintesAsync();
+
+            return entities
+                .Where(m => m.Code is null || !eteintes.Contains(m.Code))
+                .Select(Map)
+                .ToList();
+        }
+
+        private async Task<HashSet<string>> MatieresEteintesAsync()
+        {
+            var reglages = await _context.Reglages
+                .AsNoTracking()
+                .Where(r => r.Cle.StartsWith(LanguesVivantes.Prefixe))
+                .ToDictionaryAsync(r => r.Cle, r => r.Valeur);
+
+            return LanguesVivantes.MatieresEteintes(reglages);
+        }
+
+        public async Task<IReadOnlyList<string>> GetCodesMatieresExistantesAsync(
+            IEnumerable<string> codes, CancellationToken ct = default)
+        {
+            var cherches = codes.ToList();
+
+            return await _context.Matieres
+                .AsNoTracking()
+                .Where(m => m.Code != null && cherches.Contains(m.Code))
+                .Select(m => m.Code!)
+                .ToListAsync(ct);
         }
 
         public async Task<IEnumerable<DomainAcademie>> GetAcademiesAsync()

@@ -252,4 +252,25 @@ namespace SchoolWebApp.Api.Workers
         protected override PrixLus? Lire(string page, string modele) =>
             LecteurGrilleTarifs.LireOpenAi(page, modele);
     }
+
+    /// <summary>
+    /// La veille des tarifs de Google — voir <see cref="VeilleTarifsWorker"/>. La
+    /// page porte deux prix datés par case ; le lecteur retient celui du jour.
+    /// </summary>
+    public sealed class VeilleTarifsGeminiWorker : VeilleTarifsWorker
+    {
+        public VeilleTarifsGeminiWorker(
+            IServiceScopeFactory scopes, IHttpClientFactory http, ITelegramService telegram,
+            IConfiguration configuration, ILogger<VeilleTarifsGeminiWorker> logger)
+            : base(scopes, http, telegram, configuration, logger) { }
+
+        protected override string Fournisseur => "gemini";
+
+        protected override string Libelle => "Google Gemini";
+
+        protected override string Adresse => "https://ai.google.dev/gemini-api/docs/pricing.md.txt";
+
+        protected override PrixLus? Lire(string page, string modele) =>
+            LecteurGrilleTarifs.LireGemini(page, modele, DateTime.UtcNow);
+    }
 }

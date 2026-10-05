@@ -109,17 +109,18 @@ namespace SchoolWebApp.Api.Controllers
             var verdict = await _chatBuilder.VerifierQuotaAsync(conversationId, HttpContext.RequestAborted);
             if (!verdict.Autorise)
             {
-                // TRACÉ, PARCE QU'UN REFUS MUET COÛTE DES JOURS. Ce 403 ne dit rien à
-                // l'élève — le navigateur affiche « WebSocket failed » et c'est tout —
-                // et ne disait rien au serveur non plus. Trois familles ont cherché du
-                // côté de leur matériel un défaut qui était ici. Le motif du refus
-                // distingue le quota épuisé de la séance qui n'appartient pas à
-                // l'appelant : deux causes opposées derrière le même code.
+                // ON ACCEPTE LA LIAISON POUR DIRE NON — Camara, le 28/09/2026. Un
+                // 403 avant la poignée de main ne dit rien au navigateur : il voit
+                // une liaison qui tombe (code 1006), exactement comme un réseau qui
+                // coupe, et rappelle le serveur vingt fois de suite pendant que
+                // l'enfant parle dans le vide. Ici on ouvre, on explique, et on
+                // ferme avec le code 1008 : le navigateur sait que c'est
+                // DÉFINITIF, cesse de rappeler, et le dit à l'élève.
                 _logger.LogWarning(
                     "Ecoute REFUSEE (conversation {ConversationId}) : {Motif}.",
                     conversationId, verdict.Motif);
 
-                HttpContext.Response.StatusCode = StatusCodes.Status403Forbidden;
+                await RefuserAsync(MessageDeRefus(verdict.Motif));
                 return;
             }
 
@@ -174,6 +175,44 @@ namespace SchoolWebApp.Api.Controllers
         /// Le relais entre le micro du navigateur et le fournisseur — commun aux
         /// séances et à la dictée d'un contrôle. Appelé une fois l'accès vérifié.
         /// </summary>
+        /// <summary>
+        /// Le mot pour l'élève, selon le motif. Jamais le motif brut : « TropDEnfants »
+        /// ne veut rien dire pour un enfant de huit ans, et ce n'est pas à lui de
+        /// régler l'abonnement.
+        /// </summary>
+        private static string MessageDeRefus(SchoolWebApp.Domain.Models.MotifRefus motif) => motif switch
+        {
+            SchoolWebApp.Domain.Models.MotifRefus.PotEpuise
+                or SchoolWebApp.Domain.Models.MotifRefus.PlafondEnfant =>
+                "Il n'y a plus d'heures de cours pour aujourd'hui : le micro est fermé. "
+                + "Tu peux encore écrire ton message.",
+            _ =>
+                "Le micro n'est pas disponible pour cette séance. Tu peux écrire ton message.",
+        };
+
+        /// <summary>
+        /// Ouvre la liaison, envoie un refus DÉFINITIF, et la referme avec le
+        /// code 1008 (« policy violation », le seul code réservé à « ce que tu
+        /// demandes n'est pas permis »). Voir `Ecouter`.
+        /// </summary>
+        private async Task RefuserAsync(string message)
+        {
+            using var navigateur = await HttpContext.WebSockets.AcceptWebSocketAsync();
+            var emetteur = new EmetteurNavigateur(navigateur);
+
+            await emetteur.EnvoyerAsync(
+                new { type = "erreur", message, definitif = true, cause = "refus" },
+                HttpContext.RequestAborted);
+
+            try
+            {
+                await navigateur.CloseAsync(
+                    WebSocketCloseStatus.PolicyViolation, "refus", CancellationToken.None);
+            }
+            catch (WebSocketException) { }
+            catch (OperationCanceledException) { }
+        }
+
         private async Task RelayerAsync(string? matiereCode, string origine)
         {
             using var navigateur = await HttpContext.WebSockets.AcceptWebSocketAsync();
@@ -198,7 +237,12 @@ namespace SchoolWebApp.Api.Controllers
             // vivant, et le cours se termine en silence. D'où ce jeton, qu'on
             // déclenche nous-mêmes à la fin.
             using var fermeture = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            var reception = RecevoirAsync(navigateur, file.Writer, fermeture.Token);
+
+            // UN SEUL ENVOI À LA FOIS SUR LA LIAISON : les transcriptions partent
+            // du relais, les « pong » de la réception. Deux tâches qui écrivent
+            // sans se concerter sur un WebSocket, c'est une exception.
+            var emetteur = new EmetteurNavigateur(navigateur);
+            var reception = RecevoirAsync(navigateur, file.Writer, emetteur, fermeture.Token);
 
             try
             {
@@ -210,7 +254,7 @@ namespace SchoolWebApp.Api.Controllers
                 // `MinutesAudioMax` qui borne les dérives, pas le quota.
                 await _transcription.RelayerAsync(
                     file.Reader.ReadAllAsync(ct),
-                    fragment => EmettreAsync(navigateur, fragment, ct),
+                    fragment => emetteur.EmettreAsync(fragment, ct),
                     secondes =>
                     {
                         _logger.LogInformation(
@@ -230,11 +274,18 @@ namespace SchoolWebApp.Api.Controllers
                 _logger.LogError(ex,
                     "Echec de la transcription ({Origine}).", origine);
 
-                await EmettreAsync(
-                    navigateur,
-                    new FragmentTranscription("", false),
-                    CancellationToken.None,
-                    erreur: "La transcription est indisponible.");
+                // LA CAUSE VOYAGE AVEC L'ERREUR — le type de l'exception, rien de
+                // plus. Le navigateur la remonte dans son relevé de coupure
+                // (mesures/ecoute) : c'est ce qui permettra de lire, dans les
+                // logs, si c'est le fournisseur qui refuse ou le réseau qui lâche.
+                await emetteur.EnvoyerAsync(
+                    new
+                    {
+                        type = "erreur",
+                        message = "La transcription est indisponible.",
+                        cause = ex.GetType().Name,
+                    },
+                    CancellationToken.None);
             }
 
             file.Writer.TryComplete();
@@ -266,7 +317,8 @@ namespace SchoolWebApp.Api.Controllers
 
         /// <summary>Lit l'audio du navigateur et le pousse dans la file.</summary>
         private static async Task RecevoirAsync(
-            WebSocket navigateur, ChannelWriter<BlocAudio> file, CancellationToken ct)
+            WebSocket navigateur, ChannelWriter<BlocAudio> file, EmetteurNavigateur emetteur,
+            CancellationToken ct)
         {
             var tampon = new byte[TailleTampon];
 
@@ -283,9 +335,20 @@ namespace SchoolWebApp.Api.Controllers
                     // le niveau sonore, le fournisseur ne fait que le supposer.
                     if (recu.MessageType == WebSocketMessageType.Text)
                     {
-                        if (EstFinDeTour(tampon.AsSpan(0, recu.Count)))
+                        switch (LireOrdre(tampon.AsSpan(0, recu.Count)))
                         {
-                            await file.WriteAsync(BlocAudio.Fin(), ct);
+                            case "fin_tour":
+                                await file.WriteAsync(BlocAudio.Fin(), ct);
+                                break;
+
+                            // LE BATTEMENT DU NAVIGATEUR — Camara, le 28/09/2026.
+                            // Pendant un long silence, il demande toutes les vingt
+                            // secondes si la liaison vit encore ; deux battements
+                            // sans réponse, et il rappelle AVANT que l'enfant
+                            // reparle, au lieu de perdre son premier tour.
+                            case "ping":
+                                await emetteur.EnvoyerAsync(new { type = "pong" }, ct);
+                                break;
                         }
 
                         continue;
@@ -313,48 +376,73 @@ namespace SchoolWebApp.Api.Controllers
         }
 
         /// <summary>
-        /// La trame texte annonce-t-elle la fin d'un tour de parole ?
+        /// L'ordre porté par une trame texte : « fin_tour », « ping », ou null.
         ///
-        /// Lecture volontairement stricte : c'est le seul ordre qu'un client
-        /// puisse donner sur cette liaison, et il n'y a aucune raison d'y
+        /// Lecture volontairement stricte : ce sont les deux seuls ordres qu'un
+        /// client puisse donner sur cette liaison, et il n'y a aucune raison d'y
         /// ouvrir un dialecte. Tout le reste est ignoré en silence.
         /// </summary>
-        private static bool EstFinDeTour(ReadOnlySpan<byte> trame)
+        private static string? LireOrdre(ReadOnlySpan<byte> trame)
         {
             try
             {
                 using var document = JsonDocument.Parse(Encoding.UTF8.GetString(trame));
 
                 return document.RootElement.TryGetProperty("type", out var type)
-                       && type.GetString() == "fin_tour";
+                    ? type.GetString()
+                    : null;
             }
             catch (JsonException)
             {
-                return false;
+                return null;
             }
         }
 
-        private static async Task EmettreAsync(
-            WebSocket navigateur,
-            FragmentTranscription fragment,
-            CancellationToken ct,
-            string? erreur = null)
+        /// <summary>
+        /// Tout ce qui part vers le navigateur passe par ici, un envoi à la
+        /// fois. Une liaison fermée avale l'envoi sans bruit : c'est la
+        /// fermeture qui compte, pas la trame qui l'a ratée.
+        /// </summary>
+        private sealed class EmetteurNavigateur
         {
-            if (navigateur.State != WebSocketState.Open) return;
+            private readonly WebSocket _navigateur;
+            private readonly SemaphoreSlim _verrou = new(1, 1);
 
-            var motif = erreur ?? fragment.Erreur;
+            public EmetteurNavigateur(WebSocket navigateur) => _navigateur = navigateur;
 
-            var charge = motif is null
-                ? JsonSerializer.SerializeToUtf8Bytes(
-                    new { type = fragment.Final ? "final" : "partiel", texte = fragment.Texte })
-                : JsonSerializer.SerializeToUtf8Bytes(new { type = "erreur", message = motif });
-
-            try
+            public Task EmettreAsync(FragmentTranscription fragment, CancellationToken ct)
             {
-                await navigateur.SendAsync(charge, WebSocketMessageType.Text, true, ct);
+                object charge = fragment.Erreur is not null
+                    ? new { type = "erreur", message = fragment.Erreur }
+                    : fragment.Attente
+                        ? new { type = "attente" }
+                        : new { type = fragment.Final ? "final" : "partiel", texte = fragment.Texte };
+
+                return EnvoyerAsync(charge, ct);
             }
-            catch (WebSocketException) { }
-            catch (OperationCanceledException) { }
+
+            public async Task EnvoyerAsync(object charge, CancellationToken ct)
+            {
+                if (_navigateur.State != WebSocketState.Open) return;
+
+                var octets = JsonSerializer.SerializeToUtf8Bytes(charge);
+
+                try
+                {
+                    await _verrou.WaitAsync(ct);
+                    try
+                    {
+                        if (_navigateur.State != WebSocketState.Open) return;
+                        await _navigateur.SendAsync(octets, WebSocketMessageType.Text, true, ct);
+                    }
+                    finally
+                    {
+                        _verrou.Release();
+                    }
+                }
+                catch (WebSocketException) { }
+                catch (OperationCanceledException) { }
+            }
         }
     }
 }

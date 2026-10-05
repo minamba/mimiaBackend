@@ -30,7 +30,7 @@ namespace SchoolWebApp.Dal.Repositories
             new(StringComparer.OrdinalIgnoreCase)
             {
                 // Ses répliques : une balise par langue enseignée.
-                "EN", "FR", "ES", "DE", "IT", "ZH",
+                "EN", "FR", "ES", "DE", "IT", "ZH", "AR",
 
                 "ARDOISE", "TABLEAU_EFFACE", "SCHEMA", "POINTAGE",
             };

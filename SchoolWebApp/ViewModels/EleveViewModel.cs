@@ -24,6 +24,13 @@ namespace SchoolWebApp.Api.ViewModels
         /// <summary>Les spécialités de la voie générale cochées par la famille (codes).</summary>
         public List<string> Specialites { get; set; } = [];
 
+        /// <summary>
+        /// Les autres langues vivantes B de l'élève (ALLEMAND, ITALIEN…). En
+        /// base elles vivent avec les spécialités ; ici elles en sont séparées,
+        /// pour que l'écran compte ses spécialités sans compter une langue.
+        /// </summary>
+        public List<string> Langues { get; set; } = [];
+
         public string? NiveauLibelle { get; set; }
 
         public string? NiveauCycle { get; set; }

@@ -70,9 +70,21 @@ namespace SchoolWebApp.Api.Services.Voix
         /// tout le passage avant d'envoyer le premier octet, et cette attente
         /// s'ajoutait telle quelle au silence entendu par l'élève.
         /// </summary>
+        /// <summary>
+        /// Le modèle qui prête sa voix EN CE MOMENT : `tts-1` si le secours est
+        /// allumé, sinon Gemini si son interrupteur l'est, sinon le modèle
+        /// d'OpenAI. Noté sur chaque réponse du professeur, pour le coût.
+        /// </summary>
+        Task<string> ModeleCourantAsync(CancellationToken ct = default);
+
+        /// <param name="reference">
+        /// À qui attribuer la dépense — « sub:… », le compte du parent, que
+        /// l'enfant porte aussi dans son jeton. Null : la dépense est comptée
+        /// sans famille.
+        /// </param>
         Task CopierAudioAsync(
             string texte, string? avatar, int age, Stream destination,
             bool dictee = false, string? langue = null, string? vitesse = null,
-            CancellationToken ct = default);
+            string? reference = null, CancellationToken ct = default);
     }
 }

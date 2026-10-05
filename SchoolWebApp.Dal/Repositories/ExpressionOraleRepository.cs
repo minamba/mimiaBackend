@@ -225,7 +225,7 @@ namespace SchoolWebApp.Dal.Repositories
         /// message déjà écrit — même motif que `ComprehensionOraleRepository`.
         /// </summary>
         private static readonly System.Text.RegularExpressions.Regex Langue =
-            new(@"\[(EN|FR|ES|DE|IT|ZH)\](?<texte>.*?)\[/\1\]",
+            new(@"\[(EN|FR|ES|DE|IT|ZH|AR)\](?<texte>.*?)\[/\1\]",
                 System.Text.RegularExpressions.RegexOptions.Singleline
                     | System.Text.RegularExpressions.RegexOptions.IgnoreCase
                     | System.Text.RegularExpressions.RegexOptions.Compiled);

@@ -231,6 +231,7 @@ namespace SchoolWebApp.Api.Services.Voix
             "es" => "espagnol",
             "de" => "allemand",
             "it" => "italien",
+            "ar" => "arabe",
             _ => null,
         };
 

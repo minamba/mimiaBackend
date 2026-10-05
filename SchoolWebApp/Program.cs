@@ -457,6 +457,13 @@ builder.Services.AddSingleton<
     SchoolWebApp.Api.Services.Affluence.SalleDAttente>();
 builder.Services.AddSingleton<SchoolWebApp.Api.Services.Affluence.ReglageAffluence>();
 
+// Ce que la voix demande à Google, compté pour les jauges de l'administration.
+builder.Services.AddSingleton<CompteurGemini>();
+
+// Et quand Google dit « plus aujourd'hui », la surveillance le constate tout de
+// suite : carte à l'orange, alerte Telegram — voir AlerteQuotaGemini.
+builder.Services.AddHostedService<SchoolWebApp.Api.Services.Fournisseurs.AlerteQuotaGemini>();
+
 builder.Services.AddHttpClient<ISyntheseVocaleService, SyntheseVocaleService>(client =>
 {
     // Une phrase courte revient en moins d'une seconde ; au-delà de 30 s c'est
@@ -519,6 +526,8 @@ builder.Services.AddHostedService<BilanHebdomadaireWorker>();
 // ---------------------------------------------------------------------------
 builder.Services.AddScoped<IObservateurCompetencesService, ObservateurCompetencesService>();
 builder.Services.AddScoped<IPlanificateurControleService, PlanificateurControleService>();
+// Le cours importé avec un contrôle : une porte pour l'ordinateur et le téléphone.
+builder.Services.AddScoped<SchoolWebApp.Api.Services.CoursDuControleService>();
 
 // Singleton : la file traverse les requêtes. Un contrôleur y dépose, le
 // worker y puise.
@@ -550,11 +559,12 @@ builder.Services.AddHostedService<PurgeConversationsWorker>();
 // par ouverture à froid — voir RechauffeurCacheWorker.
 builder.Services.AddHostedService<RechauffeurCacheWorker>();
 
-// La veille des tarifs d'Anthropic et d'OpenAI : une lecture par jour de leur
-// page de tarifs, les nouveaux prix appliqués à nos calculs et annoncés sur
-// Telegram — voir VeilleTarifsWorker.
+// La veille des tarifs d'Anthropic, d'OpenAI et de Google : une lecture par
+// jour de leur page de tarifs, les nouveaux prix appliqués à nos calculs et
+// annoncés sur Telegram — voir VeilleTarifsWorker.
 builder.Services.AddHostedService<VeilleTarifsAnthropicWorker>();
 builder.Services.AddHostedService<VeilleTarifsOpenAiWorker>();
+builder.Services.AddHostedService<VeilleTarifsGeminiWorker>();
 
 // Le calendrier scolaire officiel (data.education.gouv.fr), resynchronisé
 // une fois par jour — voir CalendrierScolaireSyncWorker pour ce que ça
@@ -586,6 +596,10 @@ builder.Services.AddHostedService<EcheanceReferentielWorker>();
 // document doit pouvoir réveiller CE worker-là. Deux instances ne se
 // verraient jamais.
 builder.Services.AddSingleton<SchoolWebApp.Api.Workers.ReveilDocuments>();
+// La lecture des documents d'élève, partagée par le worker (pièces jointes,
+// cours d'un contrôle) et la séance de préparation, qui lit un cours pas
+// encore transcrit plutôt que de préparer sans lui.
+builder.Services.AddSingleton<SchoolWebApp.Api.Services.PiecesJointes.TranscripteurDocuments>();
 builder.Services.AddHostedService<TranscriptionDocumentsWorker>();
 
 // Décrire les planches importées : sans ça, le professeur affiche une figure
@@ -937,7 +951,15 @@ app.Use(async (contexte, suivant) =>
     await suivant();
 });
 
-app.UseWebSockets();
+// UN SIGNE DE VIE TOUTES LES VINGT SECONDES, ET NON TOUTES LES DEUX MINUTES
+// (le défaut d'ASP.NET Core) — Camara, le 28/09/2026 : « énormément de soucis
+// de connexion ». Pendant qu'un enfant de CP réfléchit, rien ne circule sur
+// la liaison d'écoute ; un relais ou un réseau mobile qui coupe les liaisons
+// muettes la fermait sans que personne ne le sache, et l'élève ne le
+// découvrait qu'en reparlant : huit secondes de silence, puis « petit souci
+// de connexion ». Les pings du serveur tiennent la liaison vivante dans un
+// sens ; le navigateur fait de même dans l'autre (voir ecouteTempsReel.js).
+app.UseWebSockets(new WebSocketOptions { KeepAliveInterval = TimeSpan.FromSeconds(20) });
 app.UseAuthentication();
 app.UseAuthorization();
 

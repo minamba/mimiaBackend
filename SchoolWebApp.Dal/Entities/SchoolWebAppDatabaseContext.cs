@@ -51,6 +51,7 @@ namespace SchoolWebApp.Dal.Entities
         public virtual DbSet<EvaluationPrevue> EvaluationsPrevues { get; set; }
         public virtual DbSet<ControleScolaire> ControlesScolaires { get; set; }
         public virtual DbSet<ControleNotion> ControlesNotions { get; set; }
+        public virtual DbSet<ControleDocument> ControlesDocuments { get; set; }
         public virtual DbSet<Offre> Offres { get; set; }
         public virtual DbSet<OffreRecharge> OffresRecharge { get; set; }
         public virtual DbSet<Abonnement> Abonnements { get; set; }
@@ -504,6 +505,7 @@ namespace SchoolWebApp.Dal.Entities
                 entity.Property(e => e.TokensCacheLecture).HasColumnName("tokens_cache_lecture");
                 entity.Property(e => e.TokensCacheEcriture).HasColumnName("tokens_cache_ecriture");
                 entity.Property(e => e.TokensCacheEcriture1h).HasColumnName("tokens_cache_ecriture_1h");
+                entity.Property(e => e.ModeleVoix).HasMaxLength(50).HasColumnName("modele_voix");
                 entity.Property(e => e.DateCreation).HasColumnName("date_creation");
 
                 entity.HasOne(e => e.Conversation)
@@ -1139,6 +1141,8 @@ namespace SchoolWebApp.Dal.Entities
                 entity.Property(e => e.EnoncePieceJointeId).HasColumnName("enonce_piece_jointe_id");
                 entity.Property(e => e.CopiePieceJointeId).HasColumnName("copie_piece_jointe_id");
                 entity.Property(e => e.CopieAnalyseeLe).HasColumnName("copie_analysee_le");
+                entity.Property(e => e.StyleCorrection).HasMaxLength(20).HasColumnName("style_correction");
+                entity.Property(e => e.StyleCorrectionLe).HasColumnName("style_correction_le");
                 entity.Property(e => e.PretVerdict).HasMaxLength(20).HasColumnName("pret_verdict");
                 entity.Property(e => e.PretObservation).HasColumnName("pret_observation");
                 entity.Property(e => e.PretLe).HasColumnName("pret_le");
@@ -1173,6 +1177,34 @@ namespace SchoolWebApp.Dal.Entities
                 // élève et cette matière », appelée à chaque arrivée en
                 // séance.
                 entity.HasIndex(e => new { e.EleveId, e.MatiereId, e.DateControle });
+            });
+
+            // ---------------------------------------------------------------
+            // ControleDocument — le cours de l'élève, importé avec son contrôle
+            // ---------------------------------------------------------------
+            modelBuilder.Entity<ControleDocument>(entity =>
+            {
+                entity.ToTable("ControleDocument");
+                entity.HasKey(e => e.Id);
+
+                entity.Property(e => e.Id).HasColumnName("id");
+                entity.Property(e => e.ControleId).HasColumnName("controle_id");
+                entity.Property(e => e.NomFichier).IsRequired().HasMaxLength(255).HasColumnName("nom_fichier");
+                entity.Property(e => e.TypeMime).IsRequired().HasMaxLength(60).HasColumnName("type_mime");
+                entity.Property(e => e.Taille).HasColumnName("taille");
+                entity.Property(e => e.NombrePages).HasColumnName("nombre_pages");
+                entity.Property(e => e.Donnees).HasColumnName("donnees");
+                entity.Property(e => e.Transcription).HasColumnName("transcription");
+                entity.Property(e => e.DonneesEffaceesLe).HasColumnName("donnees_effacees_le");
+                entity.Property(e => e.DateCreation).HasColumnName("date_creation");
+
+                // Cascade : le cours n'a aucune vie hors de son contrôle.
+                entity.HasOne(e => e.Controle)
+                      .WithMany()
+                      .HasForeignKey(e => e.ControleId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasIndex(e => e.ControleId);
             });
 
             // ---------------------------------------------------------------

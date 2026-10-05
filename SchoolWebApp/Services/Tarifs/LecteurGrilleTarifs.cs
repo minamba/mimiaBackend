@@ -130,5 +130,94 @@ namespace SchoolWebApp.Api.Services.Tarifs
 
             return new PrixLus(entree, sortie, Math.Round(sortie.Value * JetonsAudioParMinute / 1_000_000m, 5));
         }
+
+        /// <summary>
+        /// Les jetons audio que Google FACTURE par seconde de son : 39, mesurés le
+        /// 28/09/2026 sur ses propres réponses (`usageMetadata`), quand sa page en
+        /// annonce 25. On compte ce qui est facturé.
+        /// </summary>
+        public const decimal JetonsAudioParSecondeGemini = 39m;
+
+        [GeneratedRegex(@"\$\s*([0-9]+(?:\.[0-9]+)?)\s*\((?:text|audio)\)\s*(through|starting)\s+([A-Z][a-z]+ [0-9]{1,2}, [0-9]{4})", RegexOptions.IgnoreCase)]
+        private static partial Regex MontantDate();
+
+        /// <summary>
+        /// La page de Google (`ai.google.dev/gemini-api/docs/pricing.md.txt`) —
+        /// une section par modèle, repérée par son identifiant écrit en code
+        /// (`gemini-3.8-flash-lite-tts`), puis un tableau « ### Standard » :
+        ///
+        ///   | Input price  | Free of charge | $0.50 (text) through December 31, 2026. $1.00 (text) starting January 1, 2027. |
+        ///   | Output price | Free of charge | $6.00 (audio) through December 31, 2026. $12.00 (audio) starting January 1, 2027. … |
+        ///
+        /// DEUX PRIX PAR CASE, DATÉS : on retient celui qui vaut le jour de la
+        /// lecture (<paramref name="aujourdhui"/>). Le 1er janvier 2027, la veille
+        /// basculera d'elle-même sur le second — c'est tout l'intérêt de la lire.
+        /// La colonne payante est la dernière : la gratuite ne nous concerne pas.
+        /// </summary>
+        public static PrixLus? LireGemini(string markdown, string modele, DateTime aujourdhui)
+        {
+            var lignes = markdown.Split('\n');
+
+            var debut = Array.FindIndex(lignes, l => l.Contains($"`{modele}`", StringComparison.OrdinalIgnoreCase));
+            if (debut < 0) return null;
+
+            // La section s'arrête au modèle suivant (« ## »).
+            var fin = Array.FindIndex(lignes, debut + 1, l => l.StartsWith("## ", StringComparison.Ordinal));
+            if (fin < 0) fin = lignes.Length;
+
+            var standard = Array.FindIndex(lignes, debut, fin - debut,
+                l => l.Trim().Equals("### Standard", StringComparison.OrdinalIgnoreCase));
+            if (standard < 0) return null;
+
+            decimal? Ligne(string intitule)
+            {
+                for (var i = standard + 1; i < fin; i++)
+                {
+                    if (lignes[i].StartsWith("### ", StringComparison.Ordinal)) break;
+                    if (!lignes[i].TrimStart().StartsWith('|')) continue;
+
+                    var cellules = Cellules(lignes[i]);
+                    if (cellules.Length < 2 || !cellules[0].Equals(intitule, StringComparison.OrdinalIgnoreCase)) continue;
+
+                    return PrixDuJour(cellules[^1], aujourdhui);
+                }
+
+                return null;
+            }
+
+            var entree = Ligne("Input price");
+            var sortie = Ligne("Output price");
+            if (sortie is null) return null;
+
+            return new PrixLus(
+                entree,
+                sortie,
+                Math.Round(sortie.Value * JetonsAudioParSecondeGemini * 60m / 1_000_000m, 5));
+        }
+
+        /// <summary>
+        /// Le prix valable à cette date parmi « $X (…) through D. $Y (…) starting
+        /// D2. », ou le seul montant de la case s'il n'est pas daté.
+        /// </summary>
+        private static decimal? PrixDuJour(string cellule, DateTime aujourdhui)
+        {
+            var jour = aujourdhui.Date;
+
+            foreach (Match m in MontantDate().Matches(cellule))
+            {
+                if (!DateTime.TryParse(m.Groups[3].Value, CultureInfo.InvariantCulture, DateTimeStyles.None, out var borne))
+                {
+                    continue;
+                }
+
+                var valable = m.Groups[2].Value.Equals("through", StringComparison.OrdinalIgnoreCase)
+                    ? jour <= borne.Date
+                    : jour >= borne.Date;
+
+                if (valable) return decimal.Parse(m.Groups[1].Value, CultureInfo.InvariantCulture);
+            }
+
+            return MontantDate().IsMatch(cellule) ? null : LireMontant(cellule);
+        }
     }
 }

@@ -80,6 +80,8 @@ namespace SchoolWebApp.Api.Services
         private readonly IMemoryCache _memoire;
         private readonly OptionsClaude _options;
         private readonly ILogger<AgentPedagogiqueService> _logger;
+        private readonly IControleScolaireRepository _controles;
+        private readonly PiecesJointes.TranscripteurDocuments _transcripteur;
 
         public AgentPedagogiqueService(
             AnthropicClient client,
@@ -91,8 +93,12 @@ namespace SchoolWebApp.Api.Services
             Jeux.IJeuxService jeux,
             IMemoryCache memoire,
             IOptions<OptionsClaude> options,
-            ILogger<AgentPedagogiqueService> logger)
+            ILogger<AgentPedagogiqueService> logger,
+            IControleScolaireRepository controles,
+            PiecesJointes.TranscripteurDocuments transcripteur)
         {
+            _controles = controles ?? throw new ArgumentNullException(nameof(controles));
+            _transcripteur = transcripteur ?? throw new ArgumentNullException(nameof(transcripteur));
             _jeux = jeux ?? throw new ArgumentNullException(nameof(jeux));
             _reglages = reglages ?? throw new ArgumentNullException(nameof(reglages));
             _memoire = memoire ?? throw new ArgumentNullException(nameof(memoire));
@@ -757,7 +763,11 @@ namespace SchoolWebApp.Api.Services
         private async Task<string> ContexteDeLaSeanceAsync(
             Eleve eleve, Conversation conversation, TypeAccueil accueil, CancellationToken ct)
         {
-            var cle = $"contexte-seance:{conversation.Id}:{eleve.Id}:{eleve.NiveauScolaireId}:{conversation.MatiereId}";
+            // LE MODE ET LE CONTRÔLE ENTRENT DANS LA CLÉ depuis le 26/09/2026 : le
+            // contexte d'une préparation porte le cours de l'élève, celui d'un
+            // cours ordinaire non. Passer de l'un à l'autre recalcule.
+            var cle = $"contexte-seance:{conversation.Id}:{eleve.Id}:{eleve.NiveauScolaireId}:{conversation.MatiereId}"
+                + $":{conversation.ModeSeance}:{conversation.ModeControleId}";
 
             var debutDeSeance = accueil is TypeAccueil.PremiereSeance
                 or TypeAccueil.Retour
@@ -768,7 +778,8 @@ namespace SchoolWebApp.Api.Services
                 return fige;
             }
 
-            var contexte = await ConstruireContexteEleveAsync(eleve, conversation, ct);
+            var contexte = await ConstruireContexteEleveAsync(eleve, conversation, ct)
+                + await CoursDuControleAsync(conversation, ct);
 
             _memoire.Set(cle, contexte, new MemoryCacheEntryOptions
             {
@@ -777,6 +788,137 @@ namespace SchoolWebApp.Api.Services
             });
 
             return contexte;
+        }
+
+        /// <summary>
+        /// Au-delà, le cours est coupé. Trente mille caractères, c'est une
+        /// leçon de six à huit pages bien remplies — ce qu'un élève importe
+        /// pour un contrôle. Relus à chaque tour, mais depuis le cache : un
+        /// dixième du prix. Sans plafond, un classeur entier photographié
+        /// pèserait sur chaque tour de la séance.
+        /// </summary>
+        private const int CoursMaxCaracteres = 30_000;
+
+        /// <summary>
+        /// LE COURS DE L'ÉLÈVE, IMPORTÉ AVEC SON CONTRÔLE — voulu par Camara le
+        /// 26/09/2026, sur la remontée d'un parent : « le professeur ne garde
+        /// pas en mémoire le cours ».
+        ///
+        /// DANS LE CONTEXTE MIS EN CACHE, PAS DANS LE MESSAGE DU TOUR. Le
+        /// contrôle lui-même n'est décrit qu'au premier tour d'une séance —
+        /// c'est un fait d'arrivée. Un cours posé là aurait disparu dès le
+        /// deuxième échange, ce qui est exactement le reproche. Ici, il est
+        /// présent à chaque tour, relu au dixième du prix.
+        ///
+        /// PRÉPARATION ET BILAN SEULEMENT : c'est le cours DE CE CONTRÔLE. En
+        /// cours ordinaire, rien ne change.
+        ///
+        /// UN DOCUMENT PAS ENCORE LU EST LU ICI, en attendant : l'élève qui crée
+        /// son contrôle puis clique aussitôt « Préparer » ne doit pas avoir une
+        /// première séance sans son cours. La tâche de fond l'aurait fait
+        /// quelques secondes plus tard ; au pire, le document est lu deux fois.
+        /// </summary>
+        private async Task<string> CoursDuControleAsync(Conversation conversation, CancellationToken ct)
+        {
+            var mode = ModesSeance.Normaliser(conversation.ModeSeance);
+            if ((mode != ModesSeance.Controle && mode != ModesSeance.Bilan)
+                || conversation.ModeControleId is not int controleId)
+            {
+                return string.Empty;
+            }
+
+            IReadOnlyList<DocumentControle> documents;
+
+            try
+            {
+                documents = await _controles.GetCoursPourSeanceAsync(controleId, ct);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Lecture du cours du controle {ControleId} impossible.", controleId);
+                return string.Empty;
+            }
+
+            if (documents.Count == 0) return string.Empty;
+
+            var pages = new List<(string Nom, string Texte)>();
+
+            foreach (var document in documents)
+            {
+                var texte = document.Transcription;
+
+                if (texte is null && document.Donnees is { Length: > 0 } octets)
+                {
+                    try
+                    {
+                        texte = await _transcripteur.TranscrireAsync(
+                            octets, document.TypeMime, document.NomFichier,
+                            "transcription-cours-controle", ct);
+
+                        if (string.IsNullOrWhiteSpace(texte))
+                        {
+                            texte = "(document illisible : transcription automatique vide)";
+                        }
+
+                        texte = texte.Trim();
+                        await _controles.EnregistrerTranscriptionDocumentAsync(
+                            document.Id, texte, DateTime.UtcNow, ct);
+                    }
+                    catch (Exception ex) when (ex is not OperationCanceledException)
+                    {
+                        _logger.LogWarning(ex,
+                            "Cours du controle {ControleId} : document {Id} illisible pour cette seance.",
+                            controleId, document.Id);
+                        texte = null;
+                    }
+                }
+
+                if (!string.IsNullOrWhiteSpace(texte)) pages.Add((document.NomFichier, texte));
+            }
+
+            if (pages.Count == 0) return string.Empty;
+
+            var cours = new StringBuilder();
+            cours.AppendLine();
+            cours.AppendLine("## Le cours de l'élève pour ce contrôle");
+            cours.AppendLine();
+            cours.AppendLine(
+                "Il l'a importé avec son contrôle : c'est la leçon de SON professeur de classe, avec "
+                + "ses mots. Tu l'as déjà : ne lui redemande pas sa leçon.");
+
+            cours.AppendLine(mode == ModesSeance.Controle
+                ? "PRÉPARE EN SUIVANT CE COURS : sa trame, son ordre, son vocabulaire, ses exemples et "
+                  + "sa façon de présenter — c'est ce que son professeur attendra le jour du contrôle. "
+                  + "Les notions du programme de ce contrôle que ce cours ne couvre pas, tu les "
+                  + "travailles APRÈS, en le lui disant simplement (« ce n'est pas dans ta leçon, mais "
+                  + "c'est au programme »). Si le cours et le programme diffèrent sur la façon de "
+                  + "faire, c'est le cours de son professeur qui l'emporte."
+                : "PENDANT LA CORRECTION DE SA COPIE, renvoie-le à SA leçon (« regarde ce que dit ton "
+                  + "cours sur… ») — surtout s'il a choisi de se corriger lui-même : son cours est "
+                  + "l'indice qui ne donne pas la réponse.");
+
+            var restant = CoursMaxCaracteres;
+            var numero = 0;
+
+            foreach (var (nom, texte) in pages)
+            {
+                if (restant <= 0) break;
+
+                numero++;
+                var morceau = texte.Length > restant ? texte[..restant] : texte;
+                restant -= morceau.Length;
+
+                cours.AppendLine();
+                cours.AppendLine($"### Document {numero} — {nom}");
+                cours.AppendLine(morceau);
+
+                if (morceau.Length < texte.Length)
+                {
+                    cours.AppendLine("[… la suite de ce cours est trop longue pour être gardée en tête]");
+                }
+            }
+
+            return cours.ToString();
         }
 
         /// <summary>

@@ -203,6 +203,29 @@ namespace SchoolWebApp.Dal.Entities
         /// </summary>
         public DateTime? CopieAnalyseeLe { get; set; }
 
+        /// <summary>
+        /// COMMENT L'ÉLÈVE VEUT CORRIGER SA COPIE — voulu par Camara le
+        /// 26/09/2026, sur la remontée d'un parent : « l'enfant voulait essayer
+        /// de se corriger tout seul, mais le professeur a donné la réponse ».
+        ///
+        /// <c>"aide"</c> : « Je t'aide à te corriger » — le professeur ne donne
+        /// JAMAIS la réponse, il fait comprendre l'erreur jusqu'à ce que
+        /// l'élève la trouve. <c>"explique"</c> : « Je corrige et t'explique ».
+        /// Null tant qu'il n'a pas choisi : le professeur n'analyse rien.
+        /// Remis à null par une nouvelle demande de copie.
+        /// </summary>
+        public string? StyleCorrection { get; set; }
+
+        /// <summary>
+        /// Quand il a fait ce dernier choix.
+        ///
+        /// DEPUIS LE 26/09/2026 AU SOIR, LE CHOIX SE FAIT ERREUR PAR ERREUR : ces
+        /// deux colonnes gardent le DERNIER choix, pour mémoire. Ce qui pilote la
+        /// correction se lit dans l'historique (balises [ERREUR n/N] et choix de
+        /// l'élève après elles) — voir `LecteurCopieControle.EtatCorrection`.
+        /// </summary>
+        public DateTime? StyleCorrectionLe { get; set; }
+
         public virtual ICollection<ControleNotion> Notions { get; set; } = new List<ControleNotion>();
 
         public virtual Eleve? Eleve { get; set; }

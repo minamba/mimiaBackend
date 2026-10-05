@@ -42,6 +42,7 @@ namespace SchoolWebApp.Api.Services.Fournisseurs
         private readonly IServiceScopeFactory _scopes;
         private readonly ITelegramService _telegram;
         private readonly ILogger<SurveillanceFournisseurs> _logger;
+        private readonly CompteurGemini _compteurGemini;
 
         public SurveillanceFournisseurs(
             HttpClient http,
@@ -52,8 +53,10 @@ namespace SchoolWebApp.Api.Services.Fournisseurs
             EtatFournisseurs etats,
             IServiceScopeFactory scopes,
             ITelegramService telegram,
-            ILogger<SurveillanceFournisseurs> logger)
+            ILogger<SurveillanceFournisseurs> logger,
+            CompteurGemini compteurGemini)
         {
+            _compteurGemini = compteurGemini ?? throw new ArgumentNullException(nameof(compteurGemini));
             _telegram = telegram ?? throw new ArgumentNullException(nameof(telegram));
             _http = http ?? throw new ArgumentNullException(nameof(http));
             _anthropic = anthropic ?? throw new ArgumentNullException(nameof(anthropic));
@@ -74,11 +77,13 @@ namespace SchoolWebApp.Api.Services.Fournisseurs
             {
                 var anthropic = SonderAnthropicAsync(ct);
                 var openai = SonderOpenAiAsync(ct);
-                await Task.WhenAll(anthropic, openai);
+                var gemini = SonderGeminiAsync(ct);
+                await Task.WhenAll(anthropic, openai, gemini);
 
                 var maintenant = DateTime.UtcNow;
                 _etats.Enregistrer(EtatFournisseurs.Anthropic, _claude.ModeleTranscription, await anthropic, maintenant);
                 _etats.Enregistrer(EtatFournisseurs.OpenAi, _voix.Modele, await openai, maintenant);
+                _etats.Enregistrer(EtatFournisseurs.Gemini, _voix.GeminiModele, await gemini, maintenant);
 
                 foreach (var etat in _etats.Tous())
                 {
@@ -176,6 +181,72 @@ namespace SchoolWebApp.Api.Services.Fournisseurs
                                        || (ex is OperationCanceledException && !ct.IsCancellationRequested))
             {
                 _logger.LogWarning(ex, "Sonde OpenAI : fournisseur injoignable.");
+                return new ResultatSonde(StatutFournisseur.Injoignable, Detail: ex.Message, DureeMs: chrono.ElapsedMilliseconds);
+            }
+        }
+
+        /// <summary>
+        /// La sonde de Google — la FICHE du modèle, pas un « ok » dit à voix haute.
+        ///
+        /// LE QUOTA DU JOUR L'IMPOSE, mesuré le 28/09/2026 : Google n'accorde que
+        /// 100 appels vocaux par jour à ce modèle sur notre projet
+        /// (`GenerateRequestsPerDayPerProjectPerModel = 100`). Une sonde qui le
+        /// faisait parler toutes les trente minutes en brûlait 48 — la moitié de la
+        /// voix des élèves. Lire la fiche du modèle ne compte pas dans ce quota, et
+        /// dit l'essentiel : la clé est-elle acceptée, le modèle servi, Google
+        /// joignable ?
+        ///
+        /// Ce qu'elle ne voit plus : un crédit épuisé ou le quota du jour atteint.
+        /// Les phrases réelles, elles, le voient — et repassent alors par OpenAI.
+        /// </summary>
+        private async Task<ResultatSonde> SonderGeminiAsync(CancellationToken ct)
+        {
+            if (string.IsNullOrWhiteSpace(_voix.GeminiApiKey)) return new ResultatSonde(StatutFournisseur.NonConfigure);
+
+            // LE QUOTA DU JOUR, VU PAR LES VRAIES PHRASES. La fiche du modèle
+            // répond « ok » même quand Google refuse toute synthèse : sans cette
+            // lecture, la carte restait verte pendant que la voix passait par
+            // OpenAI. Le compteur, lui, a reçu le refus — c'est lui qui fait foi.
+            var maintenant = DateTime.UtcNow;
+            if (_compteurGemini.JourEstPlein(maintenant))
+            {
+                var remise = _compteurGemini.BloqueJusqua(maintenant);
+                var heure = remise is { } r
+                    ? TimeZoneInfo.ConvertTimeFromUtc(r, Paris).ToString("HH:mm")
+                    : "la remise à zéro";
+
+                return new ResultatSonde(
+                    StatutFournisseur.QuotaAtteint,
+                    429,
+                    "RESOURCE_EXHAUSTED",
+                    $"Quota du jour atteint ({_voix.GeminiLimiteRequetesJour} requêtes) : la voix des professeurs passe par OpenAI jusqu'à {heure}.");
+            }
+
+            var chrono = Stopwatch.StartNew();
+
+            try
+            {
+                using var requete = new HttpRequestMessage(
+                    HttpMethod.Get,
+                    $"https://generativelanguage.googleapis.com/v1beta/models/{_voix.GeminiModele}");
+                requete.Headers.Add("x-goog-api-key", _voix.GeminiApiKey);
+
+                using var reponse = await _http.SendAsync(requete, HttpCompletionOption.ResponseHeadersRead, ct);
+
+                if (reponse.IsSuccessStatusCode)
+                {
+                    return new ResultatSonde(StatutFournisseur.Ok, 200, DureeMs: chrono.ElapsedMilliseconds);
+                }
+
+                var corps = await reponse.Content.ReadAsStringAsync(ct);
+                var resultat = EtatFournisseurs.ClasserGemini((int)reponse.StatusCode, corps, chrono.ElapsedMilliseconds);
+                Journaliser("Gemini", resultat);
+                return resultat;
+            }
+            catch (Exception ex) when (ex is HttpRequestException
+                                       || (ex is OperationCanceledException && !ct.IsCancellationRequested))
+            {
+                _logger.LogWarning(ex, "Sonde Gemini : fournisseur injoignable.");
                 return new ResultatSonde(StatutFournisseur.Injoignable, Detail: ex.Message, DureeMs: chrono.ElapsedMilliseconds);
             }
         }

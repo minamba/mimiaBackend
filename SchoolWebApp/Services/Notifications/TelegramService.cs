@@ -103,7 +103,7 @@ namespace SchoolWebApp.Api.Services.Notifications
             string titre, string urgence, string? description, string? auteur);
 
         /// <summary>
-        /// Anthropic ou OpenAI vient de passer au rouge ou à l'orange — ou
+        /// Anthropic, OpenAI ou Google Gemini vient de passer au rouge ou à l'orange — ou
         /// fonctionne de nouveau.
         ///
         /// DANS LE SALON DES SIGNALEMENTS, voulu par Camara le 15/09/2026 :
@@ -489,7 +489,7 @@ namespace SchoolWebApp.Api.Services.Notifications
             var sb = new StringBuilder();
             sb.AppendLine($"🟠 *Veille des tarifs {Echapper(fournisseur)}*");
             sb.AppendLine($"— {Echapper(probleme)}");
-            sb.AppendLine("— Le dernier prix connu reste appliqué. À vérifier dans Administration › Anthropic / OpenAI › Tarifs.");
+            sb.AppendLine("— Le dernier prix connu reste appliqué. À vérifier dans Administration › Anthropic / OpenAI / Gemini › Tarifs.");
             sb.AppendLine($"— Le : {Horodatage()}");
 
             return EnvoyerAsync(_contactToken, _contactChatId, sb.ToString());

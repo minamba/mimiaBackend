@@ -160,6 +160,53 @@ namespace SchoolWebApp.Domain.Models
         public static bool AUneLv2(string? codeNiveau) =>
             codeNiveau is not null && ClassesAvecLv2.Contains(codeNiveau);
 
+        /// <summary>
+        /// LES AUTRES LANGUES VIVANTES B — Camara, le 04/10/2026 : allemand,
+        /// italien, chinois, arabe, « selon les classes où ça doit apparaître ».
+        /// Les mêmes classes que l'espagnol : la LVB commence en 5e, et n'existe
+        /// qu'en voies générale et technologique au lycée.
+        ///
+        /// UN CHOIX DE LA FAMILLE, COMME L'ESPAGNOL — mais RANGÉ AVEC LES
+        /// SPÉCIALITÉS, dans la même liste (`Eleve.Specialites`), et c'est
+        /// voulu. L'espagnol avait reçu sa propre colonne ; en donner une à
+        /// chaque langue aurait demandé une migration par langue et un paramètre
+        /// de plus dans les huit endroits qui demandent « cette matière est-elle
+        /// au programme de cet élève ? ». Ces endroits passent DÉJÀ la liste des
+        /// choix de la famille : une langue cochée y voyage sans rien changer.
+        /// Ce que voit le navigateur reste séparé — `Langues` d'un côté,
+        /// `Specialites` de l'autre : voir `LanguesDe` et `SansLangues`.
+        ///
+        /// Le code est celui de la matière. L'espagnol n'y est pas : il garde sa
+        /// case (`Eleve.Lv2Espagnol`).
+        /// </summary>
+        public static readonly IReadOnlyList<(string Code, string Libelle)> LanguesAuChoix =
+        [
+            ("ALLEMAND", "Allemand"),
+            ("ITALIEN", "Italien"),
+            ("CHINOIS", "Chinois"),
+            ("ARABE", "Arabe"),
+        ];
+
+        public static bool EstUneLangueAuChoix(string? codeMatiere) =>
+            codeMatiere is not null
+            && LanguesAuChoix.Any(l => l.Code.Equals(codeMatiere.Trim(), StringComparison.OrdinalIgnoreCase));
+
+        /// <summary>Parmi les choix de la famille, les langues.</summary>
+        public static List<string> LanguesDe(IEnumerable<string>? choix) =>
+            (choix ?? []).Where(EstUneLangueAuChoix).Select(c => c.Trim().ToUpperInvariant()).Distinct().ToList();
+
+        /// <summary>Les choix de la famille, sans les langues : les seules spécialités.</summary>
+        public static List<string> SansLangues(IEnumerable<string>? choix) =>
+            (choix ?? []).Where(c => !EstUneLangueAuChoix(c)).ToList();
+
+        /// <summary>
+        /// Ce qu'on garde des langues envoyées par le navigateur : des codes
+        /// connus, sans doublon, et rien dans une classe sans LVB. Le serveur ne
+        /// croit jamais la liste sur parole — même règle que les spécialités.
+        /// </summary>
+        public static List<string> LanguesRetenues(string? codeNiveau, IEnumerable<string>? codes) =>
+            AUneLv2(codeNiveau) ? LanguesDe(codes) : [];
+
         /// <summary>Une spécialité de la voie générale : son code EST celui de la matière qui l'enseigne.</summary>
         /// <remarks>
         /// `Precision` : le nom officiel en toutes lettres, affiché en petit sous
@@ -341,6 +388,15 @@ namespace SchoolWebApp.Domain.Models
             if (string.Equals(codeMatiere, "ESPAGNOL", StringComparison.OrdinalIgnoreCase))
             {
                 return lv2Espagnol && AUneLv2(codeNiveau);
+            }
+
+            // LES AUTRES LANGUES AUSSI : une classe où la LVB existe, et la langue
+            // cochée — elle voyage dans la liste des choix de la famille.
+            if (EstUneLangueAuChoix(codeMatiere))
+            {
+                return AUneLv2(codeNiveau)
+                    && specialites is not null
+                    && specialites.Contains(codeMatiere!, StringComparer.OrdinalIgnoreCase);
             }
 
             // UNE SPÉCIALITÉ AUSSI : une classe qui en a, et la case cochée.

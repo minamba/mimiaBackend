@@ -629,7 +629,7 @@ namespace SchoolWebApp.Dal.Repositories
 
         /// <summary>Les balises de langue, pour retrouver dans laquelle on écrivait.</summary>
         private static readonly Regex Langue =
-            new(@"\[(EN|FR|ES|DE|IT|ZH)\]",
+            new(@"\[(EN|FR|ES|DE|IT|ZH|AR)\]",
                 RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
         /// <summary>

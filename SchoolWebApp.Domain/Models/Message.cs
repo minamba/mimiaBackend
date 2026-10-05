@@ -24,6 +24,9 @@ namespace SchoolWebApp.Domain.Models
         /// <summary>Part écrite pour une heure ; NULL = tour antérieur au détail.</summary>
         public int? TokensCacheEcriture1h { get; set; }
 
+        /// <summary>Le modèle qui a dit cette réponse. Voir l'entité.</summary>
+        public string? ModeleVoix { get; set; }
+
         public DateTime DateCreation { get; set; }
     }
 }

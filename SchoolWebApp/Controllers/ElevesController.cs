@@ -235,6 +235,10 @@ namespace SchoolWebApp.Api.Controllers
 
                 return Ok(new ControleViewModel
                 {
+                    // L'IDENTIFIANT REVIENT depuis le 26/09/2026 : la fenêtre de
+                    // création envoie le cours de l'élève juste après, sur ce
+                    // contrôle-là.
+                    Id = enregistre.Id,
                     MatiereId = enregistre.MatiereId,
                     MatiereLibelle = enregistre.MatiereLibelle,
                     ProfCouleur = enregistre.ProfCouleur,
@@ -493,6 +497,173 @@ namespace SchoolWebApp.Api.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Erreur lors de la suppression du controle {ControleId}.", controleId);
+                return StatusCode(500, new { message = "Une erreur est survenue, veuillez réessayer." });
+            }
+        }
+
+        // -----------------------------------------------------------------
+        // LE COURS DE L'ÉLÈVE, IMPORTÉ AVEC SON CONTRÔLE — Camara, 26/09/2026
+        // -----------------------------------------------------------------
+        // Pour préparer, le professeur suit la trame de la leçon de l'élève et
+        // complète avec le référentiel ; sans cours, rien ne change. Voir
+        // `AgentPedagogiqueService.CoursDuControleAsync`.
+
+        [HttpGet("{id:int}/controles/{controleId:int}/cours")]
+        [SchoolWebApp.Api.Auth.AutoriseEleve]
+        [SwaggerResponse(200, "Les documents du cours, sans leur contenu.", typeof(IEnumerable<DocumentControleViewModel>))]
+        [SwaggerResponse(404, "Contrôle inexistant ou n'appartenant pas à cet élève.")]
+        public async Task<IActionResult> GetCoursDuControle(
+            int id, int controleId,
+            [FromServices] IControleScolaireRepository controles,
+            CancellationToken ct)
+        {
+            try
+            {
+                if (await controles.GetAsync(id, controleId, ct) is null) return NotFound();
+
+                var documents = await controles.GetDocumentsAsync(id, controleId, ct);
+                return Ok(documents.Select(DocumentControleViewModel.Depuis));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Erreur lors de la lecture du cours du controle {ControleId}.", controleId);
+                return StatusCode(500, new { message = "Une erreur est survenue, veuillez réessayer." });
+            }
+        }
+
+        [HttpPost("{id:int}/controles/{controleId:int}/cours")]
+        [SchoolWebApp.Api.Auth.AutoriseEleve]
+        [RequestSizeLimit(SchoolWebApp.Api.Services.PiecesJointes.ValidationPieceJointe.TailleMax + 4096)]
+        [SwaggerResponse(200, "Le document ajouté.", typeof(DocumentControleViewModel))]
+        [SwaggerResponse(400, "Fichier refusé — le motif est destiné à l'élève.")]
+        [SwaggerResponse(404, "Contrôle inexistant ou n'appartenant pas à cet élève.")]
+        public async Task<IActionResult> AjouterCoursDuControle(
+            int id, int controleId, IFormFile fichier,
+            [FromServices] IControleScolaireRepository controles,
+            [FromServices] CoursDuControleService cours,
+            CancellationToken ct)
+        {
+            if (fichier is null || fichier.Length == 0)
+            {
+                return BadRequest(new { message = "Aucun fichier reçu." });
+            }
+
+            if (fichier.Length > SchoolWebApp.Api.Services.PiecesJointes.ValidationPieceJointe.TailleMax)
+            {
+                return BadRequest(new { message = "Ce fichier est trop lourd (5 Mo au plus)." });
+            }
+
+            try
+            {
+                if (await controles.GetAsync(id, controleId, ct) is null) return NotFound();
+
+                using var flux = new MemoryStream();
+                await fichier.CopyToAsync(flux, ct);
+
+                var resultat = await cours.AjouterAsync(
+                    id, controleId, fichier.FileName, fichier.ContentType, flux.ToArray(), ct);
+
+                return resultat.Document is null
+                    ? BadRequest(new { message = resultat.Motif })
+                    : Ok(DocumentControleViewModel.Depuis(resultat.Document));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Erreur lors de l'ajout au cours du controle {ControleId}.", controleId);
+                return StatusCode(500, new { message = "Le document n'a pas pu être envoyé. Tu peux réessayer ?" });
+            }
+        }
+
+        [HttpDelete("{id:int}/controles/{controleId:int}/cours/{documentId:int}")]
+        [SchoolWebApp.Api.Auth.AutoriseEleve]
+        [SwaggerResponse(204, "Document retiré.")]
+        [SwaggerResponse(404, "Document inexistant ou n'appartenant pas à cet élève.")]
+        public async Task<IActionResult> SupprimerCoursDuControle(
+            int id, int controleId, int documentId,
+            [FromServices] IControleScolaireRepository controles,
+            CancellationToken ct)
+        {
+            try
+            {
+                return await controles.SupprimerDocumentAsync(id, controleId, documentId, ct)
+                    ? NoContent()
+                    : NotFound();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Erreur lors du retrait d'un document du controle {ControleId}.", controleId);
+                return StatusCode(500, new { message = "Une erreur est survenue, veuillez réessayer." });
+            }
+        }
+
+        /// <summary>
+        /// LE QR CODE DU COURS : l'élève photographie sa leçon avec son
+        /// téléphone, comme il scanne une feuille en séance. Les photos vont au
+        /// contrôle, pas à une conversation.
+        /// </summary>
+        [HttpPost("{id:int}/controles/{controleId:int}/cours/scan-mobile")]
+        [SchoolWebApp.Api.Auth.AutoriseEleve]
+        [SwaggerResponse(200, "Le jeton du QR code et son expiration.")]
+        [SwaggerResponse(404, "Contrôle inexistant ou n'appartenant pas à cet élève.")]
+        public async Task<IActionResult> CreerScanCoursDuControle(
+            int id, int controleId,
+            [FromServices] IControleScolaireRepository controles,
+            [FromServices] SchoolWebApp.Api.Services.ScanMobile.JetonsScanMobile jetons,
+            CancellationToken ct)
+        {
+            try
+            {
+                var controle = await controles.GetAsync(id, controleId, ct);
+                if (controle is null) return NotFound();
+
+                var (jeton, expireLe) = jetons.CreerPourControle(
+                    id, controleId, $"{controle.MatiereLibelle} — ton cours", DateTime.UtcNow);
+
+                return Ok(new { jeton, expireLe });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Echec de la creation d'un QR code de cours sur {ControleId}.", controleId);
+                return StatusCode(500, new { message = "Une erreur est survenue, veuillez réessayer." });
+            }
+        }
+
+        [HttpGet("{id:int}/controles/{controleId:int}/cours/scan-mobile/{jeton}")]
+        [SchoolWebApp.Api.Auth.AutoriseEleve]
+        [SwaggerResponse(200, "attente, recu (avec les documents) ou expire.")]
+        [SwaggerResponse(404, "Contrôle inexistant ou n'appartenant pas à cet élève.")]
+        public async Task<IActionResult> EtatScanCoursDuControle(
+            int id, int controleId, string jeton,
+            [FromServices] IControleScolaireRepository controles,
+            [FromServices] SchoolWebApp.Api.Services.ScanMobile.JetonsScanMobile jetons,
+            CancellationToken ct)
+        {
+            try
+            {
+                if (await controles.GetAsync(id, controleId, ct) is null) return NotFound();
+
+                var (etat, ids, termine) = jetons.EtatControle(jeton, controleId, DateTime.UtcNow);
+
+                var recus = (await controles.GetDocumentsAsync(id, controleId, ct))
+                    .Where(d => ids.Contains(d.Id))
+                    .Select(DocumentControleViewModel.Depuis)
+                    .ToList();
+
+                return Ok(new
+                {
+                    etat = etat switch
+                    {
+                        SchoolWebApp.Api.Services.ScanMobile.EtatJetonScan.Recu when recus.Count > 0 => "recu",
+                        SchoolWebApp.Api.Services.ScanMobile.EtatJetonScan.Attente => "attente",
+                        _ => "expire",
+                    },
+                    documents = recus,
+                    termine,
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Echec de la lecture d'un QR code de cours sur {ControleId}.", controleId);
                 return StatusCode(500, new { message = "Une erreur est survenue, veuillez réessayer." });
             }
         }

@@ -883,20 +883,65 @@ namespace SchoolWebApp.Dal.Repositories
 
             if (messages.Count == 0) return null;
 
-            var depuis = messages.FindLastIndex(
-                m => m.Contenu != null
-                     && m.Contenu.Contains("[DICTEE_CORRIGEE]", StringComparison.OrdinalIgnoreCase));
+            return TexteDicte(messages.Select(m => (m.Role ?? "", m.Contenu ?? "")).ToList());
+        }
+
+        /// <summary>
+        /// Le texte de la dictée EN COURS, relu dans les messages. Pur, donc
+        /// vérifiable sans base.
+        ///
+        /// UNE DICTÉE ABANDONNÉE OU RECOMMENCÉE NE SE MÉLANGE PAS À LA SUIVANTE
+        /// — Camara, le 04/10/2026 : « j'ai demandé une dictée de trois lignes,
+        /// et à la correction il m'affiche une dictée beaucoup plus longue ».
+        /// Le professeur avait d'abord dicté cinq phrases ; l'élève en a voulu
+        /// moins, il a redicté les deux premières. Tout ce qui portait la balise
+        /// depuis la dernière correction était additionné : le tableau montrait
+        /// les cinq phrases PLUS la variante raccourcie de la deuxième, et la
+        /// copie de deux phrases n'y retrouvait rien.
+        ///
+        /// Deux règles de plus, donc :
+        ///   - [DICTEE_SUPPRIMEE] ferme une dictée, comme [DICTEE_CORRIGEE] —
+        ///     et ce qui suit la balise DANS LE MÊME MESSAGE appartient déjà à
+        ///     la suivante (le professeur abandonne et redicte d'un seul élan) ;
+        ///   - un passage de plusieurs phrases qui REPART DE LA PREMIÈRE est la
+        ///     dictée recommencée : on repart de lui. Une phrase relue seule
+        ///     reste une relecture, dédoublonnée comme avant.
+        /// </summary>
+        internal static string? TexteDicte(IReadOnlyList<(string Role, string Contenu)> messages)
+        {
+            var depuis = -1;
+            var apres = 0;
+
+            for (var i = messages.Count - 1; i >= 0 && depuis < 0; i--)
+            {
+                var fin = Clotures().Matches(messages[i].Contenu).LastOrDefault();
+                if (fin is null) continue;
+
+                depuis = i;
+                apres = fin.Index + fin.Length;
+            }
 
             var phrases = new List<string>();
             var vues = new HashSet<string>();
 
-            for (var i = depuis + 1; i < messages.Count; i++)
+            for (var i = Math.Max(0, depuis); i < messages.Count; i++)
             {
                 if (messages[i].Role != "assistant") continue;
 
-                foreach (Match passage in Passages().Matches(messages[i].Contenu ?? ""))
+                var contenu = i == depuis ? messages[i].Contenu[apres..] : messages[i].Contenu;
+
+                foreach (Match passage in Passages().Matches(contenu))
                 {
-                    foreach (var phrase in Decouper(passage.Groups["texte"].Value))
+                    var dictees = Decouper(passage.Groups["texte"].Value).ToList();
+
+                    if (dictees.Count >= 2 && phrases.Count > 0
+                        && CleDictee(dictees[0]) == CleDictee(phrases[0]))
+                    {
+                        phrases.Clear();
+                        vues.Clear();
+                    }
+
+                    foreach (var phrase in dictees)
                     {
                         if (vues.Add(CleDictee(phrase))) phrases.Add(phrase);
                     }
@@ -905,6 +950,10 @@ namespace SchoolWebApp.Dal.Repositories
 
             return phrases.Count == 0 ? null : string.Join(" ", phrases);
         }
+
+        /// <summary>Ce qui ferme une dictée : sa correction archivée, ou son abandon.</summary>
+        [GeneratedRegex(@"\[/?DICTEE_CORRIGEE\]|\[/?DICTEE_SUPPRIMEE\]", RegexOptions.IgnoreCase)]
+        private static partial Regex Clotures();
 
         [GeneratedRegex(@"\[DICTEE\](?<texte>.*?)\[/DICTEE\]",
             RegexOptions.Singleline | RegexOptions.IgnoreCase)]

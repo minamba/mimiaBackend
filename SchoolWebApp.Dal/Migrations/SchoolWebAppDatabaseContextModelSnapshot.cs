@@ -1050,6 +1050,62 @@ namespace SchoolWebApp.Dal.Migrations
                     b.ToTable("ComprehensionOrale", (string)null);
                 });
 
+            modelBuilder.Entity("SchoolWebApp.Dal.Entities.ControleDocument", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasColumnName("id");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("ControleId")
+                        .HasColumnType("int")
+                        .HasColumnName("controle_id");
+
+                    b.Property<DateTime>("DateCreation")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("date_creation");
+
+                    b.Property<byte[]>("Donnees")
+                        .HasColumnType("varbinary(max)")
+                        .HasColumnName("donnees");
+
+                    b.Property<DateTime?>("DonneesEffaceesLe")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("donnees_effacees_le");
+
+                    b.Property<string>("NomFichier")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)")
+                        .HasColumnName("nom_fichier");
+
+                    b.Property<int>("NombrePages")
+                        .HasColumnType("int")
+                        .HasColumnName("nombre_pages");
+
+                    b.Property<int>("Taille")
+                        .HasColumnType("int")
+                        .HasColumnName("taille");
+
+                    b.Property<string>("Transcription")
+                        .HasColumnType("nvarchar(max)")
+                        .HasColumnName("transcription");
+
+                    b.Property<string>("TypeMime")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("nvarchar(60)")
+                        .HasColumnName("type_mime");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ControleId");
+
+                    b.ToTable("ControleDocument", (string)null);
+                });
+
             modelBuilder.Entity("SchoolWebApp.Dal.Entities.ControleNotion", b =>
                 {
                     b.Property<int>("Id")
@@ -1204,6 +1260,15 @@ namespace SchoolWebApp.Dal.Migrations
                     b.Property<DateTime?>("CopieAnalyseeLe")
                         .HasColumnType("datetime2")
                         .HasColumnName("copie_analysee_le");
+
+                    b.Property<string>("StyleCorrection")
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)")
+                        .HasColumnName("style_correction");
+
+                    b.Property<DateTime?>("StyleCorrectionLe")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("style_correction_le");
 
                     b.Property<string>("Ressenti")
                         .HasMaxLength(500)
@@ -1968,6 +2033,11 @@ namespace SchoolWebApp.Dal.Migrations
                     b.Property<int?>("TokensCacheEcriture1h")
                         .HasColumnType("int")
                         .HasColumnName("tokens_cache_ecriture_1h");
+
+                    b.Property<string>("ModeleVoix")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)")
+                        .HasColumnName("modele_voix");
 
                     b.Property<int>("TokensCacheLecture")
                         .HasColumnType("int")
@@ -3296,6 +3366,17 @@ namespace SchoolWebApp.Dal.Migrations
                     b.Navigation("Matiere");
 
                     b.Navigation("NiveauScolaire");
+                });
+
+            modelBuilder.Entity("SchoolWebApp.Dal.Entities.ControleDocument", b =>
+                {
+                    b.HasOne("SchoolWebApp.Dal.Entities.ControleScolaire", "Controle")
+                        .WithMany()
+                        .HasForeignKey("ControleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Controle");
                 });
 
             modelBuilder.Entity("SchoolWebApp.Dal.Entities.ControleNotion", b =>

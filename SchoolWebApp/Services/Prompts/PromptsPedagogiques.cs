@@ -65,6 +65,8 @@ namespace SchoolWebApp.Api.Services.Prompts
                 "marine",  // anglais
                 "ines",    // SVT
                 "lucia",   // espagnol
+                "giulia",  // italien
+                "lin",     // chinois
                 "elodie",  // sanitaire et social
                 "jeanne",  // arts
                 "camille", // philosophie
@@ -2885,6 +2887,27 @@ namespace SchoolWebApp.Api.Services.Prompts
             return texte.ToString().TrimEnd();
         }
 
+        /// <summary>
+        /// LE GENRE DU PROFESSEUR, REDIT À CHAQUE TOUR — Camara, le 30/09/2026 : un
+        /// parent, « le problème d'expression féminine est revenu » — Adrien qui
+        /// écrit « Contente de te retrouver ». La règle vit dans le bloc « Qui tu
+        /// es » (voir <see cref="Identite"/>), tout en haut d'une conversation qui
+        /// peut compter des centaines de tours ; le bloc « Accord grammatical »
+        /// de l'élève, lui, arrive après, et quand l'élève est une fille il
+        /// pousse au féminin. Une règle de prompt ne vaut pas un fait : ce
+        /// marqueur redit le genre AU MÊME ENDROIT que le tour de l'élève, à
+        /// chaque tour, dans la queue non mise en cache — une ligne, pas plus.
+        /// Jamais persisté, comme les autres marqueurs.
+        /// </summary>
+        public static string MarqueurGenre(string? prenom, string? avatar)
+        {
+            var nom = string.IsNullOrWhiteSpace(prenom) ? "le professeur" : prenom;
+
+            return EstUneProfesseure(avatar)
+                ? $"[Rappel : tu es {nom}, une FEMME — pour toi, accords au féminin : « contente », « sûre », « désolée ». L'accord au masculin ne vaut que pour l'élève si c'est un garçon.]"
+                : $"[Rappel : tu es {nom}, un HOMME — pour toi, accords au masculin : « content », « sûr », « désolé ». L'accord au féminin ne vaut que pour l'élève si c'est une fille.]";
+        }
+
         public static string MarqueurTemps(int secondes, string? cycle = null, int age = 0)
         {
             var lisible = secondes >= 60
@@ -3892,6 +3915,7 @@ namespace SchoolWebApp.Api.Services.Prompts
                 ["agent-allemand"] = "DE",
                 ["agent-italien"] = "IT",
                 ["agent-chinois"] = "ZH",
+                ["agent-arabe"] = "AR",
             };
 
 
@@ -3920,6 +3944,10 @@ namespace SchoolWebApp.Api.Services.Prompts
                 "agent-histoire-geo" => SpecialiteHistoireGeo,
                 "agent-anglais" => SpecialiteAnglais,
                 "agent-espagnol" => PromptsEspagnol.Specialite,
+                "agent-allemand" => PromptsAllemand.Specialite,
+                "agent-italien" => PromptsItalien.Specialite,
+                "agent-chinois" => PromptsChinois.Specialite,
+                "agent-arabe" => PromptsArabe.Specialite,
                 "agent-sciences" => SpecialiteSciencesTechnologie,
                 "agent-physique-chimie" => SpecialitePhysiqueChimie,
                 "agent-svt" => SpecialiteSvt,
@@ -4706,6 +4734,11 @@ namespace SchoolWebApp.Api.Services.Prompts
             C'est la méthode que l'élève doit finir par employer seul : demander
             à réentendre le morceau précis dont il n'est pas sûr, plutôt que de
             deviner ou de renoncer. Il ne l'apprendra qu'en te voyant faire.
+
+            C'EST TOI QUI LIS, C'EST LUI QUI ÉCOUTE, et le français le dit :
+            « je te le relis », « je te le fais réécouter », « écoute-le encore
+            une fois ». JAMAIS « je te réécoute l'histoire » ni « je te la
+            réécoute » : cela voudrait dire que c'est toi qui écoutes.
 
             Se souvenir n'est pas l'exercice. L'exercice, c'est ÉCOUTER.
 
@@ -6646,7 +6679,14 @@ namespace SchoolWebApp.Api.Services.Prompts
                 <= 11 => "Phrases courtes, vocabulaire simple, exemples de la vie quotidienne. Tutoie-le.",
                 <= 14 => "Vocabulaire clair sans être infantilisant. Tutoie-le. Évite le ton scolaire rigide.",
                 <= 17 => "Tu peux utiliser le vocabulaire technique de la matière en l'expliquant. Tutoie-le, sur un ton d'égal à égal.",
-                _ => "Adresse-toi à l'élève comme à un adulte qui reprend ses études. Vouvoie-le."
+
+                // PLUS DE VOUVOIEMENT À 18 ANS — Camara, le 28/09/2026 : le
+                // professeur d'informatique vouvoyait ses élèves. C'était cette
+                // ligne : la NSI se suit en 1re et en terminale, où beaucoup
+                // d'élèves ont 18 ans, et ils recevaient « Vouvoie-le ». Un
+                // lycéen majeur reste un élève du même cours particulier ; le
+                // vouvoiement casse la proximité que tout le produit cherche.
+                _ => "Tu peux utiliser le vocabulaire technique de la matière en l'expliquant. Tutoie-le, sur un ton d'égal à égal, même s'il est majeur."
             };
 
             var tonCycle = cycle switch
@@ -6680,8 +6720,24 @@ namespace SchoolWebApp.Api.Services.Prompts
                     """
             };
 
+            // LA MÊME RÈGLE POUR TOUS, QUEL QUE SOIT L'ÂGE — Camara, le 28/09/2026 :
+            // « tous les professeurs doivent impérativement tutoyer les élèves
+            // pour avoir une proximité avec eux ; le professeur doit être très
+            // chaleureux ». Écrite une fois, ici, pour qu'aucune tranche d'âge ni
+            // aucune matière ne puisse y échapper.
+            const string proximite = """
+                TU TUTOIES TOUJOURS L'ÉLÈVE, à chaque message, quel que soit son âge
+                ou sa classe : jamais « vous » pour t'adresser à lui. Et tu es
+                CHALEUREUX : tu l'accueilles avec plaisir, tu l'appelles par son
+                prénom, tu remarques ses efforts et tu le lui dis. Proche et
+                bienveillant comme un bon professeur particulier — jamais distant
+                ni administratif.
+                """;
+
             return $"""
                 # Ton interlocuteur
+
+                {proximite}
 
                 {tonAge}
                 {tonCycle}

@@ -24,6 +24,14 @@ namespace SchoolWebApp.Domain.Repositories
         /// <summary>Matières actives uniquement quand <paramref name="activesSeulement"/> est vrai.</summary>
         Task<IEnumerable<Matiere>> GetMatieresAsync(bool activesSeulement);
 
+        /// <summary>
+        /// Parmi ces codes, ceux qui ont une ligne en base — SANS le filtre des
+        /// langues éteintes. Sert à l'écran des modes, qui doit justement lister
+        /// les langues qu'on ne voit plus ailleurs. Voir `LanguesVivantes`.
+        /// </summary>
+        Task<IReadOnlyList<string>> GetCodesMatieresExistantesAsync(
+            IEnumerable<string> codes, CancellationToken ct = default);
+
         /// <summary>Les 30 académies, triées par libellé.</summary>
         Task<IEnumerable<Academie>> GetAcademiesAsync();
 

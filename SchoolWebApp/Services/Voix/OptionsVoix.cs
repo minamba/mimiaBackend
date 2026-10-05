@@ -35,6 +35,42 @@ namespace SchoolWebApp.Api.Services.Voix
         public string Modele { get; set; } = "gpt-4o-mini-tts";
 
         /// <summary>
+        /// Qui prête sa voix aux professeurs EN DIRECT : "openai" (par défaut) ou
+        /// "gemini", à l'essai depuis le 28/09/2026 — voir <see cref="SyntheseGemini"/>.
+        /// Un échec de Google avant le premier octet repasse par OpenAI.
+        /// </summary>
+        public string Fournisseur { get; set; } = "openai";
+
+        /// <summary>Clé de l'API Gemini. Jamais dans un fichier versionné.</summary>
+        public string? GeminiApiKey { get; set; }
+
+        /// <summary>
+        /// LE CHOIX DU MODÈLE EST CELUI DE CAMARA, PAS DU CODE. Mesuré le
+        /// 04/10/2026 sur 400 appels de deux paragraphes réels : Flash-Lite relit
+        /// tout son texte une seconde fois dans 6 % des appels (11/200), et une
+        /// consigne « lis-le une seule fois » n'y change rien (5/100) ; Flash
+        /// (non-Lite, prix 1,5×) : 0 redite sur 200, un emballement de 85 s.
+        /// Le modèle se règle dans appsettings (`Voix:GeminiModele`) ; la borne
+        /// de durée de <see cref="SyntheseGemini"/> vaut pour les deux.
+        /// </summary>
+        public string GeminiModele { get; set; } = "gemini-3.8-flash-lite-tts";
+
+        /// <summary>
+        /// LES LIMITES DE GOOGLE POUR CE MODÈLE, recopiées d'AI Studio › Rate limit
+        /// pour dessiner les jauges de la carte « Google Gemini » (voir
+        /// <see cref="CompteurGemini"/>). Niveau 1 le 28/09/2026 : 10 requêtes par
+        /// minute, 10 000 jetons d'entrée par minute, 100 requêtes par jour. Au
+        /// Niveau 2 : 1 000, 100 000 et 10 000 — à reporter ici le jour du passage.
+        /// Elles ne freinent rien : c'est Google qui freine, elles ne font que
+        /// mesurer.
+        /// </summary>
+        public int GeminiLimiteRequetesMinute { get; set; } = 10;
+
+        public int GeminiLimiteJetonsMinute { get; set; } = 10_000;
+
+        public int GeminiLimiteRequetesJour { get; set; } = 100;
+
+        /// <summary>
         /// Longueur maximale d'une requête. Chaque appel est facturé : sans
         /// plafond, un compte compromis pourrait générer des heures d'audio.
         /// Une phrase de professeur dépasse rarement 200 caractères.

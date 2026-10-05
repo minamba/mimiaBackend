@@ -930,6 +930,7 @@ namespace SchoolWebApp.Api.Workers
                 ["ALLEMAND"] = "allemand",
                 ["ITALIEN"] = "italien",
                 ["CHINOIS"] = "chinois",
+                ["ARABE"] = "arabe",
 
                 // LES SPÉCIALITÉS DE LANGUE (14/09/2026), ajoutées avec leurs
                 // emplacements de planches. Sans elles, une carte de l'Empire

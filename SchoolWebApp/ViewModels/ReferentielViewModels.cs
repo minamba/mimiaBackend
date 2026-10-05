@@ -31,6 +31,13 @@ namespace SchoolWebApp.Api.ViewModels
         public bool Lv2Possible { get; set; }
 
         /// <summary>
+        /// Les autres langues vivantes B que le parent peut cocher dans cette
+        /// classe : celles qui sont ALLUMÉES (voir `LanguesVivantes`), et
+        /// seulement là où la LVB existe. Vide ailleurs.
+        /// </summary>
+        public List<SpecialiteViewModel> LanguesPossibles { get; set; } = [];
+
+        /// <summary>
         /// Combien de spécialités le parent coche dans cette classe : 3 en
         /// première générale, 2 en terminale, 0 ailleurs.
         /// </summary>

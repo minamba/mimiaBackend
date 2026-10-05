@@ -39,7 +39,17 @@ namespace SchoolWebApp.Dal.Repositories
                 return [];
             }
 
-            var langues = lv2Espagnol ? "l'anglais comme l'espagnol" : "l'anglais par exemple";
+            // Ses autres langues vivantes B voyagent avec ses spécialités — voir
+            // `VoiesScolaires.LanguesAuChoix`. Même règle pour toutes.
+            var siennes = (lv2Espagnol ? new[] { "l'espagnol" } : [])
+                .Concat(VoiesScolaires.LanguesAuChoix
+                    .Where(l => specialites.Contains(l.Code, StringComparer.OrdinalIgnoreCase))
+                    .Select(l => "l'" + l.Libelle.ToLowerInvariant()))
+                .ToList();
+
+            var langues = siennes.Count == 0
+                ? "l'anglais par exemple"
+                : "l'anglais comme " + string.Join(", ", siennes);
 
             var note = $"Tes langues vivantes, ta LVA et ta LVB ({langues}), n'ont pas d'épreuve finale au bac : "
                 + "elles comptent en contrôle continu, avec tes moyennes de première et de terminale.";

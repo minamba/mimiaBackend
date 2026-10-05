@@ -14,10 +14,16 @@ namespace SchoolWebApp.Api.Services.ScanMobile
     /// </summary>
     public record InfoScanMobile(
         string? ProfPrenom, string? Matiere, DateTime ExpireLe, bool DejaEnvoye,
-        bool BlueSky = false);
+        bool BlueSky = false, string? StyleSaison = null);
 
     /// <summary>Où en est un QR code, vu de l'ordinateur.</summary>
     public enum EtatJetonScan { Attente, Recu, Expire }
+
+    /// <summary>
+    /// Où va la photo : une séance (<see cref="ConversationId"/>), ou le cours
+    /// d'un contrôle (<see cref="ControleId"/>, depuis le 26/09/2026).
+    /// </summary>
+    public record DestinationScan(int ConversationId, int? ControleId, int EleveId);
 
     /// <summary>
     /// LES QR CODES DU SCANNER, LE TEMPS QU'ILS SERVENT.
@@ -59,6 +65,13 @@ namespace SchoolWebApp.Api.Services.ScanMobile
         private sealed class Entree
         {
             public int ConversationId { get; init; }
+
+            // LE COURS D'UN CONTRÔLE — 26/09/2026. Le même QR code, mais les
+            // photos vont au contrôle et non à une séance : il n'y a pas de
+            // conversation derrière un contrôle créé depuis le calendrier.
+            // `ConversationId` vaut alors 0.
+            public int? ControleId { get; init; }
+            public int EleveId { get; init; }
             public string? ProfPrenom { get; init; }
             public string? Matiere { get; init; }
             public DateTime ExpireLe { get; init; }
@@ -123,9 +136,9 @@ namespace SchoolWebApp.Api.Services.ScanMobile
         /// utilisé, ou si un envoi est déjà en cours — deux photos envoyées au
         /// même instant depuis deux onglets ne passent pas toutes les deux.
         /// </summary>
-        public bool Reserver(string? jeton, DateTime maintenant, out int conversationId)
+        public bool Reserver(string? jeton, DateTime maintenant, out DestinationScan destination)
         {
-            conversationId = 0;
+            destination = new DestinationScan(0, null, 0);
 
             lock (_verrou)
             {
@@ -135,9 +148,71 @@ namespace SchoolWebApp.Api.Services.ScanMobile
                 if (entree!.Termine || entree.EnCours || entree.PiecesJointes.Count >= PiecesMax) return false;
 
                 entree.EnCours = true;
-                conversationId = entree.ConversationId;
+                destination = new DestinationScan(entree.ConversationId, entree.ControleId, entree.EleveId);
                 return true;
             }
+        }
+
+        /// <summary>
+        /// Un QR code pour le COURS D'UN CONTRÔLE — 26/09/2026. Mêmes règles
+        /// que pour une séance : dix minutes, plusieurs photos, « terminé ».
+        /// </summary>
+        public (string Jeton, DateTime ExpireLe) CreerPourControle(
+            int eleveId, int controleId, string? matiere, DateTime maintenant)
+        {
+            Nettoyer(maintenant);
+
+            lock (_verrou)
+            {
+                // Un QR code resté sans photo sur ce contrôle ne sert plus.
+                foreach (var (cle, entree) in _entrees)
+                {
+                    if (entree.ControleId == controleId && entree.PiecesJointes.Count == 0 && !entree.EnCours)
+                    {
+                        _entrees.TryRemove(cle, out _);
+                    }
+                }
+
+                var jeton = AuthentificationEleve.GenererJeton();
+                var expireLe = maintenant + Validite;
+
+                _entrees[AuthentificationEleve.Hacher(jeton)] = new Entree
+                {
+                    ControleId = controleId,
+                    EleveId = eleveId,
+                    Matiere = matiere,
+                    ExpireLe = expireLe,
+                };
+
+                return (jeton, expireLe);
+            }
+        }
+
+        /// <summary>Même lecture que <see cref="Etat"/>, pour le QR code du cours d'un contrôle.</summary>
+        public (EtatJetonScan Etat, IReadOnlyList<int> Documents, bool Termine) EtatControle(
+            string? jeton, int controleId, DateTime maintenant)
+        {
+            if (string.IsNullOrWhiteSpace(jeton)
+                || !_entrees.TryGetValue(AuthentificationEleve.Hacher(jeton), out var entree)
+                || entree.ControleId != controleId)
+            {
+                return (EtatJetonScan.Expire, Array.Empty<int>(), false);
+            }
+
+            int[] recues;
+            bool termine;
+
+            lock (_verrou)
+            {
+                recues = entree.PiecesJointes.ToArray();
+                termine = entree.Termine;
+            }
+
+            if (recues.Length > 0) return (EtatJetonScan.Recu, recues, termine);
+
+            return entree.ExpireLe > maintenant
+                ? (EtatJetonScan.Attente, recues, termine)
+                : (EtatJetonScan.Expire, recues, termine);
         }
 
         /// <summary>L'envoi a réussi : le jeton est consommé, la pièce attend l'ordinateur.</summary>

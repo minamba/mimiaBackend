@@ -41,10 +41,7 @@ namespace SchoolWebApp.Api.Workers
     public class TranscriptionDocumentsWorker : BackgroundService
     {
         private readonly IServiceScopeFactory _scopes;
-        private readonly AnthropicClient _client;
-        private readonly OptionsClaude _options;
-        private readonly IConfiguration _configuration;
-        private readonly IJournalClaudeRepository _journal;
+        private readonly Services.PiecesJointes.TranscripteurDocuments _transcripteur;
         private readonly ReveilDocuments _reveil;
         private readonly ILogger<TranscriptionDocumentsWorker> _logger;
 
@@ -54,35 +51,14 @@ namespace SchoolWebApp.Api.Workers
         /// </summary>
         private const int TailleLot = 10;
 
-        /// <summary>
-        /// Plafond de sortie. Une page d'énoncé transcrite tient largement
-        /// dedans ; au-delà, c'est que le modèle s'est mis à commenter.
-        ///
-        /// RELEVÉ DE 2 000 À 4 000. Le plafond ne borne pas que le texte rendu :
-        /// la réflexion du modèle le consomme d'abord. Sur un document dense —
-        /// un énoncé de trois pages photographié — elle peut l'épuiser AVANT
-        /// d'écrire quoi que ce soit, et la réponse revient vide sans la moindre
-        /// erreur. C'est le piège qui a coûté cher sur les planches, deux fois.
-        ///
-        /// On ne paie que ce qui est réellement produit : relever le plafond ne
-        /// coûte rien sur les documents qui tenaient déjà dessous.
-        /// </summary>
-        private const int MaxTokens = 4000;
-
         public TranscriptionDocumentsWorker(
             IServiceScopeFactory scopes,
-            AnthropicClient client,
-            IOptions<OptionsClaude> options,
-            IConfiguration configuration,
-            IJournalClaudeRepository journal,
+            Services.PiecesJointes.TranscripteurDocuments transcripteur,
             ReveilDocuments reveil,
             ILogger<TranscriptionDocumentsWorker> logger)
         {
             _scopes = scopes ?? throw new ArgumentNullException(nameof(scopes));
-            _client = client ?? throw new ArgumentNullException(nameof(client));
-            _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
-            _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
-            _journal = journal ?? throw new ArgumentNullException(nameof(journal));
+            _transcripteur = transcripteur ?? throw new ArgumentNullException(nameof(transcripteur));
             _reveil = reveil ?? throw new ArgumentNullException(nameof(reveil));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
@@ -129,7 +105,9 @@ namespace SchoolWebApp.Api.Workers
                             break;
                         }
 
-                        if (await TranscrireAsync(ct) == 0) break;
+                        // Les pièces jointes, puis le cours importé avec un
+                        // contrôle : la même consigne, deux files.
+                        if (await TranscrireAsync(ct) + await TranscrireCoursAsync(ct) == 0) break;
 
                         if (tour == 99)
                         {
@@ -186,7 +164,8 @@ namespace SchoolWebApp.Api.Workers
 
                 try
                 {
-                    var texte = await DemanderAsync(piece, ct);
+                    var texte = await _transcripteur.TranscrireAsync(
+                        piece.Donnees, piece.TypeMime, piece.NomFichier, "transcription-document", ct);
 
                     // UN ÉCHEC EST ÉCRIT, IL N'EST PLUS LAISSÉ EN ATTENTE.
                     //
@@ -246,95 +225,62 @@ namespace SchoolWebApp.Api.Workers
             return marques;
         }
 
-        private async Task<string?> DemanderAsync(
-            Domain.Models.PieceJointe piece, CancellationToken ct)
-        {
-            var base64 = Convert.ToBase64String(piece.Donnees!);
-
-            var blocs = new List<ContentBlockParam>();
-
-            if (piece.EstPdf)
-            {
-                blocs.Add(new DocumentBlockParam
-                {
-                    Source = new Base64PdfSource { Data = base64 },
-                    Title = piece.NomFichier,
-                });
-            }
-            else
-            {
-                blocs.Add(new ImageBlockParam
-                {
-                    Source = new Base64ImageSource
-                    {
-                        Data = base64,
-                        MediaType = piece.TypeMime switch
-                        {
-                            "image/png" => MediaType.ImagePng,
-                            "image/gif" => MediaType.ImageGif,
-                            "image/webp" => MediaType.ImageWebP,
-                            _ => MediaType.ImageJpeg,
-                        },
-                    },
-                });
-            }
-
-            blocs.Add(new TextBlockParam { Text = Consigne });
-
-            var reponse = await _client.Messages.Create(
-                new MessageCreateParams
-                {
-                    Model = _options.ModeleTranscription,
-                    MaxTokens = MaxTokens,
-                    Messages = new List<MessageParam>
-                    {
-                        new() { Role = Role.User, Content = blocs },
-                    },
-                },
-                cancellationToken: ct);
-
-            // Ce que cette transcription a coûté. Sans cette ligne, le poste
-            // dépense en silence : seul le dialogue portait ses jetons.
-            await _journal.EnregistrerAsync(
-                "transcription-document", reponse.Model,
-                reponse.Usage.InputTokens, reponse.Usage.OutputTokens,
-                reponse.Usage.CacheReadInputTokens ?? 0,
-                reponse.Usage.CacheCreationInputTokens ?? 0,
-                ct: ct);
-
-            // On concatène les blocs de texte : le modèle peut en renvoyer
-            // plusieurs, et ne lire que le premier tronquerait l'énoncé.
-            var morceaux = reponse.Content
-                .Where(b => b.TryPickText(out _))
-                .Select(b => { b.TryPickText(out var t); return t!.Text; });
-
-            return string.Join("\n", morceaux);
-        }
-
         /// <summary>
-        /// La consigne de transcription.
+        /// LE COURS IMPORTÉ AVEC UN CONTRÔLE — 26/09/2026. Même consigne que les
+        /// pièces jointes (voir TranscripteurDocuments) ; les octets partent dès
+        /// que le texte est écrit.
         ///
-        /// Elle demande une RESTITUTION, pas un résumé ni une correction : ce
-        /// texte remplacera le document, et tout ce qui n'y figure pas sera
-        /// définitivement perdu. Elle demande aussi de DÉCRIRE ce qui ne se
-        /// transcrit pas — une figure, un graphique — plutôt que de l'ignorer
-        /// en silence, pour qu'on sache au moins qu'il y en avait un.
+        /// UN DOCUMENT ILLISIBLE EST MARQUÉ, pour la même raison qu'au-dessus :
+        /// le laisser dans la file le ferait relire à chaque réveil.
         /// </summary>
-        private const string Consigne = """
-            Transcris ce document en texte, fidèlement.
+        private async Task<int> TranscrireCoursAsync(CancellationToken ct)
+        {
+            using var scope = _scopes.CreateScope();
+            var controles = scope.ServiceProvider.GetRequiredService<IControleScolaireRepository>();
 
-            - Restitue TOUT ce qui est écrit : énoncés, questions, numéros
-              d'exercices, consignes, valeurs numériques, unités.
-            - Ne résous rien, ne corrige rien, ne commente rien.
-            - Ce qui est manuscrit compte autant que ce qui est imprimé. Si
-              c'est le travail d'un élève, transcris-le tel quel, erreurs
-              comprises.
-            - Ce qui ne se transcrit pas — une figure, un graphique, un tableau,
-              une photo — décris-le en une phrase entre crochets, par exemple
-              [figure : triangle ABC rectangle en A, avec AB = 3 cm].
-            - Si un passage est illisible, écris [illisible] plutôt que de
-              deviner.
-            - Aucune introduction, aucune conclusion : uniquement le contenu.
-            """;
+            var aFaire = await controles.GetDocumentsATranscrireAsync(TailleLot, ct);
+            if (aFaire.Count == 0) return 0;
+
+            var marques = 0;
+
+            foreach (var document in aFaire)
+            {
+                if (ct.IsCancellationRequested) return marques;
+                if (document.Donnees is not { Length: > 0 }) continue;
+
+                try
+                {
+                    var texte = await _transcripteur.TranscrireAsync(
+                        document.Donnees, document.TypeMime, document.NomFichier,
+                        "transcription-cours-controle", ct);
+
+                    if (string.IsNullOrWhiteSpace(texte))
+                    {
+                        _logger.LogWarning(
+                            "Cours du controle {ControleId}, document {Id} : transcription VIDE.",
+                            document.ControleId, document.Id);
+                        texte = "(document illisible : transcription automatique vide)";
+                    }
+
+                    await controles.EnregistrerTranscriptionDocumentAsync(
+                        document.Id, texte.Trim(), DateTime.UtcNow, ct);
+                    marques++;
+                }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                {
+                    return marques;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex,
+                        "Transcription impossible pour le cours {DocumentId}.", document.Id);
+                }
+            }
+
+            _logger.LogInformation(
+                "{Marques}/{Lus} page(s) de cours transcrite(s).", marques, aFaire.Count);
+
+            return marques;
+        }
     }
 }

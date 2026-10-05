@@ -576,6 +576,25 @@ namespace SchoolWebApp.Dal.Repositories
             // le pot reste le vrai frein, et il est commun.
             var plafondEnfant = forfait.MinutesPlafondEnfant;
 
+            // LE SUPER-ADMINISTRATEUR N'A PAS DE LIMITE D'HEURES NON PLUS —
+            // Camara, le 28/09/2026 : « pour le compte super administrateur, je
+            // ne veux pas de limite de pot pour les élèves ; cette exception est
+            // uniquement pour ce compte-là ». Ni le pot commun ni la part de
+            // chaque enfant ne l'arrêtent : c'est le compte qui teste le produit
+            // en entier, et « tu as utilisé toutes tes heures du mois » au milieu
+            // d'un essai n'apprend rien. Le temps reste décompté — l'écran du
+            // forfait continue de dire ce qui a été consommé.
+            //
+            // Ce qui l'arrête ENCORE, et c'est voulu : le disjoncteur de jetons
+            // du jour (plus haut), qui protège la facture contre un emballement,
+            // et un abonnement absent, en pause, résilié ou impayé.
+            if (await SansLimiteDEnfantsAsync(parentId.Value, ct))
+            {
+                return VerdictQuota.Ok(Math.Max(0, Math.Min(
+                    alloueesPot - consommeesPot,
+                    forfait.MinutesPlafondEnfant - consommeesEnfant)));
+            }
+
             // Le pot d'abord : c'est lui qui borne le coût. Le plafond ensuite,
             // qui protège la fratrie plutôt que la facture — d'où deux motifs
             // de refus distincts, que les écrans expliquent différemment.

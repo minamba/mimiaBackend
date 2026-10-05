@@ -124,6 +124,31 @@ namespace SchoolWebApp.Dal.Seed
                 notes: "Anglais : annexe 3. Espagnol : annexe 9 — vérifier les compétences de 3e contre elle.",
                 url: UrlLanguesCollegeLycee, matieresCodes: "ANGLAIS;ESPAGNOL", niveauxCodes: "TROISIEME", ct: ct);
 
+            // LES QUATRE LANGUES DU 04/10/2026 — allemand (annexes 1-2), arabe
+            // (5-6), chinois (7-8), italien (13-14) du même arrêté, aux mêmes
+            // dates. Des lignes À PART de celles de l'anglais et de l'espagnol :
+            // `SeedSiAbsente` ne retouche pas une ligne déjà semée, et les
+            // ajouter à leur liste de matières n'aurait eu aucun effet sur une
+            // base existante.
+            await repository.SeedSiAbsenteAsync(
+                "Langues vivantes B (allemand, italien, chinois, arabe)", "4e", new DateTime(2027, 9, 1),
+                dateConnue: true, texteOfficiel: "BO n° 22 du 29/05/2025",
+                notes: "Annexes 1 (allemand), 5 (arabe), 7 (chinois), 13 (italien) — vérifier les compétences de 4e contre elles.",
+                url: UrlLanguesCollegeLycee, matieresCodes: "ALLEMAND;ITALIEN;CHINOIS;ARABE", niveauxCodes: "QUATRIEME", ct: ct);
+
+            await repository.SeedSiAbsenteAsync(
+                "Langues vivantes B (allemand, italien, chinois, arabe)", "3e", new DateTime(2028, 9, 1),
+                dateConnue: true, texteOfficiel: "BO n° 22 du 29/05/2025",
+                notes: "Annexes 1 (allemand), 5 (arabe), 7 (chinois), 13 (italien) — vérifier les compétences de 3e contre elles.",
+                url: UrlLanguesCollegeLycee, matieresCodes: "ALLEMAND;ITALIEN;CHINOIS;ARABE", niveauxCodes: "TROISIEME", ct: ct);
+
+            await repository.SeedSiAbsenteAsync(
+                "Langues vivantes B (allemand, italien, chinois, arabe) — lycée", "2de, 1re, Tle", new DateTime(2027, 8, 1),
+                dateConnue: false, texteOfficiel: "Arrêté du 5/05/2025 (MENE2504621A, annexes 2, 6, 8 et 14)",
+                notes: "Revérification annuelle, comme l'espagnol.",
+                url: "https://eduscol.education.gouv.fr/5811/programmes-et-ressources-en-langues-vivantes-voie-gt",
+                matieresCodes: "ALLEMAND;ITALIEN;CHINOIS;ARABE", niveauxCodes: "SECONDE;PREMIERE;TERMINALE", ct: ct);
+
             await repository.SeedSiAbsenteAsync(
                 "Histoire-géographie", "CM2, 6e", new DateTime(2027, 9, 1),
                 dateConnue: true, texteOfficiel: "BO n° 22 du 28 mai 2026", notes: "Texte déjà publié.",

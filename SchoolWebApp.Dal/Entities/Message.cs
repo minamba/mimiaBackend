@@ -36,6 +36,13 @@ namespace SchoolWebApp.Dal.Entities
         /// </summary>
         public int? TokensCacheEcriture1h { get; set; }
 
+        /// <summary>
+        /// Le modèle qui a prêté sa voix à cette réponse (`gpt-4o-mini-tts`,
+        /// `gemini-3.8-flash-lite-tts`, `tts-1`). NULL avant le 28/09/2026 :
+        /// OpenAI. Sert au coût de la synthèse vocale, par fournisseur.
+        /// </summary>
+        public string? ModeleVoix { get; set; }
+
         public DateTime DateCreation { get; set; }
 
         public virtual Conversation? Conversation { get; set; }

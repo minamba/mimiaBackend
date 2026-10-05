@@ -58,6 +58,14 @@ namespace SchoolWebApp.Api.Request
         /// </summary>
         public List<string>? Specialites { get; set; }
 
+        /// <summary>
+        /// Les autres langues vivantes B cochées par le parent (codes de
+        /// matière : ALLEMAND, ITALIEN…). Null : le champ n'a pas été envoyé —
+        /// un écran antérieur — et rien n'est changé. Voir
+        /// `VoiesScolaires.LanguesAuChoix`.
+        /// </summary>
+        public List<string>? Langues { get; set; }
+
         // Pas de ParentId : il est déduit du JWT, jamais du corps de la requête.
     }
 }

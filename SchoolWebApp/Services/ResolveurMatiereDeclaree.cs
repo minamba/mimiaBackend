@@ -57,6 +57,8 @@ namespace SchoolWebApp.Api.Services
             ["allemand"] = "ALLEMAND",
             ["italien"] = "ITALIEN",
             ["chinois"] = "CHINOIS",
+            ["mandarin"] = "CHINOIS",
+            ["arabe"] = "ARABE",
 
             ["svt"] = "SVT",
             ["bio"] = "SVT",

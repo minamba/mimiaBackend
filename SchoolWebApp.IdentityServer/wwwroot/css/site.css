@@ -555,3 +555,161 @@ html.blue-sky .badge-beta {
 }
 
 html.blue-sky .auth-footnote { color: #a9bddb; }
+
+/* ================================================================== */
+/* LES DÉCLINAISONS DE BLUE SKY — 29/09/2026                           */
+/* Soldes d'été, soldes d'hiver, French Days, Black Friday : la classe */
+/* `saison-…` s'ajoute à `blue-sky` (_Layout.cshtml, réglage  */
+/* STYLE_SAISON). Les mêmes fonds et les mêmes couleurs que le site    */
+/* (App.css, « LES DÉCLINAISONS DE BLUE SKY »).                        */
+/* ================================================================== */
+
+html.blue-sky.saison-soldes-ete {
+    --card: rgba(4, 58, 104, 0.62);
+    --ink-soft: #d4ecfb;
+    --line: rgba(186, 230, 253, 0.3);
+    --line-bouton: rgba(212, 236, 251, 0.6);
+    --accent: #d9480f;
+    --accent-survol: #bf3f0c;
+    --accent-texte: #ffb088;
+    --accent-ink: #ffffff;
+}
+
+html.blue-sky.saison-soldes-ete body {
+    background:
+        linear-gradient(180deg, rgba(3, 55, 105, 0.5), rgba(3, 50, 95, 0.4)) fixed,
+        #0a6fb8 url('../img/solde_ete_bg.webp') center top / cover no-repeat fixed;
+}
+
+@media (max-width: 700px), (hover: none) {
+    html.blue-sky.saison-soldes-ete body {
+        background: linear-gradient(180deg, rgba(3, 55, 105, 0.5), rgba(3, 50, 95, 0.4)), #0a6fb8 url('../img/solde_ete_bg.webp') center top / cover no-repeat;
+        background-attachment: scroll;
+    }
+}
+
+html.blue-sky.saison-soldes-ete .auth-card { box-shadow: 0 30px 80px rgba(2, 35, 70, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.08); }
+html.blue-sky.saison-soldes-ete h1 { text-shadow: 0 2px 20px rgba(2, 45, 90, 0.45); }
+html.blue-sky.saison-soldes-ete .field input:focus { outline-color: #ffb088; }
+html.blue-sky.saison-soldes-ete .badge-beta { border-color: rgba(255, 138, 76, 0.45); background: rgba(255, 138, 76, 0.16); color: #ffd2b5; }
+html.blue-sky.saison-soldes-ete .auth-footnote { color: #d4ecfb; }
+
+html.blue-sky.saison-soldes-hiver {
+    --card: rgba(6, 26, 60, 0.62);
+    --ink-soft: #c3d8f2;
+    --line: rgba(190, 228, 255, 0.26);
+    --line-bouton: rgba(195, 216, 242, 0.55);
+    --accent: #1f6fe0;
+    --accent-survol: #1759bd;
+    --accent-texte: #9ed8ff;
+    --accent-ink: #ffffff;
+}
+
+html.blue-sky.saison-soldes-hiver body {
+    background:
+        linear-gradient(rgba(2, 12, 35, 0.3), rgba(2, 12, 35, 0.3)) fixed,
+        #0a2350 url('../img/solde_hiver_bg.webp') center top / cover no-repeat fixed;
+}
+
+@media (max-width: 700px), (hover: none) {
+    html.blue-sky.saison-soldes-hiver body {
+        background: linear-gradient(rgba(2, 12, 35, 0.3), rgba(2, 12, 35, 0.3)), #0a2350 url('../img/solde_hiver_bg.webp') center top / cover no-repeat;
+        background-attachment: scroll;
+    }
+}
+
+html.blue-sky.saison-soldes-hiver .auth-card { box-shadow: 0 30px 80px rgba(0, 10, 35, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.08); }
+html.blue-sky.saison-soldes-hiver h1 { text-shadow: 0 2px 20px rgba(60, 150, 255, 0.55); }
+html.blue-sky.saison-soldes-hiver .field input:focus { outline-color: #9ed8ff; }
+html.blue-sky.saison-soldes-hiver .badge-beta { border-color: rgba(108, 198, 255, 0.45); background: rgba(108, 198, 255, 0.14); color: #cdeeff; }
+html.blue-sky.saison-soldes-hiver .auth-footnote { color: #c3d8f2; }
+
+html.blue-sky.saison-french-days {
+    --card: rgba(8, 18, 52, 0.66);
+    --ink-soft: #c9d3ec;
+    --line: rgba(160, 180, 255, 0.24);
+    --line-bouton: rgba(201, 211, 236, 0.55);
+    --accent: #d8192f;
+    --accent-survol: #b51326;
+    --accent-texte: #ff7a86;
+    --accent-ink: #ffffff;
+}
+
+html.blue-sky.saison-french-days body {
+    background:
+        linear-gradient(rgba(0, 0, 0, 0.32), rgba(0, 0, 0, 0.32)) fixed,
+        #0a1a4a url('../img/french_day_bg.webp') center top / cover no-repeat fixed;
+}
+
+@media (max-width: 700px), (hover: none) {
+    html.blue-sky.saison-french-days body {
+        background: linear-gradient(rgba(0, 0, 0, 0.32), rgba(0, 0, 0, 0.32)), #0a1a4a url('../img/french_day_bg.webp') center top / cover no-repeat;
+        background-attachment: scroll;
+    }
+}
+
+html.blue-sky.saison-french-days .auth-card { box-shadow: 0 30px 80px rgba(0, 5, 25, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.08); }
+html.blue-sky.saison-french-days h1 { text-shadow: 0 2px 20px rgba(30, 70, 220, 0.55); }
+html.blue-sky.saison-french-days .field input:focus { outline-color: #ff7a86; }
+html.blue-sky.saison-french-days .badge-beta { border-color: rgba(255, 77, 94, 0.45); background: rgba(255, 77, 94, 0.14); color: #ffc4ca; }
+html.blue-sky.saison-french-days .auth-footnote { color: #c9d3ec; }
+
+html.blue-sky.saison-black-friday {
+    --card: rgba(20, 20, 20, 0.7);
+    --ink-soft: #bdbdbd;
+    --line: rgba(255, 205, 90, 0.22);
+    --line-bouton: rgba(220, 220, 220, 0.4);
+    --accent: #f5b301;
+    --accent-survol: #d99c00;
+    --accent-texte: #ffcc4d;
+    --accent-ink: #141414;
+}
+
+html.blue-sky.saison-black-friday body {
+    background:
+        linear-gradient(rgba(0, 0, 0, 0.25), rgba(0, 0, 0, 0.25)) fixed,
+        #0b0b0b url('../img/black_friday_bg.webp') center top / cover no-repeat fixed;
+}
+
+@media (max-width: 700px), (hover: none) {
+    html.blue-sky.saison-black-friday body {
+        background: linear-gradient(rgba(0, 0, 0, 0.25), rgba(0, 0, 0, 0.25)), #0b0b0b url('../img/black_friday_bg.webp') center top / cover no-repeat;
+        background-attachment: scroll;
+    }
+}
+
+html.blue-sky.saison-black-friday .auth-card { box-shadow: 0 30px 80px rgba(0, 0, 0, 0.65), inset 0 1px 0 rgba(255, 255, 255, 0.08); }
+html.blue-sky.saison-black-friday h1 { text-shadow: 0 2px 20px rgba(200, 140, 0, 0.45); }
+html.blue-sky.saison-black-friday .field input:focus { outline-color: #ffcc4d; }
+html.blue-sky.saison-black-friday .badge-beta { border-color: rgba(245, 179, 1, 0.45); background: rgba(245, 179, 1, 0.14); color: #ffe199; }
+html.blue-sky.saison-back-to-school {
+    --card: rgba(5, 62, 44, 0.64);
+    --ink-soft: #d2f2e2;
+    --line: rgba(190, 240, 215, 0.26);
+    --line-bouton: rgba(210, 242, 226, 0.58);
+    --accent: #d62839;
+    --accent-survol: #b71f2f;
+    --accent-texte: #ffd966;
+    --accent-ink: #ffffff;
+}
+
+html.blue-sky.saison-back-to-school body {
+    background:
+        linear-gradient(180deg, rgba(4, 60, 40, 0.48), rgba(4, 55, 38, 0.4)) fixed,
+        #0f6b4d url('../img/back_to_school_bg.webp') center top / cover no-repeat fixed;
+}
+
+@media (max-width: 700px), (hover: none) {
+    html.blue-sky.saison-back-to-school body {
+        background: linear-gradient(180deg, rgba(4, 60, 40, 0.48), rgba(4, 55, 38, 0.4)), #0f6b4d url('../img/back_to_school_bg.webp') center top / cover no-repeat;
+        background-attachment: scroll;
+    }
+}
+
+html.blue-sky.saison-back-to-school .auth-card { box-shadow: 0 30px 80px rgba(2, 30, 20, 0.52), inset 0 1px 0 rgba(255, 255, 255, 0.08); }
+html.blue-sky.saison-back-to-school h1 { text-shadow: 0 2px 16px rgba(3, 60, 40, 0.55); }
+html.blue-sky.saison-back-to-school .field input:focus { outline-color: #ffd966; }
+html.blue-sky.saison-back-to-school .badge-beta { border-color: rgba(255, 200, 61, 0.45); background: rgba(255, 200, 61, 0.14); color: #ffe9a8; }
+html.blue-sky.saison-back-to-school .auth-footnote { color: #d2f2e2; }
+
+html.blue-sky.saison-black-friday .auth-footnote { color: #bdbdbd; }

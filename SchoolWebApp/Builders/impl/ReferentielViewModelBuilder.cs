@@ -33,13 +33,24 @@ namespace SchoolWebApp.Api.Builders.impl
                 .Select(s => new SpecialiteViewModel { Code = s.Code, Libelle = s.Libelle, Precision = s.Precision })
                 .ToList();
 
+            // LES AUTRES LANGUES, de la même façon : cochables seulement si leur
+            // matière est ouverte — une langue éteinte n'a pas de case.
+            var langues = VoiesScolaires.LanguesAuChoix
+                .Where(l => ouvertes.Contains(l.Code))
+                .Select(l => new SpecialiteViewModel { Code = l.Code, Libelle = l.Libelle })
+                .ToList();
+
             // Le regroupement et le choix possible viennent de la même table que
             // le programme de chaque classe : `VoiesScolaires`.
             foreach (var vue in vues)
             {
                 vue.Groupe = VoiesScolaires.Groupe(vue.Code, vue.Cycle);
                 vue.Selectionnable = VoiesScolaires.EstSelectionnable(vue.Code);
-                vue.Lv2Possible = VoiesScolaires.AUneLv2(vue.Code);
+                // La case « espagnol en LVB » n'est proposée que si l'espagnol
+                // est allumé : éteint, la langue ne figure nulle part, options de
+                // l'élève comprises — voir `LanguesVivantes`.
+                vue.Lv2Possible = VoiesScolaires.AUneLv2(vue.Code) && ouvertes.Contains("ESPAGNOL");
+                vue.LanguesPossibles = VoiesScolaires.AUneLv2(vue.Code) ? langues : [];
                 vue.NombreSpecialites = VoiesScolaires.NombreSpecialites(vue.Code);
                 vue.SpecialitesPossibles = vue.NombreSpecialites > 0 ? proposees : [];
             }
@@ -118,7 +129,12 @@ namespace SchoolWebApp.Api.Builders.impl
                         Presentation = presentation,
                         Disciplines = siennes.Select(m => new DisciplineViewModel
                         {
-                            Libelle = m.Libelle,
+                            // Sur la fiche seulement : partout ailleurs — cartes de
+                            // cours, contrôles, bulletins —, la matière garde son
+                            // nom de la base.
+                            Libelle = string.Equals(m.Code, "HISTOIRE_GEO", StringComparison.OrdinalIgnoreCase)
+                                ? "Histoire-Géographie et EMC"
+                                : m.Libelle,
                             Promesse = m.Promesse,
                             Niveaux = Niveaux(m.NiveauOrdreMin, m.NiveauOrdreMax),
                             Voie = Voie(m.Code, m.NiveauOrdreMin),
@@ -154,10 +170,17 @@ namespace SchoolWebApp.Api.Builders.impl
                 {
                     "MATHS" => ("Mathématiques", "Les maths ne sont pas une question de don : on part de ce que tu sais déjà, et on avance une marche à la fois, jusqu'à ce que ça devienne clair."),
                     "FRANCAIS" => ("Français", "Lire, écrire, trouver ses mots : je t'accompagne de la première dictée jusqu'au bac de français, à ton rythme."),
-                    "HISTOIRE_GEO" => ("Histoire-Géographie", "Le passé et le monde se comprennent mieux quand on les raconte : on relie les dates, les cartes et les grandes idées."),
+                    // L'EMC EST DANS SA MATIÈRE, ET ÇA SE DIT — Camara, le 26/09/2026.
+                    // Elle a toujours été enseignée (notions EMC du référentiel, du
+                    // CM1 à la terminale), mais rien ne l'annonçait aux familles.
+                    "HISTOIRE_GEO" => ("Histoire-Géographie · EMC", "Le passé et le monde se comprennent mieux quand on les raconte : on relie les dates, les cartes et les grandes idées. Et en EMC, on apprend à vivre ensemble : les règles, les droits, les valeurs de la République, et comment on en débat."),
                     "ANGLAIS" => ("Anglais", "Une langue s'apprend en la parlant : on écoute, on ose, et on se trompe sans avoir peur. C'est comme ça qu'on progresse."),
                     "SCIENCES" or "PHYSIQUE_CHIMIE" => ("Sciences · Physique-Chimie", "J'aime quand on comprend pourquoi ça marche : on observe, on mesure, et on explique ensemble ce qui se passe."),
                     "ESPAGNOL" => ("Espagnol", "¡Hola! On apprend l'espagnol en le parlant, et on découvre au passage les cultures du monde hispanique."),
+                    "ALLEMAND" => ("Allemand", "Hallo! L'allemand a une réputation de langue difficile : on la démonte ensemble, une phrase après l'autre, et on découvre les pays où on la parle."),
+                    "ITALIEN" => ("Italien", "Ciao! L'italien se parle avec plaisir : on écoute, on répète, on ose, et on découvre l'Italie en chemin."),
+                    "CHINOIS" => ("Chinois", "你好 ! On apprend à entendre les tons, à tracer les caractères un trait après l'autre, et à dire ses premières phrases."),
+                    "ARABE" => ("Arabe", "مرحبا ! On apprend à lire et à écrire l'arabe lettre par lettre, à le parler, et on découvre le monde arabe."),
                     "SVT" => ("SVT", "Le vivant, le corps humain, la Terre : on part de ce qu'on observe pour comprendre comment tout cela fonctionne."),
                     "PHILOSOPHIE" => ("Philosophie", "Penser par soi-même, ça s'apprend : on pose le problème, on argumente, et la dissertation devient beaucoup moins intimidante."),
                     "SCIENCES_GESTION" or "MANAGEMENT" or "DROIT_ECONOMIE" => ("Management / Droit et économie", "L'économie, le droit et la gestion sont partout autour de toi : on part d'exemples concrets pour comprendre les décisions."),
@@ -218,7 +241,7 @@ namespace SchoolWebApp.Api.Builders.impl
                 case "SCIENCES_GESTION" or "MANAGEMENT" or "DROIT_ECONOMIE": return "Série STMG";
                 case "SANITAIRE_SOCIAL" or "BIOLOGIE_HUMAINE": return "Série ST2S";
                 case "BIOTECHNOLOGIES" or "SPCL": return "Série STL";
-                case "ESPAGNOL": return "En LV2";
+                case "ESPAGNOL" or "ALLEMAND" or "ITALIEN" or "CHINOIS" or "ARABE": return "En LV2";
             }
 
             var specialite = niveauMin >= 11 && VoiesScolaires.SpecialitesGenerales

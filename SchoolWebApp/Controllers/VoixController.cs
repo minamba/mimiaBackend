@@ -2,6 +2,7 @@ using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SchoolWebApp.Api.Services.Voix;
+using SchoolWebApp.Api.Utils;
 using Swashbuckle.AspNetCore.Annotations;
 
 namespace SchoolWebApp.Api.Controllers
@@ -20,11 +21,16 @@ namespace SchoolWebApp.Api.Controllers
     public class VoixController : Controller
     {
         private readonly ISyntheseVocaleService _synthese;
+        private readonly ICurrentUserAccessor _currentUser;
         private readonly ILogger<VoixController> _logger;
 
-        public VoixController(ISyntheseVocaleService synthese, ILogger<VoixController> logger)
+        public VoixController(
+            ISyntheseVocaleService synthese,
+            ICurrentUserAccessor currentUser,
+            ILogger<VoixController> logger)
         {
             _synthese = synthese ?? throw new ArgumentNullException(nameof(synthese));
+            _currentUser = currentUser ?? throw new ArgumentNullException(nameof(currentUser));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
@@ -70,9 +76,16 @@ namespace SchoolWebApp.Api.Controllers
                 Response.Headers["X-Accel-Buffering"] = "no";
                 Response.Headers.CacheControl = "no-store";
 
+                // LA DÉPENSE A UNE FAMILLE : le « sub » du jeton est celui du
+                // parent, que l'enfant porte aussi (voir ChatContexteResolver).
+                // Lu dans le jeton, sans toucher à la base — trente appels par
+                // séance ne doivent rien coûter de plus.
+                var sub = _currentUser.IdentityUserId;
+                var reference = string.IsNullOrWhiteSpace(sub) ? null : $"sub:{sub}";
+
                 await _synthese.CopierAudioAsync(
                     requete.Texte!, requete.Avatar, requete.Age, Response.Body,
-                    requete.Dictee, requete.Langue, requete.Vitesse, ct);
+                    requete.Dictee, requete.Langue, requete.Vitesse, reference, ct);
 
                 return new EmptyResult();
             }

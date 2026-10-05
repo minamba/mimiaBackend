@@ -73,6 +73,15 @@ namespace SchoolWebApp.Domain.Models
         public DateTime? CopieAnalyseeLe { get; set; }
 
         /// <summary>
+        /// « Je t'aide à te corriger » (<see cref="StylesCorrection.Aide"/>) ou
+        /// « Je corrige et t'explique » (<see cref="StylesCorrection.Explique"/>).
+        /// Null tant que l'élève n'a pas choisi.
+        /// </summary>
+        public string? StyleCorrection { get; set; }
+
+        public DateTime? StyleCorrectionLe { get; set; }
+
+        /// <summary>
         /// Le professeur a-t-il TOUT ce qu'il lui faut pour analyser ? L'énoncé
         /// ET la copie s'ils sont séparés, la copie seule sinon. Calculé ici,
         /// une fois — le rappel au professeur et la clôture de l'analyse

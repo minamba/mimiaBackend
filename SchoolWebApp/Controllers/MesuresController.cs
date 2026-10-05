@@ -157,6 +157,96 @@ namespace SchoolWebApp.Api.Controllers
         /// En avertissement quand quelque chose cloche, en information sinon :
         /// un relevé sain sert de point de comparaison, pas d'alerte.
         /// </summary>
+        /// <summary>
+        /// UNE COUPURE D'ÉCOUTE, VUE DU NAVIGATEUR — Camara, le 28/09/2026 :
+        /// « énormément de soucis de connexion », sans qu'on sache lesquels.
+        /// Chaque rappel du serveur dit ici POURQUOI : liaison fermée (avec son
+        /// code), oreille morte, erreur du relais (avec sa cause), battement
+        /// sans réponse, ou abandon après vingt rappels. Journalisé seulement :
+        /// on lit `docker logs mimia`, on cherche « Coupure d'ecoute ».
+        /// </summary>
+        public class MesureEcouteRequest
+        {
+            [Required]
+            [StringLength(36, MinimumLength = 8)]
+            public string Seance { get; set; } = string.Empty;
+
+            [Required]
+            [StringLength(40)]
+            public string Cause { get; set; } = string.Empty;
+
+            [Range(0, 5000)]
+            public int? Code { get; set; }
+
+            [StringLength(120)]
+            public string? Raison { get; set; }
+
+            [StringLength(200)]
+            public string? Message { get; set; }
+
+            [Range(0, 1000)]
+            public int Rappels { get; set; }
+
+            [Range(0, 100_000)]
+            public double? Secondes { get; set; }
+
+            [StringLength(300)]
+            public string? Navigateur { get; set; }
+        }
+
+        [HttpPost("ecoute")]
+        [SwaggerResponse(204, "Relevé journalisé.")]
+        public IActionResult Ecoute([FromBody] MesureEcouteRequest requete)
+        {
+            try
+            {
+                _logger.LogWarning(
+                    "Coupure d'ecoute [{Seance}] cause={Cause} code={Code} raison=\"{Raison}\" "
+                    + "message=\"{Message}\" rappels={Rappels} secondesDepuisOuverture={Secondes} "
+                    + "navigateur=\"{Navigateur}\"",
+                    requete.Seance, requete.Cause, requete.Code, requete.Raison ?? "-",
+                    requete.Message ?? "-", requete.Rappels, requete.Secondes,
+                    requete.Navigateur ?? "-");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Coupure d'ecoute non journalisee.");
+            }
+
+            return NoContent();
+        }
+
+        /// <summary>
+        /// LE SON DE LA SYNTHÈSE S'EST ÉPUISÉ EN PLEIN PASSAGE — Camara, le
+        /// 28/09/2026 : « il dit une lettre, ça coupe ». Le lecteur se protège
+        /// seul (il ré-accumule une seconde avant de reprendre) ; ce relevé dit
+        /// combien de fois et combien de temps, pour savoir si c'est le
+        /// fournisseur qui traîne ou le réseau. Journalisé seulement.
+        /// </summary>
+        public class MesureTrouVoixRequest
+        {
+            [Required]
+            [StringLength(36, MinimumLength = 8)]
+            public string Seance { get; set; } = string.Empty;
+
+            [Range(0, 3600)]
+            public double? Secondes { get; set; }
+
+            [StringLength(300)]
+            public string? Navigateur { get; set; }
+        }
+
+        [HttpPost("voix-trou")]
+        [SwaggerResponse(204, "Relevé journalisé.")]
+        public IActionResult TrouVoix([FromBody] MesureTrouVoixRequest requete)
+        {
+            _logger.LogWarning(
+                "Trou de voix [{Seance}] : son epuise en plein passage depuis {Secondes:0.0} s. navigateur=\"{Navigateur}\"",
+                requete.Seance, requete.Secondes, requete.Navigateur ?? "-");
+
+            return NoContent();
+        }
+
         [HttpPost("micro")]
         [SwaggerResponse(204, "Relevé journalisé, ou ignoré sans bruit.")]
         public IActionResult Micro([FromBody] MesureMicroRequest requete)

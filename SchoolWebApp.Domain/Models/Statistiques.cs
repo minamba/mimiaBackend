@@ -311,6 +311,9 @@ namespace SchoolWebApp.Domain.Models
         /// <summary>La part du coût qui vient du dialogue. Mesurée.</summary>
         public decimal? CoutDialogueDollars { get; set; }
 
+        /// <summary>La part de la voix, modèle par modèle. Voir <see cref="CoutPeriode.Voix"/>.</summary>
+        public List<CoutVoix> CoutVoix { get; set; } = [];
+
         /// <summary>
         /// LE TEMPS RÉELLEMENT PASSÉ EN COURS sur la période affichée, EN
         /// SECONDES (« à la seconde près »). Voulu par Camara le 19/09/2026 : « un parent m'a coûté
@@ -376,6 +379,15 @@ namespace SchoolWebApp.Domain.Models
         public decimal VoixDollars { get; set; }
 
         /// <summary>
+        /// La voix, modèle par modèle — Camara, le 28/09/2026 : « il faut
+        /// préciser OpenAI GPT ou Gemini ; si je bascule de l'un à l'autre, les
+        /// prix doivent être différenciés ; si je n'utilise pas l'un, il
+        /// n'apparaît pas ». Seuls les modèles qui ont parlé sur la période
+        /// y figurent, du plus cher au moins cher.
+        /// </summary>
+        public List<CoutVoix> Voix { get; set; } = [];
+
+        /// <summary>
         /// Ce que les tâches de fond ont consommé. Mesuré, comme le dialogue.
         ///
         /// Décrire une planche, en cartographier les repères, observer une
@@ -412,6 +424,42 @@ namespace SchoolWebApp.Domain.Models
         /// TRAÇABLE, ce qui est exactement ce qu'on veut voir par période.
         /// </summary>
         public int MinutesTravaillees { get; set; }
+    }
+
+    /// <summary>
+    /// Ce qu'a coûté la voix d'UN modèle sur la période : qui (`openai`,
+    /// `gemini`), lequel, combien de tours il a dits, combien de dollars.
+    /// </summary>
+    public class CoutVoix
+    {
+        public string Fournisseur { get; set; } = string.Empty;
+
+        public string Modele { get; set; } = string.Empty;
+
+        public int Tours { get; set; }
+
+        /// <summary>Le prix appliqué à la minute qui a servi au calcul.</summary>
+        public decimal PrixMinute { get; set; }
+
+        public decimal Dollars { get; set; }
+
+        /// <summary>
+        /// MESURÉ OU ESTIMÉ — Camara, le 03/10/2026. Depuis cette date, chaque
+        /// appel de synthèse est journalisé avec ses jetons (ceux que Gemini
+        /// renvoie ; pour OpenAI, déduits des secondes d'audio reçues) : quand
+        /// la période en a, `Dollars` est leur somme au tarif de la grille et
+        /// `Mesure` est vrai. Avant, et pour les tours sans appel journalisé,
+        /// on en reste à l'estimation par tour de parole, et `Mesure` est faux.
+        /// </summary>
+        public bool Mesure { get; set; }
+
+        /// <summary>Appels de synthèse journalisés sur la période.</summary>
+        public int Appels { get; set; }
+
+        public long JetonsEntree { get; set; }
+
+        /// <summary>Les jetons audio — c'est eux qui font le prix.</summary>
+        public long JetonsSortie { get; set; }
     }
 
     /// <summary>

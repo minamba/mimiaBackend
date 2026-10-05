@@ -9,6 +9,20 @@ namespace SchoolWebApp.Api.Services
     public record PieceCopie(int Controle, bool EstEnonce);
 
     /// <summary>
+    /// L'élève a choisi comment corriger sa copie : <c>aide</c> (« Je t'aide à
+    /// te corriger ») ou <c>explique</c> (« Je corrige et t'explique »).
+    /// </summary>
+    public record StyleCorrectionChoisi(int Controle, string Style);
+
+    /// <summary>
+    /// Où en est la correction, erreur par erreur : l'erreur en cours (null
+    /// tant qu'aucune n'est présentée), le total s'il est connu, le style
+    /// choisi POUR CETTE ERREUR (null = la question est à l'écran), et si
+    /// tout est fini.
+    /// </summary>
+    public record EtatCorrectionCopie(int? Erreur, int? Total, string? Style, bool Termine);
+
+    /// <summary>
     /// LA COPIE D'UN CONTRÔLE PASSÉ, REGARDÉE AVEC LE PROFESSEUR — voulu par
     /// Camara le 13/09/2026.
     ///
@@ -43,6 +57,12 @@ namespace SchoolWebApp.Api.Services
         [GeneratedRegex(@"\[(?<role>[ÉE]NONC[ÉE]|COPIE) DU CONTR[ÔO]LE n°\s?(?<id>\d+)\]",
             RegexOptions.IgnoreCase)]
         private static partial Regex Piece();
+
+        // « [CORRECTION DU CONTRÔLE n° 42 : aide-moi à me corriger] » ou
+        // « … : corrige et explique-moi ». Écrit par `copieControle.js`.
+        [GeneratedRegex(@"\[CORRECTION DU CONTR[ÔO]LE n°\s?(?<id>\d+)\s?:\s?(?<choix>[^\]]+)\]",
+            RegexOptions.IgnoreCase)]
+        private static partial Regex Style();
 
         /// <summary>Le numéro du contrôle dont le professeur propose de regarder la copie. Null sinon.</summary>
         public static int? LireDemande(string? message)
@@ -117,6 +137,134 @@ namespace SchoolWebApp.Api.Services
 
             return new ChoixCopie(id, Separee: !memeCopie);
         }
+
+        // LA CORRECTION ERREUR PAR ERREUR — Camara, le 26/09/2026. Le professeur
+        // ouvre chaque erreur par « [ERREUR n/N] » et clôt par
+        // « [CORRECTION_TERMINEE] ». Lu aussi par `copieControle.js`.
+        [GeneratedRegex(@"\[ERREUR\s+(?<n>\d+)(?:\s*/\s*(?<total>\d+))?\]", RegexOptions.IgnoreCase)]
+        private static partial Regex Erreur();
+
+        public const string CorrectionTerminee = "[CORRECTION_TERMINEE]";
+
+        /// <summary>
+        /// L'ÉTAT DE LA CORRECTION, lu dans l'historique — la même règle que
+        /// l'écran, à la lettre (`lireCorrection` dans copieControle.js) : deux
+        /// calculs divergents afficheraient une question à l'élève en en
+        /// annonçant une autre au professeur.
+        ///
+        /// Depuis la dernière demande de copie de ce contrôle : la dernière
+        /// balise [ERREUR n/N] donne l'erreur en cours ; le dernier choix de
+        /// l'élève APRÈS elle donne son style ; [CORRECTION_TERMINEE] après
+        /// elle clôt tout. <paramref name="contenuEleve"/> est le message de ce
+        /// tour, pas encore dans l'historique.
+        /// </summary>
+        public static EtatCorrectionCopie EtatCorrection(
+            IReadOnlyList<(string Role, string Contenu)> messages, string? contenuEleve, int controle)
+        {
+            var debut = 0;
+            for (var i = messages.Count - 1; i >= 0; i--)
+            {
+                if (messages[i].Role == "assistant" && LireDemande(messages[i].Contenu) == controle)
+                {
+                    debut = i;
+                    break;
+                }
+            }
+
+            int? erreur = null;
+            int? total = null;
+            var indexErreur = -1;
+            var termine = false;
+
+            for (var i = debut; i < messages.Count; i++)
+            {
+                if (messages[i].Role != "assistant") continue;
+
+                var contenu = messages[i].Contenu ?? string.Empty;
+                var balises = Erreur().Matches(contenu);
+                var derniere = balises.Count > 0 ? balises[^1] : null;
+                var fin = contenu.LastIndexOf(CorrectionTerminee, StringComparison.OrdinalIgnoreCase);
+
+                if (derniere is not null)
+                {
+                    indexErreur = i;
+                    erreur = int.Parse(derniere.Groups["n"].Value);
+                    if (derniere.Groups["total"].Success) total = int.Parse(derniere.Groups["total"].Value);
+                    termine = false;
+                }
+
+                if (fin >= 0 && (derniere is null || fin > derniere.Index)) termine = true;
+            }
+
+            string? style = null;
+
+            if (indexErreur >= 0 && !termine)
+            {
+                var suivants = messages.Skip(indexErreur + 1)
+                    .Where(m => m.Role == "user")
+                    .Select(m => m.Contenu)
+                    .Append(contenuEleve);
+
+                foreach (var contenu in suivants)
+                {
+                    if (LireStyle(contenu) is { } choix && choix.Controle == controle) style = choix.Style;
+                }
+            }
+
+            return new EtatCorrectionCopie(erreur, total, style, termine);
+        }
+
+        /// <summary>
+        /// Le choix « Je t'aide à te corriger » / « Je corrige et t'explique »,
+        /// ou null. « aide-moi » ou « me corriger » veut dire qu'il se corrige
+        /// lui-même ; tout le reste, qu'il veut la correction expliquée.
+        /// </summary>
+        public static StyleCorrectionChoisi? LireStyle(string? message)
+        {
+            if (string.IsNullOrWhiteSpace(message)) return null;
+
+            var style = Style().Match(message);
+            if (!style.Success || !int.TryParse(style.Groups["id"].Value, out var id)) return null;
+
+            var texte = style.Groups["choix"].Value;
+            var seul = texte.Contains("aide-moi", StringComparison.OrdinalIgnoreCase)
+                || texte.Contains("me corriger", StringComparison.OrdinalIgnoreCase);
+
+            return new StyleCorrectionChoisi(id,
+                seul ? global::SchoolWebApp.Domain.Models.StylesCorrection.Aide : global::SchoolWebApp.Domain.Models.StylesCorrection.Explique);
+        }
+
+        /// <summary>
+        /// TOUTES les pièces annoncées dans le message, dans l'ordre — depuis
+        /// le 26/09/2026, l'énoncé et la copie partent ENSEMBLE, dans un seul
+        /// message, une fois les deux importés. Les documents du message sont
+        /// dans le même ordre que les marqueurs.
+        /// </summary>
+        public static IReadOnlyList<PieceCopie> LirePieces(string? message)
+        {
+            if (string.IsNullOrWhiteSpace(message)) return Array.Empty<PieceCopie>();
+
+            return Piece().Matches(message)
+                .Where(m => int.TryParse(m.Groups["id"].Value, out _))
+                .Select(m => new PieceCopie(
+                    int.Parse(m.Groups["id"].Value),
+                    !m.Groups["role"].Value.StartsWith("COPIE", StringComparison.OrdinalIgnoreCase)))
+                .ToList();
+        }
+
+        /// <summary>
+        /// La réponse sans le bloc [COPIE_CONTROLE] de ce contrôle — quand la
+        /// copie est DÉJÀ en cours. Relevé par Camara le 26/09/2026 : l'énoncé
+        /// reçu, le professeur réécrivait le bloc en réclamant la copie, et
+        /// chaque bloc repartait de zéro — la question « séparés ? » revenait
+        /// et l'énoncé était oublié. Le bloc en double part du texte gardé.
+        /// </summary>
+        public static string SansDemande(string texte, int controle) =>
+            Demande().Replace(texte, m =>
+            {
+                var numero = Numero().Match(m.Groups["corps"].Value);
+                return numero.Success && numero.Value == controle.ToString() ? string.Empty : m.Value;
+            }).Trim();
 
         public static PieceCopie? LirePiece(string? message)
         {

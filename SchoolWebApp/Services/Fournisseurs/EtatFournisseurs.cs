@@ -39,6 +39,14 @@ namespace SchoolWebApp.Api.Services.Fournisseurs
         public const string Erreur = "erreur";
 
         /// <summary>
+        /// Le quota du JOUR est atteint — Camara, le 28/09/2026 : « Gemini est
+        /// signalé en vert comme si tout était ok alors que ça ne marche pas ».
+        /// Orange et non rouge : rien n'est coupé, la voix passe par OpenAI
+        /// jusqu'à la remise à zéro. Mais c'est un défaut, et Telegram le dit.
+        /// </summary>
+        public const string QuotaAtteint = "quota_atteint";
+
+        /// <summary>
         /// LES DEUX SEULS ÉTATS QUI MÉRITENT UN COURRIEL. Ils ne se règlent pas
         /// tout seuls : il faut recharger, ou changer la clé. Une surcharge ou
         /// un freinage passent en quelques minutes, et un courriel pour chacun
@@ -54,7 +62,7 @@ namespace SchoolWebApp.Api.Services.Fournisseurs
         /// téléphone, elle ne mérite pas pour autant une boîte de réception.
         /// </summary>
         public static bool EnDefaut(string statut) =>
-            statut is CreditEpuise or CleRefusee or Limite or Indisponible or Injoignable or Erreur;
+            statut is CreditEpuise or CleRefusee or Limite or Indisponible or Injoignable or Erreur or QuotaAtteint;
 
         /// <summary>L'état en toutes lettres, comme l'écran l'écrit.</summary>
         public static string Libelle(string statut) => statut switch
@@ -63,6 +71,7 @@ namespace SchoolWebApp.Api.Services.Fournisseurs
             CreditEpuise => "crédit épuisé",
             CleRefusee => "clé refusée",
             Limite => "freiné (trop de requêtes)",
+            QuotaAtteint => "quota du jour atteint — la voix passe par OpenAI",
             Indisponible => "panne chez le fournisseur",
             Injoignable => "injoignable",
             NonConfigure => "non configuré",
@@ -114,6 +123,21 @@ namespace SchoolWebApp.Api.Services.Fournisseurs
         public DateTime? StatutDepuis { get; init; }
 
         public DateTime? DernierSuccesLe { get; init; }
+
+        /// <summary>
+        /// Où en est la consommation face aux quotas — Google seulement, compté
+        /// par nous (voir <c>CompteurGemini</c>). Null pour les autres.
+        /// </summary>
+        public IReadOnlyList<SchoolWebApp.Api.Services.Voix.JaugeQuota>? Jauges { get; init; }
+
+        /// <summary>Les refus 429 du jour de Google : le plafond a été touché.</summary>
+        public int? RefusDuJour { get; init; }
+
+        /// <summary>
+        /// Jusqu'à quand la voix passe par OpenAI parce que Google a dit non — le
+        /// disjoncteur de <c>CompteurGemini</c>. Null quand il est fermé.
+        /// </summary>
+        public DateTime? BloqueJusqua { get; init; }
     }
 
     /// <summary>
@@ -132,6 +156,12 @@ namespace SchoolWebApp.Api.Services.Fournisseurs
     {
         public const string Anthropic = "anthropic";
         public const string OpenAi = "openai";
+
+        /// <summary>
+        /// Google, pour la voix des professeurs depuis le 28/09/2026 — Camara :
+        /// « tout ce qu'on a mis en place pour OpenAI, je veux pareil pour Gemini ».
+        /// </summary>
+        public const string Gemini = "gemini";
 
         private readonly ConcurrentDictionary<string, EtatFournisseur> _etats = new();
         private readonly ConcurrentDictionary<string, string> _signales = new();
@@ -160,10 +190,23 @@ namespace SchoolWebApp.Api.Services.Fournisseurs
                 Usage = "La voix des professeurs et le micro de l'élève (transcription).",
                 LienFacturation = "https://platform.openai.com/settings/organization/billing/overview",
             };
+
+            // SA PANNE NE COUPE RIEN, ET L'ALERTE DOIT LE DIRE : quand Google ne
+            // répond pas, chaque phrase repasse d'elle-même par OpenAI (voir
+            // SyntheseGemini). Le courriel et Telegram reprennent cet usage mot
+            // pour mot — un « une partie de Mimia est coupée » sans cette phrase
+            // ferait courir pour rien.
+            _etats[Gemini] = new EtatFournisseur
+            {
+                Code = Gemini,
+                Nom = "Google Gemini",
+                Usage = "La voix des professeurs quand l'interrupteur « Voix Gemini » est allumé (Modes). En panne, la voix repasse d'elle-même par OpenAI.",
+                LienFacturation = "https://console.cloud.google.com/billing",
+            };
         }
 
-        /// <summary>Anthropic d'abord, OpenAI ensuite — toujours le même ordre à l'écran.</summary>
-        public IReadOnlyList<EtatFournisseur> Tous() => [_etats[Anthropic], _etats[OpenAi]];
+        /// <summary>Anthropic, OpenAI, Google — toujours le même ordre à l'écran.</summary>
+        public IReadOnlyList<EtatFournisseur> Tous() => [_etats[Anthropic], _etats[OpenAi], _etats[Gemini]];
 
         public EtatFournisseur Get(string code) => _etats[code];
 
@@ -237,6 +280,66 @@ namespace SchoolWebApp.Api.Services.Fournisseurs
                 codeErreur ?? type,
                 Tronquer(message ?? corps, 300),
                 dureeMs);
+        }
+
+        /// <summary>
+        /// Le classement de GOOGLE, qui n'écrit pas ses erreurs comme les deux autres.
+        ///
+        /// `{"error":{"code":429,"message":…,"status":"RESOURCE_EXHAUSTED"}}` : le
+        /// code est un nombre, la nature est dans `status`. Et SURTOUT, son simple
+        /// freinage dit « You exceeded your current quota, please check your plan
+        /// and BILLING details » — lu par `Classer`, le mot « billing » en ferait
+        /// un crédit épuisé : alerte rouge et courriel pour un ralentissement
+        /// passager. D'où cette lecture à part :
+        ///
+        ///   - clé invalide (`API_KEY_INVALID`, « API key not valid ») → clé refusée ;
+        ///   - 401 / 403 → clé refusée, sauf facturation coupée → crédit épuisé ;
+        ///   - 429 → freinage, sauf crédit prépayé épuisé (« prepay », « credits ») ;
+        ///   - 5xx → indisponible ; le reste → erreur.
+        /// </summary>
+        public static ResultatSonde ClasserGemini(int codeHttp, string? corps, long? dureeMs = null)
+        {
+            var (type, codeErreur, message) = LireErreur(corps);
+            var statutGoogle = LireStatutGoogle(corps);
+            var indices = $"{statutGoogle} {type} {codeErreur} {message} {corps}".ToLowerInvariant();
+
+            var cleInvalide = indices.Contains("api_key_invalid") || indices.Contains("api key not valid");
+            var facturation = indices.Contains("billing_disabled") || indices.Contains("billing account")
+                              || indices.Contains("prepay") || indices.Contains("credits are depleted")
+                              || indices.Contains("credit balance");
+
+            var statut =
+                cleInvalide ? StatutFournisseur.CleRefusee
+                : codeHttp is 401 or 403 ? (facturation ? StatutFournisseur.CreditEpuise : StatutFournisseur.CleRefusee)
+                : codeHttp == 429 ? (facturation ? StatutFournisseur.CreditEpuise : StatutFournisseur.Limite)
+                : codeHttp >= 500 ? StatutFournisseur.Indisponible
+                : StatutFournisseur.Erreur;
+
+            return new ResultatSonde(
+                statut,
+                codeHttp,
+                statutGoogle ?? codeErreur ?? type,
+                Tronquer(message ?? corps, 300),
+                dureeMs);
+        }
+
+        /// <summary>Le `status` d'une erreur Google (RESOURCE_EXHAUSTED…), ou null.</summary>
+        private static string? LireStatutGoogle(string? corps)
+        {
+            if (string.IsNullOrWhiteSpace(corps)) return null;
+
+            try
+            {
+                using var document = JsonDocument.Parse(corps);
+                return document.RootElement.TryGetProperty("error", out var erreur)
+                       && erreur.ValueKind == JsonValueKind.Object
+                    ? Texte(erreur, "status")
+                    : null;
+            }
+            catch (JsonException)
+            {
+                return null;
+            }
         }
 
         /// <summary>

@@ -120,6 +120,14 @@ namespace SchoolWebApp.Api.Builders.impl
             eleve.DateCreation = DateTime.UtcNow;
             eleve.Specialites = VoiesScolaires.SpecialitesRetenues(niveau.Code, model.Specialites);
 
+            // ET SES AUTRES LANGUES VIVANTES B, rangées avec les spécialités —
+            // voir `VoiesScolaires.LanguesAuChoix`. Seulement celles qui sont
+            // ouvertes : une langue éteinte n'a pas de case, donc ne se coche pas.
+            var ouvertesALaCreation = await CodesOuvertsAsync();
+
+            eleve.Specialites.AddRange(
+                VoiesScolaires.LanguesRetenues(niveau.Code, model.Langues).Where(ouvertesALaCreation.Contains));
+
             var cree = await _eleveService.AddEleveAsync(eleve);
 
             _logger.LogInformation("Profil eleve {EleveId} cree pour le parent {ParentId}.", cree.Id, parent.Id);
@@ -162,9 +170,46 @@ namespace SchoolWebApp.Api.Builders.impl
             // reste que deux, ni en voie technologique, où il n'y en a aucune.
             eleve.Specialites = VoiesScolaires.SpecialitesRetenues(codeNiveau, model.Specialites);
 
+            // UNE LANGUE ÉTEINTE NE FAIT PAS PERDRE SON CHOIX À L'ÉLÈVE — voir
+            // `LanguesVivantes`. L'espagnol masqué, sa case n'est plus à
+            // l'écran : le formulaire la renvoie décochée. On garde donc ce qui
+            // était enregistré, pour qu'il le retrouve quand la langue revient.
+            var ouvertes = await CodesOuvertsAsync();
+
+            if (!ouvertes.Contains("ESPAGNOL")) eleve.Lv2Espagnol = existant.Lv2Espagnol;
+
+            // SES AUTRES LANGUES, avec la même prudence. Trois cas :
+            //   - le champ n'a pas été envoyé (un écran antérieur) : on garde tout ;
+            //   - la langue est ouverte : c'est le formulaire qui décide ;
+            //   - la langue est éteinte : sa case n'était pas à l'écran, on garde
+            //     ce qui était enregistré.
+            // Puis le filtre de classe : une langue ne survit pas à un passage
+            // dans une classe sans LVB.
+            var dejaChoisies = VoiesScolaires.LanguesDe(existant.Specialites);
+
+            var languesVoulues = model.Langues is null
+                ? dejaChoisies
+                : VoiesScolaires.LanguesDe(model.Langues).Where(ouvertes.Contains)
+                    .Concat(dejaChoisies.Where(l => !ouvertes.Contains(l)))
+                    .Distinct()
+                    .ToList();
+
+            eleve.Specialites.AddRange(VoiesScolaires.LanguesRetenues(codeNiveau, languesVoulues));
+
             var maj = await _eleveService.UpdateEleveAsync(eleve);
             return maj is null ? null : _mapper.Map<EleveViewModel>(maj);
         }
+
+        /// <summary>
+        /// Les codes des matières ouvertes — donc sans les langues éteintes, que
+        /// la liste des matières écarte à la source (voir `LanguesVivantes`).
+        /// </summary>
+        private async Task<HashSet<string>> CodesOuvertsAsync() =>
+            (await _referentielService.GetMatieresAsync(activesSeulement: true))
+                .Select(m => m.Code)
+                .Where(c => c is not null)
+                .Select(c => c!)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         public async Task<IEnumerable<EleveViewModel>> GetArchivesAsync()
         {

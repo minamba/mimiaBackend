@@ -1132,7 +1132,7 @@ namespace SchoolWebApp.Api.Services
         /// </summary>
         /// <summary>Les balises d ecoute, une par langue enseignee.</summary>
         private static readonly System.Text.RegularExpressions.Regex BaliseEcoute =
-            new(@"\[(?:EN|FR|ES|DE|IT|ZH)\](?<passage>.*?)\[/(?:EN|FR|ES|DE|IT|ZH)\]",
+            new(@"\[(?:EN|FR|ES|DE|IT|ZH|AR)\](?<passage>.*?)\[/(?:EN|FR|ES|DE|IT|ZH|AR)\]",
                 System.Text.RegularExpressions.RegexOptions.Singleline
                     | System.Text.RegularExpressions.RegexOptions.IgnoreCase
                     | System.Text.RegularExpressions.RegexOptions.Compiled);

@@ -17,7 +17,9 @@ namespace SchoolWebApp.Domain.Repositories
         /// </summary>
         /// <param name="origine">
         /// `description-planche`, `reperes-planche`, `transcription-document`,
-        /// `observation-competences`, `bilan`.
+        /// `observation-competences`, `bilan` — et `voix`, depuis le 03/10/2026 :
+        /// chaque appel de synthèse vocale, avec les jetons que le fournisseur
+        /// a facturés, et en référence le « sub » du parent à qui l'attribuer.
         /// </param>
         /// <param name="reference">
         /// La clé de la planche ou l'identifiant de la séance : de quoi

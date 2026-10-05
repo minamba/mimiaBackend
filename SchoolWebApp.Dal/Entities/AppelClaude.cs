@@ -24,6 +24,14 @@ namespace SchoolWebApp.Dal.Entities
     /// sert à toutes les familles à la fois. Les loger dans `Message`
     /// obligerait à inventer une conversation fictive, et fausserait du même
     /// coup le coût par famille.
+    ///
+    /// LA VOIX Y EST AUSSI, DEPUIS LE 03/10/2026 (origine `voix`), et elle est
+    /// l'exception à ce qui précède : une phrase prononcée appartient bien à
+    /// une famille. Mais un tour de parole fait plusieurs appels de synthèse,
+    /// et la synthèse ne connaît pas le message qu'elle lit : une ligne par
+    /// appel, avec les jetons facturés par le fournisseur, et en `Reference`
+    /// le « sub » du parent. Avant cette date, la voix était ESTIMÉE à partir
+    /// du nombre de tours — et l'estimation valait le double de la réalité.
     /// </summary>
     public class AppelClaude
     {
@@ -46,6 +54,21 @@ namespace SchoolWebApp.Dal.Entities
 
         public int TokensSortie { get; set; }
 
+        /// <summary>
+        /// POUR L'ORIGINE `voix`, CES DEUX COLONNES NE SONT PAS DES JETONS —
+        /// depuis le 04/10/2026. La voix n'a pas de cache, et son coût ne lit
+        /// que l'entrée et la sortie : elles portent le verdict de la garde de
+        /// redite, en centièmes de seconde, pour qu'on puisse le relire sans la
+        /// console.
+        ///
+        ///   `TokensCacheLecture`  : le son relu par la transcription. 0 = rien
+        ///                           à relire ; -1 = la garde a renoncé.
+        ///   `TokensCacheEcriture` : le son RETIRÉ parce qu'il redisait le
+        ///                           texte. Plus de 0 = une redite coupée.
+        ///
+        /// Une redite fabriquée et non coupée se lit donc : sortie double de
+        /// l'ordinaire, et rien de retiré.
+        /// </summary>
         public int TokensCacheLecture { get; set; }
 
         public int TokensCacheEcriture { get; set; }

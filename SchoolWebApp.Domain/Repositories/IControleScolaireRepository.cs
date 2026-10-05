@@ -240,6 +240,52 @@ namespace SchoolWebApp.Domain.Repositories
             int eleveId, int controleId, DateTime maintenant, CancellationToken ct = default);
 
         /// <summary>
+        /// Pose le choix de l'élève : se corriger lui-même (<c>aide</c>) ou être
+        /// corrigé avec explications (<c>explique</c>). Cloisonné sur la
+        /// matière, comme la copie. Faux si le contrôle n'est pas le sien.
+        /// </summary>
+        Task<bool> PoserStyleCorrectionAsync(
+            int eleveId, int controleId, int matiereId, string style, DateTime maintenant,
+            CancellationToken ct = default);
+
+        // -----------------------------------------------------------------
+        // LE COURS DE L'ÉLÈVE, IMPORTÉ AVEC SON CONTRÔLE (26/09/2026)
+        // -----------------------------------------------------------------
+
+        /// <summary>
+        /// Ajoute une page de cours. Null si le contrôle n'est pas à cet élève,
+        /// ou s'il a déjà <see cref="DocumentControle.Maximum"/> documents.
+        /// </summary>
+        Task<DocumentControle?> AjouterDocumentAsync(
+            int eleveId, int controleId, DocumentControle document, CancellationToken ct = default);
+
+        /// <summary>Les documents du contrôle, sans leurs octets. Vide si le contrôle n'est pas à cet élève.</summary>
+        Task<IReadOnlyList<DocumentControle>> GetDocumentsAsync(
+            int eleveId, int controleId, CancellationToken ct = default);
+
+        Task<bool> SupprimerDocumentAsync(
+            int eleveId, int controleId, int documentId, CancellationToken ct = default);
+
+        /// <summary>Les documents encore à lire, AVEC leurs octets, les plus anciens d'abord.</summary>
+        Task<IReadOnlyList<DocumentControle>> GetDocumentsATranscrireAsync(
+            int taille, CancellationToken ct = default);
+
+        /// <summary>
+        /// Écrit la transcription et efface les octets : une fois lu, le
+        /// document ne sert plus, et un cours photographié reste personnel.
+        /// </summary>
+        Task EnregistrerTranscriptionDocumentAsync(
+            int documentId, string transcription, DateTime maintenant, CancellationToken ct = default);
+
+        /// <summary>
+        /// Le cours d'un contrôle pour une séance : transcrit, ou encore avec
+        /// ses octets s'il ne l'est pas. Sans contrôle d'appartenance — la
+        /// séance a déjà vérifié que le contrôle est à l'élève.
+        /// </summary>
+        Task<IReadOnlyList<DocumentControle>> GetCoursPourSeanceAsync(
+            int controleId, CancellationToken ct = default);
+
+        /// <summary>
         /// Le dernier contrôle PASSÉ de cette matière, depuis au plus
         /// `joursMaximum` jours — clos ou non. C'est celui dont l'élève peut
         /// avoir la copie sous la main. `maintenant` est l'heure de Paris.
@@ -252,8 +298,14 @@ namespace SchoolWebApp.Domain.Repositories
         /// Une nouvelle demande de copie commence : l'état de la précédente
         /// est effacé, la question sera reposée. Faux si le contrôle n'est pas
         /// à cet élève, dans cette matière.
+        ///
+        /// SAUF SI LA COPIE EST ENCORE EN COURS — Camara, le 26/09/2026 :
+        /// réponse donnée ou pièce reçue depuis <paramref name="depuis"/>, et
+        /// tout n'est pas encore arrivé. Une demande répétée pendant qu'on
+        /// attend la copie n'efface rien : la question ne revient pas, et
+        /// l'énoncé déjà reçu reste reçu.
         /// </summary>
         Task<bool> OuvrirCopieAsync(
-            int eleveId, int controleId, int matiereId, CancellationToken ct = default);
+            int eleveId, int controleId, int matiereId, DateTime depuis, CancellationToken ct = default);
     }
 }

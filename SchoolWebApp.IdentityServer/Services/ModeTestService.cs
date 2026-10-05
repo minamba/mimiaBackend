@@ -53,6 +53,12 @@ namespace SchoolWebApp.IdentityServer.Services
         /// FAUX PAR DÉFAUT : une base injoignable garde le style d'origine.
         /// </summary>
         Task<bool> BlueSkyAsync(CancellationToken ct = default);
+
+        /// <summary>
+        /// La déclinaison de Blue Sky (`soldes-ete`, `soldes-hiver`,
+        /// `french-days`, `black-friday`), ou null. Réglage `STYLE_SAISON`.
+        /// </summary>
+        Task<string?> StyleSaisonAsync(CancellationToken ct = default);
     }
 
     public class ModeTestService : IModeTestService
@@ -61,6 +67,12 @@ namespace SchoolWebApp.IdentityServer.Services
         private const string CleCompteTest = "COMPTE_TEST_ACTIF";
         private const string CleMaintenance = "MAINTENANCE_ACTIVE";
         private const string CleBlueSky = "BLUE_SKY";
+        private const string CleStyleSaison = "STYLE_SAISON";
+
+        private static readonly HashSet<string> SaisonsConnues =
+            new(StringComparer.Ordinal) { "soldes-ete", "soldes-hiver", "french-days", "black-friday", "back-to-school" };
+
+        private (string? Valeur, DateTime LuLe)? _saison;
 
         /// <summary>
         /// Durée de mise en cache. Assez courte pour qu'un basculement depuis
@@ -100,6 +112,40 @@ namespace SchoolWebApp.IdentityServer.Services
 
         public Task<bool> BlueSkyAsync(CancellationToken ct = default) =>
             LireAsync(CleBlueSky, false, ct);
+
+        /// <summary>
+        /// Même fraîcheur que les drapeaux (quinze secondes), et même repli :
+        /// une lecture ratée rend le Blue Sky classique, jamais une erreur.
+        /// </summary>
+        public async Task<string?> StyleSaisonAsync(CancellationToken ct = default)
+        {
+            if (_saison is { } connu && DateTime.UtcNow - connu.LuLe < Fraicheur) return connu.Valeur;
+
+            string? valeur = null;
+
+            if (!string.IsNullOrWhiteSpace(_connexion))
+            {
+                try
+                {
+                    await using var connexion = new SqlConnection(_connexion);
+                    await connexion.OpenAsync(ct);
+
+                    await using var commande = connexion.CreateCommand();
+                    commande.CommandText = "SELECT TOP 1 valeur FROM Reglage WHERE cle = @cle";
+                    commande.Parameters.AddWithValue("@cle", CleStyleSaison);
+
+                    var lu = await commande.ExecuteScalarAsync(ct) as string;
+                    valeur = lu is not null && SaisonsConnues.Contains(lu) ? lu : null;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Lecture de la declinaison du style impossible : Blue Sky classique.");
+                }
+            }
+
+            _saison = (valeur, DateTime.UtcNow);
+            return valeur;
+        }
 
         private async Task<bool> LireAsync(string cle, bool parDefaut, CancellationToken ct)
         {

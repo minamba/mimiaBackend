@@ -424,6 +424,8 @@ namespace SchoolWebApp.Dal.Repositories
                 EnonceRecu = c.EnoncePieceJointeId != null,
                 CopieRecue = c.CopiePieceJointeId != null,
                 CopieAnalyseeLe = c.CopieAnalyseeLe,
+                StyleCorrection = c.StyleCorrection,
+                StyleCorrectionLe = c.StyleCorrectionLe,
             };
 
         public async Task<int> AjouterNotionsAsync(
@@ -946,13 +948,30 @@ namespace SchoolWebApp.Dal.Repositories
         }
 
         public async Task<bool> OuvrirCopieAsync(
-            int eleveId, int controleId, int matiereId, CancellationToken ct = default)
+            int eleveId, int controleId, int matiereId, DateTime depuis, CancellationToken ct = default)
         {
             var controle = await _context.ControlesScolaires
                 .Where(c => c.Id == controleId && c.EleveId == eleveId && c.MatiereId == matiereId)
                 .FirstOrDefaultAsync(ct);
 
             if (controle is null) return false;
+
+            // UNE COPIE ENCORE EN COURS NE REPART PAS DE ZÉRO — relevé par
+            // Camara le 26/09/2026 : l'énoncé reçu, le professeur réclamait la
+            // copie en réécrivant le bloc, la question « séparés ? » revenait
+            // et l'énoncé était oublié. Trois fois de suite.
+            //
+            // « En cours » = une réponse ou une pièce récente, et pas tout
+            // reçu. Une copie COMPLÈTE redemandée, elle, repart bien de zéro :
+            // c'est « on la regarde encore une fois ».
+            var complete = controle.CopiePieceJointeId != null
+                && (controle.CopieSeparee == false || controle.EnoncePieceJointeId != null);
+
+            if (controle.CopieSeparee != null && controle.CopieDemandeeLe >= depuis
+                && controle.CopieAnalyseeLe == null && !complete)
+            {
+                return true;
+            }
 
             // UNE NOUVELLE DEMANDE REPART DE ZÉRO : la question sera reposée,
             // et rien de ce qui a été reçu la dernière fois ne compte. Sans ça,
@@ -963,6 +982,11 @@ namespace SchoolWebApp.Dal.Repositories
             controle.EnoncePieceJointeId = null;
             controle.CopiePieceJointeId = null;
             controle.CopieAnalyseeLe = null;
+
+            // Le choix « je me corrige seul / corrige-moi » vaut pour UNE
+            // correction : une nouvelle demande le repose.
+            controle.StyleCorrection = null;
+            controle.StyleCorrectionLe = null;
 
             await _context.SaveChangesAsync(ct);
             return true;
@@ -1061,6 +1085,153 @@ namespace SchoolWebApp.Dal.Repositories
             controle.CopieAnalyseeLe = maintenant;
             await _context.SaveChangesAsync(ct);
             return true;
+        }
+
+        public async Task<bool> PoserStyleCorrectionAsync(
+            int eleveId, int controleId, int matiereId, string style, DateTime maintenant,
+            CancellationToken ct = default)
+        {
+            var normalise = StylesCorrection.Normaliser(style);
+            if (normalise is null) return false;
+
+            var controle = await _context.ControlesScolaires
+                .Where(c => c.Id == controleId && c.EleveId == eleveId && c.MatiereId == matiereId)
+                .FirstOrDefaultAsync(ct);
+
+            if (controle is null) return false;
+
+            controle.StyleCorrection = normalise;
+            controle.StyleCorrectionLe = maintenant;
+
+            await _context.SaveChangesAsync(ct);
+            return true;
+        }
+
+        public async Task<DocumentControle?> AjouterDocumentAsync(
+            int eleveId, int controleId, DocumentControle document, CancellationToken ct = default)
+        {
+            var sien = await _context.ControlesScolaires
+                .AnyAsync(c => c.Id == controleId && c.EleveId == eleveId, ct);
+
+            if (!sien) return null;
+
+            var deja = await _context.ControlesDocuments.CountAsync(d => d.ControleId == controleId, ct);
+            if (deja >= DocumentControle.Maximum) return null;
+
+            var ligne = new ControleDocument
+            {
+                ControleId = controleId,
+                NomFichier = document.NomFichier,
+                TypeMime = document.TypeMime,
+                Taille = document.Taille,
+                NombrePages = document.NombrePages,
+                Donnees = document.Donnees,
+                DateCreation = document.DateCreation,
+            };
+
+            _context.ControlesDocuments.Add(ligne);
+            await _context.SaveChangesAsync(ct);
+
+            document.Id = ligne.Id;
+            document.ControleId = controleId;
+            return document;
+        }
+
+        public async Task<IReadOnlyList<DocumentControle>> GetDocumentsAsync(
+            int eleveId, int controleId, CancellationToken ct = default)
+        {
+            // Les octets ne sont JAMAIS lus ici : cette liste s'affiche, elle
+            // ne transcrit rien.
+            return await _context.ControlesDocuments
+                .AsNoTracking()
+                .Where(d => d.ControleId == controleId && d.Controle!.EleveId == eleveId)
+                .OrderBy(d => d.DateCreation)
+                .Select(d => new DocumentControle
+                {
+                    Id = d.Id,
+                    ControleId = d.ControleId,
+                    NomFichier = d.NomFichier,
+                    TypeMime = d.TypeMime,
+                    Taille = d.Taille,
+                    NombrePages = d.NombrePages,
+                    Transcription = d.Transcription == null ? null : string.Empty,
+                    DateCreation = d.DateCreation,
+                })
+                .ToListAsync(ct);
+        }
+
+        public async Task<bool> SupprimerDocumentAsync(
+            int eleveId, int controleId, int documentId, CancellationToken ct = default)
+        {
+            var ligne = await _context.ControlesDocuments
+                .Where(d => d.Id == documentId && d.ControleId == controleId && d.Controle!.EleveId == eleveId)
+                .FirstOrDefaultAsync(ct);
+
+            if (ligne is null) return false;
+
+            _context.ControlesDocuments.Remove(ligne);
+            await _context.SaveChangesAsync(ct);
+            return true;
+        }
+
+        public async Task<IReadOnlyList<DocumentControle>> GetDocumentsATranscrireAsync(
+            int taille, CancellationToken ct = default)
+        {
+            return await _context.ControlesDocuments
+                .AsNoTracking()
+                .Where(d => d.Transcription == null && d.Donnees != null)
+                .OrderBy(d => d.DateCreation)
+                .Take(taille)
+                .Select(d => new DocumentControle
+                {
+                    Id = d.Id,
+                    ControleId = d.ControleId,
+                    NomFichier = d.NomFichier,
+                    TypeMime = d.TypeMime,
+                    Taille = d.Taille,
+                    NombrePages = d.NombrePages,
+                    Donnees = d.Donnees,
+                    DateCreation = d.DateCreation,
+                })
+                .ToListAsync(ct);
+        }
+
+        public async Task EnregistrerTranscriptionDocumentAsync(
+            int documentId, string transcription, DateTime maintenant, CancellationToken ct = default)
+        {
+            var ligne = await _context.ControlesDocuments.FirstOrDefaultAsync(d => d.Id == documentId, ct);
+
+            // Supprimé pendant la lecture : rien à écrire.
+            if (ligne is null) return;
+
+            ligne.Transcription = transcription;
+            ligne.Donnees = null;
+            ligne.DonneesEffaceesLe = maintenant;
+
+            await _context.SaveChangesAsync(ct);
+        }
+
+        public async Task<IReadOnlyList<DocumentControle>> GetCoursPourSeanceAsync(
+            int controleId, CancellationToken ct = default)
+        {
+            return await _context.ControlesDocuments
+                .AsNoTracking()
+                .Where(d => d.ControleId == controleId)
+                .OrderBy(d => d.DateCreation)
+                .Select(d => new DocumentControle
+                {
+                    Id = d.Id,
+                    ControleId = d.ControleId,
+                    NomFichier = d.NomFichier,
+                    TypeMime = d.TypeMime,
+                    Taille = d.Taille,
+                    NombrePages = d.NombrePages,
+                    // Les octets ne voyagent que pour un document pas encore lu.
+                    Donnees = d.Transcription == null ? d.Donnees : null,
+                    Transcription = d.Transcription,
+                    DateCreation = d.DateCreation,
+                })
+                .ToListAsync(ct);
         }
 
         private static string? Tronquer(string? texte, int max)

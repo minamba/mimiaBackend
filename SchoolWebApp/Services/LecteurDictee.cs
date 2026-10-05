@@ -12,6 +12,16 @@ namespace SchoolWebApp.Api.Services
     public record SuppressionDictee(int? DicteeId);
 
     /// <summary>
+    /// Une correction de dictée en cours : la dictée archivée remise au
+    /// tableau (<see cref="DicteeId"/>), ou les deux textes du tableau de
+    /// comparaison.
+    /// </summary>
+    public record CorrectionDictee(bool Ouverte, int? DicteeId, string? Dicte, string? Copie)
+    {
+        public static readonly CorrectionDictee Fermee = new(false, null, null, null);
+    }
+
+    /// <summary>
     /// Extrait le bloc [DICTEE_CORRIGEE] d'un message du professeur.
     ///
     /// Trois corps de texte libre à la suite, pas un seul comme [FICHE] : le
@@ -160,6 +170,18 @@ namespace SchoolWebApp.Api.Services
             "[ARDOISE]\nLa dictée\n" + dicte.Trim() + "\n\nTa copie\n" + copie.Trim() + "\n[/ARDOISE]";
 
         /// <summary>
+        /// Une note de l'application que le professeur aurait recopiée — le
+        /// 04/10/2026, le dépliage d'une dictée remise au tableau, texte anglais
+        /// compris, lu à voix haute. Elle part du texte persisté : rien de ce
+        /// que l'application lui souffle ne doit revenir dans sa bouche.
+        /// </summary>
+        [GeneratedRegex(@"\[Ajouté par l'application[\s\S]*?\][ \t]*\r?\n?", RegexOptions.IgnoreCase)]
+        private static partial Regex NoteApplication();
+
+        public static string SansNoteApplication(string? texte) =>
+            string.IsNullOrEmpty(texte) ? string.Empty : NoteApplication().Replace(texte, string.Empty);
+
+        /// <summary>
         /// Retire un tableau de comparaison que le professeur aurait écrit quand
         /// même : celui de l'application, déjà au tableau, fait foi.
         /// </summary>
@@ -180,25 +202,96 @@ namespace SchoolWebApp.Api.Services
         /// Une nouvelle dictée, un abandon, une fin de séance ou un tableau
         /// effacé referment la correction.
         /// </summary>
-        public static bool CorrectionOuverte(IEnumerable<string?> messagesProfesseur)
+        public static bool CorrectionOuverte(IEnumerable<string?> messagesProfesseur) =>
+            EtatCorrection(messagesProfesseur).Ouverte;
+
+        /// <summary>
+        /// La correction en cours, et de quoi recalculer ses écarts : le numéro
+        /// de la dictée remise au tableau, ou les deux textes du tableau de
+        /// comparaison.
+        ///
+        /// DEUX DÉFAUTS CORRIGÉS LE 03/10/2026 — Camara, en anglais : la
+        /// correction ne s'ouvrait pas, et le professeur n'a reçu aucun rappel.
+        ///
+        /// 1. Une dictée remise au tableau par son numéro —
+        ///    <c>[DICTEE_AU_TABLEAU]26[/DICTEE_AU_TABLEAU]</c>, le cas de toute
+        ///    dictée reprise à la séance suivante — n'était pas reconnue : seul
+        ///    le tableau « La dictée / Ta copie » ouvrait la correction.
+        /// 2. Le message de reprise commence par <c>[TABLEAU_EFFACE]</c>, et ce
+        ///    marqueur fermait la correction AVANT qu'on ait regardé ce que le
+        ///    même message mettait ensuite au tableau. Dans un message, c'est
+        ///    désormais l'ORDRE qui compte : le dernier geste l'emporte.
+        /// </summary>
+        public static CorrectionDictee EtatCorrection(IEnumerable<string?> messagesProfesseur)
         {
             foreach (var message in messagesProfesseur.Reverse())
             {
                 if (string.IsNullOrEmpty(message)) continue;
 
-                if (message.Contains("[DICTEE_CORRIGEE]", StringComparison.OrdinalIgnoreCase)
-                    || message.Contains(Abandon, StringComparison.Ordinal)
-                    || message.Contains("[FIN_SEANCE]", StringComparison.Ordinal)
-                    || message.Contains("[TABLEAU_EFFACE]", StringComparison.Ordinal)
-                    || message.Contains("[DICTEE]", StringComparison.OrdinalIgnoreCase))
+                var ouvreA = -1;
+                CorrectionDictee? ouverte = null;
+
+                var numero = AuTableau().Matches(message).LastOrDefault();
+                if (numero is not null && int.TryParse(numero.Groups["id"].Value, out var id))
                 {
-                    return false;
+                    ouvreA = numero.Index;
+                    ouverte = new CorrectionDictee(true, id, null, null);
                 }
 
-                if (ComparaisonAuTableau().IsMatch(message)) return true;
+                var tableau = ComparaisonAuTableau().Matches(message).LastOrDefault();
+                if (tableau is not null && tableau.Index > ouvreA)
+                {
+                    ouvreA = tableau.Index;
+                    var (dicte, copie) = LireComparaison(tableau.Value);
+                    ouverte = new CorrectionDictee(true, null, dicte, copie);
+                }
+
+                var fermeA = new[]
+                {
+                    message.LastIndexOf("[DICTEE_CORRIGEE]", StringComparison.OrdinalIgnoreCase),
+                    message.LastIndexOf(Abandon, StringComparison.Ordinal),
+                    message.LastIndexOf("[FIN_SEANCE]", StringComparison.Ordinal),
+                    message.LastIndexOf("[TABLEAU_EFFACE]", StringComparison.Ordinal),
+                    message.LastIndexOf("[DICTEE]", StringComparison.OrdinalIgnoreCase),
+                }.Max();
+
+                if (fermeA > ouvreA) return CorrectionDictee.Fermee;
+                if (ouverte is not null) return ouverte;
             }
 
-            return false;
+            return CorrectionDictee.Fermee;
+        }
+
+        [GeneratedRegex(@"^\s*(?:la\s+|le\s+|el\s+|il\s+|the\s+|das\s+)?(?:dict[ée]e|dictation|dictado|dettato|diktat|听写)\s*[:：]?\s*$",
+            RegexOptions.IgnoreCase)]
+        private static partial Regex TitreDictee();
+
+        [GeneratedRegex(@"^\s*(?:ta\s+|ma\s+|your\s+|tu\s+|la\s+tua\s+|deine\s+|你的\s*)?(?:copie|copy|copia|abschrift|抄写|答案)\s*[:：]?\s*$",
+            RegexOptions.IgnoreCase)]
+        private static partial Regex TitreCopie();
+
+        /// <summary>
+        /// Les deux textes d'un tableau « La dictée / Ta copie » — la lecture de
+        /// `lireComparaison` côté front, mêmes titres reconnus.
+        /// </summary>
+        private static (string? Dicte, string? Copie) LireComparaison(string bloc)
+        {
+            var lignes = bloc
+                .Replace("[ARDOISE]", string.Empty, StringComparison.OrdinalIgnoreCase)
+                .Replace("[/ARDOISE]", string.Empty, StringComparison.OrdinalIgnoreCase)
+                .Replace("\r", string.Empty)
+                .Split('\n');
+
+            var indexDictee = Array.FindIndex(lignes, l => TitreDictee().IsMatch(l));
+            if (indexDictee < 0) return (null, null);
+
+            var indexCopie = Array.FindIndex(lignes, indexDictee + 1, l => TitreCopie().IsMatch(l));
+            if (indexCopie < 0) return (null, null);
+
+            var dicte = string.Join('\n', lignes[(indexDictee + 1)..indexCopie]).Trim();
+            var copie = string.Join('\n', lignes[(indexCopie + 1)..]).Trim();
+
+            return (dicte.Length > 0 ? dicte : null, copie.Length > 0 ? copie : null);
         }
 
         /// <summary>

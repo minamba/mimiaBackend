@@ -9,7 +9,11 @@ namespace SchoolWebApp.Api.Mapper
     {
         public MapperProfile()
         {
-            CreateMap<Eleve, EleveViewModel>();
+            // LES CHOIX DE LA FAMILLE, SÉPARÉS POUR L'ÉCRAN : les langues d'un
+            // côté, les spécialités de l'autre — voir `VoiesScolaires.LanguesAuChoix`.
+            CreateMap<Eleve, EleveViewModel>()
+                .ForMember(v => v.Specialites, o => o.MapFrom(e => VoiesScolaires.SansLangues(e.Specialites)))
+                .ForMember(v => v.Langues, o => o.MapFrom(e => VoiesScolaires.LanguesDe(e.Specialites)));
 
             // ParentId volontairement ignoré : il est imposé par le builder
             // depuis le JWT, jamais recopié depuis la requête.

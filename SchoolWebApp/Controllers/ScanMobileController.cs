@@ -61,10 +61,15 @@ namespace SchoolWebApp.Api.Controllers
             // dans CETTE réponse plutôt que dans une seconde requête : la page
             // est encore vide quand il arrive, et la bascule ne se voit pas.
             var blueSky = false;
+            string? saison = null;
 
             try
             {
                 blueSky = await reglages.EstActifAsync(ReglagesController.BlueSky, false, ct);
+
+                // Sa déclinaison (soldes, French Days, Black Friday), même raison.
+                var lue = await reglages.LireAsync(ReglagesController.StyleSaison, ct);
+                saison = lue is not null && ReglagesController.SaisonsConnues.Contains(lue) ? lue : null;
             }
             catch (Exception ex)
             {
@@ -74,7 +79,7 @@ namespace SchoolWebApp.Api.Controllers
                 _logger.LogWarning(ex, "Lecture du style pour la page de scan impossible.");
             }
 
-            return Ok(info with { BlueSky = blueSky });
+            return Ok(info with { BlueSky = blueSky, StyleSaison = saison });
         }
 
         [HttpPost("{jeton}")]
@@ -82,7 +87,8 @@ namespace SchoolWebApp.Api.Controllers
         [SwaggerResponse(200, "Photo reçue.")]
         [SwaggerResponse(400, "Fichier refusé — le motif est destiné à l'élève.")]
         [SwaggerResponse(404, "QR code inconnu, expiré ou déjà utilisé.")]
-        public async Task<IActionResult> Envoyer(string jeton, IFormFile fichier)
+        public async Task<IActionResult> Envoyer(
+            string jeton, IFormFile fichier, [FromServices] Services.CoursDuControleService cours)
         {
             if (fichier is null || fichier.Length == 0)
             {
@@ -96,7 +102,7 @@ namespace SchoolWebApp.Api.Controllers
 
             // RÉSERVÉ AVANT DE LIRE LE FICHIER : deux envois simultanés avec le
             // même QR code ne passent pas tous les deux.
-            if (!_jetons.Reserver(jeton, DateTime.UtcNow, out var conversationId))
+            if (!_jetons.Reserver(jeton, DateTime.UtcNow, out var destination))
             {
                 return NotFound(new
                 {
@@ -109,6 +115,26 @@ namespace SchoolWebApp.Api.Controllers
             {
                 using var flux = new MemoryStream();
                 await fichier.CopyToAsync(flux, HttpContext.RequestAborted);
+
+                // LE COURS D'UN CONTRÔLE — 26/09/2026 : la photo va au contrôle,
+                // par la même porte que l'ordinateur.
+                if (destination.ControleId is int controleId)
+                {
+                    var ajout = await cours.AjouterAsync(
+                        destination.EleveId, controleId, fichier.FileName, fichier.ContentType,
+                        flux.ToArray(), HttpContext.RequestAborted);
+
+                    if (ajout.Document is null)
+                    {
+                        _jetons.Liberer(jeton);
+                        return BadRequest(new { message = ajout.Motif });
+                    }
+
+                    _jetons.Livrer(jeton, ajout.Document.Id);
+                    return Ok(new { recu = true });
+                }
+
+                var conversationId = destination.ConversationId;
 
                 var resultat = await _chatBuilder.AjouterPieceJointeParScanAsync(
                     conversationId, fichier.FileName, fichier.ContentType,
@@ -132,7 +158,8 @@ namespace SchoolWebApp.Api.Controllers
             catch (Exception ex)
             {
                 _jetons.Liberer(jeton);
-                _logger.LogError(ex, "Echec de l'envoi d'une photo par QR code sur {ConversationId}.", conversationId);
+                _logger.LogError(ex, "Echec de l'envoi d'une photo par QR code (conversation {ConversationId}, controle {ControleId}).",
+                    destination.ConversationId, destination.ControleId);
                 return StatusCode(500, new { message = "La photo n'a pas pu être envoyée. Tu peux réessayer ?" });
             }
         }

@@ -134,6 +134,12 @@ namespace SchoolWebApp.Api.Controllers
                     // mais c'est la classe qui décide lesquels. Un CP et un CM2
                     // ne jouent pas au même jeu derrière le même bouton.
                     eleve.NiveauCode,
+
+                    // ET SON ÂGE — depuis le 30/09/2026 : la voix du professeur
+                    // règle son ton sur l'âge (chaleureux avant douze ans). Sans
+                    // lui, la séance d'un enfant entré par son code parlait à un
+                    // adolescent de douze ans par défaut.
+                    eleve.Age,
                 },
             });
         }

@@ -630,7 +630,7 @@ namespace SchoolWebApp.Api.Builders.impl
         /// la fenêtre d'historique que le professeur a sous les yeux. Une
         /// consigne seule lui aurait demandé de corriger ce qu'il ne voit pas.
         /// </summary>
-        private async Task<string?> DicteeEnAttenteAsync(int eleveId, int matiereId, CancellationToken ct)
+        private async Task<(string Rappel, int Id)?> DicteeEnAttenteAsync(int eleveId, int matiereId, CancellationToken ct)
         {
             try
             {
@@ -647,15 +647,40 @@ namespace SchoolWebApp.Api.Builders.impl
 
                 if (enAttente is null) return null;
 
-                return $"[Une dictée attend sa correction depuis le {enAttente.DateCreation:dd/MM} "
+                // LES NUMÉROS DU TABLEAU, DÈS L'ACCUEIL — Camara, le 04/10/2026 :
+                // « l'erreur numéro 1 que le professeur m'indique est en fait la
+                // numéro 2 ». Au tour d'accueil il recevait le texte et la copie,
+                // jamais la liste numérotée — elle n'arrivait qu'au tour suivant,
+                // une fois la dictée au tableau. Il numérotait donc de tête, et
+                // repartait de ce qu'il avait écrit la fois d'avant (« l'erreur 1
+                // porte sur les volets »), qui était faux. Voir `EcartsDictee`.
+                var ecarts = EcartsDictee.Marqueur(enAttente.TexteDicte, enAttente.Copie);
+
+                var numeros = ecarts is null
+                    ? string.Empty
+                    : "\n" + ecarts + "\n[Ces numéros font foi, même contre ce que tu as pu écrire "
+                        + "à une séance précédente : si tu avais appelé « erreur 1 » un autre écart, "
+                        + "c'était une erreur de ta part. Reprends au n°1, sauf si l'historique montre "
+                        + "que l'élève en a déjà corrigé — alors au premier numéro qui reste.]";
+
+                // L'APPLICATION LA REMET AU TABLEAU ELLE-MÊME — Camara, le
+                // 04/10/2026 : « vu que le prof a dit qu'on reprenait la
+                // correction, il doit la réafficher ». On demandait au professeur
+                // d'écrire le repère ; il a annoncé « on reprend ta dictée » et
+                // posé sa question devant un tableau vide. Une garantie d'usage
+                // ne se demande pas : voir `tableauRepris`, qui se sert de l'Id.
+                var rappel = $"[Une dictée attend sa correction depuis le {enAttente.DateCreation:dd/MM} "
                     + $"(n° {enAttente.Id}) : tu COMMENCES la séance par elle, avant toute autre "
-                    + "chose — voir « UNE DICTÉE EN ATTENTE SE CORRIGE D'ABORD ». Pour la "
-                    + $"remettre au tableau : [DICTEE_AU_TABLEAU]{enAttente.Id}[/DICTEE_AU_TABLEAU]. "
+                    + "chose — voir « UNE DICTÉE EN ATTENTE SE CORRIGE D'ABORD ». L'application la "
+                    + "remet ELLE-MÊME au tableau à l'instant, avec ses numéros : n'écris pas de "
+                    + "repère [DICTEE_AU_TABLEAU], ne dis pas « je te la remets ». "
                     + "S'il ne veut pas la corriger — ou s'il a DÉJÀ demandé plus haut à "
                     + "l'abandonner : dans ce cas ne la lui repropose pas —, écris "
                     + $"[DICTEE_SUPPRIMEE]{enAttente.Id}[/DICTEE_SUPPRIMEE] et passe à autre chose.\n"
                     + "Texte dicté :\n" + enAttente.TexteDicte + "\n"
-                    + "Sa copie :\n" + enAttente.Copie + "]";
+                    + "Sa copie :\n" + enAttente.Copie + "]" + numeros;
+
+                return (rappel, enAttente.Id);
             }
             catch (Exception ex)
             {
@@ -1145,7 +1170,7 @@ namespace SchoolWebApp.Api.Builders.impl
         /// ordinaire, qui ne coûte qu'une expression régulière.
         /// </summary>
         private async Task EnregistrerCopieControleAsync(
-            int eleveId, int matiereId, string? contenu, int? pieceAttachee, CancellationToken ct)
+            int eleveId, int matiereId, string? contenu, IReadOnlyList<int> piecesAttachees, CancellationToken ct)
         {
             try
             {
@@ -1160,10 +1185,26 @@ namespace SchoolWebApp.Api.Builders.impl
                 // SEULEMENT SI LA PIÈCE A VRAIMENT ÉTÉ ATTACHÉE : un marqueur
                 // « voici ma copie » sans document ne prouve rien, et le
                 // professeur attendrait une feuille en la croyant reçue.
-                if (pieceAttachee is int piece && LecteurCopieControle.LirePiece(contenu) is { } recue)
+                //
+                // L'ÉNONCÉ ET LA COPIE PARTENT ENSEMBLE depuis le 26/09/2026 : la
+                // carte les garde jusqu'à ce que tout soit importé, puis un seul
+                // message les porte, marqueurs et documents dans le même ordre.
+                var recues = LecteurCopieControle.LirePieces(contenu);
+
+                for (var i = 0; i < recues.Count && i < piecesAttachees.Count; i++)
                 {
                     await _controles.RecevoirPieceCopieAsync(
-                        eleveId, recue.Controle, matiereId, recue.EstEnonce, piece, maintenant, ct);
+                        eleveId, recues[i].Controle, matiereId, recues[i].EstEnonce,
+                        piecesAttachees[i], maintenant, ct);
+                }
+
+                // « Je t'aide à te corriger » / « Je corrige et t'explique » —
+                // noté AVANT la réponse : c'est ce choix qui décide, dès ce
+                // tour-ci, si le professeur a le droit de donner une réponse.
+                if (LecteurCopieControle.LireStyle(contenu) is { } style)
+                {
+                    await _controles.PoserStyleCorrectionAsync(
+                        eleveId, style.Controle, matiereId, style.Style, maintenant, ct);
                 }
             }
             catch (Exception ex)
@@ -1189,14 +1230,18 @@ namespace SchoolWebApp.Api.Builders.impl
         /// lue à quinze cents lignes du tour courant s'oublie ; celle qui
         /// voyage avec le tour, non.
         /// </summary>
-        private async Task<string?> CopieControleAsync(int eleveId, int matiereId, CancellationToken ct)
+        private async Task<string?> CopieControleAsync(
+            int eleveId, int matiereId, IReadOnlyList<(string Role, string Contenu)> fil, string? contenu,
+            CancellationToken ct)
         {
             try
             {
                 var copie = await _controles.GetCopieEnCoursAsync(
                     eleveId, matiereId, DateTime.UtcNow - FenetreCopie, ct);
 
-                return copie is null ? null : MarqueurCopieControle(copie);
+                return copie is null
+                    ? null
+                    : MarqueurCopieControle(copie, LecteurCopieControle.EtatCorrection(fil, contenu, copie.Id));
             }
             catch (Exception ex)
             {
@@ -1259,25 +1304,47 @@ namespace SchoolWebApp.Api.Builders.impl
             + "lui qui affiche les boutons d'envoi de l'énoncé, sans reposer la question de la "
             + "copie.]";
 
-        private static string MarqueurCopieControle(ControleScolaireEleve c)
+        private static string MarqueurCopieControle(ControleScolaireEleve c, EtatCorrectionCopie correction)
         {
             var entete = $"[COPIE DU CONTRÔLE n° {c.Id} — {c.MatiereLibelle}, "
                 + $"{c.Sujet ?? "sujet non précisé"}. ";
 
             if (c.CopieComplete)
             {
-                return entete
-                    + (c.CopieSeparee == true
-                        ? "Tu as TOUT : l'énoncé ET sa copie. "
-                        : "Tu as TOUT : sa copie, énoncé et réponses sur la même feuille. ")
-                    + "Accuse réception de ce qui vient d'arriver, puis commencez l'analyse "
-                    + "ENSEMBLE : une erreur à la fois, en lui demandant d'abord ce qu'il pense "
-                    + "s'être passé sur cette question avant de lui montrer la démarche. Tu "
-                    + "t'appuies sur ce que le correcteur a compté juste ou faux, pas sur ton "
-                    + "impression ; une mauvaise note se constate, elle ne se reproche pas. "
-                    + "Quand l'analyse est faite, écris [CONTROLE_RESULTAT] avec "
-                    + $"controle: {c.Id}, la note si elle figure sur la copie, et `reussies:` / "
-                    + "`ratees:` d'après la copie.]";
+                var recu = c.CopieSeparee == true
+                    ? "Tu as TOUT : l'énoncé ET sa copie. "
+                    : "Tu as TOUT : sa copie, énoncé et réponses sur la même feuille. ";
+
+                var appui = "Tu t'appuies sur ce que le correcteur a compté juste ou faux, pas sur ton "
+                    + "impression ; une mauvaise note se constate, elle ne se reproche pas. ";
+
+                if (correction.Termine)
+                {
+                    return entete + recu + appui
+                        + "LA CORRECTION DE CETTE COPIE EST TERMINÉE : ne rouvre aucune erreur, sauf "
+                        + "s'il te le demande.]";
+                }
+
+                // AUCUNE ERREUR PRÉSENTÉE ENCORE — Camara, le 26/09/2026 : le choix
+                // « je t'aide / je corrige » se fait ERREUR PAR ERREUR. On présente
+                // la première, et l'écran pose la question pour elle seule.
+                if (correction.Erreur is null)
+                {
+                    return entete + recu + appui
+                        + "Accuse réception en une phrase, puis présente SA PREMIÈRE ERREUR — la "
+                        + "première question que le correcteur a comptée fausse : laquelle, et ce "
+                        + "qu'il a écrit —, SANS dire pourquoi c'est faux ni la bonne réponse. Écris "
+                        + "[ERREUR 1/N] à la fin de ton message, où N est le nombre de questions que le "
+                        + "correcteur a comptées fausses : l'écran lui demandera alors comment il veut "
+                        + "corriger CETTE erreur (« Je t'aide à te corriger » ou « Je corrige et "
+                        + "t'explique »). Tu n'expliques rien avant son choix. S'IL N'A AUCUNE ERREUR, "
+                        + "félicite-le, puis écris [CORRECTION_TERMINEE] et [CONTROLE_RESULTAT] avec "
+                        + $"controle: {c.Id} et la note si elle figure sur la copie."
+                        + CommencerToutDeSuite + "]";
+                }
+
+                return entete + recu + appui.TrimEnd() + "]"
+                    + "\n\n" + MarqueurErreur(c.Id, correction);
             }
 
             var etat = (c.CopieSeparee, c.EnonceRecu, c.CopieRecue) switch
@@ -1301,7 +1368,111 @@ namespace SchoolWebApp.Api.Builders.impl
                 + " TANT QUE TU N'AS PAS TOUT, TU NE COMMENCES AUCUNE ANALYSE : ni de l'énoncé "
                 + "seul, ni de la copie seule — tu ne corriges rien, tu ne commentes aucune "
                 + "réponse, tu ne devines pas ce qui manque. Les boutons d'envoi sont à l'écran : "
-                + "inutile de lui expliquer comment faire.]";
+                + "inutile de lui expliquer comment faire. N'ÉCRIS PAS [COPIE_CONTROLE] : la demande "
+                + "est déjà ouverte, et l'écran garde ce qu'il a déjà importé jusqu'à ce que tout "
+                + "soit là — l'énoncé et la copie t'arriveront ENSEMBLE, dans un seul message.]";
+        }
+
+        /// <summary>
+        /// La copie EN COURS ET INCOMPLÈTE dans cette matière, ou null : une
+        /// réponse ou une pièce récente, et tout n'est pas encore arrivé.
+        /// </summary>
+        private async Task<ControleScolaireEleve?> CopieOuverteAsync(
+            int eleveId, int matiereId, CancellationToken ct)
+        {
+            try
+            {
+                var copie = await _controles.GetCopieEnCoursAsync(
+                    eleveId, matiereId, DateTime.UtcNow - FenetreCopie, ct);
+
+                return copie is not null && !copie.CopieComplete ? copie : null;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex,
+                    "Echec de la lecture de la copie ouverte de l'eleve {EleveId}.", eleveId);
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// COMMENCER TOUT DE SUITE — Camara, le 26/09/2026. Au tour du choix, la
+        /// professeure a réfléchi plus d'une minute sans écrire un mot : elle
+        /// préparait la correction de TOUTE la copie avant de commencer. L'enfant,
+        /// devant une bulle vide, a reparlé — et coupé la réponse. Une erreur à la
+        /// fois, c'est aussi une erreur à la fois à PRÉPARER.
+        /// </summary>
+        private const string CommencerToutDeSuite =
+            " COMMENCE TOUT DE SUITE par la première erreur : ne prépare pas la correction de "
+            + "toute la copie avant d'écrire — tu regarderas la suivante au moment d'y passer.";
+
+        /// <summary>
+        /// L'ERREUR EN COURS, RAPPELÉE À CHAQUE TOUR — Camara, le 26/09/2026 :
+        /// « à chaque erreur, la question de l'aide ou de la correction +
+        /// explication apparaît, et ainsi de suite jusqu'à la fin ».
+        ///
+        /// UN FAIT PAR TOUR, PAS UNE RÈGLE DU NOYAU. Le noyau dit déjà « tu ne
+        /// donnes jamais la réponse » ; c'est précisément ce qui n'a pas tenu,
+        /// dans un sens (la fille d'un parent qui voulait se corriger seule) comme
+        /// dans l'autre (Syan, qui a dû réclamer la réponse qu'il avait choisie).
+        /// Le choix vaut pour UNE erreur : lu dans l'historique
+        /// (<see cref="LecteurCopieControle.EtatCorrection"/>), comme l'écran.
+        /// </summary>
+        private static string MarqueurErreur(int controleId, EtatCorrectionCopie e)
+        {
+            var nom = $"ERREUR {e.Erreur}" + (e.Total is int total ? $" SUR {total}" : string.Empty);
+            var suivante = (e.Erreur ?? 0) + 1;
+            var totalEcrit = e.Total is int t ? $"/{t}" : "/N";
+
+            var entete = $"[CORRECTION DE LA COPIE DU CONTRÔLE n° {controleId} — {nom}";
+
+            // LA SUITE, POUR LES DEUX STYLES : l'erreur réglée, la suivante est
+            // présentée SANS explication, et la balise repose la question.
+            var suite = " QUAND CETTE ERREUR EST RÉGLÉE — il a trouvé, ou il a compris ta correction —, "
+                + "présente L'ERREUR SUIVANTE : laquelle, et ce qu'il a écrit, SANS dire pourquoi c'est "
+                + $"faux ni la bonne réponse, et écris [ERREUR {suivante}{totalEcrit}] à la fin de ton "
+                + "message : l'écran lui reposera la question pour elle. S'IL N'Y EN A PLUS, écris "
+                + $"[CORRECTION_TERMINEE], puis [CONTROLE_RESULTAT] avec controle: {controleId}, la note "
+                + "si elle figure sur la copie, et `reussies:` / `ratees:` d'après la copie.";
+
+            if (e.Style is null)
+            {
+                return entete + " : l'écran lui demande en ce moment comment il veut la corriger "
+                    + "(« Je t'aide à te corriger » ou « Je corrige et t'explique »). ATTENDS SON "
+                    + "CHOIX : tu n'expliques rien, tu ne donnes ni indice ni réponse. S'il te parle "
+                    + "d'autre chose, réponds en une phrase et rappelle-lui de choisir sur l'écran.]";
+            }
+
+            if (e.Style == StylesCorrection.Aide)
+            {
+                return entete + " — IL A CHOISI « JE T'AIDE À TE CORRIGER » POUR CETTE ERREUR. RÈGLE "
+                    + "ABSOLUE : TU NE DONNES JAMAIS LA BONNE RÉPONSE. Ni en entier, ni en partie, ni "
+                    + "au tableau, ni glissée dans un exemple, une reformulation ou une question fermée "
+                    + "qui la contient (« est-ce que c'est 12 ? »), ni en lui proposant deux réponses "
+                    + "dont l'une est la bonne, ni en complétant toi-même ce qu'il a commencé. "
+                    + "Demande-lui d'abord ce qu'il pense s'être passé ; fais-lui comprendre POURQUOI "
+                    + "c'est faux — la règle, la notion, l'étape où ça a déraillé ; puis c'est LUI qui "
+                    + "cherche. S'il se trompe encore, un indice de plus, plus précis, qui porte sur la "
+                    + "MÉTHODE, jamais sur le résultat. C'est lui qui trouve et qui écrit la bonne "
+                    + "réponse ; quand il l'a, tu la valides. "
+                    + "S'IL BLOQUE — plusieurs indices sans avancer, ou « je n'y arrive pas » —, "
+                    + "rappelle-lui avec gentillesse qu'il peut toucher « Finalement, corrige et "
+                    + "explique-moi » sur l'écran pour cette erreur. S'il te demande la réponse, même "
+                    + "chose. MAIS TU NE CHANGES JAMAIS DE MANIÈRE DE TOI-MÊME : c'est lui qui décide."
+                    + suite + "]";
+            }
+
+            // RELEVÉ PAR CAMARA LE 26/09/2026 : en « je corrige et t'explique », le
+            // professeur a quand même commencé par « regarde la figure… », et
+            // l'enfant a dû insister. La règle générale du noyau (« ne donne
+            // jamais la réponse ») est levée ici en toutes lettres.
+            return entete + " — IL A CHOISI « JE CORRIGE ET T'EXPLIQUE » POUR CETTE ERREUR. Ici, la "
+                + "règle « ne donne jamais la réponse » NE S'APPLIQUE PAS : il te l'a demandé, et le "
+                + "contrôle est fini. NE LE FAIS PAS CHERCHER — pas de « regarde la figure », pas de "
+                + "« à ton avis ». DANS CE MESSAGE : ce qu'il a écrit, pourquoi c'est faux — la règle, "
+                + "la notion, l'étape où ça a déraillé —, puis LA BONNE RÉPONSE écrite en clair avec sa "
+                + "démarche, et une petite question pour vérifier qu'il a compris."
+                + suite + "]";
         }
 
         /// <summary>
@@ -1656,6 +1827,31 @@ namespace SchoolWebApp.Api.Builders.impl
         }
 
         /// <summary>
+        /// Les écarts numérotés de la dictée en correction, tels que le tableau
+        /// les montre — voir <see cref="EcartsDictee"/>. Null si rien ne permet
+        /// de les recalculer : le rappel de correction part alors seul.
+        /// </summary>
+        private async Task<string?> EcartsAuTableauAsync(CorrectionDictee correction, int eleveId)
+        {
+            try
+            {
+                if (correction.DicteeId is int id)
+                {
+                    var dictee = await _dictees.GetDetailAsync(id, eleveId);
+                    return dictee is null ? null : EcartsDictee.Marqueur(dictee.TexteDicte, dictee.Copie);
+                }
+
+                return EcartsDictee.Marqueur(correction.Dicte, correction.Copie);
+            }
+            catch (Exception ex)
+            {
+                // Un rappel manqué ne doit pas coûter la réponse du professeur.
+                _logger.LogError(ex, "Ecarts de la dictee en correction non calcules (eleve {EleveId}).", eleveId);
+                return null;
+            }
+        }
+
+        /// <summary>
         /// L'élève parle de dictée, dans l'une des langues enseignées : c'est
         /// le moment où le professeur a besoin de la liste.
         /// </summary>
@@ -1732,9 +1928,20 @@ namespace SchoolWebApp.Api.Builders.impl
                 ? $"la planche « {contenu[7..].Trim()} »"
                 : $"« {ResumerTableau(contenu)} »";
 
+            // LE NOUVEL EXERCICE REMPLACE L'ANCIEN AU TABLEAU — Camara, le
+            // 05/10/2026 : « on est passé à l'exercice suivant sans que le
+            // professeur mette à jour le tableau ». Il donnait le nouvel énoncé à
+            // l'oral, et l'élève avait encore l'exercice d'avant sous les yeux,
+            // avec d'autres valeurs. Le fait du tour disait déjà ce qui était
+            // affiché ; il ne disait pas QUE CHANGER D'EXERCICE OBLIGE À RÉÉCRIRE.
             return $"\n\n[TABLEAU : il affiche {quoi}. C'est la SEULE chose que "
                  + "l'élève voit. Tout autre support dont tu parlerais n'est pas "
-                 + "devant lui : remets-le au tableau avant d'en parler.]";
+                 + "devant lui : remets-le au tableau avant d'en parler. Si tu "
+                 + "passes à un NOUVEL exercice — un nouvel énoncé, de nouvelles "
+                 + "valeurs, une nouvelle question —, ce qui est affiché est "
+                 + "l'ANCIEN : écris le nouveau dans un bloc [ARDOISE] dans CE "
+                 + "message, qui remplace l'ancien. Ne le donne jamais à l'oral "
+                 + "seulement.]";
         }
 
         /// <summary>
@@ -1763,23 +1970,33 @@ namespace SchoolWebApp.Api.Builders.impl
         /// part ailleurs, rien n'est réécrit en base —, le texte dicté et la
         /// copie d'origine. Déterministe, donc sans effet sur le cache.
         /// </summary>
-        private async Task DeplierDicteesAuTableauAsync(
+        /// <remarks>
+        /// DU CÔTÉ DE L'ÉLÈVE, JAMAIS DANS LA BOUCHE DU PROFESSEUR — Camara, le
+        /// 04/10/2026. La note était collée au bout du message du professeur qui
+        /// portait le repère, dans son propre historique. À la deuxième reprise
+        /// de la même dictée, il avait deux exemples de « lui-même » écrivant ce
+        /// bloc : il l'a recopié entier dans sa réponse, texte anglais compris,
+        /// malgré « ne le recopie jamais » — et la voix l'a lu. Une consigne ne
+        /// vaut pas un fait, et un fait placé dans la bouche du modèle devient
+        /// une habitude. La note va donc dans le MESSAGE DE L'ÉLÈVE qui suit, ou
+        /// dans le déclencheur du tour quand le repère est dans la dernière
+        /// réponse : c'est là que vivent tous les autres faits de l'application.
+        /// Rendu : ce qui doit rejoindre le déclencheur ; vide sinon.
+        /// </remarks>
+        private async Task<string> DeplierDicteesAuTableauAsync(
             List<DomainMessage> historique, int eleveId, CancellationToken ct)
         {
             try
             {
-                var duProfesseur = historique
+                var numeros = historique
                     .Where(m => m.Role == "assistant" && !string.IsNullOrEmpty(m.Contenu))
-                    .ToList();
-
-                var numeros = duProfesseur
                     .SelectMany(m => LecteurDictee.AuTableau().Matches(m.Contenu!))
                     .Select(m => int.TryParse(m.Groups["id"].Value, out var id) ? id : 0)
                     .Where(id => id > 0)
                     .Distinct()
                     .ToList();
 
-                if (numeros.Count == 0) return;
+                if (numeros.Count == 0) return string.Empty;
 
                 var textes = new Dictionary<int, string>();
 
@@ -1789,24 +2006,56 @@ namespace SchoolWebApp.Api.Builders.impl
                     if (d is null) continue;
 
                     textes[numero] =
-                        $"[Ajouté par l'application, ne le recopie jamais : l'écran affiche au tableau "
-                        + $"la dictée n° {d.Id} du {d.DateCreation:dd/MM/yyyy}"
+                        $"[Ajouté par l'application : l'écran affiche au tableau la dictée n° {d.Id} "
+                        + $"du {d.DateCreation:dd/MM/yyyy}"
                         + (string.IsNullOrWhiteSpace(d.Titre) ? "" : $" « {d.Titre} »")
                         + ", avec ses erreurs surlignées et numérotées dans l'ordre du texte.\n"
                         + "La dictée\n" + d.TexteDicte + "\n\nTa copie\n" + d.Copie + "]";
                 }
 
-                foreach (var message in duProfesseur)
+                // Le texte complet une seule fois par dictée, sur sa DERNIÈRE
+                // remise au tableau ; les remises antérieures n'en gardent qu'une
+                // ligne — l'historique ne porte pas quatre copies du même texte.
+                var complets = new HashSet<int>();
+                var complement = new System.Text.StringBuilder();
+
+                for (var i = historique.Count - 1; i >= 0; i--)
                 {
-                    message.Contenu = LecteurDictee.AuTableau().Replace(message.Contenu!, m =>
-                        int.TryParse(m.Groups["id"].Value, out var id) && textes.TryGetValue(id, out var t)
-                            ? m.Value + "\n" + t
-                            : m.Value);
+                    var message = historique[i];
+                    if (message.Role != "assistant" || string.IsNullOrEmpty(message.Contenu)) continue;
+
+                    var notes = LecteurDictee.AuTableau().Matches(message.Contenu)
+                        .Select(m => int.TryParse(m.Groups["id"].Value, out var id) ? id : 0)
+                        .Where(textes.ContainsKey)
+                        .Distinct()
+                        .Select(id => complets.Add(id)
+                            ? textes[id]
+                            : $"[Ajouté par l'application : l'écran affichait alors la dictée n° {id} au tableau.]")
+                        .ToList();
+
+                    if (notes.Count == 0) continue;
+
+                    var note = string.Join("\n", notes);
+                    var suivant = i + 1 < historique.Count ? historique[i + 1] : null;
+
+                    if (suivant is { Role: "user" })
+                    {
+                        suivant.Contenu = note + "\n\n" + suivant.Contenu;
+                    }
+                    else
+                    {
+                        // Le repère est dans la dernière réponse : le tour en
+                        // cours est celui qui doit savoir ce qu'il y a au tableau.
+                        complement.Insert(0, "\n\n" + note);
+                    }
                 }
+
+                return complement.ToString();
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Echec du depliage des dictees au tableau (eleve {EleveId}).", eleveId);
+                return string.Empty;
             }
         }
 
@@ -2322,6 +2571,19 @@ namespace SchoolWebApp.Api.Builders.impl
                 AgentPedagogiqueService.PlancherHistorique,
                 AgentPedagogiqueService.PasHistorique)).ToList();
 
+            // LES COMPRÉHENSIONS ORALES ENCORE OUVERTES — voir EcouteAuTableau.
+            // On parcourt l'historique dans l'ordre : chaque passage lu ouvre
+            // une écoute, son archive la referme. Au passage, un tableau qui
+            // reproduirait le texte lu est retiré de ce que le professeur
+            // relit — sans quoi il se croirait fondé à l'y remettre, et l'état
+            // du tableau qu'on lui annonce plus bas serait faux.
+            var ecoutesOuvertes = new List<string>();
+
+            foreach (var message in historique.Where(m => m.Role == "assistant"))
+            {
+                message.Contenu = EcouteAuTableau.Avancer(ecoutesOuvertes, message.Contenu);
+            }
+
             var typeAccueil = TypeAccueil.Aucun;
             TimeSpan? depuis = null;
 
@@ -2337,7 +2599,7 @@ namespace SchoolWebApp.Api.Builders.impl
 
             // Son identifiant, une fois RÉELLEMENT attaché au message — c'est
             // la preuve dont la copie de contrôle a besoin.
-            int? pieceAttachee = null;
+            var piecesAttachees = new List<int>();
 
             // Annonce déclenchée par le minuteur de séance : elle ne dépend
             // d'aucun délai de silence, c'est l'horloge qui commande.
@@ -2438,10 +2700,10 @@ namespace SchoolWebApp.Api.Builders.impl
                         && piece.MessageId is null)
                     {
                         await _conversationService.AttacherAuMessageAsync(idPiece, messageEleve.Id, ct);
-                        // LA COPIE DE CONTRÔLE NE RETIENT QUE LA PREMIÈRE, pour
-                        // l'instant : une copie en plusieurs pages toucherait
-                        // l'évaluation et demanderait une migration. Chantier à part.
-                        pieceAttachee ??= idPiece;
+                        // DANS L'ORDRE D'ENVOI : la carte de copie envoie l'énoncé
+                        // puis la copie, et ses marqueurs dans le même ordre. Une
+                        // copie reste d'UNE page — voir la carte.
+                        piecesAttachees.Add(idPiece);
 
                         // L'historique a été lu AVANT d'écrire ce message : le
                         // document n'y est donc pas. On le porte à part pour ce
@@ -2466,7 +2728,7 @@ namespace SchoolWebApp.Api.Builders.impl
                 // dans ce tour même, d'accuser réception de ce qui vient
                 // d'arriver.
                 await EnregistrerCopieControleAsync(
-                    contexte.Eleve.Id, contexte.Conversation.MatiereId, contenu, pieceAttachee, ct);
+                    contexte.Eleve.Id, contexte.Conversation.MatiereId, contenu, piecesAttachees, ct);
             }
 
             // L'API exige que la conversation se termine par un tour utilisateur.
@@ -2521,12 +2783,18 @@ namespace SchoolWebApp.Api.Builders.impl
                 or TypeAccueil.RetourDicteeInterrompue
                 or TypeAccueil.NouvelleSeance;
 
+            int? dicteeEnAttenteId = null;
+
             if (retourEnCours)
             {
                 var enAttente = await DicteeEnAttenteAsync(
                     contexte.Eleve.Id, contexte.Conversation.MatiereId, ct);
 
-                if (enAttente is not null) declencheur += "\n\n" + enAttente;
+                if (enAttente is { } attente)
+                {
+                    declencheur += "\n\n" + attente.Rappel;
+                    dicteeEnAttenteId = attente.Id;
+                }
 
                 // Une correction d'évaluation remise faute de temps ouvre, elle
                 // aussi, le cours suivant — voir CorrectionEnAttenteAsync.
@@ -2748,6 +3016,16 @@ namespace SchoolWebApp.Api.Builders.impl
                     : ReponseChiffree.Rappel);
             }
 
+            // ET SON SYMÉTRIQUE : « VAS-Y » N'EST PAS UNE RÉPONSE — voir
+            // `InvitationAContinuer`. Le 03/10/2026, Nora a posé un exercice,
+            // l'élève a répondu « Vas-y. », et elle a validé un 53 qu'elle
+            // venait de calculer elle-même : « Oui, c'est exactement ça : 53 »,
+            // puis « tu as tout retrouvé tout seul ».
+            else if (InvitationAContinuer.Est(contenu))
+            {
+                declencheur += "\n\n" + InvitationAContinuer.Rappel;
+            }
+
             // UNE EXPRESSION ÉCRITE EN COURS DE CORRECTION SE RAPPELLE AUSSI À
             // CHAQUE TOUR, et pour la même raison que le contrôle juste au-dessus :
             // le serveur sait qu'elle est ouverte, la mémoire du modèle non.
@@ -2768,10 +3046,35 @@ namespace SchoolWebApp.Api.Builders.impl
             // vingt-quatre écarts numérotés au tableau, et le professeur a
             // commencé par le 5. « Dans l'ordre du texte » était dans sa consigne ;
             // il fallait le lui redire au tour même, comme pour le contrôle.
-            if (LecteurDictee.CorrectionOuverte(
-                    historique.Where(m => m.Role == "assistant").Select(m => m.Contenu)))
+            // UNE ÉCOUTE OUVERTE SE RAPPELLE À CHAQUE TOUR — voir EcouteAuTableau :
+            // le 04/10/2026, « je t'entends plus » a suffi pour que le passage
+            // entier parte au tableau, malgré la consigne de l'exercice.
+            if (ecoutesOuvertes.Count > 0) declencheur += "\n\n" + EcouteAuTableau.Rappel;
+
+            var correctionDictee = LecteurDictee.EtatCorrection(
+                historique.Where(m => m.Role == "assistant").Select(m => m.Contenu));
+
+            if (correctionDictee.Ouverte)
             {
                 declencheur += "\n\n" + PromptsPedagogiques.MarqueurCorrectionDicteeEnCours();
+
+                // ET LES NUMÉROS EUX-MÊMES — voir `EcartsDictee`. Le 03/10/2026,
+                // le professeur recomptait « par lignes » des erreurs que le
+                // tableau numérote, s'est dédit deux fois, et a inventé un mot.
+                // Le texte d'une dictée remise par son numéro n'est qu'au tour
+                // d'accueil, jamais persisté : on le relit en base à chaque tour.
+                var ecarts = await EcartsAuTableauAsync(correctionDictee, contexte.Eleve.Id);
+                if (ecarts is not null) declencheur += "\n\n" + ecarts;
+
+                // À L'ARRIVÉE, le tableau est effacé puis remis par l'application
+                // elle-même (voir `tableauRepris`) : le professeur n'a ni à
+                // l'annoncer ni à le réécrire.
+                if (nouvelleArrivee)
+                {
+                    declencheur += "\n\n[L'élève revient : l'application remet ELLE-MÊME la dictée au tableau "
+                        + "à l'instant, avec ses numéros. N'écris pas de repère [DICTEE_AU_TABLEAU], ne dis "
+                        + "pas « je te la remets » : reprends la correction au numéro où vous en étiez.]";
+                }
             }
 
             // UNE COPIE DE CONTRÔLE EN COURS D'ENVOI : ce qui est déjà arrivé,
@@ -2803,11 +3106,25 @@ namespace SchoolWebApp.Api.Builders.impl
                 && LecteurEnonceExercice.DemandeOuverte(
                     historique.Where(m => m.Role == "assistant").Select(m => m.Contenu));
 
+            var fil = historique.Select(m => (m.Role, m.Contenu ?? string.Empty)).ToList();
+
             var copieEnCours = !enonceSeul && (mode == ModesSeance.Bilan || agitSurLaCopie)
-                ? await CopieControleAsync(contexte.Eleve.Id, contexte.Conversation.MatiereId, ct)
+                ? await CopieControleAsync(contexte.Eleve.Id, contexte.Conversation.MatiereId, fil, contenu, ct)
                 : null;
 
             if (copieEnCours is not null) declencheur += "\n\n" + copieEnCours;
+
+            // L'ERREUR EN COURS SURVIT À LA CLÔTURE DE L'ANALYSE. Le rappel de copie
+            // s'éteint dès que le professeur écrit la note ; la correction, erreur
+            // par erreur, doit tenir jusqu'à la dernière. Quand la copie est encore
+            // « en cours », son rappel porte déjà l'erreur : pas de doublon.
+            if (copieEnCours is null && !enonceSeul && mode == ModesSeance.Bilan
+                && controleMode is int controleDuBilan
+                && LecteurCopieControle.EtatCorrection(fil, contenu, controleDuBilan) is
+                    { Erreur: not null, Termine: false } correction)
+            {
+                declencheur += "\n\n" + MarqueurErreur(controleDuBilan, correction);
+            }
 
             if (enonceSeul)
             {
@@ -2848,6 +3165,26 @@ namespace SchoolWebApp.Api.Builders.impl
                     restant, contexte.Eleve.NiveauCycle, contexte.Eleve.Age);
             }
 
+            // LE GENRE DU PROFESSEUR, À CHAQUE TOUR — voir MarqueurGenre : un
+            // professeur qui « redevenait » une femme au fil d'une longue
+            // conversation, malgré la règle du bloc d'identité.
+            declencheur += "\n\n" + PromptsPedagogiques.MarqueurGenre(
+                contexte.Conversation.ProfPrenom, contexte.Conversation.ProfAvatar);
+
+            // LES HARAKAT, À CHAQUE TOUR DU COURS D'ARABE — Camara, le 04/10/2026 :
+            // « j'ai toujours pas les harakat qui s'affichent ». La consigne de la
+            // matière les demandait depuis une demi-heure ; le professeur a remis
+            // au tableau un passage écrit plus tôt sans elles, recopié tel quel
+            // depuis l'historique. Une règle ne vaut pas un fait : on le lui redit
+            // au tour même, en nommant le cas de la recopie.
+            if (string.Equals(contexte.Conversation.MatiereCode, "ARABE", StringComparison.OrdinalIgnoreCase))
+            {
+                declencheur += "\n\n[Rappel : tout mot arabe que tu écris à l'ardoise ou dans une balise [AR] "
+                    + "porte TOUTES ses harakat — fatha, damma, kasra, soukoun, chadda, tanwîn : "
+                    + "« اِسْمِي سَارَة », jamais « اسمي سارة ». Y compris quand tu recopies un passage déjà "
+                    + "écrit plus haut sans elles : ajoute-les en le recopiant.]";
+            }
+
             // LA VITESSE D'ÉCOUTE, MÊME CHEMIN QUE LE TEMPS : elle vit dans le
             // navigateur, elle voyage avec le tour de l'élève, et elle n'est
             // pas persistée. Sans elle, « plus lent » n'a pas de cran de
@@ -2855,6 +3192,17 @@ namespace SchoolWebApp.Api.Builders.impl
             if (!string.IsNullOrWhiteSpace(vitesseEcoute))
             {
                 declencheur += "\n\n" + PromptsPedagogiques.MarqueurVitesse(vitesseEcoute);
+            }
+
+            // L'AU REVOIR APRÈS UN BILAN DÉJÀ FAIT — Camara, le 28/09/2026 : le
+            // professeur redisait tout son bilan quand l'élève lui disait au
+            // revoir juste après. Voir LecteurAuRevoir.
+            if (typeAccueil == TypeAccueil.Aucun
+                && (LecteurAuRevoir.DitAuRevoir(contenu) || LecteurAuRevoir.RemercieApresBilan(contenu))
+                && LecteurAuRevoir.BilanDejaFait(
+                    historique.LastOrDefault(m => m.Role == "assistant")?.Contenu))
+            {
+                declencheur += "\n\n" + LecteurAuRevoir.Marqueur;
             }
 
             // Un accueil de retour n'a de sens que si l'agent voit la dernière
@@ -2870,7 +3218,21 @@ namespace SchoolWebApp.Api.Builders.impl
             // qui reste le cas de l'immense majorité des séances.
             // Une dictée remise au tableau par son numéro : le professeur doit
             // savoir ce qu'il y a dessus pour la corriger.
-            await DeplierDicteesAuTableauAsync(historique, contexte.Eleve.Id, ct);
+            declencheur += await DeplierDicteesAuTableauAsync(historique, contexte.Eleve.Id, ct);
+
+            // LES TOURNURES FAUTIVES DÉJÀ ENREGISTRÉES, corrigées dans ce que le
+            // professeur relit — voir TournuresFautives : il imite ses propres
+            // messages, et « je te réécoute l'histoire » revenait à chaque
+            // reprise. Déterministe, donc sans effet sur le cache.
+            // Et ses accords à lui, pour la même raison : « content de te
+            // retrouver », écrit une fois, se recopie de séance en séance.
+            var professeure = PromptsPedagogiques.EstUneProfesseure(contexte.Conversation.ProfAvatar);
+
+            foreach (var message in historique.Where(m => m.Role == "assistant"))
+            {
+                message.Contenu = AccordDuProfesseur.Corriger(
+                    TournuresFautives.Corriger(message.Contenu), professeure);
+            }
 
             var piecesHistorique = await _conversationService.GetPiecesDesMessagesAsync(
                 historique.Where(m => m.Id > 0).Select(m => m.Id), ct);
@@ -2891,6 +3253,36 @@ namespace SchoolWebApp.Api.Builders.impl
             // restent DANS la séance en cours : rien à effacer, le tableau
             // qu'elles trouvent est encore celui de ce cours-ci.
             if (nouvelleArrivee) yield return TableauEfface;
+
+            // LA DICTÉE EN CORRECTION REVIENT AU TABLEAU AVEC L'ÉLÈVE — Camara,
+            // le 04/10/2026 : « la prof me demande de regarder ma copie mais
+            // n'affiche rien au tableau ». L'arrivée efface le tableau, et le
+            // professeur — qui connaît désormais les écarts par leur numéro — a
+            // repris « l'erreur numéro 3 » de tête, devant un tableau vide.
+            // Quand une correction était en cours, c'est l'APPLICATION qui
+            // remet le tableau : une garantie d'usage ne se demande pas.
+            string? tableauRepris = null;
+
+            if (nouvelleArrivee && correctionDictee.Ouverte)
+            {
+                tableauRepris = correctionDictee switch
+                {
+                    { DicteeId: int idDictee } => $"\n[DICTEE_AU_TABLEAU]{idDictee}[/DICTEE_AU_TABLEAU]\n",
+                    { Dicte: { } dicte, Copie: { } copie } => "\n" + LecteurDictee.TableauDeComparaison(dicte, copie) + "\n",
+                    _ => null,
+                };
+
+                if (tableauRepris is not null) yield return tableauRepris;
+            }
+
+            // ET LA DICTÉE RESTÉE EN ATTENTE, de la même façon : après un départ,
+            // la correction n'est plus « ouverte » dans l'historique, mais c'est
+            // bien elle que le professeur va reprendre — voir DicteeEnAttenteAsync.
+            if (nouvelleArrivee && tableauRepris is null && dicteeEnAttenteId is int idEnAttente)
+            {
+                tableauRepris = $"\n[DICTEE_AU_TABLEAU]{idEnAttente}[/DICTEE_AU_TABLEAU]\n";
+                yield return tableauRepris;
+            }
 
             // LE TABLEAU DE COMPARAISON DE LA DICTÉE, ÉCRIT PAR L'APPLICATION —
             // Camara, le 19/09/2026, pour le coût des cours de langue. Quand la
@@ -2920,13 +3312,45 @@ namespace SchoolWebApp.Api.Builders.impl
             // et la rouvrirait pour une dictée que le professeur déclare perdue.
             if (marquerAbandonDictee) yield return LecteurDictee.Abandon;
 
+            // PENDANT UNE ÉCOUTE, LE TEXTE LU NE PASSE PAS AU TABLEAU — voir
+            // EcouteAuTableau. Le filtre n'existe que si une écoute est ouverte :
+            // en dehors, le flux part tel quel, sans retenue ni retard.
+            var filtreEcoute = ecoutesOuvertes.Count > 0
+                ? new EcouteAuTableau.Filtre(ecoutesOuvertes)
+                : null;
+
+            // CE QUE LE PROFESSEUR ÉCRIT MAL, CORRIGÉ DANS LE FLUX — voir
+            // CorrectionsDuFlux : ses accords (« content de te retrouver » dit par
+            // Marine) et ses tournures fautives (« je te la réécoute »), avant
+            // l'écran ET la voix.
+            var filtreAccord = new CorrectionsDuFlux(
+                PromptsPedagogiques.EstUneProfesseure(contexte.Conversation.ProfAvatar));
+
             await foreach (var fragment in _agent.RepondreAsync(
                 contexte.Eleve, contexte.Conversation, historique, declencheur, bilan,
                 TypeTache.Dialogue, typeAccueil, depuis, secondesRestantes,
                 parMessage, piecesDuTour, ct))
             {
-                yield return fragment.Texte;
+                var accorde = filtreAccord.Passer(fragment.Texte);
+                if (accorde.Length == 0) continue;
+
+                if (filtreEcoute is null)
+                {
+                    yield return accorde;
+                    continue;
+                }
+
+                var passe = filtreEcoute.Passer(accorde);
+                if (passe.Length > 0) yield return passe;
             }
+
+            if (filtreAccord.Terminer() is { Length: > 0 } finAccordee)
+            {
+                var passe = filtreEcoute is null ? finAccordee : filtreEcoute.Passer(finAccordee);
+                if (passe.Length > 0) yield return passe;
+            }
+
+            if (filtreEcoute?.Terminer() is { Length: > 0 } finDeFlux) yield return finDeFlux;
 
             // LE FILET DE LA COPIE DE CONTRÔLE — et c'est le code qui le tend.
             //
@@ -2939,7 +3363,16 @@ namespace SchoolWebApp.Api.Builders.impl
             // bloc est invisible et muet — l'élève ne voit que la carte.
             string? blocCopieAjoute = null;
 
-            if (controleRecent is not null && bilan.Task.IsCompletedSuccessfully)
+            // UNE COPIE DÉJÀ EN COURS, INCOMPLÈTE — Camara, le 26/09/2026. Le
+            // professeur qui dit « envoie-moi ta copie » après avoir reçu
+            // l'énoncé ne rouvre pas une demande : la carte est déjà là, avec
+            // ses coches. Ni le filet ne rajoute le bloc, ni le bloc écrit par
+            // le professeur n'est gardé — il effaçait ce qui était reçu.
+            var copieOuverte = await CopieOuverteAsync(
+                contexte.Eleve.Id, contexte.Conversation.MatiereId, ct);
+
+            if (controleRecent is not null && bilan.Task.IsCompletedSuccessfully
+                && copieOuverte?.Id != controleRecent.Id)
             {
                 var texteModele = (await bilan.Task).TexteComplet;
 
@@ -2967,16 +3400,19 @@ namespace SchoolWebApp.Api.Builders.impl
                 // `tableauAuto` retrouve le dernier geste sur le tableau, et
                 // sans elle ici, une page rechargée à ce moment-là verrait
                 // resurgir le contenu de la séance précédente.
-                var contenuPersiste = nouvelleArrivee
-                    ? TableauEfface + resultat.TexteComplet
-                    : resultat.TexteComplet;
+                // L'en-tête d'une arrivée : la gomme, et le tableau que
+                // l'application a remis elle-même quand une correction de
+                // dictée était en cours — voir plus haut, `tableauRepris`.
+                var enTete = nouvelleArrivee ? TableauEfface + (tableauRepris ?? string.Empty) : string.Empty;
+
+                var contenuPersiste = enTete + resultat.TexteComplet;
 
                 // Le tableau écrit par l'application rejoint le texte persisté,
                 // devant la réponse — et si le professeur en a écrit un quand
                 // même, le sien part : celui de l'application fait foi.
                 if (blocDicteeAjoute is not null)
                 {
-                    contenuPersiste = (nouvelleArrivee ? TableauEfface : string.Empty)
+                    contenuPersiste = enTete
                         + blocDicteeAjoute
                         + LecteurDictee.SansComparaison(resultat.TexteComplet);
                 }
@@ -2992,7 +3428,7 @@ namespace SchoolWebApp.Api.Builders.impl
 
                     if (sansDoublon.Length < resultat.TexteComplet.Trim().Length)
                     {
-                        contenuPersiste = (nouvelleArrivee ? TableauEfface : string.Empty) + sansDoublon;
+                        contenuPersiste = enTete + sansDoublon;
 
                         _logger.LogInformation(
                             "Tableau de dictee reecrit pendant la correction : retire du message persiste (conversation {ConversationId}).",
@@ -3007,6 +3443,16 @@ namespace SchoolWebApp.Api.Builders.impl
                 if (blocCopieAjoute is not null)
                 {
                     contenuPersiste = contenuPersiste.Replace("[DEMANDE_DOCUMENT]", string.Empty) + blocCopieAjoute;
+                }
+
+                if (copieOuverte is not null
+                    && LecteurCopieControle.LireDemande(contenuPersiste) == copieOuverte.Id)
+                {
+                    contenuPersiste = LecteurCopieControle.SansDemande(contenuPersiste, copieOuverte.Id);
+
+                    _logger.LogInformation(
+                        "Demande de copie repetee pendant la copie en cours du controle {ControleId} : "
+                        + "bloc retire (conversation {ConversationId}).", copieOuverte.Id, conversationId);
                 }
 
                 // Le marqueur d'abandon est persisté avec l'accueil : c'est
@@ -3058,6 +3504,23 @@ namespace SchoolWebApp.Api.Builders.impl
                 // est retirée AVANT d'être persistée. La phrase du professeur
                 // reste — c'est la carte qui ne s'affichera pas, et le journal
                 // dit pourquoi.
+                // Rien de ce que l'application souffle au professeur ne reste
+                // dans sa bouche — voir LecteurDictee.SansNoteApplication.
+                contenuPersiste = LecteurDictee.SansNoteApplication(contenuPersiste);
+
+                // Et une tournure fautive ne reste pas dans l'historique, où il
+                // la reprendrait à la séance suivante — voir TournuresFautives.
+                contenuPersiste = TournuresFautives.Corriger(contenuPersiste);
+
+                // Ses accords aussi — déjà faits dans le flux, refaits ici pour
+                // ce qui n'y passe pas (un bloc écrit par l'application).
+                contenuPersiste = AccordDuProfesseur.Corriger(
+                    contenuPersiste, PromptsPedagogiques.EstUneProfesseure(contexte.Conversation.ProfAvatar));
+
+                // Le texte d'une écoute ouverte ne reste pas au tableau non plus :
+                // une page rechargée ne doit pas le faire réapparaître.
+                contenuPersiste = EcouteAuTableau.Avancer([.. ecoutesOuvertes], contenuPersiste);
+
                 if (Services.Jeux.LecteurJeu.Lire(contenuPersiste) is { } identifiantJeu
                     && await _jeux.AutoriseAsync(contexte.Eleve, contexte.Conversation, identifiantJeu, ct) is null)
                 {
@@ -3078,6 +3541,10 @@ namespace SchoolWebApp.Api.Builders.impl
                     TokensCacheLecture = resultat.TokensCacheLecture,
                     TokensCacheEcriture = resultat.TokensCacheEcriture,
                     TokensCacheEcriture1h = resultat.TokensCacheEcriture1h,
+
+                    // QUI L'A DIT — pour que le coût de la voix suive la bascule
+                    // OpenAI / Gemini de l'administration, réponse par réponse.
+                    ModeleVoix = await ModeleVoixAsync(ct),
                     DateCreation = DateTime.UtcNow
                 });
 
@@ -3088,7 +3555,8 @@ namespace SchoolWebApp.Api.Builders.impl
                     try
                     {
                         await _controles.OuvrirCopieAsync(
-                            contexte.Eleve.Id, demandeCopie, contexte.Conversation.MatiereId, ct);
+                            contexte.Eleve.Id, demandeCopie, contexte.Conversation.MatiereId,
+                            DateTime.UtcNow - FenetreCopie, ct);
                     }
                     catch (Exception ex)
                     {
@@ -4433,6 +4901,23 @@ namespace SchoolWebApp.Api.Builders.impl
                 .Where(m => VoiesScolaires.EstAuProgramme(m, niveau, lv2Espagnol, specialites))
                 .Select(m => new MatiereReconnaissable(m.Id, m.Code, m.Libelle))
                 .ToList();
+        }
+
+        /// <summary>
+        /// Le modèle de voix du moment, sans jamais faire échouer le tour : une
+        /// lecture de réglage ratée coûte une ligne de compte, pas une réponse.
+        /// </summary>
+        private async Task<string?> ModeleVoixAsync(CancellationToken ct)
+        {
+            try
+            {
+                return await _syntheseVocale.ModeleCourantAsync(ct);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Modele de voix du moment illisible : la reponse est enregistree sans.");
+                return null;
+            }
         }
 
         public async Task<VerdictQuota> VerifierQuotaAsync(

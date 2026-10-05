@@ -12,9 +12,13 @@
     // le reste du site d'un coup. Éteint, la classe est absente et site.css
     // rend exactement la page d'avant.
     var blueSky = await ModeTest.BlueSkyAsync();
+
+    // Sa déclinaison (soldes, French Days, Black Friday) : une classe de plus,
+    // habillée en fin de site.css. Seulement avec Blue Sky.
+    var saison = blueSky ? await ModeTest.StyleSaisonAsync() : null;
 }
 <!DOCTYPE html>
-<html lang="fr" class="@(blueSky ? "blue-sky" : null)">
+<html lang="fr" class="@(blueSky ? (saison is null ? "blue-sky" : $"blue-sky saison-{saison}") : null)">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />

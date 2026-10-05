@@ -91,6 +91,34 @@ namespace SchoolWebApp.Api.Services.Voix
                 // vocabulaire. Toutes deux sont des classiques enseignés en
                 // tant que tels : ce n'est pas une liste inventée, c'est celle
                 // du manuel.
+                // L'ARABE ET LE CHINOIS S'ÉCRIVENT DANS LEUR ÉCRITURE — Camara, le
+                // 04/10/2026, en cours d'arabe : « quand je parle arabe, que
+                // l'écriture soit en arabe aussi, pas en phonétique ». Il avait
+                // dit « ismī Mins » ; le champ a affiché « Ismi means. », puis
+                // « Anna means. » pour « anā Mins ».
+                //
+                // La session annonce bien `languages: ["fr","ar"]`. Mais sur
+                // deux mots dits par un débutant, le transcripteur parie sur la
+                // langue du reste du cours — le français — et écrit ce qu'il
+                // entend en lettres latines. Rien dans son contexte ne lui
+                // montrait UN mot d'arabe écrit : ce vocabulaire-ci était vide
+                // pour l'arabe, donc entièrement français.
+                //
+                // On lui en montre, dans l'écriture arabe, parmi les mots d'un
+                // premier cours. Même pari que « drank » en anglais : on nomme
+                // ce que la transcription rate. Voir aussi `MotsCles`.
+                ["ARABE"] =
+                    "alphabet, lettre, voyelle brève, article, masculin, féminin, "
+                    + "phrase nominale, racine, traduction, prononciation, "
+                    + "اسمي, أنا, أنت, هو, هي, مرحبا, السلام عليكم, شكرا, نعم, لا, "
+                    + "تلميذ, تلميذة, معلم, مدرسة, بيت, كتاب, عمري, أسكن في, أحب",
+
+                ["CHINOIS"] =
+                    "caractère, pinyin, ton, trait, clé, classificateur, particule, "
+                    + "traduction, prononciation, "
+                    + "你好, 我, 你, 他, 她, 是, 不, 叫, 什么, 名字, 学生, 老师, 谢谢, 再见, "
+                    + "喜欢, 家, 中国, 法国, 岁, 吗, 的",
+
                 ["ANGLAIS"] =
                     "prétérit, present perfect, verbe irrégulier, pluriel, "
                     + "prononciation, traduction, vocabulaire, temps, auxiliaire, "
@@ -141,6 +169,28 @@ namespace SchoolWebApp.Api.Services.Voix
                     + "vérité, raison, nature, culture, technique, travail, langage, "
                     + "État, problématique, dissertation, thèse, argument, objection, "
                     + "concept, notion",
+
+                // L'INFORMATIQUE SE DIT EN ANGLAIS, ET LE MICRO TRANSCRIT DU
+                // FRANÇAIS. Camara, le 28/09/2026 : « enqueue » et « dequeue »
+                // sont ressortis « NQ » et « DQ », puis « Encul, tecu ». Le
+                // modèle, sommé de rendre du français, écrit ce qu'il entend
+                // avec les lettres du français. On lui nomme les mots du métier
+                // tels qu'ils s'écrivent, à côté des mots français du programme :
+                // c'est le même pari que « drank » en anglais, pour la même raison.
+                ["NSI"] =
+                    "Python, programme, fonction, variable, boucle, condition, "
+                    + "liste, tableau, dictionnaire, tuple, chaîne de caractères, "
+                    + "entier, flottant, booléen, pile, file, arbre, graphe, "
+                    + "récursivité, complexité, tri, dichotomie, invariant, "
+                    + "processus, routage, chiffrement, requête, base de données, "
+                    + "enqueue, dequeue, push, pop, append, print, input, range, len, "
+                    + "return, def, if, else, elif, while, for, in, True, False, None, "
+                    + "list, dict, string, int, float, bool, import, class, self, "
+                    + "index, key, value, sort, split, join, break, continue, assert, "
+                    + "try, except, open, read, write, stack, queue, array, hash, "
+                    + "bug, debug, byte, bit, LIFO, FIFO, SQL, SELECT, FROM, WHERE, "
+                    + "JOIN, ORDER BY, INSERT, UPDATE, DELETE, TCP, IP, HTTP, GET, "
+                    + "POST, CSV, JSON, HTML, CSS, URL, DNS, RIP, OSPF, RSA, ABR",
             };
 
         /// <summary>
@@ -170,7 +220,7 @@ namespace SchoolWebApp.Api.Services.Voix
         private static readonly HashSet<string> MatieresBilingues =
             new(StringComparer.OrdinalIgnoreCase)
             {
-                "ANGLAIS", "ESPAGNOL", "ALLEMAND", "ITALIEN", "CHINOIS",
+                "ANGLAIS", "ESPAGNOL", "ALLEMAND", "ITALIEN", "CHINOIS", "ARABE",
                 // Spécialités de langue de la voie générale.
                 "LLCER_ANGLAIS", "AMC", "LLCER_ESPAGNOL",
             };
@@ -196,9 +246,15 @@ namespace SchoolWebApp.Api.Services.Voix
                 ["ALLEMAND"] = "de",
                 ["ITALIEN"] = "it",
                 ["CHINOIS"] = "zh",
+                ["ARABE"] = "ar",
                 ["LLCER_ANGLAIS"] = "en",
                 ["AMC"] = "en",
                 ["LLCER_ESPAGNOL"] = "es",
+
+                // Pas une langue étudiée, mais une langue PARLÉE : les termes du
+                // métier sont anglais, et l'élève les dit au milieu de ses phrases
+                // françaises — exactement la situation du cours d'anglais.
+                ["NSI"] = "en",
             };
 
         /// <summary>
@@ -252,13 +308,56 @@ namespace SchoolWebApp.Api.Services.Voix
         /// exactement ce qui les rend dures à distinguer, et c'est exactement
         /// ce que l'exercice travaille.
         /// </summary>
+        /// <summary>
+        /// Les mots d'un premier cours d'arabe : se saluer, se présenter, la
+        /// famille, l'école, les nombres. Non relus par un arabisant.
+        /// </summary>
+        private static readonly string[] MotsClesArabe =
+        [
+            "مرحبا", "أهلا", "السلام عليكم", "وعليكم السلام", "صباح الخير", "مساء الخير",
+            "مع السلامة", "شكرا", "عفوا", "من فضلك", "نعم", "لا",
+            "اسمي", "ما اسمك", "أنا", "أنت", "هو", "هي", "نحن",
+            "كيف حالك", "بخير", "الحمد لله",
+            "تلميذ", "تلميذة", "طالب", "طالبة", "معلم", "معلمة", "مدرسة", "صف",
+            "بيت", "كتاب", "قلم", "أب", "أم", "أخ", "أخت",
+            "عمري", "سنة", "أسكن في", "فرنسا", "باريس", "أحب", "لا أحب", "أريد", "عندي",
+            "هذا", "هذه", "في", "من", "إلى", "اليوم", "غدا", "أمس",
+            "واحد", "اثنان", "ثلاثة", "أربعة", "خمسة", "ستة", "سبعة", "ثمانية", "تسعة", "عشرة",
+        ];
+
+        /// <summary>Les mots d'un premier cours de chinois, en caractères simplifiés.</summary>
+        private static readonly string[] MotsClesChinois =
+        [
+            "你好", "您好", "再见", "谢谢", "不客气", "对不起", "没关系", "请",
+            "我", "你", "他", "她", "我们", "你们", "他们",
+            "是", "不", "不是", "叫", "我叫", "什么", "名字", "吗", "呢", "的",
+            "学生", "老师", "学校", "中文", "汉语", "中国", "法国", "中国人", "法国人",
+            "家", "爸爸", "妈妈", "哥哥", "姐姐", "弟弟", "妹妹",
+            "有", "没有", "喜欢", "想", "要", "会", "去", "来", "吃", "喝", "看", "说",
+            "好", "很", "很好", "今天", "明天", "昨天", "岁",
+            "一", "二", "三", "四", "五", "六", "七", "八", "九", "十",
+        ];
+
         public static string[]? MotsCles(string? matiereCode)
         {
             if (matiereCode is null) return null;
 
-            // Seul l'anglais est ouvert aujourd'hui. Les autres langues
-            // recevront leur liste le jour où elles arriveront : une liste
-            // vide ne vaut pas mieux que pas de liste du tout.
+            // L'INFORMATIQUE A SA LISTE : les mots anglais du métier, ceux qu'un
+            // élève dit avec l'accent français et que la transcription rend
+            // avec les lettres du français (« NQ » pour enqueue). Voir l'entrée
+            // NSI du vocabulaire, qui les nomme pour le prompt ; ici, ce sont
+            // les mêmes en mots-clés, pour le modèle qui les accepte.
+            if (matiereCode.Equals("NSI", StringComparison.OrdinalIgnoreCase)) return MotsClesInformatique;
+
+            // L'ARABE ET LE CHINOIS : les mots d'un débutant, DANS LEUR ÉCRITURE.
+            // C'est ce qui dit au transcripteur d'écrire « اسمي » et non
+            // « ismi » — voir l'entrée ARABE du vocabulaire, plus haut.
+            if (matiereCode.Equals("ARABE", StringComparison.OrdinalIgnoreCase)) return MotsClesArabe;
+            if (matiereCode.Equals("CHINOIS", StringComparison.OrdinalIgnoreCase)) return MotsClesChinois;
+
+            // Seul l'anglais est ouvert aujourd'hui parmi les langues. Les
+            // autres recevront leur liste le jour où elles arriveront : une
+            // liste vide ne vaut pas mieux que pas de liste du tout.
             if (!matiereCode.Equals("ANGLAIS", StringComparison.OrdinalIgnoreCase)) return null;
 
             // LE CHOIX DES MOTS, ET POURQUOI PAS « TOUT LE VOCABULAIRE ».
@@ -352,6 +451,26 @@ namespace SchoolWebApp.Api.Services.Voix
         /// refusée, c'est un élève sans micro. D'où une liste blanche : ce
         /// qu'on n'a pas vérifié ne reçoit rien.
         /// </summary>
+        private static readonly string[] MotsClesInformatique =
+        [
+            "enqueue", "dequeue", "push", "pop", "append", "print", "input",
+            "range", "len", "return", "def", "if", "else", "elif", "while",
+            "for", "in", "not", "and", "or", "is", "True", "False", "None",
+            "list", "dict", "tuple", "set", "string", "int", "float", "bool",
+            "import", "class", "self", "init", "index", "key", "value", "item",
+            "sort", "sorted", "reverse", "split", "join", "strip", "replace",
+            "break", "continue", "pass", "assert", "try", "except", "raise",
+            "lambda", "yield", "global", "open", "read", "write", "with",
+            "main", "stack", "queue", "array", "hash", "log", "loop",
+            "bug", "debug", "byte", "bit", "boolean", "integer", "char",
+            "LIFO", "FIFO", "SQL", "SELECT", "FROM", "WHERE", "JOIN",
+            "ORDER BY", "DISTINCT", "INSERT", "UPDATE", "DELETE",
+            "TCP", "IP", "HTTP", "GET", "POST", "CSV", "JSON", "HTML", "CSS",
+            "JavaScript", "Python", "URL", "DNS", "RIP", "OSPF", "RSA",
+            "shell", "Linux", "root", "thread", "process", "round robin",
+            "merge", "quick sort", "insertion sort", "selection sort",
+        ];
+
         public static bool AccepteLesIndicesRiches(string? modele) =>
             modele is not null && ModelesRiches.Contains(modele);
 

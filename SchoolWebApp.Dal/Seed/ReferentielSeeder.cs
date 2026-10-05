@@ -291,6 +291,10 @@ namespace SchoolWebApp.Dal.Seed
                     .ToArray(), ct);
             await SeedCompetencesAsync(context, "ANGLAIS", ReferentielAnglais.Competences, ct);
             await SeedCompetencesAsync(context, "ESPAGNOL", ReferentielEspagnol.Competences, ct);
+            await SeedCompetencesAsync(context, "ALLEMAND", ReferentielAllemand.Competences, ct);
+            await SeedCompetencesAsync(context, "ITALIEN", ReferentielItalien.Competences, ct);
+            await SeedCompetencesAsync(context, "CHINOIS", ReferentielChinois.Competences, ct);
+            await SeedCompetencesAsync(context, "ARABE", ReferentielArabe.Competences, ct);
             await SeedCompetencesAsync(context, "SCIENCES", ReferentielSciences.Competences, ct);
             // La physique-chimie des séries technologiques rejoint celle de la
             // voie générale DANS LE MÊME APPEL : le semeur rend obsolète toute
@@ -620,7 +624,7 @@ namespace SchoolWebApp.Dal.Seed
                 // — les bornes de rang ne savent pas distinguer trois classes
                 // qui partagent la même année.
                 ("FRANCAIS",        "Français",               "agent-francais",        "Adrien", "adrien", "#B4531F", 2, true, 1,  12, "Lecture, écriture et grammaire"),
-                ("HISTOIRE_GEO",    "Histoire-Géographie",    "agent-histoire-geo",    "Salim",  "salim",  "#99277F", 3, true, 4,  12, "Le passé, les cartes et le monde"),
+                ("HISTOIRE_GEO",    "Histoire-Géographie",    "agent-histoire-geo",    "Salim",  "salim",  "#99277F", 3, true, 4,  12, "Le passé, les cartes, le monde et l'EMC"),
                 ("ANGLAIS",         "Anglais",                "agent-anglais",         "Marine", "marine", "#1D6FB8", 4, true, 1,  12, "Parler, comprendre et écrire"),
                 ("SCIENCES",        "Sciences et technologie","agent-sciences",        "Yann",   "yann",   "#6B4400", 5, true, 1,  6, "Le vivant, la matière et les expériences"),
                 ("PHYSIQUE_CHIMIE", "Physique-Chimie",        "agent-physique-chimie", "Yann",   "yann",   "#6B4400", 6, true, 7,  12, "Mesures, réactions et électricité"),
@@ -641,6 +645,24 @@ namespace SchoolWebApp.Dal.Seed
                 // parent a coché la case. Voulu par Camara : « un simple checkbox
                 // permet de dire que l'enfant a espagnol en LV2 ».
                 ("ESPAGNOL",        "Espagnol",               "agent-espagnol",        "Lucía",  "lucia",  "#BE123C", 5, true, 7,  12, "Parler, comprendre et découvrir le monde hispanique"),
+
+                // QUATRE AUTRES LANGUES VIVANTES B (04/10/2026) — allemand,
+                // italien, chinois, arabe : voulues par Camara, sur le modèle de
+                // l'espagnol. Mêmes bornes (5e à terminale), même règle : un
+                // choix de la famille, dans les classes où la LVB existe — voir
+                // `VoiesScolaires.LanguesAuChoix`.
+                //
+                // ELLES NAISSENT MASQUÉES. `LanguesVivantes` les éteint par
+                // défaut : elles n'apparaissent nulle part tant que leur
+                // interrupteur n'est pas allumé dans Admin › Modes. C'est ce qui
+                // permet de les semer avant qu'elles soient prêtes.
+                //
+                // Prénoms, visages, voix et couleurs choisis par moi, comme pour
+                // Lucía — rien n'a encore été entendu ni montré à Camara.
+                ("ALLEMAND",        "Allemand",               "agent-allemand",        "Jonas",   "jonas",   "#3730A3", 36, true, 7, 12, "Parler, comprendre et découvrir les pays germanophones"),
+                ("ITALIEN",         "Italien",                "agent-italien",         "Giulia",  "giulia",  "#0E7490", 37, true, 7, 12, "Parler, comprendre et découvrir l'Italie"),
+                ("CHINOIS",         "Chinois",                "agent-chinois",         "Lin",     "lin",     "#A16207", 38, true, 7, 12, "Parler, lire, tracer les caractères et découvrir le monde chinois"),
+                ("ARABE",           "Arabe",                  "agent-arabe",           "Youssef", "youssef", "#0F766E", 39, true, 7, 12, "Parler, lire, écrire et découvrir le monde arabe"),
 
                 // LES SPÉCIALITÉS DES QUATRE SÉRIES TECHNOLOGIQUES — 14/09/2026.
                 //

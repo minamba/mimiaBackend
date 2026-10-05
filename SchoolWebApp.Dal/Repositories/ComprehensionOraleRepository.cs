@@ -112,7 +112,7 @@ namespace SchoolWebApp.Dal.Repositories
                     | System.Text.RegularExpressions.RegexOptions.Compiled);
 
         private static readonly System.Text.RegularExpressions.Regex Ecoute =
-            new(@"\[(EN|FR|ES|DE|IT|ZH)\](?<passage>.*?)\[/\1\]",
+            new(@"\[(EN|FR|ES|DE|IT|ZH|AR)\](?<passage>.*?)\[/\1\]",
                 System.Text.RegularExpressions.RegexOptions.Singleline
                     | System.Text.RegularExpressions.RegexOptions.IgnoreCase
                     | System.Text.RegularExpressions.RegexOptions.Compiled);

@@ -125,6 +125,20 @@ namespace SchoolWebApp.Api.Controllers
         public const string VoixDeSecours = "VOIX_DE_SECOURS";
 
         /// <summary>
+        /// QUI PRÊTE SA VOIX AUX PROFESSEURS : Gemini Flash-Lite (allumé) ou
+        /// GPT-4o-mini (éteint) — Camara, le 28/09/2026 : « je veux garder Google
+        /// Flash-Lite, mais garder dans l'admin l'option GPT actuelle afin de
+        /// pouvoir basculer ».
+        ///
+        /// Relu à chaque phrase, comme la voix de secours : la bascule vaut tout
+        /// de suite, cours en cours compris. Sans valeur enregistrée, c'est la
+        /// configuration qui décide (<c>Voix:Fournisseur</c>). Sans clé Gemini,
+        /// il ne peut rien allumer : la voix reste sur GPT. Et le secours garde
+        /// la priorité sur les deux.
+        /// </summary>
+        public const string VoixGemini = "VOIX_GEMINI";
+
+        /// <summary>
         /// Le style « Blue Sky » : le fond bleu de marque, les cartes en verre
         /// dépoli et les accents corail, sur TOUT le site.
         ///
@@ -141,6 +155,20 @@ namespace SchoolWebApp.Api.Controllers
         /// du site.
         /// </summary>
         public const string BlueSky = "BLUE_SKY";
+
+        /// <summary>
+        /// LA DÉCLINAISON DE BLUE SKY — Camara, le 29/09/2026 : soldes d'été,
+        /// soldes d'hiver, French Days, Black Friday, « dans la même carte que
+        /// Blue Sky ». Une chaîne et non un interrupteur : une seule à la fois.
+        /// Vide, ou Blue Sky éteint : le Blue Sky classique, ou le style d'origine.
+        /// Lue aussi par la page de connexion (serveur d'identité) et la page de
+        /// scan du téléphone.
+        /// </summary>
+        public const string StyleSaison = "STYLE_SAISON";
+
+        /// <summary>Les seules valeurs acceptées — les mêmes que `SAISONS` côté front.</summary>
+        public static readonly IReadOnlySet<string> SaisonsConnues =
+            new HashSet<string>(StringComparer.Ordinal) { "soldes-ete", "soldes-hiver", "french-days", "black-friday", "back-to-school" };
 
         /// <summary>
         /// LE MODE DÉVELOPPEUR : le professeur exécute tout, sans discuter.
@@ -355,17 +383,20 @@ namespace SchoolWebApp.Api.Controllers
         /// </summary>
         private static readonly string[] ClesConnues =
             [ModeTest, CompteTest, EssaisOuverts, TachesDeFond, Maintenance, VoixDeSecours,
-             OffreLancement, OffreLancementBandeau, BlueSky, ModeDeveloppeur, FluxSse,
+             VoixGemini, OffreLancement, OffreLancementBandeau, BlueSky, ModeDeveloppeur, FluxSse,
              JeuxPrimaire, JeuxCollege, JeuxLycee, Affluence];
 
         private readonly IReglageRepository _reglages;
         private readonly ILogger<ReglagesController> _logger;
+        private readonly SchoolWebApp.Api.Services.Voix.OptionsVoix _voix;
 
         public ReglagesController(
-            IReglageRepository reglages, ILogger<ReglagesController> logger)
+            IReglageRepository reglages, ILogger<ReglagesController> logger,
+            Microsoft.Extensions.Options.IOptions<SchoolWebApp.Api.Services.Voix.OptionsVoix> voix)
         {
             _reglages = reglages ?? throw new ArgumentNullException(nameof(reglages));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+            _voix = voix?.Value ?? throw new ArgumentNullException(nameof(voix));
         }
 
         /// <summary>
@@ -517,6 +548,9 @@ namespace SchoolWebApp.Api.Controllers
                     // pages qu'on voit avant d'avoir un compte.
                     blueSky = await _reglages.EstActifAsync(BlueSky, false, ct),
 
+                    // Sa déclinaison, publique pour la même raison.
+                    styleSaison = await SaisonAsync(ct),
+
                     // LE COUPE-CIRCUIT DU TEMPS RÉEL. Public parce que c'est le
                     // navigateur qui ouvre la connexion longue : c'est donc à lui
                     // qu'il faut dire de s'en abstenir. Allumé par défaut — une
@@ -592,9 +626,15 @@ namespace SchoolWebApp.Api.Controllers
         [Authorize(Policy = "EstAdmin")]
         [SwaggerResponse(200, "Tous les réglages.")]
         public async Task<IActionResult> Tous(
-            [FromServices] IAbonnementRepository formules, CancellationToken ct) =>
+            [FromServices] IAbonnementRepository formules,
+            [FromServices] IReferentielRepository referentiel, CancellationToken ct) =>
             Ok(new
             {
+                // LES LANGUES, UNE PAR UNE — voir `LanguesVivantes`. Seules
+                // celles qui ont une matière en base : un interrupteur sur une
+                // langue qui n'existe pas encore ne commanderait rien.
+                langues = await LanguesAsync(referentiel, ct),
+
                 modeTest = await _reglages.EstActifAsync(ModeTest, false, ct),
 
                 // Actif par défaut : le compte existe pour servir, et un
@@ -615,7 +655,18 @@ namespace SchoolWebApp.Api.Controllers
                 // secours, pas un réglage de confort.
                 voixDeSecours = await _reglages.EstActifAsync(VoixDeSecours, false, ct),
 
+                // Par défaut, ce que dit la configuration ; et l'écran doit
+                // savoir si une clé Gemini existe, sans quoi l'interrupteur
+                // promettrait une voix qu'il ne peut pas donner.
+                voixGemini = await _reglages.EstActifAsync(
+                    VoixGemini,
+                    _voix.Fournisseur.Equals("gemini", StringComparison.OrdinalIgnoreCase),
+                    ct),
+                voixGeminiDisponible = !string.IsNullOrWhiteSpace(_voix.GeminiApiKey),
+                voixGeminiModele = _voix.GeminiModele,
+
                 blueSky = await _reglages.EstActifAsync(BlueSky, false, ct),
+                styleSaison = await SaisonAsync(ct),
 
                 // Réservé à l'administration : il ne figure PAS dans la route
                 // publique. Un visiteur n'a pas à savoir dans quel état sont
@@ -855,6 +906,103 @@ namespace SchoolWebApp.Api.Controllers
 
             /// <summary>Les codes des formules concernées. Vide = aucune.</summary>
             public string[]? Formules { get; set; }
+        }
+
+        /// <summary>
+        /// Choisit la déclinaison de Blue Sky, ou la retire (`null` / vide).
+        ///
+        /// CHOISIR UNE DÉCLINAISON ALLUME BLUE SKY : elles n'existent pas sans
+        /// lui, et un choix sans effet visible se lirait comme une panne. La
+        /// retirer laisse Blue Sky tel quel — on revient au Blue Sky classique.
+        /// Diffusée à tous les navigateurs par le flux des réglages, comme
+        /// toute écriture.
+        /// </summary>
+        [HttpPut("style-saison")]
+        [Authorize(Policy = "EstSuperAdmin")]
+        [SwaggerResponse(204, "Déclinaison enregistrée.")]
+        [SwaggerResponse(400, "Déclinaison inconnue.")]
+        public async Task<IActionResult> DefinirStyleSaison(
+            [FromBody] DefinirStyleSaisonRequest requete, CancellationToken ct)
+        {
+            var saison = string.IsNullOrWhiteSpace(requete?.Saison) ? null : requete!.Saison!.Trim();
+
+            if (saison is not null && !SaisonsConnues.Contains(saison))
+            {
+                return BadRequest(new { message = "Déclinaison inconnue." });
+            }
+
+            await _reglages.EcrireAsync(StyleSaison, saison ?? string.Empty, ct);
+            if (saison is not null) await _reglages.DefinirAsync(BlueSky, true, ct);
+
+            _logger.LogWarning("Style du site : declinaison {Saison}.", saison ?? "(Blue Sky classique)");
+            return NoContent();
+        }
+
+        public class DefinirStyleSaisonRequest
+        {
+            public string? Saison { get; set; }
+        }
+
+        /// <summary>La déclinaison enregistrée, si elle est connue ; sinon aucune.</summary>
+        private async Task<string?> SaisonAsync(CancellationToken ct)
+        {
+            var lue = await _reglages.LireAsync(StyleSaison, ct);
+            return lue is not null && SaisonsConnues.Contains(lue) ? lue : null;
+        }
+
+        /// <summary>
+        /// Les langues qu'on peut montrer ou cacher, avec leur état. Voir
+        /// <see cref="SchoolWebApp.Domain.Models.LanguesVivantes"/>.
+        /// </summary>
+        private async Task<IEnumerable<object>> LanguesAsync(
+            IReferentielRepository referentiel, CancellationToken ct)
+        {
+            var toutes = SchoolWebApp.Domain.Models.LanguesVivantes.Toutes;
+
+            var existantes = (await referentiel.GetCodesMatieresExistantesAsync(
+                    toutes.SelectMany(l => l.Matieres), ct))
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            var reglages = await _reglages.GetTousAsync(ct);
+
+            return toutes
+                .Where(l => l.Matieres.Any(existantes.Contains))
+                .Select(l => new
+                {
+                    code = l.Code,
+                    libelle = l.Libelle,
+                    actif = SchoolWebApp.Domain.Models.LanguesVivantes.EstAllumee(l, reglages),
+                })
+                .ToList();
+        }
+
+        /// <summary>
+        /// Montre ou cache une langue — Camara, le 04/10/2026. Éteinte, elle
+        /// disparaît de la grille, de la page d'accueil et des options de
+        /// l'élève ; rien n'est supprimé, et la rallumer rend tout tel quel.
+        ///
+        /// UNE ROUTE À PART de celle des drapeaux : la liste des langues vit
+        /// dans <c>LanguesVivantes</c>, pas dans <c>ClesConnues</c>, pour qu'en
+        /// ajouter une ne demande pas de toucher à ce contrôleur.
+        /// </summary>
+        [HttpPut("langues/{code}")]
+        [Authorize(Policy = "EstSuperAdmin")]
+        [SwaggerResponse(204, "Langue enregistrée.")]
+        [SwaggerResponse(400, "Langue inconnue.")]
+        public async Task<IActionResult> DefinirLangue(
+            string code, [FromBody] DefinirReglageRequest requete, CancellationToken ct)
+        {
+            var langue = SchoolWebApp.Domain.Models.LanguesVivantes.Trouver(code);
+
+            if (langue is null) return BadRequest(new { message = "Langue inconnue." });
+
+            await _reglages.DefinirAsync(langue.Cle, requete.Actif, ct);
+
+            _logger.LogWarning(
+                "Langue {Langue} {Etat} par un administrateur.",
+                langue.Code, requete.Actif ? "AFFICHEE" : "MASQUEE");
+
+            return NoContent();
         }
 
         // LES MODES SONT RÉSERVÉS AU SUPER-ADMINISTRATEUR. Le mode test et

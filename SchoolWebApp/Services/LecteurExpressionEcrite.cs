@@ -158,7 +158,7 @@ namespace SchoolWebApp.Api.Services
         /// </summary>
         private static readonly HashSet<string> Neutres = new(StringComparer.OrdinalIgnoreCase)
         {
-            "EN", "FR", "ES", "DE", "IT", "ZH",
+            "EN", "FR", "ES", "DE", "IT", "ZH", "AR",
             "ARDOISE", "TABLEAU_EFFACE", "SCHEMA", "POINTAGE",
             "SUPPORT_ECRIT", "EXPRESSION_ECRITE",
             "FIN_SEANCE", "RAPPORT", "FICHE",

@@ -940,7 +940,33 @@ FROM sys.database_files;";
                 tours += s.Tours;
             }
 
-            var voix = VoixDollars(tours, grille);
+            // LA VOIX, MODÈLE PAR MODÈLE : la même fenêtre, les mêmes tours,
+            // regroupés par le modèle qui les a dits. Voir `VoixParModele`.
+            var toursVoix = await _context.Messages
+                .AsNoTracking()
+                .Where(m => m.TokensEntree > 0
+                            && m.DateCreation >= debutUtc && m.DateCreation < finUtc)
+                .GroupBy(m => m.ModeleVoix)
+                .Select(g => new { Modele = g.Key, Tours = g.Count() })
+                .ToListAsync();
+
+            // ET CE QUE LES FOURNISSEURS ONT RÉELLEMENT FACTURÉ — depuis le
+            // 03/10/2026, chaque appel de synthèse est journalisé avec ses jetons
+            // (origine `voix`). Quand la période en a, c'est eux qui font le
+            // prix ; les tours ne servent plus qu'à dire combien de fois le
+            // professeur a parlé.
+            var appelsVoix = await _context.AppelsClaude
+                .AsNoTracking()
+                .Where(a => a.Origine == OrigineVoix
+                            && a.DateCreation >= debutUtc && a.DateCreation < finUtc)
+                .GroupBy(a => a.Modele)
+                .Select(g => new AppelsVoix(
+                    g.Key, g.Count(),
+                    g.Sum(a => (long)a.TokensEntree), g.Sum(a => (long)a.TokensSortie)))
+                .ToListAsync();
+
+            var detailVoix = VoixParModele(toursVoix.Select(t => (t.Modele, t.Tours)), appelsVoix, grille);
+            var voix = detailVoix.Sum(d => d.Dollars);
 
             // LES TÂCHES DE FOND, QUI DÉPENSAIENT EN SILENCE.
             //
@@ -951,7 +977,10 @@ FROM sys.database_files;";
             // tableau ne bouge n'avait aucune explication visible.
             var fond = await _context.AppelsClaude
                 .AsNoTracking()
-                .Where(a => a.DateCreation >= debutUtc && a.DateCreation < finUtc)
+                // La voix a sa propre ligne plus haut : la compter ici la
+                // ferait payer deux fois.
+                .Where(a => a.Origine != OrigineVoix
+                            && a.DateCreation >= debutUtc && a.DateCreation < finUtc)
                 .GroupBy(a => new { a.Origine, a.Modele, a.DateCreation.Year, a.DateCreation.Month })
                 .Select(g => new
                 {
@@ -1003,6 +1032,7 @@ FROM sys.database_files;";
                 Tours = tours,
                 DialogueDollars = Math.Round(dialogue, 4),
                 VoixDollars = Math.Round(voix, 4),
+                Voix = detailVoix,
                 TachesDeFondDollars = Math.Round(tachesDeFond, 4),
                 Postes = postes.OrderByDescending(p => p.Dollars).ToList(),
                 TotalDollars = Math.Round(dialogue + voix + tachesDeFond, 4),
@@ -1555,14 +1585,129 @@ GROUP BY parent_id";
         /// famille peut laisser un cours ouvert sans parler, et les minutes
         /// consommées gonfleraient alors une voix qui n'a rien dit.
         /// </summary>
-        private static decimal VoixDollars(int tours, IReadOnlyList<TarifFournisseur> grille)
-        {
-            // Le prix APPLIQUÉ de la voix, 0,015 $ la minute en secours.
-            var minute = grille
-                .FirstOrDefault(t => t.Modele == "gpt-4o-mini-tts" && t.PrixMinuteApplique is not null)
-                ?.PrixMinuteApplique ?? 0.015m;
+        /// <remarks>
+        /// PAR MODÈLE DEPUIS LE 28/09/2026 : chaque réponse note qui l'a dite
+        /// (`Message.ModeleVoix`), et chaque modèle se compte à SON prix appliqué
+        /// de l'onglet Tarifs. Une réponse sans modèle noté date d'avant : elle a
+        /// été dite par OpenAI. Un modèle sans prix à la minute (`tts-1`, le
+        /// secours) se compte au prix d'OpenAI, faute de mieux — il ne sert que
+        /// les mauvais jours.
+        /// </remarks>
+        /// <summary>L'origine, dans le journal des appels, d'un appel de synthèse vocale.</summary>
+        private const string OrigineVoix = "voix";
 
-            return tours * 0.4m * minute;
+        /// <summary>Les appels de synthèse journalisés d'un modèle, et leurs jetons.</summary>
+        private sealed record AppelsVoix(string? Modele, int Appels, long Entree, long Sortie);
+
+        /// <summary>
+        /// La voix, modèle par modèle : MESURÉE quand le journal a des appels sur
+        /// la période, ESTIMÉE d'après les tours sinon.
+        ///
+        /// LES DEUX NE S'ADDITIONNENT PAS. Un tour de parole fait plusieurs
+        /// appels de synthèse ; dès qu'un modèle a des appels journalisés, ses
+        /// tours sont supposés couverts, et l'estimation ne vaut plus que pour
+        /// les modèles qui n'en ont aucun — ceux d'avant le 03/10/2026. Le jour
+        /// de la bascule est donc compté un peu court pour les quelques tours
+        /// dits avant le déploiement ; c'est le prix d'un chiffre qui, ensuite,
+        /// se vérifie sur la facture du fournisseur.
+        /// </summary>
+        private static List<CoutVoix> VoixParModele(
+            IEnumerable<(string? Modele, int Tours)> tours,
+            IReadOnlyList<AppelsVoix> appels,
+            IReadOnlyList<TarifFournisseur> grille)
+        {
+            var parModele = tours
+                .Select(t => (Ligne: TarifVoix(grille, t.Modele), t.Tours))
+                .GroupBy(t => t.Ligne.Modele)
+                .ToDictionary(g => g.Key, g => (g.First().Ligne, Tours: g.Sum(t => t.Tours)));
+
+            // Un modèle qui a parlé sans qu'aucun tour ne le porte — un appel de
+            // secours, par exemple — apparaît quand même : il a été facturé.
+            foreach (var a in appels)
+            {
+                var ligne = TarifVoix(grille, a.Modele);
+                if (!parModele.ContainsKey(ligne.Modele)) parModele[ligne.Modele] = (ligne, 0);
+            }
+
+            return parModele.Values
+                .Select(v =>
+                {
+                    var (ligne, nombre) = v;
+                    var mesure = appels.Where(a => TarifVoix(grille, a.Modele).Modele == ligne.Modele).ToList();
+
+                    if (mesure.Count == 0)
+                    {
+                        return new CoutVoix
+                        {
+                            Fournisseur = ligne.Fournisseur,
+                            Modele = ligne.Modele,
+                            Tours = nombre,
+                            PrixMinute = ligne.Minute,
+                            Dollars = Math.Round(nombre * MinutesParTour * ligne.Minute, 4),
+                            Mesure = false,
+                        };
+                    }
+
+                    var (prixEntree, prixSortie) = Tarif(grille, ligne.Modele);
+                    var entree = mesure.Sum(a => a.Entree);
+                    var sortie = mesure.Sum(a => a.Sortie);
+
+                    return new CoutVoix
+                    {
+                        Fournisseur = ligne.Fournisseur,
+                        Modele = ligne.Modele,
+                        Tours = nombre,
+                        PrixMinute = ligne.Minute,
+                        Dollars = Math.Round((entree * prixEntree + sortie * prixSortie) / 1_000_000m, 4),
+                        Mesure = true,
+                        Appels = mesure.Sum(a => a.Appels),
+                        JetonsEntree = entree,
+                        JetonsSortie = sortie,
+                    };
+                })
+                .Where(c => c.Tours > 0 || c.Appels > 0)
+                .OrderByDescending(c => c.Dollars)
+                .ToList();
+        }
+
+        /// <summary>
+        /// L'ESTIMATION D'AVANT LE JOURNAL, pour les tours qui n'ont pas d'appel
+        /// journalisé. Elle valait 0,4 minute par tour ; mesuré le 03/10/2026
+        /// sur une séance de maths de 17 tours, le professeur prononce ~225
+        /// caractères par tour, soit 0,2 minute sur Gemini (19 caractères par
+        /// seconde) et ~0,27 sur OpenAI (14). Un quart de minute : l'ancienne
+        /// valeur comptait la voix près du double.
+        /// </summary>
+        private const decimal MinutesParTour = 0.25m;
+
+        /// <summary>Le modèle de toutes les réponses d'avant le 28/09/2026.</summary>
+        private const string ModeleVoixHistorique = "gpt-4o-mini-tts";
+
+        /// <summary>
+        /// Le prix appliqué à la minute d'un modèle de voix, et qui le vend. Le
+        /// plus long préfixe l'emporte, comme pour le dialogue.
+        /// </summary>
+        private static (string Fournisseur, string Modele, decimal Minute) TarifVoix(
+            IReadOnlyList<TarifFournisseur> grille, string? modele)
+        {
+            var cle = string.IsNullOrWhiteSpace(modele) ? ModeleVoixHistorique : modele;
+
+            var ligne = grille
+                .Where(t => t.PrixMinuteApplique is not null
+                            && t.Modele is not null
+                            && cle.StartsWith(t.Modele, StringComparison.OrdinalIgnoreCase))
+                .OrderByDescending(t => t.Modele!.Length)
+                .FirstOrDefault();
+
+            if (ligne is not null)
+            {
+                return (ligne.Fournisseur ?? "openai", cle, ligne.PrixMinuteApplique!.Value);
+            }
+
+            // Sans prix : le modèle d'OpenAI, et 0,015 $ s'il n'est plus en grille.
+            var repli = grille.FirstOrDefault(t => t.Modele == ModeleVoixHistorique && t.PrixMinuteApplique is not null);
+            var fournisseur = cle.StartsWith("gemini", StringComparison.OrdinalIgnoreCase) ? "gemini" : "openai";
+            return (fournisseur, cle, repli?.PrixMinuteApplique ?? 0.015m);
         }
 
         /// <summary>
@@ -1642,6 +1787,58 @@ GROUP BY parent_id";
                 .GroupBy(s => s.ParentId)
                 .ToDictionary(g => g.Key, g => g.Sum(s => s.Tours));
 
+            // Et la voix de chaque famille, modèle par modèle.
+            var toursVoix = await _context.Messages
+                .AsNoTracking()
+                .Where(m => m.TokensEntree > 0
+                            && m.DateCreation >= debutUtc && m.DateCreation < finUtc
+                            && ids.Contains(m.Conversation!.Eleve!.ParentId))
+                .GroupBy(m => new { ParentId = m.Conversation!.Eleve!.ParentId, m.ModeleVoix })
+                .Select(g => new { g.Key.ParentId, Modele = g.Key.ModeleVoix, Tours = g.Count() })
+                .ToListAsync();
+
+            // Les appels de synthèse journalisés de chaque famille : la
+            // référence porte le « sub » du compte, pas l'identifiant métier.
+            var subs = await _context.Parents
+                .AsNoTracking()
+                .Where(p => ids.Contains(p.Id))
+                .Select(p => new { p.Id, p.IdentityUserId })
+                .ToListAsync();
+
+            var parentParReference = subs.ToDictionary(p => $"sub:{p.IdentityUserId}", p => p.Id);
+            var references = parentParReference.Keys.ToList();
+
+            var appelsVoixParents = await _context.AppelsClaude
+                .AsNoTracking()
+                .Where(a => a.Origine == OrigineVoix
+                            && a.Reference != null && references.Contains(a.Reference)
+                            && a.DateCreation >= debutUtc && a.DateCreation < finUtc)
+                .GroupBy(a => new { a.Reference, a.Modele })
+                .Select(g => new
+                {
+                    g.Key.Reference,
+                    g.Key.Modele,
+                    Appels = g.Count(),
+                    Entree = g.Sum(a => (long)a.TokensEntree),
+                    Sortie = g.Sum(a => (long)a.TokensSortie),
+                })
+                .ToListAsync();
+
+            var appelsParParent = appelsVoixParents
+                .GroupBy(a => parentParReference[a.Reference!])
+                .ToDictionary(
+                    g => g.Key,
+                    g => (IReadOnlyList<AppelsVoix>)g.Select(a => new AppelsVoix(a.Modele, a.Appels, a.Entree, a.Sortie)).ToList());
+
+            var voixParParent = toursVoix
+                .GroupBy(t => t.ParentId)
+                .ToDictionary(
+                    g => g.Key,
+                    g => VoixParModele(
+                        g.Select(t => (t.Modele, t.Tours)),
+                        appelsParParent.GetValueOrDefault(g.Key) ?? [],
+                        grille));
+
             var secondesReelles = await SecondesReellesParParentAsync(debutUtc, finUtc);
 
             foreach (var ligne in lignes)
@@ -1656,9 +1853,11 @@ GROUP BY parent_id";
                 // portent des jetons, ceux-là mêmes que le coût additionne.
                 ligne.ToursPeriode = tours.GetValueOrDefault(ligne.Id);
 
+                var voix = voixParParent.GetValueOrDefault(ligne.Id) ?? [];
+
                 ligne.CoutDialogueDollars = Math.Round(parle, 4);
-                ligne.CoutDollars = Math.Round(
-                    parle + VoixDollars(tours.GetValueOrDefault(ligne.Id), grille), 4);
+                ligne.CoutVoix = voix;
+                ligne.CoutDollars = Math.Round(parle + voix.Sum(v => v.Dollars), 4);
 
                 // `MinutesConsommees` n'est PLUS écrasé ici : il vient de la
                 // projection, de la table de consommation, sur la période
@@ -2221,8 +2420,15 @@ GROUP BY parent_id";
                     .Select(n => n.Code)
                     .FirstOrDefaultAsync();
 
+                // SES AUTRES LANGUES VIVANTES B vivent dans la même colonne, et
+                // cet écran ne les envoie pas : on les reprend telles qu'elles
+                // étaient, au filtre de classe près. Sans cela, corriger une
+                // spécialité depuis l'administration effacerait son allemand.
+                var langues = VoiesScolaires.LanguesRetenues(
+                    codeNiveau, VoiesScolaires.LireSpecialites(entite.Specialites));
+
                 entite.Specialites = VoiesScolaires.EcrireSpecialites(
-                    VoiesScolaires.SpecialitesRetenues(codeNiveau, specialites));
+                    VoiesScolaires.SpecialitesRetenues(codeNiveau, specialites).Concat(langues));
             }
 
             await _context.SaveChangesAsync();
