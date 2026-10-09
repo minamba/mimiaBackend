@@ -878,5 +878,2697 @@
     "competences": [
       "FR_CM2_LECT_NARRATEUR"
     ]
+  },
+  {
+    "classe": "SIXIEME",
+    "cle": "escape-maths",
+    "titre": "Le coffre du pirate",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_6E_CALC_PRIORITES",
+      "MATH_6E_FRAC_QUANTITE",
+      "MATH_6E_CALC_DIV_EUCL",
+      "MATH_6E_MES_PERIMETRE",
+      "MATH_6E_MES_AIRE",
+      "MATH_6E_PROP_POURCENT"
+    ]
+  },
+  {
+    "classe": "SIXIEME",
+    "cle": "grands-nombres-college",
+    "titre": "Les grands nombres",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_6E_NUM_ENTIERS",
+      "MATH_6E_NUM_DECIMAUX"
+    ]
+  },
+  {
+    "classe": "SIXIEME",
+    "cle": "loupe-college",
+    "titre": "La loupe des centièmes",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_6E_NUM_DEMI_DROITE",
+      "MATH_6E_NUM_ARRONDI"
+    ]
+  },
+  {
+    "classe": "SIXIEME",
+    "cle": "operations-college",
+    "titre": "Les opérations posées",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_6E_CALC_ADD",
+      "MATH_6E_CALC_MULT"
+    ]
+  },
+  {
+    "classe": "SIXIEME",
+    "cle": "partage-college",
+    "titre": "Le partage",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_6E_CALC_DIV_EUCL",
+      "MATH_6E_CALC_DIV_DEC"
+    ]
+  },
+  {
+    "classe": "SIXIEME",
+    "cle": "calcul-mental-college",
+    "titre": "Le calcul mental",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_6E_CALC_MENTAL"
+    ]
+  },
+  {
+    "classe": "SIXIEME",
+    "cle": "bonne-parenthese",
+    "titre": "La bonne parenthèse",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_6E_CALC_PRIORITES"
+    ]
+  },
+  {
+    "classe": "SIXIEME",
+    "cle": "crible-college",
+    "titre": "Le crible",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_6E_DIVISIBILITE"
+    ]
+  },
+  {
+    "classe": "SIXIEME",
+    "cle": "fractions-college",
+    "titre": "Les fractions",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_6E_FRAC_SENS",
+      "MATH_6E_FRAC_EGALES",
+      "MATH_6E_FRAC_COMPARER"
+    ]
+  },
+  {
+    "classe": "SIXIEME",
+    "cle": "droite-des-fractions",
+    "titre": "La droite des fractions",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_6E_FRAC_REPERER",
+      "MATH_6E_FRAC_QUOTIENT",
+      "MATH_6E_FRAC_ADD"
+    ]
+  },
+  {
+    "classe": "SIXIEME",
+    "cle": "deux-tiers-du-sac",
+    "titre": "Les deux tiers du sac",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_6E_FRAC_QUANTITE"
+    ]
+  },
+  {
+    "classe": "SIXIEME",
+    "cle": "recette-college",
+    "titre": "La recette",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_6E_PROP_RECONNAITRE",
+      "MATH_6E_PROP_COEFF",
+      "MATH_6E_PROP_POURCENT",
+      "MATH_6E_PROP_ECHELLE"
+    ]
+  },
+  {
+    "classe": "SIXIEME",
+    "cle": "metre-ruban-college",
+    "titre": "Le mètre ruban",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_6E_MES_LONGUEUR",
+      "MATH_6E_MES_MASSE"
+    ]
+  },
+  {
+    "classe": "SIXIEME",
+    "cle": "combien-de-temps-college",
+    "titre": "Combien de temps",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_6E_MES_DUREE"
+    ]
+  },
+  {
+    "classe": "SIXIEME",
+    "cle": "tour-du-jardin-college",
+    "titre": "Le tour du jardin",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_6E_MES_PERIMETRE",
+      "MATH_6E_MES_AIRE",
+      "MATH_6E_MES_VOLUME"
+    ]
+  },
+  {
+    "classe": "SIXIEME",
+    "cle": "rapporteur",
+    "titre": "Le rapporteur",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_6E_MES_ANGLE"
+    ]
+  },
+  {
+    "classe": "SIXIEME",
+    "cle": "detective-des-figures",
+    "titre": "Le détective des figures",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_6E_GEO_TRIANGLES",
+      "MATH_6E_GEO_QUADRILATERES",
+      "MATH_6E_GEO_CERCLE"
+    ]
+  },
+  {
+    "classe": "SIXIEME",
+    "cle": "miroir-college",
+    "titre": "Le miroir",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_6E_GEO_SYMETRIE",
+      "MATH_6E_GEO_PERPENDICULAIRE",
+      "MATH_6E_GEO_PARALLELE",
+      "MATH_6E_GEO_VOCABULAIRE"
+    ]
+  },
+  {
+    "classe": "SIXIEME",
+    "cle": "solides-et-patrons",
+    "titre": "Solides et patrons",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_6E_GEO_SOLIDES"
+    ]
+  },
+  {
+    "classe": "SIXIEME",
+    "cle": "diagramme-college",
+    "titre": "Le diagramme",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_6E_DATA_TABLEAU",
+      "MATH_6E_DATA_GRAPHIQUE"
+    ]
+  },
+  {
+    "classe": "SIXIEME",
+    "cle": "robot-college",
+    "titre": "Le robot",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_6E_ALGO_DEPLACEMENT",
+      "MATH_6E_ALG_INCONNUE",
+      "MATH_6E_ALG_MOTIFS"
+    ]
+  },
+  {
+    "classe": "SIXIEME",
+    "cle": "escape-francais",
+    "titre": "La bibliothèque hantée",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_6E_LANG_HOMOPHONES",
+      "FR_6E_LANG_PP",
+      "FR_6E_LANG_CLASSES",
+      "FR_6E_LANG_FONCTIONS",
+      "FR_6E_LANG_VALEURS",
+      "FR_6E_LANG_VOC_RELATIONS"
+    ]
+  },
+  {
+    "classe": "SIXIEME",
+    "cle": "detective-des-classes",
+    "titre": "Le détective des classes",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_6E_LANG_CLASSES"
+    ]
+  },
+  {
+    "classe": "SIXIEME",
+    "cle": "cod-ou-coi",
+    "titre": "COD ou COI ?",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_6E_LANG_FONCTIONS"
+    ]
+  },
+  {
+    "classe": "SIXIEME",
+    "cle": "roue-des-verbes-college",
+    "titre": "La roue des verbes",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_6E_LANG_INDICATIF"
+    ]
+  },
+  {
+    "classe": "SIXIEME",
+    "cle": "decor-ou-action",
+    "titre": "Décor ou action ?",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_6E_LANG_VALEURS"
+    ]
+  },
+  {
+    "classe": "SIXIEME",
+    "cle": "homophones-college",
+    "titre": "Les homophones",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_6E_LANG_HOMOPHONES"
+    ]
+  },
+  {
+    "classe": "SIXIEME",
+    "cle": "participe-passe-college",
+    "titre": "Le participe passé",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_6E_LANG_PP"
+    ]
+  },
+  {
+    "classe": "SIXIEME",
+    "cle": "simple-ou-complexe",
+    "titre": "Simple ou complexe ?",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_6E_LANG_PHRASE"
+    ]
+  },
+  {
+    "classe": "SIXIEME",
+    "cle": "le-mot-juste",
+    "titre": "Le mot juste",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_6E_LANG_VOC_RELATIONS",
+      "FR_6E_LANG_FORMATION"
+    ]
+  },
+  {
+    "classe": "SIXIEME",
+    "cle": "schema-narratif",
+    "titre": "Le schéma narratif",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_6E_LECT_SCHEMA"
+    ]
+  },
+  {
+    "classe": "SIXIEME",
+    "cle": "qui-raconte-college",
+    "titre": "Qui raconte ?",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_6E_LECT_NARRATEUR"
+    ]
+  },
+  {
+    "classe": "SIXIEME",
+    "cle": "dieux-et-heros",
+    "titre": "Dieux et héros",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_6E_LECT_MYTHE"
+    ]
+  },
+  {
+    "classe": "SIXIEME",
+    "cle": "qui-parle",
+    "titre": "Qui parle ?",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_6E_LECT_DISCOURS"
+    ]
+  },
+  {
+    "classe": "SIXIEME",
+    "cle": "escape-histoire-geo",
+    "titre": "La nuit au musée",
+    "matiereCode": "HISTOIRE_GEO",
+    "competences": [
+      "HG_6E_HIST_PREHISTOIRE",
+      "HG_6E_HIST_ORIENT",
+      "HG_6E_HIST_GRECE",
+      "HG_6E_HIST_ROME",
+      "HG_6E_HIST_MONOTHEISMES",
+      "HG_6E_GEO_REPARTITION",
+      "HG_6E_GEO_METROPOLES",
+      "HG_6E_GEO_LITTORAL"
+    ]
+  },
+  {
+    "classe": "SIXIEME",
+    "cle": "escape-anglais",
+    "titre": "Le trésor de Londres",
+    "matiereCode": "ANGLAIS",
+    "competences": [
+      "AN_6E_GRAM_AGE",
+      "AN_6E_GRAM_POSSESSION",
+      "AN_6E_GRAM_MODAUX",
+      "AN_6E_GRAM_PRESENT",
+      "AN_6E_GRAM_AUXILIAIRE",
+      "AN_6E_COMP_ECRIT"
+    ]
+  },
+  {
+    "classe": "SIXIEME",
+    "cle": "escape-sciences",
+    "titre": "La base martienne",
+    "matiereCode": "SCIENCES",
+    "competences": [
+      "SC_6E_MAT_ETATS",
+      "SC_6E_MAT_MASSE_VOLUME",
+      "SC_6E_VIV_CELLULE",
+      "SC_6E_MAT_MOUVEMENT",
+      "SC_6E_ENERGIE_CIRCUIT",
+      "SC_6E_TERRE_SOLAIRE"
+    ]
+  },
+  {
+    "classe": "CINQUIEME",
+    "cle": "escape-maths",
+    "titre": "Le sous-marin en panne",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_5E_REL_ADD",
+      "MATH_5E_PRIORITES",
+      "MATH_5E_LITT_SUBSTITUER",
+      "MATH_5E_GEO_TRI_ANGLES",
+      "MATH_5E_STAT_MOYENNE",
+      "MATH_5E_PROP_QUATRIEME"
+    ]
+  },
+  {
+    "classe": "CINQUIEME",
+    "cle": "bonne-parenthese",
+    "titre": "La bonne parenthèse",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_5E_PRIORITES"
+    ]
+  },
+  {
+    "classe": "CINQUIEME",
+    "cle": "crible-college",
+    "titre": "Le crible",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_5E_DIVISIBILITE"
+    ]
+  },
+  {
+    "classe": "CINQUIEME",
+    "cle": "fractions-college",
+    "titre": "Les fractions",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_5E_FRAC_ADD",
+      "MATH_5E_FRAC_MULT"
+    ]
+  },
+  {
+    "classe": "CINQUIEME",
+    "cle": "recette-college",
+    "titre": "La recette",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_5E_PROP_QUATRIEME",
+      "MATH_5E_PROP_POURCENT",
+      "MATH_5E_PROP_ECHELLE"
+    ]
+  },
+  {
+    "classe": "CINQUIEME",
+    "cle": "tour-du-jardin-college",
+    "titre": "Le tour du jardin",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_5E_MES_AIRE_PARAL",
+      "MATH_5E_MES_AIRE_DISQUE",
+      "MATH_5E_MES_VOLUME",
+      "MATH_5E_MES_CONVERSION"
+    ]
+  },
+  {
+    "classe": "CINQUIEME",
+    "cle": "miroir-college",
+    "titre": "Le miroir à un point",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_5E_GEO_SYM_CENTRALE",
+      "MATH_5E_GEO_PARALLELO"
+    ]
+  },
+  {
+    "classe": "CINQUIEME",
+    "cle": "diagramme-college",
+    "titre": "Le diagramme",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_5E_STAT_EFFECTIFS",
+      "MATH_5E_STAT_MOYENNE"
+    ]
+  },
+  {
+    "classe": "CINQUIEME",
+    "cle": "robot-college",
+    "titre": "Le robot et ses boucles",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_5E_ALGO_BOUCLE"
+    ]
+  },
+  {
+    "classe": "CINQUIEME",
+    "cle": "droite-des-relatifs",
+    "titre": "La droite des relatifs",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_5E_REL_SENS"
+    ]
+  },
+  {
+    "classe": "CINQUIEME",
+    "cle": "ascenseur-des-relatifs",
+    "titre": "L’ascenseur",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_5E_REL_ADD"
+    ]
+  },
+  {
+    "classe": "CINQUIEME",
+    "cle": "machine-a-x",
+    "titre": "La machine à x",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_5E_LITT_EXPRESSION",
+      "MATH_5E_LITT_SUBSTITUER"
+    ]
+  },
+  {
+    "classe": "CINQUIEME",
+    "cle": "machine-a-fonctions",
+    "titre": "La machine à fonctions",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_5E_FONC_NOTION"
+    ]
+  },
+  {
+    "classe": "CINQUIEME",
+    "cle": "tour-des-puissances",
+    "titre": "La tour des puissances",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_5E_PUISSANCES"
+    ]
+  },
+  {
+    "classe": "CINQUIEME",
+    "cle": "chasseur-d-angles",
+    "titre": "Le chasseur d’angles",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_5E_GEO_ANGLES",
+      "MATH_5E_GEO_TRI_ANGLES",
+      "MATH_5E_GEO_TRI_INEG"
+    ]
+  },
+  {
+    "classe": "CINQUIEME",
+    "cle": "bataille-navale",
+    "titre": "La bataille navale",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_5E_GEO_REPERAGE"
+    ]
+  },
+  {
+    "classe": "CINQUIEME",
+    "cle": "sac-de-billes-college",
+    "titre": "Le sac de billes",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_5E_PROBA_INTRO"
+    ]
+  },
+  {
+    "classe": "CINQUIEME",
+    "cle": "escape-francais",
+    "titre": "Le manuscrit du chevalier",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_5E_LANG_PROPOSITIONS",
+      "FR_5E_LANG_RELATIVE",
+      "FR_5E_LANG_SUBJONCTIF",
+      "FR_5E_LANG_CONDITIONNEL",
+      "FR_5E_LANG_VOIX",
+      "FR_5E_LECT_FIGURES"
+    ]
+  },
+  {
+    "classe": "CINQUIEME",
+    "cle": "roue-des-verbes-college",
+    "titre": "La roue des verbes",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_5E_LANG_SUBJONCTIF",
+      "FR_5E_LANG_CONDITIONNEL"
+    ]
+  },
+  {
+    "classe": "CINQUIEME",
+    "cle": "simple-ou-complexe",
+    "titre": "Simple ou complexe ?",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_5E_LANG_PROPOSITIONS"
+    ]
+  },
+  {
+    "classe": "CINQUIEME",
+    "cle": "le-mot-juste",
+    "titre": "Le mot juste",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_5E_LANG_LEXIQUE",
+      "FR_5E_LANG_VOC_RELATIONS"
+    ]
+  },
+  {
+    "classe": "CINQUIEME",
+    "cle": "tri-des-subordonnees",
+    "titre": "Le tri des subordonnées",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_5E_LANG_RELATIVE",
+      "FR_5E_LANG_CONJONCTIVE"
+    ]
+  },
+  {
+    "classe": "CINQUIEME",
+    "cle": "actif-ou-passif",
+    "titre": "Actif ou passif ?",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_5E_LANG_VOIX"
+    ]
+  },
+  {
+    "classe": "CINQUIEME",
+    "cle": "les-accords-college",
+    "titre": "Les accords",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_5E_LANG_ACCORDS"
+    ]
+  },
+  {
+    "classe": "CINQUIEME",
+    "cle": "comme-une-image-college",
+    "titre": "Comme une image",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_5E_LECT_FIGURES"
+    ]
+  },
+  {
+    "classe": "CINQUIEME",
+    "cle": "poeme-theatre-college",
+    "titre": "Poème, théâtre ou récit ?",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_5E_LECT_THEATRE"
+    ]
+  },
+  {
+    "classe": "CINQUIEME",
+    "cle": "pourquoi-on-rit",
+    "titre": "Pourquoi on rit ?",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_5E_LECT_COMIQUE"
+    ]
+  },
+  {
+    "classe": "CINQUIEME",
+    "cle": "le-chevalier",
+    "titre": "Le chevalier",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_5E_LECT_CHEVALERIE"
+    ]
+  },
+  {
+    "classe": "CINQUIEME",
+    "cle": "escape-histoire-geo",
+    "titre": "La chronique de l’abbaye",
+    "matiereCode": "HISTOIRE_GEO",
+    "competences": [
+      "HG_5E_HIST_ISLAM",
+      "HG_5E_HIST_BYZANCE",
+      "HG_5E_HIST_FEODALITE",
+      "HG_5E_HIST_VILLES",
+      "HG_5E_HIST_ETAT",
+      "HG_5E_HIST_DECOUVERTES",
+      "HG_5E_HIST_EMPIRES_XVI"
+    ]
+  },
+  {
+    "classe": "CINQUIEME",
+    "cle": "escape-anglais",
+    "titre": "Le mystère du château écossais",
+    "matiereCode": "ANGLAIS",
+    "competences": [
+      "AN_5E_CULT_ROYAUME_UNI",
+      "AN_5E_GRAM_PREPOSITIONS",
+      "AN_5E_GRAM_PRETERIT_ING",
+      "AN_5E_GRAM_QUANTITE",
+      "AN_5E_GRAM_COMPARATIF",
+      "AN_5E_COMP_ECRIT"
+    ]
+  },
+  {
+    "classe": "CINQUIEME",
+    "cle": "escape-physique-chimie",
+    "titre": "Le laboratoire du professeur Volta",
+    "matiereCode": "PHYSIQUE_CHIMIE",
+    "competences": [
+      "PC_5E_MAT_SOLUBILITE",
+      "PC_5E_MAT_MASSE",
+      "PC_5E_MAT_MELANGES",
+      "PC_5E_ENER_COURT",
+      "PC_5E_SIG_SOURCES",
+      "PC_5E_MAT_VOLUME"
+    ]
+  },
+  {
+    "classe": "CINQUIEME",
+    "cle": "escape-svt",
+    "titre": "Voyage au cœur du corps",
+    "matiereCode": "SVT",
+    "competences": [
+      "SV_5E_CORPS_ALIMENTATION",
+      "SV_5E_CORPS_DIGESTION",
+      "SV_5E_VIV_MICROORGANISMES",
+      "SV_5E_VIV_RESPIRATION",
+      "SV_5E_VIV_NUTRITION",
+      "SV_5E_CORPS_HYGIENE"
+    ]
+  },
+  {
+    "classe": "QUATRIEME",
+    "cle": "escape-maths",
+    "titre": "Le laboratoire verrouillé",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_4E_PUISSANCES",
+      "MATH_4E_REL_MULT",
+      "MATH_4E_EQUATION",
+      "MATH_4E_PYTHAGORE",
+      "MATH_4E_PROP_VITESSE",
+      "MATH_4E_PROBA_CALCUL"
+    ]
+  },
+  {
+    "classe": "QUATRIEME",
+    "cle": "fractions-college",
+    "titre": "Les fractions",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_4E_FRAC_OPERATIONS"
+    ]
+  },
+  {
+    "classe": "QUATRIEME",
+    "cle": "recette-college",
+    "titre": "La recette",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_4E_PROP_VITESSE",
+      "MATH_4E_PROP_POURCENT",
+      "MATH_4E_MES_COMPOSEES"
+    ]
+  },
+  {
+    "classe": "QUATRIEME",
+    "cle": "miroir-college",
+    "titre": "Le glissement",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_4E_TRANSLATION"
+    ]
+  },
+  {
+    "classe": "QUATRIEME",
+    "cle": "solides-et-patrons",
+    "titre": "Solides et patrons",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_4E_GEO_SOLIDES",
+      "MATH_4E_MES_VOLUME"
+    ]
+  },
+  {
+    "classe": "QUATRIEME",
+    "cle": "diagramme-college",
+    "titre": "Le diagramme",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_4E_STAT_MOY_POND",
+      "MATH_4E_STAT_MEDIANE"
+    ]
+  },
+  {
+    "classe": "QUATRIEME",
+    "cle": "robot-college",
+    "titre": "Le robot qui choisit",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_4E_ALGO_CONDITION"
+    ]
+  },
+  {
+    "classe": "QUATRIEME",
+    "cle": "ascenseur-des-relatifs",
+    "titre": "L’ascenseur des signes",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_4E_REL_MULT"
+    ]
+  },
+  {
+    "classe": "QUATRIEME",
+    "cle": "machine-a-x",
+    "titre": "La machine à x",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_4E_LITT_DEVELOPPER",
+      "MATH_4E_LITT_FACTORISER"
+    ]
+  },
+  {
+    "classe": "QUATRIEME",
+    "cle": "tour-des-puissances",
+    "titre": "La tour des puissances",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_4E_PUISSANCES",
+      "MATH_4E_PUISS_DIX"
+    ]
+  },
+  {
+    "classe": "QUATRIEME",
+    "cle": "sac-de-billes-college",
+    "titre": "Le sac de billes",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_4E_PROBA_CALCUL"
+    ]
+  },
+  {
+    "classe": "QUATRIEME",
+    "cle": "balance-des-equations",
+    "titre": "La balance des équations",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_4E_EQUATION",
+      "MATH_4E_PROB_EQUATION"
+    ]
+  },
+  {
+    "classe": "QUATRIEME",
+    "cle": "echelle-contre-le-mur",
+    "titre": "L’échelle contre le mur",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_4E_PYTHAGORE",
+      "MATH_4E_PYTHAGORE_REC"
+    ]
+  },
+  {
+    "classe": "QUATRIEME",
+    "cle": "photo-agrandie",
+    "titre": "La photo agrandie",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_4E_MILIEUX",
+      "MATH_4E_THALES_INTRO"
+    ]
+  },
+  {
+    "classe": "QUATRIEME",
+    "cle": "pente-du-toboggan",
+    "titre": "La pente du toboggan",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_4E_COSINUS"
+    ]
+  },
+  {
+    "classe": "QUATRIEME",
+    "cle": "escape-francais",
+    "titre": "Le journal secret",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_4E_LANG_DISCOURS",
+      "FR_4E_LANG_CONCORDANCE",
+      "FR_4E_LANG_CIRCONSTANCIELLE",
+      "FR_4E_LANG_NEGATION",
+      "FR_4E_LANG_PP_PRONOMINAL",
+      "FR_4E_LANG_CONNOTATION"
+    ]
+  },
+  {
+    "classe": "QUATRIEME",
+    "cle": "roue-des-verbes-college",
+    "titre": "La roue des verbes",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_4E_LANG_CONCORDANCE"
+    ]
+  },
+  {
+    "classe": "QUATRIEME",
+    "cle": "participe-passe-college",
+    "titre": "Le participe des pronominaux",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_4E_LANG_PP_PRONOMINAL"
+    ]
+  },
+  {
+    "classe": "QUATRIEME",
+    "cle": "simple-ou-complexe",
+    "titre": "Simple ou complexe ?",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_4E_LANG_INTERROGATIVE",
+      "FR_4E_LANG_NEGATION"
+    ]
+  },
+  {
+    "classe": "QUATRIEME",
+    "cle": "le-mot-juste",
+    "titre": "Le mot juste",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_4E_LANG_CONNOTATION",
+      "FR_4E_LANG_VOC_RELATIONS"
+    ]
+  },
+  {
+    "classe": "QUATRIEME",
+    "cle": "qui-parle",
+    "titre": "Du direct à l’indirect",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_4E_LANG_DISCOURS"
+    ]
+  },
+  {
+    "classe": "QUATRIEME",
+    "cle": "tri-des-subordonnees",
+    "titre": "Le tri des subordonnées",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_4E_LANG_CIRCONSTANCIELLE"
+    ]
+  },
+  {
+    "classe": "QUATRIEME",
+    "cle": "compteur-de-syllabes",
+    "titre": "Le compteur de syllabes",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_4E_LECT_POESIE"
+    ]
+  },
+  {
+    "classe": "QUATRIEME",
+    "cle": "quel-registre",
+    "titre": "Quel registre ?",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_4E_LECT_REGISTRE",
+      "FR_4E_LECT_FANTASTIQUE",
+      "FR_4E_LECT_REALISME"
+    ]
+  },
+  {
+    "classe": "QUATRIEME",
+    "cle": "info-ou-opinion",
+    "titre": "Info ou opinion ?",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_4E_LECT_PRESSE"
+    ]
+  },
+  {
+    "classe": "QUATRIEME",
+    "cle": "escape-histoire-geo",
+    "titre": "L’armoire des Archives",
+    "matiereCode": "HISTOIRE_GEO",
+    "competences": [
+      "HG_4E_HIST_COMMERCE",
+      "HG_4E_HIST_LUMIERES",
+      "HG_4E_HIST_REVOLUTION",
+      "HG_4E_HIST_INDUSTRIE",
+      "HG_4E_HIST_VOTER",
+      "HG_4E_HIST_REPUBLIQUE"
+    ]
+  },
+  {
+    "classe": "QUATRIEME",
+    "cle": "escape-anglais",
+    "titre": "Enquête à New York",
+    "matiereCode": "ANGLAIS",
+    "competences": [
+      "AN_4E_GRAM_PRESENT_PERFECT",
+      "AN_4E_GRAM_SINCE_FOR",
+      "AN_4E_GRAM_RELATIVES",
+      "AN_4E_GRAM_MODAUX",
+      "AN_4E_GRAM_PASSIF",
+      "AN_4E_LEX_CONNECTEURS",
+      "AN_4E_COMP_ECRIT"
+    ]
+  },
+  {
+    "classe": "QUATRIEME",
+    "cle": "escape-physique-chimie",
+    "titre": "Panne sur la base lunaire",
+    "matiereCode": "PHYSIQUE_CHIMIE",
+    "competences": [
+      "PC_4E_ENER_TENSION",
+      "PC_4E_ENER_OHM",
+      "PC_4E_MOUV_POIDS",
+      "PC_4E_SIG_SON",
+      "PC_4E_MAT_FORMULES",
+      "PC_4E_MAT_MASSE_VOLUMIQUE"
+    ]
+  },
+  {
+    "classe": "QUATRIEME",
+    "cle": "escape-svt",
+    "titre": "Le volcan qui se réveille",
+    "matiereCode": "SVT",
+    "competences": [
+      "SV_4E_TERRE_TECTONIQUE",
+      "SV_4E_TERRE_PLAQUES",
+      "SV_4E_TERRE_ROCHES",
+      "SV_4E_CORPS_SYSTEME_NERVEUX",
+      "SV_4E_VIV_SELECTION",
+      "SV_4E_VIV_ECOSYSTEME"
+    ]
+  },
+  {
+    "classe": "TROISIEME",
+    "cle": "escape-maths",
+    "titre": "La chambre forte",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_3E_EQ_PROBLEME",
+      "MATH_3E_THALES",
+      "MATH_3E_FONC_AFFINE",
+      "MATH_3E_PROBA_DEUX",
+      "MATH_3E_STAT_QUARTILES",
+      "MATH_3E_RACINE"
+    ]
+  },
+  {
+    "classe": "TROISIEME",
+    "cle": "crible-college",
+    "titre": "Le crible",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_3E_ARITH_DIVISEURS",
+      "MATH_3E_ARITH_PREMIERS",
+      "MATH_3E_FRAC_IRRED"
+    ]
+  },
+  {
+    "classe": "TROISIEME",
+    "cle": "tour-du-jardin-college",
+    "titre": "Le tour du jardin",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_3E_MES_SPHERE",
+      "MATH_3E_MES_COMPOSEES"
+    ]
+  },
+  {
+    "classe": "TROISIEME",
+    "cle": "miroir-college",
+    "titre": "Tourner, agrandir",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_3E_ROTATION",
+      "MATH_3E_HOMOTHETIE",
+      "MATH_3E_VECTEURS"
+    ]
+  },
+  {
+    "classe": "TROISIEME",
+    "cle": "diagramme-college",
+    "titre": "Le diagramme",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_3E_STAT_QUARTILES"
+    ]
+  },
+  {
+    "classe": "TROISIEME",
+    "cle": "robot-college",
+    "titre": "Le robot et ses blocs",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_3E_ALGO_FONCTION"
+    ]
+  },
+  {
+    "classe": "TROISIEME",
+    "cle": "machine-a-x",
+    "titre": "La machine à x",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_3E_LITT_REMARQUABLE",
+      "MATH_3E_LITT_FACTORISER"
+    ]
+  },
+  {
+    "classe": "TROISIEME",
+    "cle": "machine-a-fonctions",
+    "titre": "La machine à fonctions",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_3E_FONC_NOTION",
+      "MATH_3E_FONC_LINEAIRE",
+      "MATH_3E_FONC_AFFINE",
+      "MATH_3E_FONC_GRAPHIQUE"
+    ]
+  },
+  {
+    "classe": "TROISIEME",
+    "cle": "tour-des-puissances",
+    "titre": "La tour des géants",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_3E_PUISSANCES"
+    ]
+  },
+  {
+    "classe": "TROISIEME",
+    "cle": "sac-de-billes-college",
+    "titre": "Deux tirages",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_3E_PROBA_DEUX"
+    ]
+  },
+  {
+    "classe": "TROISIEME",
+    "cle": "balance-des-equations",
+    "titre": "La balance des équations",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_3E_EQ_PRODUIT",
+      "MATH_3E_EQ_PROBLEME"
+    ]
+  },
+  {
+    "classe": "TROISIEME",
+    "cle": "photo-agrandie",
+    "titre": "La photo agrandie",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_3E_THALES",
+      "MATH_3E_THALES_REC",
+      "MATH_3E_AGRANDISSEMENT"
+    ]
+  },
+  {
+    "classe": "TROISIEME",
+    "cle": "pente-du-toboggan",
+    "titre": "La pente du toboggan",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_3E_TRIGO"
+    ]
+  },
+  {
+    "classe": "TROISIEME",
+    "cle": "racine-cachee",
+    "titre": "La racine cachée",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_3E_RACINE"
+    ]
+  },
+  {
+    "classe": "TROISIEME",
+    "cle": "le-globe",
+    "titre": "Le globe",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_3E_REPERAGE"
+    ]
+  },
+  {
+    "classe": "TROISIEME",
+    "cle": "escape-francais",
+    "titre": "L’enquête du musée",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_3E_LANG_ORTHO",
+      "FR_3E_LANG_HYPOTHESE",
+      "FR_3E_LANG_MODES",
+      "FR_3E_LANG_MODALISATION",
+      "FR_3E_LANG_ANALYSE",
+      "FR_3E_LANG_VOC_RELATIONS"
+    ]
+  },
+  {
+    "classe": "TROISIEME",
+    "cle": "roue-des-verbes-college",
+    "titre": "La roue des verbes",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_3E_LANG_MODES"
+    ]
+  },
+  {
+    "classe": "TROISIEME",
+    "cle": "le-mot-juste",
+    "titre": "Le mot juste",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_3E_LANG_LEXIQUE",
+      "FR_3E_LANG_VOC_RELATIONS"
+    ]
+  },
+  {
+    "classe": "TROISIEME",
+    "cle": "qui-raconte-college",
+    "titre": "Moi, je raconte",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_3E_LECT_AUTOBIO"
+    ]
+  },
+  {
+    "classe": "TROISIEME",
+    "cle": "tri-des-subordonnees",
+    "titre": "Le tri des subordonnées",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_3E_LANG_ANALYSE"
+    ]
+  },
+  {
+    "classe": "TROISIEME",
+    "cle": "si-j-etais",
+    "titre": "Si j’étais…",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_3E_LANG_HYPOTHESE"
+    ]
+  },
+  {
+    "classe": "TROISIEME",
+    "cle": "sur-ou-pas-sur",
+    "titre": "Sûr ou pas sûr ?",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_3E_LANG_MODALISATION"
+    ]
+  },
+  {
+    "classe": "TROISIEME",
+    "cle": "chasse-aux-fautes",
+    "titre": "La chasse aux fautes",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_3E_LANG_ORTHO"
+    ]
+  },
+  {
+    "classe": "TROISIEME",
+    "cle": "these-argument-exemple",
+    "titre": "Thèse, argument ou exemple ?",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_3E_LECT_ENGAGEMENT"
+    ]
+  },
+  {
+    "classe": "TROISIEME",
+    "cle": "ce-qui-n-est-pas-dit",
+    "titre": "Ce qui n’est pas dit",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_3E_LECT_IMPLICITE"
+    ]
+  },
+  {
+    "classe": "TROISIEME",
+    "cle": "escape-histoire-geo",
+    "titre": "Le mémorial du XXe siècle",
+    "matiereCode": "HISTOIRE_GEO",
+    "competences": [
+      "HG_3E_HIST_1GM",
+      "HG_3E_HIST_TOTALITAIRES",
+      "HG_3E_HIST_FRANCE_40",
+      "HG_3E_HIST_2GM",
+      "HG_3E_HIST_REFONDER",
+      "HG_3E_HIST_FEMMES",
+      "HG_3E_HIST_PROJET_EUROPEEN",
+      "HG_3E_HIST_GUERRE_FROIDE"
+    ]
+  },
+  {
+    "classe": "TROISIEME",
+    "cle": "escape-anglais",
+    "titre": "Mission Aurora",
+    "matiereCode": "ANGLAIS",
+    "competences": [
+      "AN_3E_GRAM_TEMPS",
+      "AN_3E_GRAM_INFINITIF",
+      "AN_3E_GRAM_DISCOURS",
+      "AN_3E_GRAM_CONDITIONNEL",
+      "AN_3E_GRAM_PASSIF",
+      "AN_3E_COMP_ECRIT"
+    ]
+  },
+  {
+    "classe": "TROISIEME",
+    "cle": "escape-physique-chimie",
+    "titre": "Le bidon sans étiquette",
+    "matiereCode": "PHYSIQUE_CHIMIE",
+    "competences": [
+      "PC_3E_MAT_PH",
+      "PC_3E_MAT_TESTS",
+      "PC_3E_MAT_METAUX",
+      "PC_3E_MAT_IONS",
+      "PC_3E_ENER_CONSOMMATION",
+      "PC_3E_ENER_FORMES"
+    ]
+  },
+  {
+    "classe": "TROISIEME",
+    "cle": "escape-svt",
+    "titre": "Alerte au laboratoire Hélix",
+    "matiereCode": "SVT",
+    "competences": [
+      "SV_3E_CORPS_IMMUNITE",
+      "SV_3E_CORPS_VACCINATION",
+      "SV_3E_VIV_MITOSE",
+      "SV_3E_VIV_CHROMOSOMES",
+      "SV_3E_VIV_MEIOSE",
+      "SV_3E_VIV_MUTATION"
+    ]
+  },
+  {
+    "classe": "SECONDE",
+    "cle": "escape-maths-lycee",
+    "titre": "Le serveur piraté",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_2DE_CALC_LITTERAL",
+      "MATH_2DE_SIGNE",
+      "MATH_2DE_DROITES",
+      "MATH_2DE_REPERAGE",
+      "MATH_2DE_PROBA_EVENEMENTS",
+      "MATH_2DE_ALGO_PYTHON"
+    ]
+  },
+  {
+    "classe": "SECONDE",
+    "cle": "intervalles-et-inegalites",
+    "titre": "Intervalles et inégalités",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_2DE_INTERVALLES",
+      "MATH_2DE_LOGIQUE_ENSEMBLES"
+    ]
+  },
+  {
+    "classe": "SECONDE",
+    "cle": "puissances-et-racines-lycee",
+    "titre": "Puissances et racines",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_2DE_PUISSANCES"
+    ]
+  },
+  {
+    "classe": "SECONDE",
+    "cle": "fonctions-de-reference",
+    "titre": "Les fonctions de référence",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_2DE_FONC_CARRE",
+      "MATH_2DE_FONC_VARIATION"
+    ]
+  },
+  {
+    "classe": "SECONDE",
+    "cle": "equation-de-droite",
+    "titre": "L’équation de droite",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_2DE_DROITES",
+      "MATH_2DE_FONC_AFFINE"
+    ]
+  },
+  {
+    "classe": "SECONDE",
+    "cle": "vecteurs-et-coordonnees",
+    "titre": "Vecteurs et coordonnées",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_2DE_VECTEURS",
+      "MATH_2DE_REPERAGE",
+      "MATH_2DE_COLINEARITE"
+    ]
+  },
+  {
+    "classe": "SECONDE",
+    "cle": "probabilites-seconde",
+    "titre": "Les probabilités",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_2DE_PROBA_EVENEMENTS",
+      "MATH_2DE_PROBA_MODELE"
+    ]
+  },
+  {
+    "classe": "SECONDE",
+    "cle": "statistiques-seconde",
+    "titre": "Les statistiques",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_2DE_STAT_INDICATEURS"
+    ]
+  },
+  {
+    "classe": "SECONDE",
+    "cle": "python-variable",
+    "titre": "Python : que vaut la variable ?",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_2DE_ALGO_PYTHON"
+    ]
+  },
+  {
+    "classe": "SECONDE",
+    "cle": "escape-francais-lycee",
+    "titre": "Le souffleur a disparu",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_2DE_LECT_PROCEDES",
+      "FR_2DE_LECT_POESIE",
+      "FR_2DE_LECT_MOUVEMENT",
+      "FR_2DE_LANG_NEGATION",
+      "FR_2DE_LANG_INTERROGATION",
+      "FR_2DE_LANG_LEXIQUE"
+    ]
+  },
+  {
+    "classe": "SECONDE",
+    "cle": "figures-de-style-lycee",
+    "titre": "Les figures de style",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_2DE_LECT_PROCEDES",
+      "FR_2DE_LECT_POESIE"
+    ]
+  },
+  {
+    "classe": "SECONDE",
+    "cle": "versification",
+    "titre": "La versification",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_2DE_LECT_POESIE",
+      "FR_2DE_LECT_POESIE_ANCIENNE"
+    ]
+  },
+  {
+    "classe": "SECONDE",
+    "cle": "mouvements-litteraires",
+    "titre": "Les mouvements littéraires",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_2DE_LECT_MOUVEMENT"
+    ]
+  },
+  {
+    "classe": "SECONDE",
+    "cle": "genres-et-registres",
+    "titre": "Genres et registres",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_2DE_LECT_THEATRE",
+      "FR_2DE_LECT_ROMAN",
+      "FR_2DE_LECT_ARGUMENTATION"
+    ]
+  },
+  {
+    "classe": "SECONDE",
+    "cle": "phrase-et-effets",
+    "titre": "La phrase et ses effets",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_2DE_LANG_SYNTAXE",
+      "FR_2DE_LANG_INTERROGATION"
+    ]
+  },
+  {
+    "classe": "SECONDE",
+    "cle": "argumenter",
+    "titre": "Argumenter",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_2DE_LECT_ARGUMENTATION",
+      "FR_2DE_LECT_PRESSE"
+    ]
+  },
+  {
+    "classe": "SECONDE",
+    "cle": "vocabulaire-analyse",
+    "titre": "Le vocabulaire de l’analyse",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_2DE_LECT_ROMAN",
+      "FR_2DE_LECT_PROCEDES",
+      "FR_2DE_LANG_LEXIQUE"
+    ]
+  },
+  {
+    "classe": "SECONDE",
+    "cle": "escape-histoire-geo-lycee",
+    "titre": "Le phare de la Méditerranée",
+    "matiereCode": "HISTOIRE_GEO",
+    "competences": [
+      "HG_2DE_HIST_MEDITERRANEE",
+      "HG_2DE_HIST_MEDIEVALE",
+      "HG_2DE_HIST_XVE_XVIE",
+      "HG_2DE_HIST_ABSOLUTISME",
+      "HG_2DE_HIST_LUMIERES",
+      "HG_2DE_GEO_DEVELOPPEMENT",
+      "HG_2DE_GEO_TRANSITIONS"
+    ]
+  },
+  {
+    "classe": "SECONDE",
+    "cle": "escape-anglais-lycee",
+    "titre": "The Missing Harbour Key",
+    "matiereCode": "ANGLAIS",
+    "competences": [
+      "AN_2DE_GRAM_TEMPS",
+      "AN_2DE_GRAM_MODAUX",
+      "AN_2DE_GRAM_PRONOMS",
+      "AN_2DE_CULT_COMMONWEALTH",
+      "AN_2DE_LEX_IDIOMES",
+      "AN_2DE_COMP_IMPLICITE"
+    ]
+  },
+  {
+    "classe": "SECONDE",
+    "cle": "escape-physique-chimie-lycee",
+    "titre": "Le signal du laboratoire",
+    "matiereCode": "PHYSIQUE_CHIMIE",
+    "competences": [
+      "PC_2DE_SIG_REFRACTION",
+      "PC_2DE_CHIM_ESPECES",
+      "PC_2DE_CHIM_MOLE",
+      "PC_2DE_CHIM_CONCENTRATION",
+      "PC_2DE_CHIM_TRANSFO",
+      "PC_2DE_SIG_ELECTRIQUE"
+    ]
+  },
+  {
+    "classe": "SECONDE",
+    "cle": "escape-svt-lycee",
+    "titre": "L’énigme de la mare",
+    "matiereCode": "SVT",
+    "competences": [
+      "SV_2DE_VIV_BIODIVERSITE",
+      "SV_2DE_VIV_CELLULE",
+      "SV_2DE_VIV_ADN",
+      "SV_2DE_VIV_METABOLISME",
+      "SV_2DE_VIV_ECOSYSTEME",
+      "SV_2DE_CORPS_PATHOGENES"
+    ]
+  },
+  {
+    "classe": "SECONDE_PRO",
+    "cle": "interets-et-pourcentages",
+    "titre": "Intérêts et pourcentages",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_2PRO_PROP_COMMERCE",
+      "MATH_2PRO_PROP_FACTURE",
+      "MATH_2PRO_PROP_INTERET",
+      "MATH_2PRO_PROP_PLACEMENT"
+    ]
+  },
+  {
+    "classe": "SECONDE_PRO",
+    "cle": "proportions-et-grandeurs",
+    "titre": "Proportions et grandeurs",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_2PRO_PROP_COMMERCE",
+      "MATH_2PRO_GEO_GRANDEURS"
+    ]
+  },
+  {
+    "classe": "SECONDE_PRO",
+    "cle": "lire-un-graphique",
+    "titre": "Lire un graphique",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_2PRO_ALG_GRAPHIQUE",
+      "MATH_2PRO_LOGIQUE_INTERVALLE"
+    ]
+  },
+  {
+    "classe": "SECONDE_PRO",
+    "cle": "probabilites-pro",
+    "titre": "Les probabilités",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_2PRO_PROB_CALCULER",
+      "MATH_2PRO_PROB_ESTIMER",
+      "MATH_2PRO_PROB_FLUCTUATION"
+    ]
+  },
+  {
+    "classe": "SECONDE_PRO",
+    "cle": "geometrie-atelier",
+    "titre": "La géométrie de l’atelier",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_2PRO_GEO_GRANDEURS",
+      "MATH_2PRO_GEO_THEOREMES"
+    ]
+  },
+  {
+    "classe": "SECONDE_PRO",
+    "cle": "escape-histoire-geo-lycee",
+    "titre": "Le mystère des routes marchandes",
+    "matiereCode": "HISTOIRE_GEO",
+    "competences": [
+      "HG_2DE_HIST_MEDITERRANEE",
+      "HG_2DE_HIST_MEDIEVALE",
+      "HG_2DE_HIST_XVE_XVIE",
+      "HG_2DE_GEO_MOBILITES",
+      "HG_2DE_GEO_RESSOURCES",
+      "HG_2DE_GEO_ENERGIE"
+    ]
+  },
+  {
+    "classe": "SECONDE_PRO",
+    "cle": "escape-anglais-lycee",
+    "titre": "The Workshop Mystery",
+    "matiereCode": "ANGLAIS",
+    "competences": [
+      "AN_2DE_LEX_PRECISION",
+      "AN_2DE_GRAM_TEMPS",
+      "AN_2DE_GRAM_MODAUX",
+      "AN_2DE_GRAM_GN",
+      "AN_2DE_COMP_ECRIT",
+      "AN_2DE_GRAM_PRONOMS"
+    ]
+  },
+  {
+    "classe": "SECONDE_PRO",
+    "cle": "escape-physique-chimie-lycee",
+    "titre": "La panne de l’atelier",
+    "matiereCode": "PHYSIQUE_CHIMIE",
+    "competences": [
+      "PC_2DE_SIG_ELECTRIQUE",
+      "PC_2DE_METH_PROTOCOLE",
+      "PC_2DE_METH_HOMOGENEITE",
+      "PC_2DE_CHIM_ENTITES",
+      "PC_2DE_SIG_CAPTEUR",
+      "PC_2DE_MOUV_INERTIE"
+    ]
+  },
+  {
+    "classe": "SECONDE_PRO",
+    "cle": "escape-svt-lycee",
+    "titre": "Le jardin sous surveillance",
+    "matiereCode": "SVT",
+    "competences": [
+      "SV_2DE_VIV_BIODIVERSITE",
+      "SV_2DE_VIV_METABOLISME",
+      "SV_2DE_VIV_AGROSYSTEME",
+      "SV_2DE_METH_DEMARCHE",
+      "SV_2DE_METH_STATISTIQUE",
+      "SV_2DE_CORPS_PATHOGENES"
+    ]
+  },
+  {
+    "classe": "PREMIERE",
+    "cle": "escape-maths-lycee",
+    "titre": "Le module spatial",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_1RE_AUTO_TAUX_SUCCESSIFS",
+      "MATH_1RE_AUTO_TAUX_RECIPROQUE",
+      "MATH_1RE_TRINOME_RACINES",
+      "MATH_1RE_DERIV_FONCTION",
+      "MATH_1RE_SUITES_ARITH",
+      "MATH_1RE_SUITES_GEO",
+      "MATH_1RE_PROBA_COND",
+      "MATH_1RE_AUTO_PROBA_NOTATIONS",
+      "MATH_1RE_EXP"
+    ]
+  },
+  {
+    "classe": "PREMIERE",
+    "cle": "automatismes",
+    "titre": "Les automatismes",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_1RE_AUTO_TAUX_APPLIQUER",
+      "MATH_1RE_AUTO_TAUX_CALCULER",
+      "MATH_1RE_AUTO_TAUX_SUCCESSIFS",
+      "MATH_1RE_AUTO_TAUX_RECIPROQUE",
+      "MATH_1RE_AUTO_PRODUIT_NUL",
+      "MATH_1RE_AUTO_SIGNE",
+      "MATH_1RE_AUTO_CALCUL_LITTERAL",
+      "MATH_1RE_AUTO_GRAPH_EQUATION",
+      "MATH_1RE_AUTO_GRAPH_SIGNE",
+      "MATH_1RE_AUTO_DROITE_LIRE",
+      "MATH_1RE_AUTO_COEFF_DIRECTEUR",
+      "MATH_1RE_PROBA_COND",
+      "MATH_1RE_AUTO_PROBA_NOTATIONS"
+    ]
+  },
+  {
+    "classe": "PREMIERE",
+    "cle": "suites",
+    "titre": "Les suites",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_1RE_SUITES_NOTION",
+      "MATH_1RE_SUITES_TERMES",
+      "MATH_1RE_SUITES_ARITH",
+      "MATH_1RE_SUITES_GEO",
+      "MATH_1RE_SUITES_VARIATION",
+      "MATH_1RE_SUITES_MODELE"
+    ]
+  },
+  {
+    "classe": "PREMIERE",
+    "cle": "second-degre",
+    "titre": "Le second degré",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_1RE_TRINOME_RACINES",
+      "MATH_1RE_TRINOME_SIGNE",
+      "MATH_1RE_TRINOME_FORME",
+      "MATH_1RE_TRINOME_FACTORISER",
+      "MATH_1RE_TRINOME_DEUX_RACINES"
+    ]
+  },
+  {
+    "classe": "PREMIERE",
+    "cle": "derivation",
+    "titre": "La dérivation",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_1RE_DERIV_GRAPHIQUE",
+      "MATH_1RE_DERIV_NOMBRE",
+      "MATH_1RE_DERIV_REFERENCE",
+      "MATH_1RE_DERIV_FONCTION",
+      "MATH_1RE_DERIV_VARIATION"
+    ]
+  },
+  {
+    "classe": "PREMIERE",
+    "cle": "exponentielle",
+    "titre": "L’exponentielle",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_1RE_EXP",
+      "MATH_1RE_EXP_ETUDE",
+      "MATH_1RE_EXP_DERIVEE"
+    ]
+  },
+  {
+    "classe": "PREMIERE",
+    "cle": "produit-scalaire",
+    "titre": "Le produit scalaire",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_1RE_SCAL_DEFINITION",
+      "MATH_1RE_SCAL_ORTHOGONAL",
+      "MATH_1RE_SCAL_APPLICATION",
+      "MATH_1RE_SCAL_PROPRIETES"
+    ]
+  },
+  {
+    "classe": "PREMIERE",
+    "cle": "probabilites-conditionnelles",
+    "titre": "Les probabilités conditionnelles",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_1RE_PROBA_COND",
+      "MATH_1RE_AUTO_PROBA_NOTATIONS",
+      "MATH_1RE_PROBA_ARBRE",
+      "MATH_1RE_PROBA_INDEP",
+      "MATH_1RE_PROBA_DEUX_EPREUVES"
+    ]
+  },
+  {
+    "classe": "PREMIERE",
+    "cle": "variables-aleatoires",
+    "titre": "Les variables aléatoires",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_1RE_VA_NOTATIONS",
+      "MATH_1RE_VA_LOI",
+      "MATH_1RE_VA_ESPERANCE",
+      "MATH_1RE_VA_LINEARITE",
+      "MATH_1RE_VA_PROBLEME"
+    ]
+  },
+  {
+    "classe": "PREMIERE",
+    "cle": "vrai-faux-reciproque",
+    "titre": "Vrai, faux, réciproque",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_1RE_LOG_IMPLICATION",
+      "MATH_1RE_LOGIQUE_CONTRAPOSEE",
+      "MATH_1RE_LOG_CONTRE_EXEMPLE",
+      "MATH_1RE_LOG_NECESSAIRE",
+      "MATH_1RE_LOGIQUE_QUANTIF",
+      "MATH_1RE_LOG_CONNECTEURS",
+      "MATH_1RE_LOG_STATUT"
+    ]
+  },
+  {
+    "classe": "PREMIERE",
+    "cle": "listes-python",
+    "titre": "Les listes en Python",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_1RE_ALGO_LISTE_GENERER",
+      "MATH_1RE_ALGO_LISTE_MANIPULER",
+      "MATH_1RE_ALGO_LISTE_PARCOURIR"
+    ]
+  },
+  {
+    "classe": "PREMIERE",
+    "cle": "escape-francais-lycee",
+    "titre": "La malle de l’écrivain",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_1RE_LANG_SUBORDINATION",
+      "FR_1RE_LANG_NEGATION",
+      "FR_1RE_LANG_INTERROGATION",
+      "FR_1RE_METH_GRAMMAIRE",
+      "FR_1RE_METH_LINEAIRE",
+      "FR_1RE_LECT_THEATRE"
+    ]
+  },
+  {
+    "classe": "PREMIERE",
+    "cle": "question-de-grammaire",
+    "titre": "La question de grammaire",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_1RE_METH_GRAMMAIRE",
+      "FR_1RE_LANG_SUBORDINATION",
+      "FR_1RE_LANG_INTERROGATION",
+      "FR_1RE_LANG_NEGATION"
+    ]
+  },
+  {
+    "classe": "PREMIERE",
+    "cle": "dissertation",
+    "titre": "La dissertation",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_1RE_ECR_DISSERTATION",
+      "FR_1RE_ECR_PROBLEMATISER",
+      "FR_1RE_ECR_EXEMPLES"
+    ]
+  },
+  {
+    "classe": "PREMIERE",
+    "cle": "explication-lineaire",
+    "titre": "L’explication linéaire",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_1RE_METH_LINEAIRE"
+    ]
+  },
+  {
+    "classe": "PREMIERE",
+    "cle": "procedes-et-effets",
+    "titre": "Procédés et effets",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_1RE_ECR_COMMENTAIRE",
+      "FR_1RE_METH_LINEAIRE"
+    ]
+  },
+  {
+    "classe": "PREMIERE",
+    "cle": "culture-litteraire",
+    "titre": "La culture littéraire",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_1RE_LECT_PARCOURS",
+      "FR_1RE_ECR_EXEMPLES"
+    ]
+  },
+  {
+    "classe": "PREMIERE",
+    "cle": "escape-histoire-geo-lycee",
+    "titre": "Le dernier train de l’enquête",
+    "matiereCode": "HISTOIRE_GEO",
+    "competences": [
+      "HG_1RE_HIST_REVOLUTION_NATION",
+      "HG_1RE_HIST_RESTAURATION",
+      "HG_1RE_HIST_AGE_DEMOCRATIQUE",
+      "HG_1RE_HIST_NOUVEAUX_ETATS",
+      "HG_1RE_HIST_REPUBLIQUE",
+      "HG_1RE_HIST_EMBRASEMENT",
+      "HG_1RE_HIST_SORTIR_GUERRE",
+      "HG_1RE_GEO_METROPOLISATION",
+      "HG_1RE_GEO_PRODUCTIFS"
+    ]
+  },
+  {
+    "classe": "PREMIERE",
+    "cle": "escape-anglais-lycee",
+    "titre": "The Midnight Broadcast",
+    "matiereCode": "ANGLAIS",
+    "competences": [
+      "AN_1RE_CULT_AMERIQUE",
+      "AN_1RE_GRAM_HYPOTHESE",
+      "AN_1RE_GRAM_ARTICULER",
+      "AN_1RE_GRAM_NUANCE",
+      "AN_1RE_CULT_INCLUSION",
+      "AN_1RE_GRAM_PRONOMS"
+    ]
+  },
+  {
+    "classe": "PREMIERE",
+    "cle": "escape-physique-chimie-lycee",
+    "titre": "La réaction disparue",
+    "matiereCode": "PHYSIQUE_CHIMIE",
+    "competences": [
+      "PC_1RE_ONDES_COULEURS",
+      "PC_1RE_CHIM_COMPOSITION",
+      "PC_1RE_CHIM_OXYDO",
+      "PC_1RE_CHIM_AVANCEMENT",
+      "PC_1RE_CHIM_DOSAGE",
+      "PC_1RE_MOUV_STATIQUE"
+    ]
+  },
+  {
+    "classe": "PREMIERE",
+    "cle": "escape-svt-lycee",
+    "titre": "Le secret des cellules",
+    "matiereCode": "SVT",
+    "competences": [
+      "SV_1RE_VIV_ENZYMES",
+      "SV_1RE_GEN_EXPRESSION",
+      "SV_1RE_GEN_MUTATIONS",
+      "SV_1RE_GEN_PHENOTYPE",
+      "SV_1RE_SANTE_MUTATION",
+      "SV_1RE_GEN_MITOSE"
+    ]
+  },
+  {
+    "classe": "PREMIERE_TECHNO",
+    "cle": "automatismes",
+    "titre": "Les automatismes",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_1TEC_AUTO_TAUX_APPLIQUER",
+      "MATH_1TEC_AUTO_EVOLUTION",
+      "MATH_1TEC_AUTO_TAUX_SUCCESSIFS",
+      "MATH_1TEC_AUTO_TAUX_RECIPROQUE",
+      "MATH_1TEC_AUTO_PRODUIT_NUL",
+      "MATH_1TEC_AUTO_SIGNE",
+      "MATH_1TEC_AUTO_ALGEBRE",
+      "MATH_1TEC_AUTO_GRAPHIQUE",
+      "MATH_1TEC_AUTO_GRAPH_SIGNE",
+      "MATH_1TEC_AUTO_DROITE_LIRE",
+      "MATH_1TEC_AUTO_COEFF_DIRECTEUR",
+      "MATH_1TEC_PROB_CONDITION",
+      "MATH_1TEC_AUTO_PROBA_NOTATIONS"
+    ]
+  },
+  {
+    "classe": "PREMIERE_TECHNO",
+    "cle": "variables-aleatoires",
+    "titre": "L’espérance et les jeux de hasard",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_1TEC_VA_LOI",
+      "MATH_1TEC_VA_ESPERANCE"
+    ]
+  },
+  {
+    "classe": "PREMIERE_TECHNO",
+    "cle": "vrai-faux-reciproque",
+    "titre": "Vrai, faux, réciproque",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_1TEC_LOG_RECIPROQUE",
+      "MATH_1TEC_LOG_CONTRE_EXEMPLE",
+      "MATH_1TEC_LOG_NECESSAIRE",
+      "MATH_1TEC_LOGIQUE",
+      "MATH_1TEC_LOG_STATUT"
+    ]
+  },
+  {
+    "classe": "PREMIERE_TECHNO",
+    "cle": "listes-python",
+    "titre": "Les listes en Python",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_1TEC_ALGO_LISTE",
+      "MATH_1TEC_ALGO_LISTE_MANIP"
+    ]
+  },
+  {
+    "classe": "PREMIERE_TECHNO",
+    "cle": "les-evolutions",
+    "titre": "Les évolutions",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_1TEC_AUTO_EVOLUTION",
+      "MATH_1TEC_AUTO_TAUX_APPLIQUER",
+      "MATH_1TEC_AUTO_TAUX_SUCCESSIFS",
+      "MATH_1TEC_AUTO_TAUX_RECIPROQUE"
+    ]
+  },
+  {
+    "classe": "PREMIERE_TECHNO",
+    "cle": "fonctions-et-paraboles",
+    "titre": "Fonctions et paraboles",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_1TEC_PARABOLE_ASSOCIER",
+      "MATH_1TEC_PARABOLE_ELEMENTS",
+      "MATH_1TEC_POLY_RACINES",
+      "MATH_1TEC_DERIV_CALCULER",
+      "MATH_1TEC_DERIV_VARIATIONS",
+      "MATH_1TEC_DERIV_TANGENTE"
+    ]
+  },
+  {
+    "classe": "PREMIERE_TECHNO",
+    "cle": "escape-francais-lycee",
+    "titre": "La rotative bloquée",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_1TEC_LANG_CIRCONSTANCIELLES",
+      "FR_1TEC_LANG_NEGATION",
+      "FR_1TEC_LANG_INTERROGATION",
+      "FR_1TEC_ECR_RELATIONS_LOGIQUES",
+      "FR_1TEC_LANG_ACQUIS_SECONDE",
+      "FR_1TEC_LANG_LEXIQUE"
+    ]
+  },
+  {
+    "classe": "PREMIERE_TECHNO",
+    "cle": "question-de-grammaire",
+    "titre": "La question de grammaire",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_1TEC_METH_GRAMMAIRE",
+      "FR_1TEC_LANG_CIRCONSTANCIELLES",
+      "FR_1TEC_LANG_INTERROGATION",
+      "FR_1TEC_LANG_NEGATION"
+    ]
+  },
+  {
+    "classe": "PREMIERE_TECHNO",
+    "cle": "explication-lineaire",
+    "titre": "L’explication linéaire",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_1TEC_METH_LINEAIRE"
+    ]
+  },
+  {
+    "classe": "PREMIERE_TECHNO",
+    "cle": "procedes-et-effets",
+    "titre": "Procédés et effets",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_1TEC_ECR_COMMENTAIRE",
+      "FR_1TEC_METH_LINEAIRE"
+    ]
+  },
+  {
+    "classe": "PREMIERE_TECHNO",
+    "cle": "culture-litteraire",
+    "titre": "La culture littéraire",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_1TEC_LECT_CONTEXTE",
+      "FR_1TEC_ECR_ETAYER_ESSAI"
+    ]
+  },
+  {
+    "classe": "PREMIERE_TECHNO",
+    "cle": "essai",
+    "titre": "L’essai",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_1TEC_ECR_ESSAI",
+      "FR_1TEC_ECR_ETAYER_ESSAI",
+      "FR_1TEC_ECR_RELATIONS_LOGIQUES"
+    ]
+  },
+  {
+    "classe": "PREMIERE_TECHNO",
+    "cle": "contraction",
+    "titre": "La contraction de texte",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_1TEC_ECR_CONTRACTION",
+      "FR_1TEC_ECR_COMPTER_MOTS",
+      "FR_1TEC_ECR_REFORMULER"
+    ]
+  },
+  {
+    "classe": "PREMIERE_TECHNO",
+    "cle": "escape-histoire-geo-lycee",
+    "titre": "Les quais de la révolution",
+    "matiereCode": "HISTOIRE_GEO",
+    "competences": [
+      "HG_1TEC_HIST_REVOLUTION",
+      "HG_1TEC_HIST_NAPOLEON_VIENNE",
+      "HG_1TEC_HIST_1848",
+      "HG_1TEC_HIST_SECOND_EMPIRE",
+      "HG_1TEC_HIST_PROJET_REPUBLICAIN",
+      "HG_1TEC_HIST_DREYFUS",
+      "HG_1TEC_GEO_ESPACES_PRODUCTIFS"
+    ]
+  },
+  {
+    "classe": "PREMIERE_TECHNO",
+    "cle": "escape-anglais-lycee",
+    "titre": "The Greenhouse Alarm",
+    "matiereCode": "ANGLAIS",
+    "competences": [
+      "AN_1RE_LEX_THEMATIQUE",
+      "AN_1RE_COMP_ECRIT",
+      "AN_1RE_GRAM_NUANCE",
+      "AN_1RE_GRAM_ARTICULER",
+      "AN_1RE_GRAM_HYPOTHESE",
+      "AN_1RE_GRAM_PRONOMS"
+    ]
+  },
+  {
+    "classe": "PREMIERE_TECHNO",
+    "cle": "escape-physique-chimie-lycee",
+    "titre": "L’énergie introuvable",
+    "matiereCode": "PHYSIQUE_CHIMIE",
+    "competences": [
+      "PCS1_COMBUSTION_HYDROLYSE",
+      "PCS1_PRESSION",
+      "PCS1_TRANSFERTS_THERMIQUES",
+      "PCS1_TENSION_SECTEUR",
+      "PCS1_RISQUE_ELECTRIQUE",
+      "PCS1_BILAN_MUSCLE"
+    ]
+  },
+  {
+    "classe": "PREMIERE_TECHNO",
+    "cle": "escape-svt-lycee",
+    "titre": "L’alerte du bassin vivant",
+    "matiereCode": "SVT",
+    "competences": [
+      "SV_2DE_VIV_ECOSYSTEME",
+      "SV_2DE_VIV_METABOLISME",
+      "SV_2DE_METH_STATISTIQUE",
+      "SV_2DE_VIV_CELLULE",
+      "SV_2DE_VIV_AGROSYSTEME",
+      "SV_2DE_VIV_BIODIVERSITE"
+    ]
+  },
+  {
+    "classe": "PREMIERE_PRO",
+    "cle": "interets-et-pourcentages",
+    "titre": "Intérêts et pourcentages",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_1PRO_SUITE_MODELISER",
+      "MATH_1PRO_SUITE_RECONNAITRE",
+      "MATH_1PRO_SUITE_TERME"
+    ]
+  },
+  {
+    "classe": "PREMIERE_PRO",
+    "cle": "proportions-et-grandeurs",
+    "titre": "Proportions et grandeurs",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_1PRO_GEO_ESPACE"
+    ]
+  },
+  {
+    "classe": "PREMIERE_PRO",
+    "cle": "lire-un-graphique",
+    "titre": "Lire un graphique",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_1PRO_DERIV_CALCULER",
+      "MATH_1PRO_DERIV_VARIATIONS",
+      "MATH_1PRO_DERIV_EXTREMUM"
+    ]
+  },
+  {
+    "classe": "PREMIERE_PRO",
+    "cle": "probabilites-pro",
+    "titre": "Les probabilités",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_1PRO_PROB_ARBRE",
+      "MATH_1PRO_PROB_CONDITION"
+    ]
+  },
+  {
+    "classe": "PREMIERE_PRO",
+    "cle": "geometrie-atelier",
+    "titre": "La géométrie de l’atelier",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_1PRO_GEO_ESPACE"
+    ]
+  },
+  {
+    "classe": "PREMIERE_PRO",
+    "cle": "ajuster-un-nuage",
+    "titre": "Ajuster un nuage de points",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_1PRO_STAT_NUAGE",
+      "MATH_1PRO_STAT_AJUSTEMENT",
+      "MATH_1PRO_STAT_INTERPOLER",
+      "MATH_1PRO_STAT_PERTINENCE"
+    ]
+  },
+  {
+    "classe": "PREMIERE_PRO",
+    "cle": "escape-histoire-geo-lycee",
+    "titre": "La cargaison des deux mondes",
+    "matiereCode": "HISTOIRE_GEO",
+    "competences": [
+      "HG_1RE_HIST_INDUSTRIE",
+      "HG_1RE_HIST_COLONIAL",
+      "HG_1RE_HIST_NOUVEAUX_ETATS",
+      "HG_1RE_HIST_1GM",
+      "HG_1RE_HIST_EMBRASEMENT",
+      "HG_1RE_GEO_PRODUCTIFS",
+      "HG_1RE_GEO_METROPOLISATION",
+      "HG_1RE_GEO_UE"
+    ]
+  },
+  {
+    "classe": "PREMIERE_PRO",
+    "cle": "escape-anglais-lycee",
+    "titre": "The Delivery Detour",
+    "matiereCode": "ANGLAIS",
+    "competences": [
+      "AN_1RE_LEX_THEMATIQUE",
+      "AN_1RE_COMP_ECRIT",
+      "AN_1RE_GRAM_ARTICULER",
+      "AN_1RE_GRAM_HYPOTHESE",
+      "AN_1RE_GRAM_NUANCE",
+      "AN_1RE_GRAM_PRONOMS"
+    ]
+  },
+  {
+    "classe": "PREMIERE_PRO",
+    "cle": "escape-physique-chimie-lycee",
+    "titre": "Le circuit du chantier",
+    "matiereCode": "PHYSIQUE_CHIMIE",
+    "competences": [
+      "PC_2DE_METH_PROTOCOLE",
+      "PC_2DE_SIG_ELECTRIQUE",
+      "PC_2DE_METH_HOMOGENEITE",
+      "PC_2DE_SIG_CAPTEUR",
+      "PC_2DE_MOUV_VITESSE",
+      "PC_2DE_MOUV_FORCES"
+    ]
+  },
+  {
+    "classe": "PREMIERE_PRO",
+    "cle": "escape-svt-lycee",
+    "titre": "La trace dans la serre",
+    "matiereCode": "SVT",
+    "competences": [
+      "SV_2DE_VIV_ECOSYSTEME",
+      "SV_2DE_METH_DEMARCHE",
+      "SV_2DE_VIV_METABOLISME",
+      "SV_2DE_VIV_CELLULE",
+      "SV_2DE_METH_STATISTIQUE",
+      "SV_2DE_VIV_AGROSYSTEME"
+    ]
+  },
+  {
+    "classe": "TERMINALE",
+    "cle": "escape-maths-lycee",
+    "titre": "Le message chiffré",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_TLE_FONC_LIMITE",
+      "MATH_TLE_LOG",
+      "MATH_TLE_PRIMITIVES",
+      "MATH_TLE_INTEGRALE",
+      "MATH_TLE_BINOMIALE",
+      "MATH_TLE_DENOMBR_KUPLETS",
+      "MATH_TLE_DENOMBR_PERMUTATIONS",
+      "MATH_TLE_DENOMBR_COMBINAISONS",
+      "MATH_TLE_ORTHOGONALITE",
+      "MATH_TLE_PLAN_CARTESIEN"
+    ]
+  },
+  {
+    "classe": "TERMINALE",
+    "cle": "limites-et-continuite",
+    "titre": "Limites et continuité",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_TLE_SUITES_LIMITE",
+      "MATH_TLE_SUITES_CONV",
+      "MATH_TLE_FONC_LIMITE",
+      "MATH_TLE_CONTINUITE"
+    ]
+  },
+  {
+    "classe": "TERMINALE",
+    "cle": "logarithme",
+    "titre": "Le logarithme",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_TLE_LOG",
+      "MATH_TLE_DERIV_COMPOSEE"
+    ]
+  },
+  {
+    "classe": "TERMINALE",
+    "cle": "primitives-et-integrales",
+    "titre": "Primitives et intégrales",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_TLE_PRIMITIVES",
+      "MATH_TLE_INTEGRALE"
+    ]
+  },
+  {
+    "classe": "TERMINALE",
+    "cle": "loi-binomiale",
+    "titre": "La loi binomiale",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_TLE_BINOMIALE",
+      "MATH_TLE_VA_SOMME"
+    ]
+  },
+  {
+    "classe": "TERMINALE",
+    "cle": "denombrement",
+    "titre": "Le dénombrement",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_TLE_DENOMBR_REPRESENTER",
+      "MATH_TLE_DENOMBR_PRINCIPES",
+      "MATH_TLE_DENOMBR_KUPLETS",
+      "MATH_TLE_DENOMBR_PERMUTATIONS",
+      "MATH_TLE_DENOMBR_COMBINAISONS",
+      "MATH_TLE_DENOMBR_PASCAL"
+    ]
+  },
+  {
+    "classe": "TERMINALE",
+    "cle": "geometrie-espace",
+    "titre": "La géométrie dans l’espace",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_TLE_VECT_ESPACE",
+      "MATH_TLE_PARAMETRIQUE",
+      "MATH_TLE_PLAN_CARTESIEN",
+      "MATH_TLE_SCAL_ESPACE",
+      "MATH_TLE_ORTHOGONALITE",
+      "MATH_TLE_DROITES_PLANS"
+    ]
+  },
+  {
+    "classe": "TERMINALE",
+    "cle": "convexite",
+    "titre": "La convexité",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_TLE_CONVEXITE"
+    ]
+  },
+  {
+    "classe": "TERMINALE",
+    "cle": "recurrence",
+    "titre": "La récurrence",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_TLE_RECURRENCE"
+    ]
+  },
+  {
+    "classe": "TERMINALE",
+    "cle": "escape-histoire-geo-lycee",
+    "titre": "Le réseau du monde",
+    "matiereCode": "HISTOIRE_GEO",
+    "competences": [
+      "HG_TLE_HIST_CRISE_1929",
+      "HG_TLE_HIST_2GM",
+      "HG_TLE_HIST_1945",
+      "HG_TLE_HIST_GUERRE_FROIDE",
+      "HG_TLE_HIST_DECOLONISATION",
+      "HG_TLE_HIST_FRANCE",
+      "HG_TLE_HIST_FRANCE_1974",
+      "HG_TLE_HIST_CONSTRUCTION_EU",
+      "HG_TLE_GEO_MERS",
+      "HG_TLE_GEO_DYNAMIQUES"
+    ]
+  },
+  {
+    "classe": "TERMINALE",
+    "cle": "escape-anglais-lycee",
+    "titre": "The Silent Research Station",
+    "matiereCode": "ANGLAIS",
+    "competences": [
+      "AN_TLE_CULT_ROYAUME_UNI",
+      "AN_TLE_ECR_TRADUIRE",
+      "AN_TLE_LEX_REGISTRE",
+      "AN_TLE_GRAM_STYLE",
+      "AN_TLE_GRAM_GN",
+      "AN_TLE_COMP_ECRIT"
+    ]
+  },
+  {
+    "classe": "TERMINALE",
+    "cle": "escape-physique-chimie-lycee",
+    "titre": "L’orbite du signal perdu",
+    "matiereCode": "PHYSIQUE_CHIMIE",
+    "competences": [
+      "PC_TLE_MOUV_KEPLER",
+      "PC_TLE_ONDES_PHOTOELEC",
+      "PC_TLE_ELEC_CONDENSATEUR",
+      "PC_TLE_ONDES_DIFFRACTION",
+      "PC_TLE_ONDES_DUALITE",
+      "PC_TLE_ONDES_DOPPLER"
+    ]
+  },
+  {
+    "classe": "TERMINALE",
+    "cle": "escape-svt-lycee",
+    "titre": "La faille des origines",
+    "matiereCode": "SVT",
+    "competences": [
+      "SV_TLE_TERRE_ARCHIVES",
+      "SV_TLE_TERRE_OPHIOLITES",
+      "SV_TLE_TERRE_ATMOSPHERE",
+      "SV_TLE_GEN_POPULATION",
+      "SV_TLE_GEN_DERIVE",
+      "SV_TLE_GEN_ESPECE"
+    ]
+  },
+  {
+    "classe": "TERMINALE_TECHNO",
+    "cle": "listes-python",
+    "titre": "Les listes en Python",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_TTEC_ALGO_LISTE"
+    ]
+  },
+  {
+    "classe": "TERMINALE_TECHNO",
+    "cle": "loi-binomiale",
+    "titre": "La loi binomiale",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_TTEC_VA_BINOMIALE",
+      "MATH_TTEC_VA_ESPERANCE"
+    ]
+  },
+  {
+    "classe": "TERMINALE_TECHNO",
+    "cle": "les-evolutions",
+    "titre": "Les évolutions",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_TTEC_EXPO_TAUX_MOYEN",
+      "MATH_TTEC_AUTO_EVOLUTION"
+    ]
+  },
+  {
+    "classe": "TERMINALE_TECHNO",
+    "cle": "fonctions-et-paraboles",
+    "titre": "Fonctions et paraboles",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_TTEC_INVERSE"
+    ]
+  },
+  {
+    "classe": "TERMINALE_TECHNO",
+    "cle": "escape-histoire-geo-lycee",
+    "titre": "Le barrage des frontières",
+    "matiereCode": "HISTOIRE_GEO",
+    "competences": [
+      "HG_TTEC_HIST_TOTALITARISMES",
+      "HG_TTEC_HIST_FRANCE_1940",
+      "HG_TTEC_HIST_ORDRE_1945",
+      "HG_TTEC_HIST_GUERRE_FROIDE",
+      "HG_TTEC_HIST_FIN_EMPIRE",
+      "HG_TTEC_HIST_DECOLONISATION",
+      "HG_TTEC_HIST_PROJET_EUROPEEN",
+      "HG_TTEC_GEO_INTEGRATION",
+      "HG_TTEC_GEO_CENTRES_DECISION"
+    ]
+  },
+  {
+    "classe": "TERMINALE_TECHNO",
+    "cle": "escape-anglais-lycee",
+    "titre": "The Smart City Blackout",
+    "matiereCode": "ANGLAIS",
+    "competences": [
+      "AN_TLE_CULT_ROYAUME_UNI",
+      "AN_TLE_CULT_COMMUNICATION",
+      "AN_TLE_LEX_REGISTRE",
+      "AN_TLE_GRAM_GN",
+      "AN_TLE_COMP_ECRIT",
+      "AN_TLE_ECR_TRADUIRE"
+    ]
+  },
+  {
+    "classe": "TERMINALE_TECHNO",
+    "cle": "escape-physique-chimie-lycee",
+    "titre": "Le spectre invisible",
+    "matiereCode": "PHYSIQUE_CHIMIE",
+    "competences": [
+      "CBPHT_ONDES_RAYONS_X",
+      "CBPHT_PROTECTION_SOLAIRE",
+      "CBPHT_OZONE_GES",
+      "CBPHT_DOSAGE_ETALONNAGE",
+      "CBPHT_RADIOGRAPHIE",
+      "CBPHT_DEMI_VIE"
+    ]
+  },
+  {
+    "classe": "TERMINALE_TECHNO",
+    "cle": "escape-svt-lycee",
+    "titre": "Le vivant en équilibre",
+    "matiereCode": "SVT",
+    "competences": [
+      "SV_2DE_VIV_METABOLISME",
+      "SV_2DE_VIV_ECOSYSTEME",
+      "SV_2DE_TERRE_EROSION",
+      "SV_2DE_VIV_BIODIVERSITE",
+      "SV_2DE_CORPS_EFFORT",
+      "SV_2DE_CORPS_MICROBIOTE"
+    ]
+  },
+  {
+    "classe": "TERMINALE_PRO",
+    "cle": "interets-et-pourcentages",
+    "titre": "Intérêts et pourcentages",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_TPRO_LOG_DUREE",
+      "MATH_TPRO_EXPO_TAUX",
+      "MATH_TPRO_SUITE_SOMME",
+      "MATH_TPRO_EXPO_FONCTION"
+    ]
+  },
+  {
+    "classe": "TERMINALE_PRO",
+    "cle": "proportions-et-grandeurs",
+    "titre": "Proportions et grandeurs",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_TPRO_LOG_DECIMAL"
+    ]
+  },
+  {
+    "classe": "TERMINALE_PRO",
+    "cle": "lire-un-graphique",
+    "titre": "Lire un graphique",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_TPRO_POLY3_DERIVEE",
+      "MATH_TPRO_POLY3_VARIATIONS",
+      "MATH_TPRO_POLY3_EXPLOITER"
+    ]
+  },
+  {
+    "classe": "TERMINALE_PRO",
+    "cle": "probabilites-pro",
+    "titre": "Les probabilités",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_TPRO_LOGIQUE"
+    ]
+  },
+  {
+    "classe": "TERMINALE_PRO",
+    "cle": "geometrie-atelier",
+    "titre": "La géométrie de l’atelier",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_TPRO_TRIGO_TRIANGLE"
+    ]
+  },
+  {
+    "classe": "TERMINALE_PRO",
+    "cle": "ajuster-un-nuage",
+    "titre": "Ajuster un nuage de points",
+    "matiereCode": "MATHS",
+    "competences": [
+      "MATH_TPRO_STAT_AJUSTEMENT",
+      "MATH_TPRO_STAT_EXPLOITER"
+    ]
+  },
+  {
+    "classe": "TERMINALE_PRO",
+    "cle": "debat-idees",
+    "titre": "Le débat d’idées",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_TPRO_ORAL_DEBAT",
+      "FR_TPRO_ORAL_REAGIR",
+      "FR_TPRO_ECR_NUANCER"
+    ]
+  },
+  {
+    "classe": "TERMINALE_PRO",
+    "cle": "ecrit-professionnel",
+    "titre": "L’écrit professionnel",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_TPRO_ECR_PROFESSIONNEL"
+    ]
+  },
+  {
+    "classe": "TERMINALE_PRO",
+    "cle": "groupement-textes",
+    "titre": "Le groupement de textes",
+    "matiereCode": "FRANCAIS",
+    "competences": [
+      "FR_TPRO_LECT_GROUPEMENT",
+      "FR_TPRO_METH_POINTS_VUE"
+    ]
+  },
+  {
+    "classe": "TERMINALE_PRO",
+    "cle": "escape-histoire-geo-lycee",
+    "titre": "L’enquête des territoires",
+    "matiereCode": "HISTOIRE_GEO",
+    "competences": [
+      "HG_TLE_HIST_MUTATIONS",
+      "HG_TLE_HIST_1945",
+      "HG_TLE_HIST_GUERRE_FROIDE",
+      "HG_TLE_HIST_FRANCE",
+      "HG_TLE_GEO_MERS",
+      "HG_TLE_GEO_DYNAMIQUES",
+      "HG_TLE_GEO_ENVIRONNEMENT",
+      "HG_TLE_HIST_CONSTRUCTION_EU"
+    ]
+  },
+  {
+    "classe": "TERMINALE_PRO",
+    "cle": "escape-anglais-lycee",
+    "titre": "The Last Train Clue",
+    "matiereCode": "ANGLAIS",
+    "competences": [
+      "AN_TLE_GRAM_MAITRISE",
+      "AN_TLE_COMP_ECRIT",
+      "AN_TLE_LEX_REGISTRE",
+      "AN_TLE_GRAM_GN",
+      "AN_TLE_ECR_TRADUIRE"
+    ]
+  },
+  {
+    "classe": "TERMINALE_PRO",
+    "cle": "escape-physique-chimie-lycee",
+    "titre": "La chaleur sous contrôle",
+    "matiereCode": "PHYSIQUE_CHIMIE",
+    "competences": [
+      "PC_2DE_SIG_SON",
+      "PC_2DE_SIG_ELECTRIQUE",
+      "PC_2DE_MOUV_FORCES",
+      "PC_2DE_SIG_CAPTEUR",
+      "PC_2DE_METH_HOMOGENEITE",
+      "PC_2DE_CHIM_ESPECES"
+    ]
+  },
+  {
+    "classe": "TERMINALE_PRO",
+    "cle": "escape-svt-lycee",
+    "titre": "Le secret du sol",
+    "matiereCode": "SVT",
+    "competences": [
+      "SV_2DE_TERRE_RESSOURCES",
+      "SV_2DE_TERRE_EROSION",
+      "SV_2DE_VIV_ECOSYSTEME",
+      "SV_2DE_VIV_CELLULE",
+      "SV_2DE_METH_STATISTIQUE",
+      "SV_2DE_VIV_AGROSYSTEME"
+    ]
   }
 ]

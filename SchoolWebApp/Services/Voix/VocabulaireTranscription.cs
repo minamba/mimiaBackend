@@ -131,7 +131,10 @@ namespace SchoolWebApp.Api.Services.Voix
 
                     // Paires de sons qui reviennent au vocabulaire de base.
                     + "sheep ship, live leave, sit seat, bit beat, full fool, "
-                    + "chip cheap",
+                    + "chip cheap, "
+
+                    // Les mots interrogatifs, dits seuls : « where » sortait « rare ».
+                    + "who, what, where, when, why, which, whose, how",
 
                 ["MATHS"] =
                     "fraction, numérateur, dénominateur, équation, inéquation, "
@@ -434,7 +437,17 @@ namespace SchoolWebApp.Api.Services.Voix
                 "thing", "thank", "mouth", "mouse", "both", "boat",
                 "path", "pass", "with", "wiz", "hair", "air",
                 "old", "high", "eye", "present perfect", "past simple", "past participle",
-                "preterite", "irregular verb", "infinitive", "auxiliary", "comparative", "superlative",            ];
+                "preterite", "irregular verb", "infinitive", "auxiliary", "comparative", "superlative",
+
+                // LES MOTS INTERROGATIFS — remonté par un parent le 05/10/2026 : sa
+                // fille s'entraînait dessus, disait « where », et l'écran écrivait
+                // « Rare ». Un mot seul, dit avec l'accent français : le w et le h
+                // tombent, il reste « ère », et le transcripteur prend le mot
+                // français le plus proche. Quatrième famille, donc : des mots très
+                // courants, mais dits SEULS dans cet exercice-là.
+                "who", "what", "where", "when", "why", "which", "whose", "how",
+                "how many", "how much", "how old", "how long", "how often",
+            ];
         }
 
         /// <summary>

@@ -86,7 +86,14 @@ namespace SchoolWebApp.Api.Services.Jeux
             if (rang is null) return null;
 
             var matiere = conversation.MatiereCode;
-            var deSaClasse = _catalogue.DeLaClasse(matiere, rang.Value);
+            // AU LYCÉE, LE RANG NE SUFFIT PAS (07/10/2026, jeux du lycée) : la
+            // 1re générale, la 1re STMG et la 1re pro partagent le rang 11 sans
+            // partager le programme. On ne garde que les jeux de la voie de
+            // l'élève — la même règle que son référentiel (`VoiesScolaires`).
+            // Avant le lycée, il n'y a pas de voie : rien n'est retiré.
+            var deSaClasse = _catalogue.DeLaClasse(matiere, rang.Value)
+                .Where(j => VoiesScolaires.NiveauConcerne(eleve.NiveauCode, j.Classe))
+                .ToList();
 
             // Les notions fragiles des classes d'avant, et pour chacune le ou
             // les jeux qui la travaillent. Une notion sans jeu ne compte pas ;

@@ -178,9 +178,9 @@ namespace SchoolWebApp.Api.Services.Jeux
                 "TROISIEME" or "TROISIEME_PREPA" => 9,
                 "SECONDE" or "SECONDE_PRO" => 10,
                 "PREMIERE" or "PREMIERE_TECHNO" or "PREMIERE_PRO"
-                    or "PREMIERE_STMG" or "PREMIERE_ST2S" or "PREMIERE_STL" => 11,
+                    or "PREMIERE_STMG" or "PREMIERE_ST2S" or "PREMIERE_STL" or "PREMIERE_STI2D" => 11,
                 "TERMINALE" or "TERMINALE_TECHNO" or "TERMINALE_PRO"
-                    or "TERMINALE_STMG" or "TERMINALE_ST2S" or "TERMINALE_STL" => 12,
+                    or "TERMINALE_STMG" or "TERMINALE_ST2S" or "TERMINALE_STL" or "TERMINALE_STI2D" => 12,
                 _ => null,
             };
         }

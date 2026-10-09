@@ -95,6 +95,22 @@ namespace SchoolWebApp.IdentityServer.Workers
                 }
             };
 
+            // LES ORIGINES SUPPLÉMENTAIRES SE CONNECTENT AUSSI — 07/10/2026 : un
+            // second front de développement (localhost:3001) ouvert au CORS
+            // aurait quand même vu sa connexion refusée (« invalid redirect_uri »)
+            // tant que seule l'URL principale avait ses adresses de retour.
+            var sites = new[] { frontUrl }
+                .Concat(_configuration.GetSection("Clients:Spa:OriginesSupplementaires").Get<string[]>() ?? [])
+                .Where(o => !string.IsNullOrWhiteSpace(o))
+                .Select(o => o.TrimEnd('/'))
+                .Distinct(StringComparer.OrdinalIgnoreCase);
+            foreach (var site in sites)
+            {
+                descriptif.RedirectUris.Add(new Uri($"{site}/callback"));
+                descriptif.RedirectUris.Add(new Uri($"{site}/silent-renew"));
+                descriptif.PostLogoutRedirectUris.Add(new Uri($"{site}/"));
+            }
+
             var clientExistant = await applicationManager.FindByClientIdAsync("school-ia-spa", cancellationToken);
 
             if (clientExistant is null)
