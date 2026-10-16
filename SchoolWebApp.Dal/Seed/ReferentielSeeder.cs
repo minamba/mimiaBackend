@@ -268,6 +268,64 @@ namespace SchoolWebApp.Dal.Seed
     /// commun du lycée et n'ont rien de propre. Relevé en chemin, hors du
     /// sujet : l'EMC de la voie GÉNÉRALE du référentiel est encore celle de
     /// 2019, alors que le programme de 2024 l'a remplacée.
+    ///
+    /// ---------------------------------------------------------------
+    ///
+    /// CINQUIÈME PASSE, LE 15 OCTOBRE 2026 : LA VOIE PROFESSIONNELLE HORS MATHS.
+    ///
+    /// Seules les maths avaient leur programme pro (troisième passe) et le
+    /// français de terminale pro. Partout ailleurs, les trois classes pro
+    /// héritaient par le rang de la voie GÉNÉRALE — le cas le plus grave : un
+    /// élève de première pro recevait la préparation au bac de français
+    /// anticipé (dissertation, commentaire, question de grammaire), épreuve
+    /// qu'il ne passe pas. Camara : « un élève en pro va s'y retrouver ? ».
+    /// +214 compétences, 4 737 → 4 951 en base locale ; les sources sont en
+    /// tête de chaque bloc « VOIE PROFESSIONNELLE » :
+    ///
+    ///   Français 2de pro          arrêté du 03/04/2019, MENE1908622A
+    ///   Français 1re, Tle pro     arrêté du 03/02/2020, MENE2003001A
+    ///                             (la Tle existait : 3 libellés resserrés,
+    ///                             l'étude de la langue ajoutée)
+    ///   Histoire-géo 2de pro      arrêté du 03/04/2019, MENE1908625A
+    ///   Histoire-géo 1re, Tle     arrêté du 03/02/2020, MENE2003002A
+    ///   EMC, les trois classes    arrêté du 29/05/2024, MENE2413934A — nouveau
+    ///                             programme commun aux trois voies, Tle pro
+    ///                             à la rentrée 2026
+    ///   Langues vivantes          arrêté du 03/04/2019, MENE1908627A, un seul
+    ///                             texte pour les trois classes, sans découpage
+    ///                             par année : réparti selon le CECRL
+    ///   Physique-chimie 2de pro   arrêté du 03/04/2019, MENE1908630A
+    ///   Physique-chimie 1re, Tle  arrêté du 03/02/2020, MENE2003004A, six
+    ///                             groupements : TOUS les modules sont repris
+    ///
+    /// Tous en vigueur à la rentrée 2026 ; l'arrêté du 16/02/2026 (MENE2602913A)
+    /// ne fait que les étendre aux classes de brevet des métiers d'art.
+    /// Vérification : chaque classe pro ne reçoit plus que ses propres
+    /// compétences dans ces quatre matières, et la voie générale aucune.
+    ///
+    /// CE QUI RESTE : la spécialité de l'élève n'est pas connue (la physique-
+    /// chimie est proposée aux spécialités tertiaires, qui ne l'ont pas) ; pas
+    /// de prérequis ni de relecture par un professeur ; la PSE et l'économie-
+    /// gestion/droit n'existent pas (voir la sixième passe) ; les escape games
+    /// de SVT des classes pro sont inaccessibles (la SVT est retirée de la voie
+    /// pro).
+    ///
+    /// SIXIÈME PASSE, LE 16 OCTOBRE 2026 : LA PSE ET L'ÉCONOMIE DU BAC PRO.
+    ///
+    /// Deux enseignements que suit tout élève de bac pro, jusque-là absents :
+    /// la prévention-santé-environnement (nouveau professeur, Hugo) et
+    /// l'économie (Karim) — économie-droit pour les spécialités tertiaires,
+    /// économie-gestion pour les autres, et chaque élève ne voit que la sienne
+    /// quand sa filière est connue (`VoiesScolaires.EconomieDeLaFiliere`).
+    /// +108 compétences ; sources dans `ReferentielVoiePro` :
+    ///
+    ///   PSE 2de pro               arrêté du 03/04/2019, MENE1908632A
+    ///   PSE 1re, Tle pro          arrêté du 03/02/2020, MENE2003005A
+    ///   Économie-droit            arrêté du 03/04/2019, MENE1908617A
+    ///   Économie-gestion          arrêté du 03/04/2019, MENE1908618A
+    ///
+    /// L'économie a UN programme pour trois ans, sans découpage par classe :
+    /// la répartition par classe est la nôtre, et le dit.
     /// </summary>
     public static class ReferentielSeeder
     {
@@ -319,6 +377,11 @@ namespace SchoolWebApp.Dal.Seed
             await SeedCompetencesAsync(context, "BIOLOGIE_HUMAINE", ReferentielsSeriesTechnologiques.BiologieHumaine, ct);
             await SeedCompetencesAsync(context, "BIOTECHNOLOGIES", ReferentielsSeriesTechnologiques.Biotechnologies, ct);
             await SeedCompetencesAsync(context, "SPCL", ReferentielsSeriesTechnologiques.Spcl, ct);
+
+            // LA VOIE PROFESSIONNELLE, ÉTAPE 3 (16/10/2026) — voir la sixième passe.
+            await SeedCompetencesAsync(context, "PSE", ReferentielVoiePro.Pse, ct);
+            await SeedCompetencesAsync(context, "ECONOMIE_DROIT", ReferentielVoiePro.EconomieDroit, ct);
+            await SeedCompetencesAsync(context, "ECONOMIE_GESTION", ReferentielVoiePro.EconomieGestion, ct);
 
             // LES SPÉCIALITÉS DE LA VOIE GÉNÉRALE — une matière chacune, ouverte
             // seulement à l'élève dont la famille l'a cochée (`VoiesScolaires`).
@@ -716,6 +779,40 @@ namespace SchoolWebApp.Dal.Seed
                 ("CINEMA_AUDIOVISUEL",    "Cinéma-audiovisuel",                              "agent-cinema-audiovisuel",    "Jeanne",  "jeanne",  "#86198F", 29, true, 11, 12, "Analyser et écrire le cinéma"),
                 ("THEATRE",               "Théâtre",                                         "agent-theatre",               "Jeanne",  "jeanne",  "#86198F", 31, true, 11, 12, "Le texte, la scène et le spectateur"),
                 ("ARTS_CIRQUE",           "Arts du cirque",                                  "agent-arts-cirque",           "Jeanne",  "jeanne",  "#86198F", 33, true, 11, 12, "Les disciplines, la création et les spectacles de cirque"),
+
+                // LA CONSEILLÈRE D'ORIENTATION (11/10/2026) — voulue par Camara :
+                // « accompagner les élèves dans leur orientation, après la 3e,
+                // après la 2de, après le bac ». De la 3e à la terminale.
+                //
+                // PAS UNE MATIÈRE ENSEIGNÉE, ET DONC PAS DE RÉFÉRENTIEL : la règle
+                // « aucune matière sans référentiel » (14/09/2026) vaut pour les
+                // cours ; l'orientation n'a pas de programme à suivre. Ce qu'elle
+                // sait vient de sa consigne (cadre national, `PromptsOrientation`)
+                // et de l'offre réelle des lycées, importée chaque semaine.
+                //
+                // ELLE NAÎT MASQUÉE (`ConseillereOrientation`), comme les langues :
+                // elle n'apparaît nulle part avant que Camara l'allume dans
+                // Admin › Modes. Prénom, visage, voix et couleur choisis par moi —
+                // rien n'a encore été montré ni entendu par Camara.
+                ("ORIENTATION",           "Orientation",                                     "agent-orientation",           "Maëlle",  "maelle",  "#6D28D9", 90, true, 9, 12, "Choisir sa voie, ses études et son métier"),
+
+                // LA VOIE PROFESSIONNELLE, ÉTAPE 3 (16/10/2026) — deux matières
+                // que tout élève de bac pro suit, de la seconde à la terminale.
+                // RÉSERVÉES À LA VOIE PRO par `VoiesScolaires`.
+                //
+                // L'ÉCONOMIE VA À KARIM : dans un lycée, c'est le même métier que
+                // l'économie-gestion de STMG. Deux programmes selon la filière —
+                // l'économie-droit pour les spécialités tertiaires, l'économie-
+                // gestion pour les autres — et chaque élève ne voit que le sien.
+                //
+                // LA PSE A SON PROFESSEUR, HUGO — Camara : « je ne veux pas qu'un
+                // professeur qui n'a rien à voir avec une matière l'enseigne ».
+                // Aucun professeur de l'équipe n'enseigne la prévention des
+                // risques au travail ; c'est un métier à part (PLP biotechnologies
+                // santé-environnement).
+                ("ECONOMIE_DROIT",        "Économie-droit",                                  "agent-economie-droit",        "Karim",   "karim",   "#166534", 40, true, 10, 12, "L'entreprise, le contrat de travail et l'économie de ton métier"),
+                ("ECONOMIE_GESTION",      "Économie-gestion",                                "agent-economie-gestion",      "Karim",   "karim",   "#166534", 41, true, 10, 12, "L'entreprise, sa gestion et ton futur statut de professionnel"),
+                ("PSE",                   "Prévention-santé-environnement",                  "agent-pse",                   "Hugo",    "hugo",    "#9A3412", 42, true, 10, 12, "Ta santé, ta sécurité au travail et les gestes qui sauvent"),
             };
 
             // Libellés d'origine, remplacés depuis. Même précaution que pour les

@@ -72,6 +72,26 @@ namespace SchoolWebApp.Domain.Models
         /// <summary>Les cours les plus récents, toutes matières confondues.</summary>
         public IEnumerable<SeanceEleve> DernieresSeances { get; set; } = [];
 
+        /// <summary>
+        /// Le projet d'orientation noté par la conseillère (11/10/2026) : le
+        /// parent le voit (décision de Camara). Null s'il n'y en a pas, ou si la
+        /// conseillère est éteinte — la route le retire alors.
+        /// </summary>
+        public ProjetOrientation? ProjetOrientation { get; set; }
+
+        /// <summary>
+        /// Ses rapports d'orientation, le plus récent d'abord (11/10/2026). Vide
+        /// si la conseillère est éteinte : la route les ajoute elle-même.
+        /// </summary>
+        public IEnumerable<RapportOrientationEleve> RapportsOrientation { get; set; } = [];
+
+        /// <summary>
+        /// Les observations de la conseillère, une par séance, pour le parent
+        /// (11/10/2026) : ce qui a été abordé et ce qu'elle a observé. Vide si
+        /// la conseillère est éteinte.
+        /// </summary>
+        public IEnumerable<RapportEleve> ObservationsOrientation { get; set; } = [];
+
         // -------------------------------------------------------- compétences
         public int CompetencesEvaluees { get; set; }
 

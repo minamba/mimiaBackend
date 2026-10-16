@@ -43,5 +43,26 @@ namespace SchoolWebApp.Domain.Repositories
 
         /// <summary>Coupe ou rouvre l'accès d'un enfant.</summary>
         Task<bool> SuspendreAccesAsync(int eleveId, bool suspendu, CancellationToken ct = default);
+
+        /// <summary>
+        /// Note que l'enfant est actif maintenant (« dernière activité »), au plus
+        /// une fois par heure. Hors cours aussi : connexion par code, partie de jeu.
+        /// </summary>
+        Task NoterActiviteAsync(int eleveId, CancellationToken ct = default);
+
+        /// <summary>
+        /// Le projet d'orientation noté par la conseillère, avec l'accord de
+        /// l'élève : il remplace le précédent. Null l'efface (l'élève ne veut
+        /// plus qu'on en parle à ses professeurs).
+        /// </summary>
+        Task DefinirProjetOrientationAsync(int eleveId, ProjetOrientation? projet, CancellationToken ct = default);
+
+        /// <summary>
+        /// L'établissement de l'élève, pour la conseillère d'orientation. Tous
+        /// les champs à null l'effacent.
+        /// </summary>
+        Task<bool> DefinirEtablissementAsync(
+            int eleveId, string? uai, string? libelle, string? commune,
+            double? latitude, double? longitude, CancellationToken ct = default);
     }
 }

@@ -27,6 +27,43 @@ namespace SchoolWebApp.Dal.Seed
         {
             await SeedOffresAsync(context, ct);
             await SeedRechargesAsync(context, ct);
+            await SeedFichesAsync(context, ct);
+        }
+
+        /// <summary>
+        /// LES PACKS DE CRÉDITS DE FICHES — Camara, le 15/10/2026 : 10 crédits
+        /// pour 5,99 €, 20 pour 9,99 €. 1 crédit = 1 COURS IMPORTÉ, quel que soit
+        /// le nombre de fiches qu'il donne (16/10/2026) ; un cours coûte
+        /// ≈ 0,05 à 0,15 $ à lire et rédiger. La colonne s'appelle encore
+        /// `fiches` : elle compte des crédits.
+        ///
+        /// Même règle que les recharges : on n'ajoute que ce qui manque. SEULE
+        /// EXCEPTION, le libellé du 15/10 (« 10 fiches de révision ») : il
+        /// annonçait des fiches là où l'on vend des cours, on le remplace.
+        /// </summary>
+        private static async Task SeedFichesAsync(SchoolWebAppDatabaseContext context, CancellationToken ct)
+        {
+            var packs = new[]
+            {
+                new OffreFiches { Code = "FICHES10", Libelle = "10 crédits de fiches de révision", Fiches = 10, PrixCentimes = 599, Ordre = 1, Active = true },
+                new OffreFiches { Code = "FICHES20", Libelle = "20 crédits de fiches de révision", Fiches = 20, PrixCentimes = 999, Ordre = 2, Active = true },
+            };
+
+            foreach (var pack in packs)
+            {
+                var ancien = $"{pack.Fiches} fiches de révision";
+                await context.OffresFiches
+                    .Where(o => o.Code == pack.Code && o.Libelle == ancien)
+                    .ExecuteUpdateAsync(s => s.SetProperty(o => o.Libelle, pack.Libelle), ct);
+            }
+
+            var codes = await context.OffresFiches.Select(o => o.Code).ToListAsync(ct);
+            var manquants = packs.Where(o => !codes.Contains(o.Code)).ToList();
+
+            if (manquants.Count == 0) return;
+
+            context.OffresFiches.AddRange(manquants);
+            await context.SaveChangesAsync(ct);
         }
 
         private static async Task SeedOffresAsync(SchoolWebAppDatabaseContext context, CancellationToken ct)

@@ -58,6 +58,11 @@ namespace SchoolWebApp.Domain.Models
 
         public decimal PacksEuros { get; set; }
 
+        /// <summary>Packs de fiches de révision vendus sur la période (15/10/2026), remboursés exclus.</summary>
+        public int PacksFiches { get; set; }
+
+        public decimal PacksFichesEuros { get; set; }
+
         public decimal TotalEuros { get; set; }
     }
 

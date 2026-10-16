@@ -117,6 +117,12 @@ namespace SchoolWebApp.Domain.Models
                 ["BIOLOGIE_HUMAINE"] = ["ST2S"],
                 ["BIOTECHNOLOGIES"] = ["STL"],
                 ["SPCL"] = ["STL"],
+
+                // La voie professionnelle (16/10/2026) : ses deux matières
+                // générales propres, de la seconde à la terminale pro.
+                ["PSE"] = ["P"],
+                ["ECONOMIE_DROIT"] = ["P"],
+                ["ECONOMIE_GESTION"] = ["P"],
             };
 
         /// <summary>Les séries sans SVT : leur biologie a un autre nom et un autre programme.</summary>
@@ -313,6 +319,220 @@ namespace SchoolWebApp.Domain.Models
             return liste.Count == 0 ? null : string.Join(';', liste);
         }
 
+        // ================================================================
+        // LA FILIÈRE PROFESSIONNELLE — Camara, le 15/10/2026
+        // ================================================================
+        //
+        // « Un élève en pro va s'y retrouver ? » Le professeur ne savait rien
+        // de son métier. Le parent indique désormais la FAMILLE DE MÉTIERS en
+        // seconde pro (le choix de la spécialité n'a lieu qu'en première) et la
+        // SPÉCIALITÉ en première et terminale pro. Le professeur y prend ses
+        // exemples ; la conseillère d'orientation y lit sa filière ; et la
+        // physique-chimie se retire aux filières qui ne l'ont pas.
+        //
+        // PAS LES CENT SPÉCIALITÉS : les douze plus suivies, qui font 73 % des
+        // élèves de première et de terminale pro (DEPP, effectifs au 01/10/2025,
+        // jeu `fr-en-lycee_pro-effectifs-niveau-sexe-mef`), et « Autre », avec un
+        // champ libre. Une spécialité souvent écrite dans « Autre » est la
+        // prochaine à ajouter.
+        //
+        // LES QUINZE FAMILLES EN VIGUEUR EN 2026-2027 : annexe de l'arrêté du
+        // 19/04/2019 (MENE1911939A) modifiée le 07/03/2024. L'arrêté du 16/03/2026
+        // (MENE2601641A) la remplace à la RENTRÉE 2027 seulement — hôtellerie-
+        // restauration et alimentation disparaissent, Cuisine et CSR deviennent
+        // « Métiers de la restauration », hors famille. REPASSER ICI À CE MOMENT.
+        // La page Onisep montre déjà la liste de 2027 : ne pas la recopier avant.
+        //
+        // PHYSIQUE-CHIMIE OU LANGUE VIVANTE B : annexe de l'arrêté du 13/06/2024
+        // (grilles par spécialité). Relation client et gestion-transport-logistique
+        // ont une LVB, hôtellerie-restauration et alimentation des « sciences
+        // appliquées » : ni les unes ni les autres n'ont de physique-chimie.
+        //
+        // RANGÉES AVEC LES SPÉCIALITÉS, comme les langues : même liste
+        // (`Eleve.Specialites`), préfixes FAMILLE_ et BACPRO_, et le texte libre
+        // derrière BACPRO_LIBRE: (sans « ; », qui sépare la liste).
+
+        // L'ÉCONOMIE SUIT LA SPÉCIALITÉ AUSSI (16/10/2026) : annexe I de l'arrêté
+        // du 19/04/2019 (NOR MENE1911952A), remplacée par l'arrêté du 13/06/2024 et
+        // lue en version consolidée au 15/10/2026. Économie-droit pour les
+        // spécialités tertiaires, économie-gestion pour les autres — MAIS LE
+        // SECTEUR NE SUFFIT PAS : l'AEPA, classée « services », suit l'économie-
+        // gestion. La cuisine et le service en restauration ont leur propre
+        // matière (gestion appliquée, mercatique et gestion appliquée), la famille
+        // alimentation aussi (environnement économique, juridique et management) :
+        // aucun de nos deux programmes, Mimia ne leur en propose donc aucun.
+
+        /// <summary>La matière d'économie d'une filière.</summary>
+        public enum EconomiePro
+        {
+            /// <summary>Économie-droit (spécialités tertiaires).</summary>
+            Droit,
+            /// <summary>Économie-gestion (production, et l'AEPA).</summary>
+            Gestion,
+            /// <summary>Un autre programme, que Mimia n'enseigne pas.</summary>
+            Autre,
+        }
+
+        /// <summary>Une famille de métiers de seconde pro, si ses spécialités ont de la physique-chimie, et leur économie (null = non vérifiée).</summary>
+        public sealed record FamilleMetiers(string Code, string Libelle, bool PhysiqueChimie, EconomiePro? Economie);
+
+        /// <summary>Une spécialité de bac pro : sa famille (null = hors famille), sa physique-chimie et son économie (null = inconnues).</summary>
+        public sealed record SpecialitePro(string Code, string Libelle, string? Famille, bool? PhysiqueChimie, EconomiePro? Economie);
+
+        public const string HorsFamille = "HORS_FAMILLE";
+        public const string SpecialiteProAutre = "AUTRE";
+        public const int LongueurSpecialiteLibreMax = 80;
+
+        private const string PrefixeFamille = "FAMILLE_";
+        private const string PrefixeSpecialitePro = "BACPRO_";
+        private const string PrefixeLibre = "BACPRO_LIBRE:";
+
+        public static readonly IReadOnlyList<FamilleMetiers> FamillesMetiers =
+        [
+            new("CONSTRUCTION", "Construction durable, bâtiment et travaux publics", true, EconomiePro.Gestion),
+            new("GATL", "Gestion administrative, transport et logistique", false, EconomiePro.Droit),
+            new("RELATION_CLIENT", "Relation client", false, EconomiePro.Droit),
+            new("GRAPHIQUE", "Industries graphiques et communication", true, EconomiePro.Gestion),
+            new("ALIMENTATION", "Alimentation", false, EconomiePro.Autre),
+            new("BEAUTE", "Beauté et bien-être", true, EconomiePro.Gestion),
+            new("ETUDES_BATIMENT", "Études et modélisation numérique du bâtiment", true, EconomiePro.Gestion),
+            new("AERONAUTIQUE", "Aéronautique", true, EconomiePro.Gestion),
+            new("HOTELLERIE", "Hôtellerie-restauration", false, EconomiePro.Autre),
+            new("MAINTENANCE", "Maintenance des matériels et des véhicules", true, EconomiePro.Gestion),
+            new("MECANIQUE", "Réalisation d'ensembles mécaniques et industriels", true, EconomiePro.Gestion),
+            new("AGENCEMENT", "Agencement, menuiserie et ameublement", true, EconomiePro.Gestion),
+            new("TRANSITIONS", "Transitions numérique et énergétique", true, EconomiePro.Gestion),
+            new("PILOTAGE", "Pilotage et maintenance d'installations automatisées", true, EconomiePro.Gestion),
+            new("MER", "Métiers de la mer", true, null),
+        ];
+
+        /// <summary>Les douze spécialités les plus suivies (73 % des élèves de 1re et Tle pro), puis « Autre ».</summary>
+        public static readonly IReadOnlyList<SpecialitePro> SpecialitesPro =
+        [
+            new("MCV", "Métiers du commerce et de la vente", "RELATION_CLIENT", false, EconomiePro.Droit),
+            new("ASSP", "Accompagnement, soins et services à la personne (ASSP)", null, true, EconomiePro.Gestion),
+            new("AGORA", "Assistance à la gestion des organisations et de leurs activités (AGOrA)", "GATL", false, EconomiePro.Droit),
+            new("MELEC", "Métiers de l'électricité et de ses environnements connectés (MELEC)", "TRANSITIONS", true, EconomiePro.Gestion),
+            new("CIEL", "Cybersécurité, informatique et réseaux, électronique (CIEL)", "TRANSITIONS", true, EconomiePro.Gestion),
+            new("ACCUEIL", "Métiers de l'accueil", "RELATION_CLIENT", false, EconomiePro.Droit),
+            new("MV", "Maintenance des véhicules", "MAINTENANCE", true, EconomiePro.Gestion),
+            new("MSPC", "Maintenance des systèmes de production connectés (MSPC)", "PILOTAGE", true, EconomiePro.Gestion),
+            new("CUISINE", "Cuisine", "HOTELLERIE", false, EconomiePro.Autre),
+            new("CSR", "Commercialisation et services en restauration (CSR)", "HOTELLERIE", false, EconomiePro.Autre),
+            new("AEPA", "Animation – enfance et personnes âgées (AEPA)", null, false, EconomiePro.Gestion),
+            new("SECURITE", "Métiers de la sécurité", null, false, EconomiePro.Droit),
+            new(SpecialiteProAutre, "Une autre spécialité", null, null, null),
+        ];
+
+        /// <summary>Les classes où la filière professionnelle se renseigne.</summary>
+        public static bool EstVoiePro(string? codeNiveau) =>
+            codeNiveau?.ToUpperInvariant() is "SECONDE_PRO" or "PREMIERE_PRO" or "TERMINALE_PRO";
+
+        /// <summary>Ce choix de la famille est-il une famille de métiers ou une spécialité de bac pro ?</summary>
+        public static bool EstUnChoixPro(string? choix) =>
+            choix is not null
+            && (choix.StartsWith(PrefixeFamille, StringComparison.OrdinalIgnoreCase)
+                || choix.StartsWith(PrefixeSpecialitePro, StringComparison.OrdinalIgnoreCase));
+
+        /// <summary>Les choix de la famille, sans la filière pro.</summary>
+        public static List<string> SansChoixPro(IEnumerable<string>? choix) =>
+            (choix ?? []).Where(c => !EstUnChoixPro(c)).ToList();
+
+        /// <summary>La filière d'un élève, lue dans ses choix : famille, spécialité, texte libre.</summary>
+        public sealed record FiliereProfessionnelle(string? Famille, string? Specialite, string? Libre)
+        {
+            public static readonly FiliereProfessionnelle Vide = new(null, null, null);
+        }
+
+        public static FiliereProfessionnelle FiliereProDe(IEnumerable<string>? choix)
+        {
+            string? famille = null, specialite = null, libre = null;
+            foreach (var c in choix ?? [])
+            {
+                if (c.StartsWith(PrefixeLibre, StringComparison.OrdinalIgnoreCase)) libre = c[PrefixeLibre.Length..];
+                else if (c.StartsWith(PrefixeSpecialitePro, StringComparison.OrdinalIgnoreCase)) specialite = c[PrefixeSpecialitePro.Length..].ToUpperInvariant();
+                else if (c.StartsWith(PrefixeFamille, StringComparison.OrdinalIgnoreCase)) famille = c[PrefixeFamille.Length..].ToUpperInvariant();
+            }
+
+            return new FiliereProfessionnelle(famille, specialite, libre);
+        }
+
+        /// <summary>
+        /// Ce qu'on garde de la filière envoyée par le navigateur : des codes
+        /// connus, et rien hors d'une classe pro. La famille se déduit de la
+        /// spécialité quand elle est connue. Le texte libre n'accompagne que
+        /// « Autre », sans « ; », et borné.
+        /// </summary>
+        public static List<string> FiliereProRetenue(string? codeNiveau, string? famille, string? specialite, string? libre)
+        {
+            if (!EstVoiePro(codeNiveau)) return [];
+
+            var retenue = new List<string>();
+            var spe = SpecialitesPro.FirstOrDefault(s => s.Code.Equals(specialite?.Trim(), StringComparison.OrdinalIgnoreCase));
+            var fam = spe?.Famille
+                ?? (string.Equals(famille?.Trim(), HorsFamille, StringComparison.OrdinalIgnoreCase)
+                    ? HorsFamille
+                    : FamillesMetiers.FirstOrDefault(f => f.Code.Equals(famille?.Trim(), StringComparison.OrdinalIgnoreCase))?.Code);
+
+            if (fam is not null) retenue.Add(PrefixeFamille + fam);
+            if (spe is not null) retenue.Add(PrefixeSpecialitePro + spe.Code);
+
+            if (spe?.Code == SpecialiteProAutre && !string.IsNullOrWhiteSpace(libre))
+            {
+                var propre = libre.Replace(";", ",").Trim();
+                if (propre.Length > LongueurSpecialiteLibreMax) propre = propre[..LongueurSpecialiteLibreMax].Trim();
+                if (propre.Length > 0) retenue.Add(PrefixeLibre + propre);
+            }
+
+            return retenue;
+        }
+
+        /// <summary>
+        /// La filière a-t-elle de la physique-chimie ? Null quand on ne sait pas
+        /// (rien renseigné, « Autre », « hors famille » sans spécialité) : dans
+        /// le doute, la matière reste proposée.
+        /// </summary>
+        public static bool? PhysiqueChimieDeLaFiliere(IEnumerable<string>? choix)
+        {
+            var filiere = FiliereProDe(choix);
+            var spe = SpecialitesPro.FirstOrDefault(s => s.Code == filiere.Specialite);
+            if (spe is not null && spe.Code != SpecialiteProAutre) return spe.PhysiqueChimie;
+
+            return FamillesMetiers.FirstOrDefault(f => f.Code == filiere.Famille)?.PhysiqueChimie;
+        }
+
+        /// <summary>
+        /// La matière d'économie de la filière. Null quand on ne sait pas (rien
+        /// renseigné, « Autre », « hors famille » sans spécialité, métiers de la
+        /// mer) : dans le doute, les deux restent proposées, comme la physique-
+        /// chimie.
+        /// </summary>
+        public static EconomiePro? EconomieDeLaFiliere(IEnumerable<string>? choix)
+        {
+            var filiere = FiliereProDe(choix);
+            var spe = SpecialitesPro.FirstOrDefault(s => s.Code == filiere.Specialite);
+            if (spe is not null && spe.Code != SpecialiteProAutre) return spe.Economie;
+
+            return FamillesMetiers.FirstOrDefault(f => f.Code == filiere.Famille)?.Economie;
+        }
+
+        /// <summary>La filière en toutes lettres, pour le professeur et la conseillère. Null si rien n'est renseigné.</summary>
+        public static string? DecrireFilierePro(IEnumerable<string>? choix)
+        {
+            var filiere = FiliereProDe(choix);
+            var spe = SpecialitesPro.FirstOrDefault(s => s.Code == filiere.Specialite);
+            var famille = FamillesMetiers.FirstOrDefault(f => f.Code == filiere.Famille);
+
+            var nomSpecialite = spe is null ? null
+                : spe.Code == SpecialiteProAutre ? (string.IsNullOrWhiteSpace(filiere.Libre) ? null : filiere.Libre)
+                : spe.Libelle;
+
+            if (nomSpecialite is not null && famille is not null) return $"bac pro {nomSpecialite} (famille de métiers « {famille.Libelle} »)";
+            if (nomSpecialite is not null) return $"bac pro {nomSpecialite}";
+            if (famille is not null) return $"famille de métiers « {famille.Libelle} » (la spécialité se choisit en fin de seconde)";
+            return null;
+        }
+
         /// <summary>Les étiquettes que porte un élève de cette classe. Vide hors du lycée.</summary>
         private static HashSet<string> EtiquettesEleve(string? codeNiveau) =>
             codeNiveau is not null && ParCode.TryGetValue(codeNiveau, out var classe)
@@ -399,6 +619,8 @@ namespace SchoolWebApp.Domain.Models
                     && specialites.Contains(codeMatiere!, StringComparer.OrdinalIgnoreCase);
             }
 
+            if (!MatiereDeLaFiliere(codeMatiere, codeNiveau, specialites)) return false;
+
             // UNE SPÉCIALITÉ AUSSI : une classe qui en a, et la case cochée.
             if (codeMatiere is not null && MatieresDeSpecialiteSeulement.Contains(codeMatiere))
             {
@@ -408,6 +630,39 @@ namespace SchoolWebApp.Domain.Models
             }
 
             return ConcerneLaVoie(codeMatiere, codeNiveau, rang);
+        }
+
+        /// <summary>
+        /// LA MATIÈRE EST-ELLE CELLE DE LA FILIÈRE PRO DE L'ÉLÈVE ? Vrai hors de
+        /// la voie pro, et vrai dans le doute (filière inconnue). Une seule règle
+        /// pour la grille des matières et pour les épreuves du bac pro.
+        ///
+        /// - La physique-chimie (15/10/2026) : les filières tertiaires et la
+        ///   restauration ne l'ont pas.
+        /// - L'économie (16/10/2026) : l'élève ne voit que la sienne ; aucune si
+        ///   sa filière a un autre programme (cuisine, restauration,
+        ///   alimentation) ; les deux tant qu'on ne sait pas. Hors de la voie
+        ///   pro, `ReserveeAux` les retire déjà.
+        /// </summary>
+        public static bool MatiereDeLaFiliere(string? codeMatiere, string? codeNiveau, IEnumerable<string>? choix)
+        {
+            if (codeMatiere is null || !EstVoiePro(codeNiveau)) return true;
+
+            switch (codeMatiere.ToUpperInvariant())
+            {
+                case "PHYSIQUE_CHIMIE":
+                    return PhysiqueChimieDeLaFiliere(choix) != false;
+
+                case "ECONOMIE_DROIT" or "ECONOMIE_GESTION":
+                    var attendue = codeMatiere.Equals("ECONOMIE_DROIT", StringComparison.OrdinalIgnoreCase)
+                        ? EconomiePro.Droit
+                        : EconomiePro.Gestion;
+                    var economie = EconomieDeLaFiliere(choix);
+                    return economie is null || economie == attendue;
+
+                default:
+                    return true;
+            }
         }
 
         private static bool ConcerneLaVoie(string? codeMatiere, string? codeNiveau, int rang)

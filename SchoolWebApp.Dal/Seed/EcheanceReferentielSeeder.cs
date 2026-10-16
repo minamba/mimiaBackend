@@ -424,6 +424,76 @@ namespace SchoolWebApp.Dal.Seed
                     url: url, matieresCodes: code, niveauxCodes: "PREMIERE;TERMINALE", ct: ct);
             }
 
+            // LA VOIE PROFESSIONNELLE (15/10/2026) — programmes intégrés ce jour-là,
+            // voir la cinquième passe de `ReferentielSeeder`, et la filière de
+            // l'élève dans `VoiesScolaires` (familles de métiers, spécialités).
+            await repository.SeedSiAbsenteAsync(
+                "Familles de métiers et spécialités de bac pro", "2de, 1re, Tle pro", new DateTime(2027, 9, 1),
+                dateConnue: true, texteOfficiel: "Arrêté du 16/03/2026 (MENE2601641A), article 4, en vigueur à la rentrée 2027",
+                notes: "Remplacer la liste de `VoiesScolaires.FamillesMetiers` : 15 → 13 familles (hôtellerie-restauration "
+                    + "et alimentation disparaissent ; Cuisine et CSR deviennent « Métiers de la restauration », hors "
+                    + "famille). Revoir aussi les 12 spécialités les plus suivies (effectifs DEPP de la rentrée 2026).",
+                url: "https://www.legifrance.gouv.fr/jorf/id/JORFTEXT000053708135",
+                niveauxCodes: "SECONDE_PRO;PREMIERE_PRO;TERMINALE_PRO", ct: ct);
+
+            await repository.SeedSiAbsenteAsync(
+                "Français (voie professionnelle)", "Tle pro", new DateTime(2027, 6, 1),
+                dateConnue: true, texteOfficiel: "Note MENE2402853N (BO n° 8 du 22/02/2024), programme limitatif 2024-2027",
+                notes: "Le thème « Rythmes et cadences de la vie moderne » s'arrête en 2026-2027 : un nouveau thème "
+                    + "limitatif est attendu pour 2027-2028.",
+                url: "https://www.education.gouv.fr/bo/2024/Hebdo8/MENE2402853N",
+                matieresCodes: "FRANCAIS", niveauxCodes: "TERMINALE_PRO", ct: ct);
+
+            await repository.SeedSiAbsenteAsync(
+                "Programmes de la voie professionnelle", "2de, 1re, Tle pro", new DateTime(2027, 8, 1),
+                dateConnue: false,
+                texteOfficiel: "Français MENE1908622A et MENE2003001A ; HG MENE1908625A et MENE2003002A ; EMC MENE2413934A ; "
+                    + "LV MENE1908627A ; physique-chimie MENE1908630A et MENE2003004A",
+                notes: "Revérification annuelle des programmes pro intégrés le 15/10/2026.",
+                matieresCodes: "FRANCAIS;HISTOIRE_GEO;ANGLAIS;PHYSIQUE_CHIMIE",
+                niveauxCodes: "SECONDE_PRO;PREMIERE_PRO;TERMINALE_PRO", ct: ct);
+
+            // LA PSE ET L'ÉCONOMIE DU BAC PRO (16/10/2026) — voir la sixième passe
+            // de `ReferentielSeeder` et `ReferentielVoiePro`.
+            await repository.SeedSiAbsenteAsync(
+                "Prévention-santé-environnement (voie professionnelle)", "2de, 1re, Tle pro", new DateTime(2027, 8, 1),
+                dateConnue: false, texteOfficiel: "Arrêtés du 03/04/2019 (MENE1908632A) et du 03/02/2020 (MENE2003005A)",
+                notes: "Revérification annuelle. Épreuve : arrêté du 17/06/2020 (MENE2015195A), annexe VIII.",
+                url: "https://www.education.gouv.fr/bo/20/Special1/MENE2003005A.htm",
+                matieresCodes: "PSE", niveauxCodes: "SECONDE_PRO;PREMIERE_PRO;TERMINALE_PRO", ct: ct);
+
+            await repository.SeedSiAbsenteAsync(
+                "Économie-droit (voie professionnelle)", "2de, 1re, Tle pro", new DateTime(2027, 8, 1),
+                dateConnue: false, texteOfficiel: "Arrêté du 03/04/2019 (MENE1908617A), un programme pour les trois ans",
+                notes: "Revérification annuelle. Épreuve : arrêté du 17/06/2020 (MENE2015195A), annexe VII.",
+                url: "https://www.education.gouv.fr/bo/19/Special5/MENE1908617A.htm",
+                matieresCodes: "ECONOMIE_DROIT", niveauxCodes: "SECONDE_PRO;PREMIERE_PRO;TERMINALE_PRO", ct: ct);
+
+            await repository.SeedSiAbsenteAsync(
+                "Économie-gestion (voie professionnelle)", "2de, 1re, Tle pro", new DateTime(2027, 8, 1),
+                dateConnue: false, texteOfficiel: "Arrêté du 03/04/2019 (MENE1908618A), un programme pour les trois ans",
+                notes: "Revérification annuelle. Épreuve : arrêté du 17/06/2020 (MENE2015195A), annexe VI.",
+                url: "https://www.education.gouv.fr/bo/19/Special5/MENE1908618A.htm",
+                matieresCodes: "ECONOMIE_GESTION", niveauxCodes: "SECONDE_PRO;PREMIERE_PRO;TERMINALE_PRO", ct: ct);
+
+            await repository.SeedSiAbsenteAsync(
+                "Bac pro (épreuves et calendrier)", "Tle pro", new DateTime(2027, 9, 1),
+                dateConnue: false, texteOfficiel: "Arrêté du 17/06/2020 (MENE2015195A) ; calendrier 2027 MENE2622686N",
+                notes: "Écrits ponctuels : français, HG-EMC, PSE, économie ; maths, physique-chimie et langues en CCF "
+                    + "(article 4). Pour la session 2028 : remplacer les dates de `ExamenSeeder` (BAC_PRO_2027) par le "
+                    + "nouveau calendrier, le thème limitatif de français, et revérifier l'arrêté consolidé.",
+                url: "https://www.education.gouv.fr/bo/2026/Special2/MENE2622686N",
+                matieresCodes: "FRANCAIS;HISTOIRE_GEO;PSE;ECONOMIE_DROIT;ECONOMIE_GESTION", niveauxCodes: "TERMINALE_PRO", ct: ct);
+
+            await repository.SeedSiAbsenteAsync(
+                "Économie de la restauration (bac pro)", "2de pro", new DateTime(2027, 9, 1),
+                dateConnue: true, texteOfficiel: "Arrêté du 09/03/2026 (MENE2605836A), « Métiers de la restauration », 1re session 2030",
+                notes: "Cuisine et CSR (gestion appliquée, hors de nos programmes) laissent place à « Métiers de la "
+                    + "restauration », en ÉCONOMIE-DROIT : ajouter la spécialité à `VoiesScolaires.SpecialitesPro` "
+                    + "avec EconomiePro.Droit. Boulangerie pâtisserie (économie-droit, 1re session 2030) remplace "
+                    + "aussi Boulanger-pâtissier (EEJM).",
+                matieresCodes: "ECONOMIE_DROIT", niveauxCodes: "SECONDE_PRO", ct: ct);
+
             // TEXTE PAS ENCORE PUBLIÉ : date de rappel provisoire, pas une
             // vraie échéance. Revoir à cette date si le texte est sorti ; si
             // oui, corriger cette ligne avec sa vraie date de bascule et son

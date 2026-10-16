@@ -274,6 +274,16 @@ namespace SchoolWebApp.Api.Workers
                 {
                     _logger.LogWarning(ex,
                         "Transcription impossible pour le cours {DocumentId}.", document.Id);
+
+                    // Compté : au troisième échec, le document est abandonné et
+                    // ses octets partent — il ne reste pas en base pour toujours.
+                    if (await controles.SignalerEchecLectureDocumentAsync(document.Id, DateTime.UtcNow, ct))
+                    {
+                        _logger.LogWarning(
+                            "Cours du controle {ControleId}, document {Id} : ABANDONNE apres trois lectures en echec.",
+                            document.ControleId, document.Id);
+                        marques++;
+                    }
                 }
             }
 

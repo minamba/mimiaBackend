@@ -49,6 +49,15 @@ namespace SchoolWebApp.Domain.Repositories
         Task<IEnumerable<RapportEleve>> GetParEleveAsync(
             int eleveId, int limite, CancellationToken ct = default);
 
+        /// <summary>
+        /// LES OBSERVATIONS DE LA CONSEILLÈRE D'ORIENTATION (11/10/2026) : ses
+        /// rapports de séance, le plus récent d'abord. Écartés des listes de
+        /// cours du parent (pas de note), ils ont leur place dans la section
+        /// « Orientation » de sa fiche.
+        /// </summary>
+        Task<IEnumerable<RapportEleve>> GetObservationsOrientationAsync(
+            int eleveId, int limite, CancellationToken ct = default);
+
         /// <summary>Un rapport complet, avec l'identité de l'élève, pour l'imprimer.</summary>
         Task<RapportEleve?> GetDetailAsync(
             int rapportId, int eleveId, CancellationToken ct = default);

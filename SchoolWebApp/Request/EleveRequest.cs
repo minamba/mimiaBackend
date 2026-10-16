@@ -59,12 +59,34 @@ namespace SchoolWebApp.Api.Request
         public List<string>? Specialites { get; set; }
 
         /// <summary>
+        /// LA FILIÈRE PROFESSIONNELLE (15/10/2026) : la famille de métiers en
+        /// seconde pro, la spécialité en première et terminale pro, et le nom
+        /// écrit à la main quand c'est « Autre ». Les trois à null : l'écran ne
+        /// les envoie pas, ce qui était enregistré est gardé. Voir
+        /// `VoiesScolaires.FiliereProRetenue`.
+        /// </summary>
+        public string? FamilleMetiers { get; set; }
+
+        public string? SpecialitePro { get; set; }
+
+        public string? SpecialiteProLibre { get; set; }
+
+        /// <summary>
         /// Les autres langues vivantes B cochées par le parent (codes de
         /// matière : ALLEMAND, ITALIEN…). Null : le champ n'a pas été envoyé —
         /// un écran antérieur — et rien n'est changé. Voir
         /// `VoiesScolaires.LanguesAuChoix`.
         /// </summary>
         public List<string>? Langues { get; set; }
+
+        /// <summary>
+        /// Les besoins particuliers cochés par le parent (DYSLEXIE, DYSCALCULIE,
+        /// TDAH) ; la coche vaut accord. Null : rien n'est changé.
+        /// </summary>
+        public List<string>? BesoinsParticuliers { get; set; }
+
+        /// <summary>L'écran adapté ; null : rien n'est changé.</summary>
+        public bool? EcranAdapte { get; set; }
 
         // Pas de ParentId : il est déduit du JWT, jamais du corps de la requête.
     }

@@ -65,6 +65,23 @@ namespace SchoolWebApp.Dal.Entities
         /// </summary>
         public string? Resultat { get; set; }
 
+        /// <summary>
+        /// L'ÉTAT DONNÉ PAR LE PROFESSEUR à la fin d'une préparation : "tenue",
+        /// "en-cours" ou "fragile" — Camara, le 13/10/2026.
+        ///
+        /// CE N'EST PAS UN SCORE, et la règle du haut tient toujours : le
+        /// moteur de maîtrise reste le seul à mesurer. Mais la barre du
+        /// contrôle, elle, doit dire la même chose que le professeur qui vient
+        /// de passer vingt minutes avec l'enfant. Relevé en prod : six
+        /// réussites d'affilée, « tu es prête », et 25 % à l'écran — parce que
+        /// la notion n'était rattachée à rien, et qu'un verdict n'écrivait rien
+        /// sur les notions. Lu par la fiche quand il est plus récent que la
+        /// dernière mesure ; une copie notée garde le dessus.
+        /// </summary>
+        public string? EtatProfesseur { get; set; }
+
+        public DateTime? EtatProfesseurLe { get; set; }
+
         public DateTime DateCreation { get; set; }
 
         public virtual ControleScolaire? Controle { get; set; }

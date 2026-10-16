@@ -45,6 +45,23 @@ namespace SchoolWebApp.Api.ViewModels
 
         /// <summary>Les spécialités proposées — seulement celles qui ont un professeur ouvert.</summary>
         public List<SpecialiteViewModel> SpecialitesPossibles { get; set; } = [];
+
+        /// <summary>
+        /// LA FILIÈRE PROFESSIONNELLE à renseigner (15/10/2026), dans les seules
+        /// classes pro ; null ailleurs. `Etape` : « famille » en seconde pro (la
+        /// spécialité ne se choisit qu'en fin de seconde), « specialite » ensuite.
+        /// </summary>
+        public FilieresProViewModel? FilierePro { get; set; }
+    }
+
+    public class FilieresProViewModel
+    {
+        public string Etape { get; set; } = null!;
+
+        public List<SpecialiteViewModel> Familles { get; set; } = [];
+
+        /// <summary>`Precision` porte le code de la famille (vide = hors famille).</summary>
+        public List<SpecialiteViewModel> Specialites { get; set; } = [];
     }
 
     public class SpecialiteViewModel

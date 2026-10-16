@@ -17,8 +17,12 @@ namespace SchoolWebApp.Api.Builders
         /// </summary>
         Task<IEnumerable<MatiereViewModel>?> GetMatieresDeLEleveAsync(int id);
 
-        /// <summary>Null si le niveau scolaire fourni n'existe pas.</summary>
-        Task<EleveViewModel?> AddEleveAsync(EleveRequest model);
+        /// <summary>
+        /// Crée le profil d'un enfant pour le parent connecté — ou, depuis
+        /// l'administration, pour le parent `parentId` (16/10/2026).
+        /// Null si le niveau scolaire fourni n'existe pas.
+        /// </summary>
+        Task<EleveViewModel?> AddEleveAsync(EleveRequest model, int? parentId = null);
 
         Task<EleveViewModel?> UpdateEleveAsync(EleveRequest model);
 

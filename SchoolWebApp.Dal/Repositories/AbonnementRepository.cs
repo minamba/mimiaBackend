@@ -431,21 +431,75 @@ namespace SchoolWebApp.Dal.Repositories
             // L'alerte des 80 % repart à faux avec la période : sans ça le
             // parent ne serait prévenu qu'une seule fois dans la vie de son
             // abonnement, et jamais aux mois suivants.
-            var touchees = await _context.Abonnements
+            var abonnements = await _context.Abonnements
                 .Where(a => a.StripeAbonnementId == stripeAbonnementId)
-                .ExecuteUpdateAsync(m => m
-                    .SetProperty(a => a.PeriodeDebut, periodeDebut)
-                    .SetProperty(a => a.PeriodeFin, periodeFin)
-                    .SetProperty(a => a.AlerteQuotaEnvoyee, false)
+                .ToListAsync(ct);
 
-                    // Une facture payée solde l'impayé, quel qu'il soit : c'est
-                    // le seul événement qui prouve que l'argent est arrivé.
-                    // Sans cette remise à zéro, un parent qui régularise
-                    // resterait bloqué pour toujours.
-                    .SetProperty(a => a.ImpayeDepuis, (DateTime?)null)
-                    .SetProperty(a => a.Statut, StatutAbonnement.Actif), ct);
+            if (abonnements.Count == 0) return false;
 
-            return touchees > 0;
+            foreach (var abonnement in abonnements)
+            {
+                // UNE PÉRIODE NOUVELLE COMMENCE : la descente de gamme programmée
+                // prend effet ICI pour un abonnement Stripe (option A, 16/10/2026) —
+                // il ne se renouvelle plus de lui-même dans `RafraichirAsync`.
+                // Une facture de milieu de période (montée de gamme au prorata)
+                // ne la déclenche pas : sa période commence bien avant la fin.
+                if (periodeDebut >= abonnement.PeriodeFin.AddHours(-1))
+                {
+                    await AppliquerChangementPrevuAsync(abonnement, ct);
+                }
+
+                // UNE FACTURE RÉGLÉE APRÈS L'ANNULATION (Stripe a abandonné ses
+                // relances, puis le parent paie depuis le lien du courriel) : il a
+                // payé CETTE période, il l'a — et rien de plus. Stripe ne
+                // prélèvera plus rien ; la fin est posée sur la fin de la période
+                // payée, où `RafraichirAsync` refermera l'abonnement.
+                if (abonnement.Statut == StatutAbonnement.Resilie)
+                {
+                    abonnement.DateFin = periodeFin;
+                }
+
+                abonnement.PeriodeDebut = periodeDebut;
+                abonnement.PeriodeFin = periodeFin;
+                abonnement.AlerteQuotaEnvoyee = false;
+
+                // Une facture payée solde l'impayé, quel qu'il soit : c'est
+                // le seul événement qui prouve que l'argent est arrivé.
+                // Sans cette remise à zéro, un parent qui régularise
+                // resterait bloqué pour toujours.
+                abonnement.ImpayeDepuis = null;
+                abonnement.Statut = StatutAbonnement.Actif;
+            }
+
+            await _context.SaveChangesAsync(ct);
+            return true;
+        }
+
+        /// <summary>
+        /// La formule programmée (descente de gamme) devient la formule en cours,
+        /// au passage de période : par le renouvellement local d'un abonnement
+        /// sans Stripe, ou par la facture payée d'un abonnement Stripe.
+        /// </summary>
+        private async Task AppliquerChangementPrevuAsync(Abonnement abonnement, CancellationToken ct)
+        {
+            if (abonnement.OffrePrevueId is not int prevue) return;
+
+            var nouvelle = await _context.Offres.FirstOrDefaultAsync(o => o.Id == prevue, ct);
+
+            if (nouvelle is not null)
+            {
+                abonnement.OffreId = nouvelle.Id;
+                abonnement.Offre = nouvelle;
+
+                if (Domain.Models.PeriodiciteAbonnement.EstValide(abonnement.PeriodicitePrevue))
+                {
+                    abonnement.Periodicite = abonnement.PeriodicitePrevue!;
+                }
+            }
+
+            abonnement.OffrePrevueId = null;
+            abonnement.PeriodicitePrevue = null;
+            abonnement.ChangementPrevuLe = null;
         }
 
         public async Task<bool> MarquerImpayeAsync(
@@ -529,6 +583,18 @@ namespace SchoolWebApp.Dal.Repositories
                 return VerdictQuota.Refus(MotifRefus.Impaye);
             }
 
+            // ÉCHÉANCE STRIPE SANS FACTURE PAYÉE (option A, 16/10/2026) : la
+            // période suivante ne s'ouvre qu'au paiement. Entre l'échéance et le
+            // prélèvement (une heure environ), l'enfant continue sur ce qu'il lui
+            // reste ; au-delà d'un jour sans nouvelle de Stripe — webhook perdu,
+            // ou abonnement que Stripe ne prélève plus — les séances attendent
+            // le règlement.
+            if (!string.IsNullOrEmpty(abonnement.StripeAbonnementId)
+                && abonnement.PeriodeFin.Add(DelaiConfirmationPaiement) <= DateTime.UtcNow)
+            {
+                return VerdictQuota.Refus(MotifRefus.Impaye);
+            }
+
             var offre = abonnement.Offre!;
 
             // Le nombre d'enfants couverts, AVANT les minutes : un quatrième
@@ -593,6 +659,14 @@ namespace SchoolWebApp.Dal.Repositories
                 return VerdictQuota.Ok(Math.Max(0, Math.Min(
                     alloueesPot - consommeesPot,
                     forfait.MinutesPlafondEnfant - consommeesEnfant)));
+            }
+
+            // L'ESSAI ÉPUISÉ A SON MOTIF (16/10/2026) : ni une recharge ni le
+            // mois suivant ne le débloquent, seule une formule — l'écran ne doit
+            // pas proposer d'acheter des heures.
+            if (offre.EstEssai && (consommeesPot >= alloueesPot || consommeesEnfant >= plafondEnfant))
+            {
+                return VerdictQuota.Refus(MotifRefus.EssaiEpuise);
             }
 
             // Le pot d'abord : c'est lui qui borne le coût. Le plafond ensuite,
@@ -690,6 +764,19 @@ namespace SchoolWebApp.Dal.Repositories
                 _context.ConsommationsEleves.Add(ligne);
             }
 
+            // LE DÉCOMPTE NE DÉPASSE PLUS LE FORFAIT (16/10/2026) : la séance est
+            // coupée net à l'échéance, mais la conclusion qui suit (le compte
+            // rendu) passe encore par ici. L'écran du parent ne doit pas afficher
+            // « 9 h 02 utilisées sur 9 h », ni « 32 min sur 30 » pour un essai.
+            // Le super-administrateur, sans limite, continue d'être décompté en
+            // entier — c'est voulu, voir VerifierAsync.
+            if (!await SansLimiteDEnfantsAsync(parentId.Value, ct))
+            {
+                var (pot, part) = await SecondesRestantesAsync(abonnement, eleveId, ct);
+                secondes = Math.Min(secondes, Math.Max(0, Math.Min(pot, part)));
+                if (secondes <= 0) return false;
+            }
+
             ligne.SecondesConsommees += secondes;
             ligne.DerniereActivite = DateTime.UtcNow;
 
@@ -720,6 +807,68 @@ namespace SchoolWebApp.Dal.Repositories
 
             await _context.SaveChangesAsync(ct);
             return alerte;
+        }
+
+        public async Task<EcheanceForfait?> EcheanceAsync(int eleveId, CancellationToken ct = default)
+        {
+            var parentId = await _context.Eleves
+                .AsNoTracking()
+                .Where(e => e.Id == eleveId)
+                .Select(e => (int?)e.ParentId)
+                .FirstOrDefaultAsync(ct);
+
+            if (parentId is null) return null;
+
+            var abonnement = await Courant(parentId.Value).FirstOrDefaultAsync(ct);
+            if (abonnement?.Offre is null) return null;
+
+            // Le super-administrateur n'a pas de limite d'heures : rien ne coupe.
+            if (await SansLimiteDEnfantsAsync(parentId.Value, ct)) return null;
+
+            var (pot, part) = await SecondesRestantesAsync(abonnement, eleveId, ct);
+
+            // LE MOTIF DE LA COUPURE, dans l'ordre du verdict : l'essai a le sien
+            // (seule une formule le débloque), puis le pot de la famille, puis la
+            // part de l'enfant.
+            var motif = abonnement.Offre.EstEssai
+                ? MotifRefus.EssaiEpuise
+                : pot <= part ? MotifRefus.PotEpuise : MotifRefus.PlafondEnfant;
+
+            return new EcheanceForfait(Math.Max(0, Math.Min(pot, part)), motif);
+        }
+
+        public async Task<bool> EpuiserAsync(int eleveId, CancellationToken ct = default)
+        {
+            var echeance = await EcheanceAsync(eleveId, ct);
+            if (echeance is null) return false;
+            if (echeance.Secondes <= 0) return true;
+
+            // Le même chemin que tout décompte : la ligne de l'enfant, la période
+            // en cours. ImputerAsync borne déjà à ce qui reste.
+            await ImputerAsync(eleveId, echeance.Secondes, 1.0, ct);
+            return true;
+        }
+
+        /// <summary>
+        /// Ce qui reste, en SECONDES, au pot de la famille et à la part de cet
+        /// enfant — et non en minutes arrondies comme le verdict : la coupure
+        /// tombe à la seconde près, ni avant ni après. Recharges comprises (la
+        /// vue du forfait les ajoute au pot comme au plafond).
+        /// </summary>
+        private async Task<(int Pot, int Part)> SecondesRestantesAsync(Abonnement abonnement, int eleveId, CancellationToken ct)
+        {
+            var forfait = await ForfaitAsync(abonnement, abonnement.Offre!, ct);
+
+            var lignes = await _context.ConsommationsEleves
+                .AsNoTracking()
+                .Where(c => c.AbonnementId == abonnement.Id && c.PeriodeDebut == abonnement.PeriodeDebut)
+                .Select(c => new { c.EleveId, c.SecondesConsommees })
+                .ToListAsync(ct);
+
+            var pot = forfait.MinutesAllouees * 60 - lignes.Sum(l => l.SecondesConsommees);
+            var part = forfait.MinutesPlafondEnfant * 60 - lignes.Where(l => l.EleveId == eleveId).Sum(l => l.SecondesConsommees);
+
+            return (pot, part);
         }
 
         // --------------------------------------------------------------- pause
@@ -1180,33 +1329,26 @@ namespace SchoolWebApp.Dal.Repositories
                 // sans avoir à changer le statut — l'abonnement n'est pas
                 // résilié, il attend son règlement.
             }
+            // UN ABONNEMENT STRIPE NE SE RENOUVELLE PAS ICI — option A, Camara le
+            // 16/10/2026. Il se renouvelait de lui-même à l'échéance, AVANT que
+            // Stripe ait prélevé : si un enfant ouvrait une séance dans l'heure
+            // qui sépare l'échéance du prélèvement, et que celui-ci échouait, le
+            // mois entier d'heures restait ouvert sans être payé. Désormais seule
+            // la facture payée (`ReporterPeriodeAsync`) ouvre la période
+            // suivante ; un prélèvement refusé suspend les séances jusqu'au
+            // règlement. Les abonnements sans Stripe (comptes exemptés, offres
+            // gratuites) gardent leur reconduction locale.
             else if (abonnement.Statut == StatutAbonnement.Actif
-                     && abonnement.PeriodeFin <= maintenant)
+                     && abonnement.PeriodeFin <= maintenant
+                     && string.IsNullOrEmpty(abonnement.StripeAbonnementId))
             {
-                // LA DESCENTE DE GAMME PREND EFFET ICI, ET NULLE PART AILLEURS.
+                // LA DESCENTE DE GAMME PREND EFFET ICI (ou à la facture payée,
+                // pour un abonnement Stripe).
                 //
                 // Avant de recalculer la période : c'est la nouvelle formule
                 // qui doit en fixer la durée. Dans l'ordre inverse, un passage
                 // au mensuel garderait une période d'un an.
-                if (abonnement.OffrePrevueId is int prevue)
-                {
-                    var nouvelle = await _context.Offres.FirstOrDefaultAsync(o => o.Id == prevue, ct);
-
-                    if (nouvelle is not null)
-                    {
-                        abonnement.OffreId = nouvelle.Id;
-                        abonnement.Offre = nouvelle;
-
-                        if (Domain.Models.PeriodiciteAbonnement.EstValide(abonnement.PeriodicitePrevue))
-                        {
-                            abonnement.Periodicite = abonnement.PeriodicitePrevue!;
-                        }
-                    }
-
-                    abonnement.OffrePrevueId = null;
-                    abonnement.PeriodicitePrevue = null;
-                    abonnement.ChangementPrevuLe = null;
-                }
+                await AppliquerChangementPrevuAsync(abonnement, ct);
 
                 // Boucle et non simple addition : un compte inactif trois mois
                 // doit repartir sur la période courante, pas rattraper les
@@ -1232,6 +1374,14 @@ namespace SchoolWebApp.Dal.Repositories
         /// </summary>
         private static DateTime FinPeriode(DateTime debut, Offre offre) =>
             offre.JoursValidite > 0 ? debut.AddDays(offre.JoursValidite) : debut.AddMonths(1);
+
+        /// <summary>
+        /// Ce qu'on laisse à Stripe pour confirmer le paiement d'une échéance
+        /// avant de suspendre les séances. Il prélève une heure environ après
+        /// l'échéance et rejoue un webhook raté pendant trois jours ; un jour
+        /// couvre le prélèvement sans offrir un mois.
+        /// </summary>
+        private static readonly TimeSpan DelaiConfirmationPaiement = TimeSpan.FromDays(1);
 
         private static bool PauseDisponible(Abonnement abonnement) =>
             abonnement.DernierePause is null

@@ -87,11 +87,17 @@ namespace SchoolWebApp.Dal.Repositories
                 .FirstAsync(ct);
         }
 
+        // LES SÉANCES D'ORIENTATION N'ONT PAS DE RAPPORT DE COURS POUR LE PARENT
+        // (Camara, le 11/10/2026) : ni notes sur 20, ni notions à revoir. Le
+        // parent lit à la place leurs rapports d'orientation. Le rapport reste
+        // enregistré — il compte la séance et clôt le départ anticipé — mais
+        // les deux listes du parent l'écartent.
         public async Task<IEnumerable<RapportEleve>> GetParEleveAsync(
             int eleveId, int limite, CancellationToken ct = default) =>
             await _context.RapportsSeance
                 .AsNoTracking()
                 .Where(r => r.EleveId == eleveId)
+                .Where(r => r.Matiere!.Code != Domain.Models.ConseillereOrientation.MatiereCode)
                 .OrderByDescending(r => r.DateCreation)
                 .Take(limite)
                 .Select(Projection)
@@ -116,7 +122,8 @@ namespace SchoolWebApp.Dal.Repositories
         {
             var lesSiens = _context.RapportsSeance
                 .AsNoTracking()
-                .Where(r => r.EleveId == eleveId);
+                .Where(r => r.EleveId == eleveId)
+                .Where(r => r.Matiere!.Code != Domain.Models.ConseillereOrientation.MatiereCode);
 
             // La matière est filtrée EN BASE, pas sur la tranche déjà chargée :
             // filtrer dix lignes sur deux cents afficherait « aucune séance de
@@ -175,6 +182,17 @@ namespace SchoolWebApp.Dal.Repositories
                     : null
             };
         }
+
+        public async Task<IEnumerable<RapportEleve>> GetObservationsOrientationAsync(
+            int eleveId, int limite, CancellationToken ct = default) =>
+            await _context.RapportsSeance
+                .AsNoTracking()
+                .Where(r => r.EleveId == eleveId)
+                .Where(r => r.Matiere!.Code == Domain.Models.ConseillereOrientation.MatiereCode)
+                .OrderByDescending(r => r.DateCreation)
+                .Take(limite)
+                .Select(Projection)
+                .ToListAsync(ct);
 
         public async Task<IEnumerable<RapportEleve>> GetEntreAsync(
             int eleveId, DateTime debut, DateTime fin, CancellationToken ct = default) =>

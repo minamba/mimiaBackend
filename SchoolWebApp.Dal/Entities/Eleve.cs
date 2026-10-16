@@ -126,6 +126,46 @@ namespace SchoolWebApp.Dal.Entities
         /// </summary>
         public string? Specialites { get; set; }
 
+        /// <summary>
+        /// L'ÉTABLISSEMENT DE L'ÉLÈVE, choisi par le parent dans l'Annuaire de
+        /// l'éducation (11/10/2026), pour la conseillère d'orientation : son lycée
+        /// donne son offre réelle ; son collège, ou son lycée, donne les lycées
+        /// proches. Code UAI, nom, commune et position.
+        /// </summary>
+        public string? EtablissementUai { get; set; }
+
+        public string? EtablissementLibelle { get; set; }
+
+        public string? EtablissementCommune { get; set; }
+
+        public double? EtablissementLatitude { get; set; }
+
+        public double? EtablissementLongitude { get; set; }
+
+        /// <summary>
+        /// LES BESOINS PARTICULIERS (11/10/2026), cochés par le parent : codes
+        /// séparés par « ; » (DYSLEXIE, DYSCALCULIE, TDAH). Donnée de santé :
+        /// voir `BesoinsParticuliers`.
+        /// </summary>
+        public string? BesoinsParticuliers { get; set; }
+
+        /// <summary>La date de la coche : la preuve de l'accord du parent.</summary>
+        public DateTime? BesoinsAccordLe { get; set; }
+
+        /// <summary>L'écran adapté (lecture aérée, calme) : allumé d'office, le parent peut le couper.</summary>
+        public bool EcranAdapte { get; set; } = true;
+
+        /// <summary>
+        /// LE PROJET D'ORIENTATION (11/10/2026), noté par la conseillère avec
+        /// l'accord de l'élève : le but, ce qui compte matière par matière (JSON),
+        /// et sa date. Un seul, le plus récent. Voir `ProjetOrientation`.
+        /// </summary>
+        public string? ProjetObjectif { get; set; }
+
+        public string? ProjetMatieres { get; set; }
+
+        public DateTime? ProjetLe { get; set; }
+
         public virtual Parent? Parent { get; set; }
 
         public virtual NiveauScolaire? NiveauScolaire { get; set; }

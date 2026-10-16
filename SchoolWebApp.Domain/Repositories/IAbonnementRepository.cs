@@ -171,6 +171,23 @@ namespace SchoolWebApp.Domain.Repositories
         Task<bool> ImputerAsync(
             int eleveId, int secondes, double seuilAlerte, CancellationToken ct = default);
 
+        /// <summary>
+        /// L'échéance du forfait de cet enfant, en SECONDES (16/10/2026) : essai
+        /// ou formule payante, recharges comprises. Null quand rien ne doit
+        /// couper la séance — pas d'abonnement en cours, ou le compte
+        /// super-administrateur, sans limite d'heures. Le temps du tour en
+        /// cours, pas encore décompté, est à retirer par l'appelant.
+        /// </summary>
+        Task<EcheanceForfait?> EcheanceAsync(int eleveId, CancellationToken ct = default);
+
+        /// <summary>
+        /// La séance vient d'être coupée à l'échéance (16/10/2026) : ce qui
+        /// restait est décompté d'un coup, pour qu'un rechargement de page ne
+        /// rende pas les secondes que le serveur n'avait pas encore comptées.
+        /// Faux s'il n'y a pas d'échéance (sans limite, ou sans abonnement).
+        /// </summary>
+        Task<bool> EpuiserAsync(int eleveId, CancellationToken ct = default);
+
         // --------------------------------------------------------------- pause
         /// <summary>
         /// Met l'abonnement en pause pour un mois. Retourne null si le droit

@@ -83,6 +83,16 @@ namespace SchoolWebApp.Api.Services
         private readonly IControleScolaireRepository _controles;
         private readonly PiecesJointes.TranscripteurDocuments _transcripteur;
 
+        /// <summary>L'offre des lycées, pour la seule conseillère d'orientation (11/10/2026).</summary>
+        private readonly IOrientationRepository _offresLycees;
+
+        /// <summary>
+        /// La fiche et les contrôles notés de l'élève, pour ses points forts et
+        /// fragiles — la conseillère seule (11/10/2026), voir <c>ForcesEleve</c>.
+        /// </summary>
+        private readonly IAdminRepository _fichesEleves;
+        private readonly IEvaluationRepository _evaluations;
+
         public AgentPedagogiqueService(
             AnthropicClient client,
             IMaitriseService maitriseService,
@@ -95,8 +105,14 @@ namespace SchoolWebApp.Api.Services
             IOptions<OptionsClaude> options,
             ILogger<AgentPedagogiqueService> logger,
             IControleScolaireRepository controles,
-            PiecesJointes.TranscripteurDocuments transcripteur)
+            PiecesJointes.TranscripteurDocuments transcripteur,
+            IOrientationRepository offresLycees,
+            IAdminRepository fichesEleves,
+            IEvaluationRepository evaluations)
         {
+            _offresLycees = offresLycees ?? throw new ArgumentNullException(nameof(offresLycees));
+            _fichesEleves = fichesEleves ?? throw new ArgumentNullException(nameof(fichesEleves));
+            _evaluations = evaluations ?? throw new ArgumentNullException(nameof(evaluations));
             _controles = controles ?? throw new ArgumentNullException(nameof(controles));
             _transcripteur = transcripteur ?? throw new ArgumentNullException(nameof(transcripteur));
             _jeux = jeux ?? throw new ArgumentNullException(nameof(jeux));
@@ -340,7 +356,14 @@ namespace SchoolWebApp.Api.Services
                     CacheControl = CacheLong(),   // commun à la matière
                 },
 
-                new() { Text = PromptsPedagogiques.Profil(eleve.NiveauCycle, eleve.Age, eleve.Sexe) },
+                // LES BESOINS PARTICULIERS (11/10/2026), cochés par le parent, à la
+                // suite du profil — voir `PromptsBesoins`. Rien si le module est
+                // éteint ou si aucune case n'est cochée.
+                new()
+                {
+                    Text = PromptsPedagogiques.Profil(eleve.NiveauCycle, eleve.Age, eleve.Sexe)
+                        + PromptsBesoins.Bloc(await BesoinsActifsAsync(eleve, ct)),
+                },
             };
 
             var contexteEleve = await ContexteDeLaSeanceAsync(eleve, conversation, accueil, ct);
@@ -779,7 +802,9 @@ namespace SchoolWebApp.Api.Services
             }
 
             var contexte = await ConstruireContexteEleveAsync(eleve, conversation, ct)
-                + await CoursDuControleAsync(conversation, ct);
+                + await CoursDuControleAsync(conversation, ct)
+                + await ContexteOrientationAsync(eleve, conversation, ct)
+                + await ProjetPourLeProfesseurAsync(eleve, conversation, ct);
 
             _memoire.Set(cle, contexte, new MemoryCacheEntryOptions
             {
@@ -788,6 +813,141 @@ namespace SchoolWebApp.Api.Services
             });
 
             return contexte;
+        }
+
+        /// <summary>
+        /// Les besoins de l'élève, si le module est allumé ; sinon aucun. Une
+        /// panne de lecture du réglage n'ajoute rien.
+        /// </summary>
+        private async Task<IReadOnlyCollection<string>> BesoinsActifsAsync(Eleve eleve, CancellationToken ct)
+        {
+            if (eleve.BesoinsParticuliers is not { Count: > 0 } besoins) return [];
+
+            try
+            {
+                return await _reglages.EstActifAsync(BesoinsParticuliers.Reglage, BesoinsParticuliers.ActifParDefaut, ct)
+                    ? besoins
+                    : [];
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Lecture du module des besoins particuliers impossible : ignore.");
+                return [];
+            }
+        }
+
+        /// <summary>
+        /// LA CONSEILLÈRE D'ORIENTATION REÇOIT L'OFFRE DES LYCÉES (11/10/2026) —
+        /// voir `ContexteOrientation`. Pour elle seule : les professeurs n'en
+        /// ont pas l'usage, et ce serait des jetons payés à chaque tour.
+        ///
+        /// UNE PANNE DE LECTURE NE CASSE PAS LA SÉANCE : la conseillère reste
+        /// capable de parler du cadre national, et sa consigne lui interdit
+        /// d'inventer l'offre d'un lycée.
+        /// </summary>
+        private async Task<string> ContexteOrientationAsync(Eleve eleve, Conversation conversation, CancellationToken ct)
+        {
+            if (!ConseillereOrientation.Est(conversation.MatiereCode)) return string.Empty;
+
+            string lycees;
+            try
+            {
+                lycees = "\n\n" + await Orientation.ContexteOrientation.ConstruireAsync(eleve, _offresLycees, ct);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Offre des lycees illisible pour l'eleve {EleveId}.", eleve.Id);
+                lycees = "\n\n# Lycées\n\nL'offre des lycées est momentanément illisible : n'invente jamais l'offre d'un lycée.";
+            }
+
+            return lycees + await ForcesDeLEleveAsync(eleve, ct);
+        }
+
+        /// <summary>
+        /// CE QU'IL FAUT À LA CONSEILLÈRE POUR ÉCRIRE [PROJET] (11/10/2026) : les
+        /// noms exacts des matières de l'élève, que le serveur sait rapprocher,
+        /// et le projet déjà noté, qu'elle met à jour plutôt que de repartir de
+        /// zéro.
+        /// </summary>
+        private static string PourPrevenirSesProfesseurs(Eleve eleve, IEnumerable<StatMatiereEleve> matieres)
+        {
+            var texte = new StringBuilder();
+            texte.AppendLine("## Pour prévenir ses professeurs ([PROJET])");
+            texte.AppendLine();
+
+            var noms = matieres
+                .Where(m => !ConseillereOrientation.Est(m.MatiereCode) && !string.IsNullOrWhiteSpace(m.MatiereLibelle))
+                .Select(m => m.MatiereLibelle!)
+                .ToList();
+            texte.AppendLine(noms.Count > 0
+                ? $"Ses matières cette année ({eleve.NiveauLibelle ?? "sa classe"}), les SEULES dont tu peux prévenir le professeur, à écrire telles quelles : {string.Join(", ", noms)}."
+                : "Ses matières sont inconnues : n'écris pas de bloc [PROJET].");
+
+            texte.AppendLine(eleve.ProjetOrientation is { } projet
+                ? $"Projet déjà noté le {projet.Le:dd/MM/yyyy} : {projet.Objectif}"
+                    + (projet.Matieres.Count > 0
+                        ? " (" + string.Join(" ; ", projet.Matieres.Select(l => $"{l.MatiereLibelle} : {l.Texte}")) + ")."
+                        : ".")
+                    + " Un nouveau bloc le remplace."
+                : "Aucun projet noté pour l'instant.");
+
+            return texte.ToString();
+        }
+
+        /// <summary>
+        /// LE PROJET D'ORIENTATION, CHEZ LES PROFESSEURS (11/10/2026) — voir
+        /// <c>ProjetPourLesProfesseurs</c>. Chacun ne lit que la ligne de sa
+        /// matière ; rien si la conseillère est éteinte, ou si la lecture du
+        /// réglage échoue.
+        /// </summary>
+        private async Task<string> ProjetPourLeProfesseurAsync(Eleve eleve, Conversation conversation, CancellationToken ct)
+        {
+            if (ConseillereOrientation.Est(conversation.MatiereCode) || eleve.ProjetOrientation is null) return string.Empty;
+
+            try
+            {
+                if (!await _reglages.EstActifAsync(ConseillereOrientation.Reglage, ConseillereOrientation.AllumeeParDefaut, ct))
+                {
+                    return string.Empty;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Lecture du module de la conseillere impossible : projet ignore.");
+                return string.Empty;
+            }
+
+            var bloc = Orientation.ProjetPourLesProfesseurs.Construire(
+                eleve.ProjetOrientation, conversation.MatiereId, DateTime.UtcNow);
+            return bloc.Length == 0 ? string.Empty : "\n\n" + bloc;
+        }
+
+        /// <summary>
+        /// SES POINTS FORTS ET FRAGILES, POUR LA CONSEILLÈRE (11/10/2026) — voir
+        /// <c>ForcesEleve</c>. Lu une fois par séance : le contexte est gardé en
+        /// mémoire ensuite. Une panne de lecture ne casse pas la séance ; la
+        /// conseillère est alors prévenue qu'elle ne sait rien, plutôt que de
+        /// croire l'élève sans travail.
+        /// </summary>
+        private async Task<string> ForcesDeLEleveAsync(Eleve eleve, CancellationToken ct)
+        {
+            try
+            {
+                var fiche = await _fichesEleves.GetFicheEleveAsync(eleve.Id);
+                var evaluations = await _evaluations.GetParEleveAsync(eleve.Id, 100, ct);
+                var solides = await _maitriseService.GetAcquisesAsync(eleve.Id, null, Orientation.ForcesEleve.NotionsLues);
+                var fragiles = await _maitriseService.GetLacunesAsync(eleve.Id, null, Orientation.ForcesEleve.NotionsLues);
+
+                return "\n\n" + Orientation.ForcesEleve.Construire(
+                    fiche?.Matieres ?? [], evaluations, solides, fragiles)
+                    + "\n" + PourPrevenirSesProfesseurs(eleve, fiche?.Matieres ?? []);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Points forts illisibles pour l'eleve {EleveId}.", eleve.Id);
+                return "\n\n## Ses points forts et ses points fragiles\n\nMomentanément illisibles : "
+                    + "tu ne les connais pas, demande-les-lui et ne suppose rien.";
+            }
         }
 
         /// <summary>
@@ -870,6 +1030,20 @@ namespace SchoolWebApp.Api.Services
                             "Cours du controle {ControleId} : document {Id} illisible pour cette seance.",
                             controleId, document.Id);
                         texte = null;
+
+                        // Compté comme dans la tâche de fond : au troisième échec,
+                        // le professeur lit la mention qui lui dit de le redemander.
+                        try
+                        {
+                            if (await _controles.SignalerEchecLectureDocumentAsync(document.Id, DateTime.UtcNow, ct))
+                            {
+                                texte = DocumentControle.MentionAbandon;
+                            }
+                        }
+                        catch (Exception exCompte) when (exCompte is not OperationCanceledException)
+                        {
+                            _logger.LogError(exCompte, "Echec de lecture du document {Id} non compte.", document.Id);
+                        }
                     }
                 }
 
@@ -950,8 +1124,14 @@ namespace SchoolWebApp.Api.Services
 
         /// <summary>
         /// Le contexte élève : ce qui fait qu'un agent maths sait qu'un blocage
-        /// vient d'une lacune de CM2, et qu'un agent français sait ce que l'élève
-        /// travaille en maths. C'est la mémoire partagée entre toutes les matières.
+        /// vient d'une lacune de CM2.
+        ///
+        /// COMMUN À TOUS LES PROFESSEURS : l'identité (prénom, classe, âge), la
+        /// série ou les spécialités. Tout le reste — programme, lacunes, acquis,
+        /// révisions, fiches, jeux — est filtré sur LA MATIÈRE DE LA SÉANCE : le
+        /// professeur de français ne voit rien des maths. C'est ce qui garde ce
+        /// contexte à ~7 000 jetons, réécrit à chaque ouverture de cours. Seule la
+        /// conseillère d'orientation lit toutes les matières (`ForcesDeLEleveAsync`).
         /// </summary>
         private async Task<string> ConstruireContexteEleveAsync(
             Eleve eleve, Conversation conversation, CancellationToken ct)
@@ -982,6 +1162,21 @@ namespace SchoolWebApp.Api.Services
             if (PromptsSpecialitesGenerales.ContexteSpecialites(eleve.NiveauCode, eleve.Specialites) is { } specialites)
             {
                 contexte.AppendLine(specialites);
+                contexte.AppendLine();
+            }
+
+            // SA FILIÈRE PROFESSIONNELLE (15/10/2026) : le professeur prend ses
+            // exemples dans le métier de l'élève — sans enseigner le métier.
+            if (VoiesScolaires.DecrireFilierePro(eleve.Specialites) is { } filiere)
+            {
+                contexte.AppendLine($"""
+                    FILIÈRE DE L'ÉLÈVE : {filiere}. Quand c'est naturel, prends tes exemples
+                    et tes situations dans ce métier (une facture, un devis, un client, un
+                    atelier, une intervention…) : il voit mieux à quoi sert ce qu'il apprend.
+                    Tu n'enseignes pas l'enseignement professionnel lui-même : à une question
+                    technique de son métier, réponds avec ce que ta matière apporte, sans
+                    inventer de règle professionnelle.
+                    """);
                 contexte.AppendLine();
             }
 

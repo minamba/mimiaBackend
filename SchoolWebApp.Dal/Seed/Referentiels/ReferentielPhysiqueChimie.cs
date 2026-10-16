@@ -235,6 +235,90 @@ namespace SchoolWebApp.Dal.Seed.Referentiels
                 ("TERMINALE", "PC_TLE_ELEC_RC",           "Ondes et signaux", "Établir et résoudre l'équation différentielle de la charge et de la décharge d'un circuit RC", 44),
                 ("TERMINALE", "PC_TLE_ELEC_CAPTEUR",      "Ondes et signaux", "Expliquer le principe de fonctionnement d'un capteur capacitif", 45),
                 ("TERMINALE", "PC_TLE_METH_INCERTITUDES", "Méthode", "Évaluer une incertitude-type composée et comparer un résultat à une valeur de référence", 46),
+
+                // ================================================================
+                // VOIE PROFESSIONNELLE (15/10/2026)
+                // ================================================================
+                //
+                // Sources : 2de pro, arrêté du 03/04/2019, NOR MENE1908630A, BO spécial n° 5
+                // du 11/04/2019 (programme commun à toutes les spécialités) ; 1re et Tle pro,
+                // arrêté du 03/02/2020, NOR MENE2003004A, BO spécial n° 1 du 06/02/2020,
+                // annexes 1 et 2. En vigueur, aucun texte de remplacement trouvé.
+                //
+                // SIX GROUPEMENTS (G1 à G6, pas les A/B/C des maths). La base ne connaît pas
+                // la spécialité de l'élève : TOUS les modules sont repris (le seul tronc commun
+                // strict de terminale est l'effet de serre ; s'y tenir aurait retiré des
+                // modules suivis par cinq groupements sur six). Quelques modules suivis par
+                // exactement les mêmes groupements sont fusionnés en une ligne. Le tableau des
+                // groupements par ligne est dans le bloc-notes de la session du 15/10/2026.
+                // Les spécialités tertiaires n'ont pas de physique-chimie (LVB à la place) :
+                // la matière leur reste proposée tant que la spécialité n'est pas connue.
+                ("SECONDE_PRO", "PC_2PRO_SECU_CHIMIE",     "Sécurité",    "Lire l’étiquette d’un produit chimique, en repérer les dangers et trier ses déchets", 1),
+                ("SECONDE_PRO", "PC_2PRO_SECU_ELEC",       "Sécurité",    "Expliquer le rôle du fusible, du disjoncteur, du différentiel et de la mise à la terre", 2),
+                ("SECONDE_PRO", "PC_2PRO_SECU_PROTECTION", "Sécurité",    "Choisir la protection adaptée face aux produits chimiques, au laser et au bruit", 3),
+                ("SECONDE_PRO", "PC_2PRO_ELEC_MESURES",    "Électricité", "Mesurer intensité et tension, et appliquer la loi des nœuds et celle des mailles", 4),
+                ("SECONDE_PRO", "PC_2PRO_ELEC_CAPTEUR",    "Électricité", "Tracer la caractéristique d’un capteur et utiliser la relation U = R·I", 5),
+                ("SECONDE_PRO", "PC_2PRO_ELEC_ALTERNATIF", "Électricité", "Lire période, fréquence, valeurs maximale et efficace d’une tension sinusoïdale", 6),
+                ("SECONDE_PRO", "PC_2PRO_MECA_MOUVEMENT",  "Mécanique",   "Choisir un référentiel et reconnaître la nature d’un mouvement enregistré", 7),
+                ("SECONDE_PRO", "PC_2PRO_MECA_VITESSE",    "Mécanique",   "Calculer une vitesse moyenne et utiliser une fréquence de rotation", 8),
+                ("SECONDE_PRO", "PC_2PRO_MECA_FORCES",     "Mécanique",   "Représenter une force, relier poids et masse, vérifier l’équilibre d’un solide", 9),
+                ("SECONDE_PRO", "PC_2PRO_CHIM_ESPECES",    "Chimie",      "Identifier des espèces chimiques en solution et distinguer atome, ion et molécule", 10),
+                ("SECONDE_PRO", "PC_2PRO_CHIM_PH",         "Chimie",      "Mesurer un pH et dire si une solution est acide, basique ou neutre", 11),
+                ("SECONDE_PRO", "PC_2PRO_CHIM_SOLUTION",   "Chimie",      "Préparer une solution par dissolution ou par dilution (concentration en g/L)", 12),
+                ("SECONDE_PRO", "PC_2PRO_SON_CARACTERISER","Acoustique",  "Caractériser un son par sa fréquence et son niveau d’intensité en décibels", 13),
+                ("SECONDE_PRO", "PC_2PRO_SON_ISOLER",      "Acoustique",  "Comparer l’atténuation du son par différents matériaux et protéger son audition", 14),
+                ("SECONDE_PRO", "PC_2PRO_SON_TRANSMETTRE", "Acoustique",  "Mettre en œuvre une chaîne de transmission d’informations par le son", 15),
+                ("SECONDE_PRO", "PC_2PRO_TH_TEMPERATURE",  "Thermique",   "Mesurer une température et choisir un capteur adapté (degré Celsius, kelvin)", 16),
+                ("SECONDE_PRO", "PC_2PRO_TH_EQUILIBRE",    "Thermique",   "Distinguer chaleur et température et observer l’équilibre thermique", 17),
+                ("SECONDE_PRO", "PC_2PRO_TH_CHANGEMENT",   "Thermique",   "Calculer l’énergie nécessaire au changement d’état d’un corps pur", 18),
+                ("SECONDE_PRO", "PC_2PRO_OPT_REFRACTION",  "Optique",     "Vérifier les lois de la réflexion et de la réfraction, et la réflexion totale", 19),
+                ("SECONDE_PRO", "PC_2PRO_OPT_SPECTRE",     "Optique",     "Décomposer la lumière blanche et situer une longueur d’onde (UV, visible, IR)", 20),
+                ("SECONDE_PRO", "PC_2PRO_OPT_COULEURS",    "Optique",     "Réaliser les synthèses additive et soustractive des couleurs", 21),
+                ("SECONDE_PRO", "PC_2PRO_OPT_PHOTOCOMP",   "Optique",     "Étudier un photocomposant et mesurer un éclairement au luxmètre", 22),
+                ("PREMIERE_PRO", "PC_1PRO_MES_INCERTITUDE", "Mesures et incertitudes", "Estimer l’incertitude d’une mesure et écrire le résultat avec des chiffres significatifs", 1),
+                ("PREMIERE_PRO", "PC_1PRO_SECU_REGLES",     "Sécurité",    "Appliquer les règles de sécurité : EPI, étiquettes, protections électriques, laser, bruit", 2),
+                ("PREMIERE_PRO", "PC_1PRO_ELEC_PUISSANCE",  "Électricité", "Calculer la puissance et l’énergie électriques reçues (P = U·I, E = P·t)", 3),
+                ("PREMIERE_PRO", "PC_1PRO_ELEC_TRANSPORT",  "Électricité", "Expliquer le transport de l’électricité sous haute tension et le rôle du transformateur", 4),
+                ("PREMIERE_PRO", "PC_1PRO_ELEC_PUISS_ACTIVE","Électricité", "Mesurer un déphasage et une puissance active en régime sinusoïdal", 5),
+                ("PREMIERE_PRO", "PC_1PRO_ELEC_CHAMP_MAG",  "Électricité", "Déterminer le sens du champ magnétique créé par un aimant ou une bobine", 6),
+                ("PREMIERE_PRO", "PC_1PRO_TH_COMBUSTION",   "Thermique",   "Écrire l’équation d’une combustion et calculer l’énergie et le CO₂ dégagés", 7),
+                ("PREMIERE_PRO", "PC_1PRO_TH_TRANSFERTS",   "Thermique",   "Distinguer les trois modes de transfert thermique et repérer les isolants", 8),
+                ("PREMIERE_PRO", "PC_1PRO_TH_ISOLATION",    "Thermique",   "Calculer la puissance thermique traversant une paroi à partir de sa conductance", 9),
+                ("PREMIERE_PRO", "PC_1PRO_MECA_ACCELERATION","Mécanique",  "Mesurer vitesse et accélération d’un mouvement rectiligne et lire un graphe des vitesses", 10),
+                ("PREMIERE_PRO", "PC_1PRO_MECA_MOMENT",     "Mécanique",   "Calculer le moment d’une force et obtenir l’équilibre d’un solide en rotation", 11),
+                ("PREMIERE_PRO", "PC_1PRO_MECA_PRESSION",   "Mécanique",   "Calculer une pression (P = F/S) et vérifier la loi de Boyle-Mariotte", 12),
+                ("PREMIERE_PRO", "PC_1PRO_MECA_ARCHIMEDE",  "Mécanique",   "Déterminer la force d’Archimède et prévoir si un objet flotte", 13),
+                ("PREMIERE_PRO", "PC_1PRO_MECA_PASCAL",     "Mécanique",   "Exploiter la relation de Pascal et expliquer la presse ou le vérin hydraulique", 14),
+                ("PREMIERE_PRO", "PC_1PRO_CHIM_MATIERE",    "Chimie",      "Décrire la matière : masse volumique, dilatation, ions et classification périodique", 15),
+                ("PREMIERE_PRO", "PC_1PRO_CHIM_CONCENTRATION","Chimie",    "Préparer une solution de concentration donnée et doser une espèce par titrage", 16),
+                ("PREMIERE_PRO", "PC_1PRO_CHIM_OXYDOREDUCTION","Chimie",   "Prévoir une réaction d’oxydoréduction et protéger un métal contre la corrosion", 17),
+                ("PREMIERE_PRO", "PC_1PRO_SIG_ONDE_EM",     "Signaux",     "Situer une onde électromagnétique dans le spectre et utiliser λ = c/f", 18),
+                ("PREMIERE_PRO", "PC_1PRO_SIG_SON",         "Signaux",     "Mesurer la vitesse du son et calculer un niveau d’intensité acoustique en dB", 19),
+                ("PREMIERE_PRO", "PC_1PRO_SIG_IMAGE",       "Signaux",     "Obtenir l’image nette d’un objet avec une lentille convergente", 20),
+                ("PREMIERE_PRO", "PC_1PRO_SIG_OEIL",        "Signaux",     "Modéliser l’œil et corriger un défaut de vision avec une lentille", 21),
+                ("PREMIERE_PRO", "PC_1PRO_SIG_SOURCE",      "Signaux",     "Choisir une source lumineuse selon son spectre et son efficacité énergétique", 22),
+                ("TERMINALE_PRO", "PC_TPRO_MES_INCERTITUDE", "Mesures et incertitudes", "Évaluer la dispersion d’une série de mesures et la comparer à une valeur de référence", 1),
+                ("TERMINALE_PRO", "PC_TPRO_SECU_REGLES",     "Sécurité",    "Appliquer les règles de sécurité : EPI, étiquettes, protections électriques, laser, bruit", 2),
+                ("TERMINALE_PRO", "PC_TPRO_ELEC_PUISS_ACTIVE","Électricité", "Mesurer une puissance active et un facteur de puissance en régime sinusoïdal", 3),
+                ("TERMINALE_PRO", "PC_TPRO_ELEC_CONVERSION", "Électricité", "Redresser et filtrer un courant alternatif, et étudier un moteur électrique", 4),
+                ("TERMINALE_PRO", "PC_TPRO_ELEC_TRIPHASE",   "Électricité", "Caractériser le réseau triphasé et produire une tension par induction", 5),
+                ("TERMINALE_PRO", "PC_TPRO_ELEC_TRANSPORT",  "Électricité", "Expliquer le transport de l’électricité sous haute tension et le rôle du transformateur", 6),
+                ("TERMINALE_PRO", "PC_TPRO_ELEC_STOCKAGE",   "Électricité", "Réaliser une pile et calculer l’énergie stockée par un accumulateur", 7),
+                ("TERMINALE_PRO", "PC_TPRO_TH_EFFET_SERRE",  "Thermique",   "Expliquer le rayonnement thermique et l’origine de l’effet de serre", 8),
+                ("TERMINALE_PRO", "PC_TPRO_TH_TRANSFERTS",   "Thermique",   "Distinguer les trois modes de transfert thermique et repérer les isolants", 9),
+                ("TERMINALE_PRO", "PC_TPRO_MECA_FLUIDES",    "Mécanique",   "Exploiter la relation de Pascal et calculer le débit d’un fluide en mouvement", 10),
+                ("TERMINALE_PRO", "PC_TPRO_MECA_ACCELERATION","Mécanique",  "Mesurer vitesse et accélération d’un mouvement rectiligne", 11),
+                ("TERMINALE_PRO", "PC_TPRO_MECA_ARCHIMEDE",  "Mécanique",   "Déterminer la force d’Archimède et prévoir si un objet flotte", 12),
+                ("TERMINALE_PRO", "PC_TPRO_CHIM_OXYDOREDUCTION","Chimie",   "Prévoir une réaction d’oxydoréduction et protéger un métal contre la corrosion", 13),
+                ("TERMINALE_PRO", "PC_TPRO_CHIM_PH",         "Chimie",      "Calculer un pH à partir de la concentration en ions H₃O⁺, et inversement", 14),
+                ("TERMINALE_PRO", "PC_TPRO_CHIM_DOSAGE",     "Chimie",      "Doser une espèce par titrage ou par étalonnage et réaliser une extraction", 15),
+                ("TERMINALE_PRO", "PC_TPRO_CHIM_SYNTHESE",   "Chimie",      "Réaliser estérification et saponification, et expliquer l’action d’un savon", 16),
+                ("TERMINALE_PRO", "PC_TPRO_CHIM_PLASTIQUES", "Chimie",      "Identifier des plastiques recyclables et synthétiser un polymère", 17),
+                ("TERMINALE_PRO", "PC_TPRO_SIG_SON",         "Signaux",     "Exploiter vitesse, longueur d’onde et niveau d’intensité d’un son", 18),
+                ("TERMINALE_PRO", "PC_TPRO_SIG_ISOLATION",   "Signaux",     "Comparer l’atténuation d’un son par des parois et calculer l’indice d’affaiblissement", 19),
+                ("TERMINALE_PRO", "PC_TPRO_SIG_TRANSMETTRE", "Signaux",     "Transmettre une information par une onde, en propagation libre ou guidée (fibre)", 20),
+                ("TERMINALE_PRO", "PC_TPRO_SIG_SOURCE",      "Signaux",     "Choisir une source lumineuse selon son spectre et son efficacité énergétique", 21),
+                ("TERMINALE_PRO", "PC_TPRO_SIG_IMAGE_COULEUR","Signaux",    "Expliquer le codage RVB et calculer la taille d’une image numérique", 22),
             };
 
         /// <summary>

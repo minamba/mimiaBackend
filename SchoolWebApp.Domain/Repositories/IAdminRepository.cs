@@ -120,6 +120,9 @@ namespace SchoolWebApp.Domain.Repositories
         /// </summary>
         Task<bool> DefinirAjoutEnfantAsync(int parentId, bool autorise);
 
+        /// <summary>Le droit à l'espace parent et à ses fiches de révision (16/10/2026).</summary>
+        Task<bool> DefinirFichesParentAsync(int parentId, bool autorise);
+
         /// <summary>Fiche complète d'un élève, ou null s'il n'existe pas.</summary>
         Task<FicheEleve?> GetFicheEleveAsync(int eleveId, int? niveauScolaireId = null);
 

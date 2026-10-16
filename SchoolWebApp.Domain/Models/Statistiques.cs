@@ -251,6 +251,15 @@ namespace SchoolWebApp.Domain.Models
         /// <summary>Ce parent peut-il enregistrer un enfant de plus ?</summary>
         public bool PeutAjouterEnfant { get; set; } = true;
 
+        /// <summary>A-t-il le droit à l'espace parent et à ses fiches de révision (16/10/2026) ?</summary>
+        public bool PeutCreerFiches { get; set; }
+
+        /// <summary>
+        /// L'état du compte, pour la colonne « État » de l'administration
+        /// (16/10/2026) : une des clés de `EtatsCompte`.
+        /// </summary>
+        public string EtatCompte { get; set; } = EtatsCompte.Inactif;
+
         /// <summary>
         /// Ce compte est-il celui du super-administrateur ?
         ///
@@ -400,6 +409,23 @@ namespace SchoolWebApp.Domain.Models
 
         /// <summary>Le détail par poste, du plus cher au moins cher.</summary>
         public List<PosteCout> Postes { get; set; } = [];
+
+        /// <summary>
+        /// LA GÉNÉRATION DES FICHES DE RÉVISION (15/10/2026) — Camara : « il
+        /// faudrait une nouvelle ligne génération de fiches ». Une dépense des
+        /// familles, pas une tâche de fond : l'enfant l'a demandée. Lecture des
+        /// cours et rédaction des fiches, au tarif exact des jetons.
+        /// </summary>
+        public decimal FichesDollars { get; set; }
+
+        /// <summary>Appels au modèle pour les fiches (lectures + rédactions).</summary>
+        public int FichesAppels { get; set; }
+
+        /// <summary>Fiches créées sur la période (celles supprimées depuis ne comptent plus).</summary>
+        public int FichesCreees { get; set; }
+
+        /// <summary>Cours envoyés à la lecture sur la période.</summary>
+        public int CoursLus { get; set; }
 
         public decimal TotalDollars { get; set; }
 
@@ -624,5 +650,68 @@ namespace SchoolWebApp.Domain.Models
         /// on chercherait longtemps pourquoi les comptes ne tombent pas juste.
         /// </summary>
         public DateTime PeriodeDebut { get; set; }
+    }
+}
+
+namespace SchoolWebApp.Domain.Models
+{
+    /// <summary>
+    /// L'ÉTAT D'UN COMPTE PARENT — voulu par Camara le 16/10/2026, pour la
+    /// colonne « État » et le filtre de l'administration. Du plus grave au
+    /// plus ordinaire, c'est aussi l'ordre de priorité :
+    ///
+    /// - banni : son adresse est bannie ;
+    /// - suspendu : un prélèvement refusé et rien de réglé depuis deux
+    ///   semaines (les relances de Stripe sont finies), ou Stripe a clos
+    ///   l'abonnement sur l'impayé — jusqu'à ce que la facture soit réglée ;
+    /// - refuse (« Paiement refusé ») : un prélèvement n'est pas passé, les
+    ///   relances de Stripe sont en cours ;
+    /// - essai (« En essai ») : l'essai gratuit est en cours — Camara : « je
+    ///   saurai les parents qui sont actuellement en essai » ;
+    /// - actif : tout est en ordre (formule payée, compte exempté). L'heure
+    ///   qui sépare une échéance Stripe de son prélèvement compte comme
+    ///   active ; au-delà d'un jour sans paiement confirmé (webhook perdu),
+    ///   les séances sont suspendues et le compte se lit « paiement refusé » ;
+    /// - inactif : aucun abonnement, résilié, essai terminé, ou en pause.
+    ///
+    /// Les séances, elles, suivent `AbonnementRepository.VerifierAsync` :
+    /// dès le refus, elles sont suspendues (option A) — l'état ne fait que
+    /// nommer la situation pour l'administration.
+    /// </summary>
+    public static class EtatsCompte
+    {
+        public const string Actif = "actif";
+        public const string Inactif = "inactif";
+        public const string PaiementRefuse = "refuse";
+        public const string EnEssai = "essai";
+        public const string Suspendu = "suspendu";
+        public const string Banni = "banni";
+
+        /// <summary>Au-delà, un paiement refusé devient un compte suspendu.</summary>
+        public static readonly TimeSpan DelaiAvantSuspension = TimeSpan.FromDays(14);
+
+        /// <summary>L'état, d'après l'abonnement le plus récent (null : aucun).</summary>
+        public static string Calculer(
+            bool banni, string? statut, DateTime? impayeDepuis, DateTime periodeFin,
+            DateTime? dateFin, DateTime? resiliationDemandeeLe, bool parStripe, bool essai, DateTime maintenant)
+        {
+            if (banni) return Banni;
+            if (statut is null) return Inactif;
+
+            if (impayeDepuis is DateTime depuis)
+            {
+                return statut == "Resilie" || maintenant - depuis >= DelaiAvantSuspension
+                    ? Suspendu
+                    : PaiementRefuse;
+            }
+
+            if (statut != "Actif") return Inactif;                         // résilié, en pause
+            if (dateFin is DateTime fin && fin <= maintenant) return Inactif; // essai terminé
+            if (resiliationDemandeeLe is not null && periodeFin <= maintenant) return Inactif;
+            if (essai) return EnEssai;
+            if (parStripe && periodeFin.AddDays(1) <= maintenant) return PaiementRefuse;
+
+            return Actif;
+        }
     }
 }

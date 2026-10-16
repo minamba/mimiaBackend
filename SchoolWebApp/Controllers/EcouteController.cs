@@ -182,6 +182,9 @@ namespace SchoolWebApp.Api.Controllers
         /// </summary>
         private static string MessageDeRefus(SchoolWebApp.Domain.Models.MotifRefus motif) => motif switch
         {
+            SchoolWebApp.Domain.Models.MotifRefus.EssaiEpuise =>
+                "Ton essai gratuit est terminé : le micro est fermé. "
+                + "Pour continuer, demande à tes parents de choisir un forfait.",
             SchoolWebApp.Domain.Models.MotifRefus.PotEpuise
                 or SchoolWebApp.Domain.Models.MotifRefus.PlafondEnfant =>
                 "Il n'y a plus d'heures de cours pour aujourd'hui : le micro est fermé. "

@@ -132,5 +132,78 @@ namespace SchoolWebApp.Domain.Models
             VerdictBientot => StatutBientot,
             _ => StatutPasPret,
         };
+
+        // L'ÉTAT D'UNE NOTION, VU PAR LE PROFESSEUR — Camara, le 13/10/2026 :
+        // « l'observation du professeur est la chose la plus fiable ; il faut
+        // que le pourcentage soit en accord ». Relevé en prod : une élève
+        // déclarée prête, six réussites d'affilée, et sa notion à 25 % « en
+        // cours ». Les trois mots que le professeur peut écrire, tels qu'ils
+        // sont gardés en base ; le pourcentage que chacun vaut sur la barre.
+        public const string NotionTenue = "tenue";
+        public const string NotionEnCours = "en-cours";
+        public const string NotionFragile = "fragile";
+
+        /// <summary>
+        /// Le mot du professeur ramené à l'un des trois états, ou null : « pas
+        /// travaillée », « pas vue » et tout mot inconnu ne posent RIEN — la
+        /// barre garde alors sa mesure, on n'invente pas un jugement.
+        /// </summary>
+        public static string? EtatNotionValide(string? etat)
+        {
+            var mot = (etat ?? "").Trim().ToLowerInvariant()
+                .Replace('_', ' ').Replace('-', ' ')
+                .Replace("é", "e").Replace("è", "e").Replace("ê", "e").Replace("û", "u");
+
+            return mot switch
+            {
+                "tenue" or "tenu" or "acquise" or "acquis" or "solide" or "sure" or "sur" or "maitrisee" or "ok" => NotionTenue,
+                "en cours" or "presque" or "a confirmer" or "a consolider" or "bientot" or "moyen" or "moyenne" => NotionEnCours,
+                "fragile" or "pas sure" or "pas sur" or "a revoir" or "a reprendre" or "ratee" or "rate" or "faible" => NotionFragile,
+                _ => null,
+            };
+        }
+
+        /// <summary>Ce que l'état du professeur vaut sur la barre, de 0 à 100.</summary>
+        public static int PourcentEtat(string etat) => etat switch
+        {
+            NotionTenue => 100,
+            NotionEnCours => 60,
+            NotionFragile => 30,
+            _ => 0,
+        };
+
+        /// <summary>
+        /// Le temps pendant lequel une mesure tirée de la conversation ne
+        /// contredit pas le professeur.
+        ///
+        /// RELEVÉ EN PROD LE 13/10/2026 (Syan) : la règle était « le plus
+        /// récent l'emporte ». Or le verdict s'écrit dans le dernier message du
+        /// cours, et l'observation de cette MÊME séance part quand l'enfant
+        /// quitte — quelques minutes plus tard, datée d'après. La mesure
+        /// gagnait donc toujours contre le jugement de la séance qu'elle
+        /// décrivait : « tenu » sous la plume du professeur, 25 % à l'écran.
+        /// Douze heures couvrent une soirée de travail ; au-delà, c'est une
+        /// autre séance, et ce qu'elle a montré compte.
+        /// </summary>
+        public static readonly TimeSpan MemeSeance = TimeSpan.FromHours(12);
+
+        /// <summary>
+        /// Le jugement du professeur vaut-il encore face à cette mesure ? Oui
+        /// s'il n'y a pas de mesure, ou si elle n'est pas d'une séance
+        /// postérieure. La copie notée est traitée à part par l'appelant.
+        /// </summary>
+        public static bool ProfesseurPrevaut(DateTime jugeLe, DateTime? mesureLe) =>
+            mesureLe is not DateTime le || le <= jugeLe + MemeSeance;
+
+        /// <summary>L'état de maîtrise affiché pour un état du professeur.</summary>
+        public static string EtatAfficheDe(string etat) => etat switch
+        {
+            NotionTenue => "acquise",
+            NotionEnCours => "en-cours",
+            _ => "fragile",
+        };
     }
+
+    /// <summary>Une notion du programme et l'état que le professeur lui donne à la fin d'une préparation.</summary>
+    public record EtatNotionDeclare(string Libelle, string Etat);
 }

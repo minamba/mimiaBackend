@@ -23,7 +23,7 @@ namespace SchoolWebApp.Api.Services.ScanMobile
     /// Où va la photo : une séance (<see cref="ConversationId"/>), ou le cours
     /// d'un contrôle (<see cref="ControleId"/>, depuis le 26/09/2026).
     /// </summary>
-    public record DestinationScan(int ConversationId, int? ControleId, int EleveId);
+    public record DestinationScan(int ConversationId, int? ControleId, int EleveId, int? CoursImporteId = null);
 
     /// <summary>
     /// LES QR CODES DU SCANNER, LE TEMPS QU'ILS SERVENT.
@@ -71,6 +71,9 @@ namespace SchoolWebApp.Api.Services.ScanMobile
             // conversation derrière un contrôle créé depuis le calendrier.
             // `ConversationId` vaut alors 0.
             public int? ControleId { get; init; }
+
+            /// <summary>Le cours importé pour des fiches de révision (14/10/2026), troisième destination.</summary>
+            public int? CoursImporteId { get; init; }
             public int EleveId { get; init; }
             public string? ProfPrenom { get; init; }
             public string? Matiere { get; init; }
@@ -148,7 +151,7 @@ namespace SchoolWebApp.Api.Services.ScanMobile
                 if (entree!.Termine || entree.EnCours || entree.PiecesJointes.Count >= PiecesMax) return false;
 
                 entree.EnCours = true;
-                destination = new DestinationScan(entree.ConversationId, entree.ControleId, entree.EleveId);
+                destination = new DestinationScan(entree.ConversationId, entree.ControleId, entree.EleveId, entree.CoursImporteId);
                 return true;
             }
         }
@@ -186,6 +189,66 @@ namespace SchoolWebApp.Api.Services.ScanMobile
 
                 return (jeton, expireLe);
             }
+        }
+
+        /// <summary>
+        /// Un QR code pour les pages d'un cours importé — fiches de révision
+        /// (14/10/2026). Même vie que celui d'un contrôle : un jeton à la fois
+        /// par cours, celui qui n'a rien reçu est remplacé.
+        /// </summary>
+        public (string Jeton, DateTime ExpireLe) CreerPourCoursImporte(
+            int eleveId, int coursId, string? matiere, DateTime maintenant)
+        {
+            Nettoyer(maintenant);
+
+            lock (_verrou)
+            {
+                foreach (var (cle, entree) in _entrees)
+                {
+                    if (entree.CoursImporteId == coursId && entree.PiecesJointes.Count == 0 && !entree.EnCours)
+                    {
+                        _entrees.TryRemove(cle, out _);
+                    }
+                }
+
+                var jeton = AuthentificationEleve.GenererJeton();
+                var expireLe = maintenant + Validite;
+
+                _entrees[AuthentificationEleve.Hacher(jeton)] = new Entree
+                {
+                    CoursImporteId = coursId,
+                    EleveId = eleveId,
+                    Matiere = matiere,
+                    ExpireLe = expireLe,
+                };
+
+                return (jeton, expireLe);
+            }
+        }
+
+        /// <summary>Même lecture que <see cref="Etat"/>, pour le QR code d'un cours importé.</summary>
+        public (EtatJetonScan Etat, IReadOnlyList<int> Pages, bool Termine) EtatCoursImporte(
+            string? jeton, int coursId, DateTime maintenant)
+        {
+            if (string.IsNullOrWhiteSpace(jeton)
+                || !_entrees.TryGetValue(AuthentificationEleve.Hacher(jeton), out var entree)
+                || entree.CoursImporteId != coursId)
+            {
+                return (EtatJetonScan.Expire, Array.Empty<int>(), false);
+            }
+
+            int[] recues;
+            bool termine;
+            lock (_verrou)
+            {
+                recues = entree.PiecesJointes.ToArray();
+                termine = entree.Termine;
+            }
+
+            if (recues.Length > 0) return (EtatJetonScan.Recu, recues, termine);
+            return entree.ExpireLe > maintenant
+                ? (EtatJetonScan.Attente, recues, termine)
+                : (EtatJetonScan.Expire, recues, termine);
         }
 
         /// <summary>Même lecture que <see cref="Etat"/>, pour le QR code du cours d'un contrôle.</summary>

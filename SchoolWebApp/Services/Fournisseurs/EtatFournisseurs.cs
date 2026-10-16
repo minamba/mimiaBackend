@@ -201,7 +201,9 @@ namespace SchoolWebApp.Api.Services.Fournisseurs
                 Code = Gemini,
                 Nom = "Google Gemini",
                 Usage = "La voix des professeurs quand l'interrupteur « Voix Gemini » est allumé (Modes). En panne, la voix repasse d'elle-même par OpenAI.",
-                LienFacturation = "https://console.cloud.google.com/billing",
+                // La facturation du projet Gemini dans AI Studio, directement
+                // (Camara, le 12/10/2026) — et non la console Google Cloud générale.
+                LienFacturation = "https://aistudio.google.com/billing?billing=010652-60F54C-0BAF77&project=gen-lang-client-0922764372",
             };
         }
 

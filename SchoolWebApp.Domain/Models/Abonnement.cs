@@ -235,6 +235,15 @@ namespace SchoolWebApp.Domain.Models
         public static VerdictQuota Refus(MotifRefus motif) => new(false, motif, 0);
     }
 
+    /// <summary>
+    /// L'ÉCHÉANCE DU FORFAIT PENDANT UNE SÉANCE — Camara, le 16/10/2026 : le
+    /// cours est coupé net quand les heures tombent à zéro, ni avant ni après.
+    /// Les secondes qui restent à cet enfant (le plus petit du pot de la
+    /// famille et de sa part), et le motif qu'affichera la coupure :
+    /// EssaiEpuise, PotEpuise ou PlafondEnfant.
+    /// </summary>
+    public sealed record EcheanceForfait(int Secondes, MotifRefus Motif);
+
     public enum MotifRefus
     {
         Aucun = 0,
@@ -256,6 +265,14 @@ namespace SchoolWebApp.Domain.Models
 
         /// <summary>Le pot de la famille est vide : une recharge le débloque.</summary>
         PotEpuise = 3,
+
+        /// <summary>
+        /// LES 30 MINUTES DE L'ESSAI SONT UTILISÉES — Camara, le 16/10/2026. Un
+        /// motif à lui, et non `PotEpuise` : ni une recharge ni la fin du mois
+        /// ne le débloquent, seule une formule. La séance est coupée net, avec
+        /// un message qui invite à prendre un forfait.
+        /// </summary>
+        EssaiEpuise = 8,
 
         /// <summary>Cet enfant a atteint son plafond, mais le pot familial a encore des heures.</summary>
         PlafondEnfant = 4,

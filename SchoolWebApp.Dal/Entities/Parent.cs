@@ -94,6 +94,16 @@ namespace SchoolWebApp.Dal.Entities
         /// </summary>
         public bool PeutAjouterEnfant { get; set; } = true;
 
+        /// <summary>
+        /// L'ESPACE PARENT ET SES FICHES DE RÉVISION (16/10/2026) — coché dans
+        /// Admin › Parents. FAUX PAR DÉFAUT : on l'accorde un par un. Le
+        /// super-administrateur l'a toujours (sa configuration, pas cette colonne).
+        /// Un administrateur doit l'avoir coché, comme tout le monde ; il n'a
+        /// alors ni plafond d'import ni quota, les autres puisent dans les crédits
+        /// achetés par la famille.
+        /// </summary>
+        public bool PeutCreerFiches { get; set; }
+
         public virtual ICollection<Eleve> Eleves { get; set; } = new List<Eleve>();
 
         public virtual ICollection<Abonnement> Abonnements { get; set; } = new List<Abonnement>();

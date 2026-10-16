@@ -213,6 +213,8 @@ namespace SchoolWebApp.Dal.Repositories
                     n.CompetenceId,
                     n.TravailleeLe,
                     n.Resultat,
+                    n.EtatProfesseur,
+                    n.EtatProfesseurLe,
                     // Le libellé du référentiel l'emporte : il peut avoir été
                     // corrigé depuis que la notion a été déclarée.
                     Libelle = n.Competence != null ? n.Competence.Libelle! : n.Libelle,
@@ -242,8 +244,31 @@ namespace SchoolWebApp.Dal.Repositories
             foreach (var controle in controles)
             {
                 var notions = new List<NotionControle>();
+                var duControle = lignes.Where(l => l.ControleId == controle.Id).ToList();
 
-                foreach (var ligne in lignes.Where(l => l.ControleId == controle.Id))
+                // UN DOUBLON NE COMPTE JAMAIS DANS LA BARRE — voir
+                // LigneDeLaNotion, qui les empêche de naître. Ceux d'avant le
+                // 13/10/2026 (ou un libellé du référentiel corrigé après coup)
+                // sont écartés ici : une ligne en texte libre qui dit la même
+                // chose qu'une ligne rattachée n'apporte que son plancher.
+                var rattachees = duControle
+                    .Where(l => l.CompetenceId.HasValue)
+                    .Select(l => LibelleNotion.CleSouple(l.Libelle))
+                    .ToHashSet();
+
+                var affichees = duControle
+                    .Where(l => l.CompetenceId.HasValue || !rattachees.Contains(LibelleNotion.CleSouple(l.Libelle)))
+                    .ToList();
+
+                // QUAND LA LIGNE `notions:` MANQUE, L'OBSERVATION LA REMPLACE —
+                // voir ObservationPret. Verdicts d'avant le 13/10/2026, ou
+                // ligne oubliée : l'état de chaque notion est lu dans le
+                // paragraphe que le professeur lui consacre, daté du verdict.
+                var deduits = controle.PretLe is null
+                    ? new Dictionary<int, string>()
+                    : EtatsDeduits(controle.PretObservation, affichees.Select(l => (l.Id, l.Libelle)).ToList());
+
+                foreach (var ligne in affichees)
                 {
                     // Pas de compétence rattachée, ou aucune observation : rien
                     // n'a été mesuré. C'est l'existence de la ligne de maîtrise
@@ -258,21 +283,60 @@ namespace SchoolWebApp.Dal.Repositories
                         : SeuilsMaitrise.Etat(
                             mesuree.Score, mesuree.NombreObservations, mesuree.DerniereEvaluation, maintenant);
 
+                    // Les mêmes sources que le verrou du moteur de maîtrise
+                    // (voir MaitriseRepository.EstUneMesure) : c'est la même
+                    // distinction, lue au même endroit.
+                    var valideeParMesure = mesuree?.Source is "Evaluation" or "Controle";
+
+                    var etat = EtatAffiche(etatMesure, ligne.TravailleeLe);
+                    var pourcent = PourcentNotion(mesuree?.Score, ligne.TravailleeLe);
+
+                    // LE PROFESSEUR L'EMPORTE, sauf devant une séance
+                    // postérieure — Camara, le 13/10/2026. Son état n'est pas
+                    // un score : la fiche de l'élève garde la mesure. Mais la
+                    // barre de CE contrôle dit ce qu'il a dit, tant qu'aucune
+                    // séance plus récente ne l'a contredit (voir
+                    // PretControle.MemeSeance). Une copie notée garde le
+                    // dessus : elle ne descend jamais sur son mot.
+                    // L'état écrit dans la ligne `notions:` d'abord ; celui lu
+                    // dans l'observation s'il est le seul, ou s'il vient d'un
+                    // verdict plus récent que l'état écrit.
+                    var jugement = ligne.EtatProfesseur;
+                    var jugeLe = ligne.EtatProfesseurLe;
+
+                    if (deduits.TryGetValue(ligne.Id, out var lu)
+                        && (jugement is null || controle.PretLe > jugeLe))
+                    {
+                        jugement = lu;
+                        jugeLe = controle.PretLe;
+                    }
+
+                    if (jugement is not null
+                        && jugeLe is DateTime le
+                        && PretControle.ProfesseurPrevaut(le, mesuree?.DerniereEvaluation))
+                    {
+                        var pourcentProfesseur = PretControle.PourcentEtat(jugement);
+
+                        if (!valideeParMesure || pourcentProfesseur >= pourcent)
+                        {
+                            pourcent = pourcentProfesseur;
+                            etat = PretControle.EtatAfficheDe(jugement);
+                        }
+                    }
+
                     notions.Add(new NotionControle
                     {
                         Id = ligne.Id,
                         CompetenceId = ligne.CompetenceId,
                         Libelle = ligne.Libelle,
-                        Etat = EtatAffiche(etatMesure, ligne.TravailleeLe),
+                        Etat = etat,
                         EtatMesure = etatMesure,
-                        Pourcent = PourcentNotion(mesuree?.Score, ligne.TravailleeLe),
+                        Pourcent = pourcent,
                         TravailleeLe = ligne.TravailleeLe,
                         Resultat = ligne.Resultat,
-
-                        // Les mêmes sources que le verrou du moteur de
-                        // maîtrise (voir MaitriseRepository.EstUneMesure) :
-                        // c'est la même distinction, lue au même endroit.
-                        ValideeParMesure = mesuree?.Source is "Evaluation" or "Controle",
+                        EtatProfesseur = jugement,
+                        EtatProfesseurLe = jugement is null ? null : jugeLe,
+                        ValideeParMesure = valideeParMesure,
                     });
                 }
 
@@ -443,6 +507,7 @@ namespace SchoolWebApp.Dal.Repositories
             if (controle is null) return 0;
 
             var existantes = await _context.ControlesNotions
+                .Include(n => n.Competence)
                 .Where(n => n.ControleId == controleId)
                 .ToListAsync(ct);
 
@@ -454,15 +519,11 @@ namespace SchoolWebApp.Dal.Repositories
                 var libelle = Tronquer(notion.Libelle, 200);
                 if (libelle is null) continue;
 
-                // Rapprochement par compétence quand elle est connue, par
-                // libellé normalisé sinon — une contrainte unique sur du texte
-                // libre serait ingérable (casse, accents, ponctuation).
-                var deja = notion.CompetenceId.HasValue
-                    ? existantes.FirstOrDefault(n => n.CompetenceId == notion.CompetenceId)
-                    : existantes.FirstOrDefault(n => n.CompetenceId == null && Cle(n.Libelle) == Cle(libelle));
+                var deja = LigneDeLaNotion(existantes, notion);
 
                 if (deja is not null)
                 {
+                    Rattacher(deja, notion, libelle);
                     if (travaillee) deja.TravailleeLe = maintenant;
                     touchees++;
                     continue;
@@ -623,6 +684,70 @@ namespace SchoolWebApp.Dal.Repositories
             await _context.SaveChangesAsync(ct);
 
             return true;
+        }
+
+        public async Task<int> AllegerControlesPassesAsync(
+            DateTime maintenant, int lot, CancellationToken ct = default)
+        {
+            // UN MOIS APRÈS LA DATE, DEUX SI LE BILAN N'EST PAS FAIT : une copie
+            // rendue trois ou cinq semaines plus tard doit encore pouvoir être
+            // analysée avec ses notions. « Fait » = bilan posé, ou relances
+            // épuisées (le contrôle ne remonte alors plus jamais).
+            var unMois = maintenant.Date.AddMonths(-1);
+            var deuxMois = maintenant.Date.AddMonths(-2);
+
+            var ids = await _context.ControlesScolaires
+                .AsNoTracking()
+                .Where(c => (c.DateControle < deuxMois
+                        || (c.DateControle < unMois
+                            && (c.BilanLe != null || c.RelancesBilan >= ControleScolaire.RelancesMaximum)))
+                    && (c.PretObservation != null
+                        || c.StyleCorrection != null
+                        || _context.ControlesDocuments.Any(d => d.ControleId == c.Id)
+                        || _context.ControlesNotions.Any(n => n.ControleId == c.Id)))
+                .OrderBy(c => c.DateControle)
+                .Select(c => c.Id)
+                .Take(lot)
+                .ToListAsync(ct);
+
+            if (ids.Count == 0) return 0;
+
+            // Le score de maîtrise de chaque notion vit dans `MaitriseEleve` :
+            // le détail par notion du contrôle peut partir sans qu'aucun score
+            // ne bouge.
+            await _context.ControlesDocuments.Where(d => ids.Contains(d.ControleId)).ExecuteDeleteAsync(ct);
+            await _context.ControlesNotions.Where(n => ids.Contains(n.ControleId)).ExecuteDeleteAsync(ct);
+            await _context.ControlesScolaires
+                .Where(c => ids.Contains(c.Id))
+                .ExecuteUpdateAsync(s => s
+                    .SetProperty(c => c.PretObservation, (string?)null)
+                    .SetProperty(c => c.StyleCorrection, (string?)null), ct);
+
+            return ids.Count;
+        }
+
+        public async Task<int> SupprimerControlesAnneesPasseesAsync(
+            DateTime maintenant, int lot, CancellationToken ct = default)
+        {
+            var debutAnnee = new DateTime(AnneeScolaire.Debut(maintenant), 8, 1);
+
+            var aSupprimer = await _context.ControlesScolaires
+                .AsNoTracking()
+                .Where(c => c.DateControle < debutAnnee)
+                .OrderBy(c => c.DateControle)
+                .Select(c => new { c.Id, c.EleveId })
+                .Take(lot)
+                .ToListAsync(ct);
+
+            var supprimes = 0;
+            foreach (var c in aSupprimer)
+            {
+                // Le même chemin que la suppression à la main : cascade des
+                // notions et documents, et blocs retirés des messages.
+                if (await SupprimerAsync(c.EleveId, c.Id, ct)) supprimes++;
+            }
+
+            return supprimes;
         }
 
         /// <summary>
@@ -810,6 +935,7 @@ namespace SchoolWebApp.Dal.Repositories
         public async Task<bool> PoserVerdictPretAsync(
             int eleveId, int controleId, int matiereId,
             string verdict, string? observation, DateTime maintenant,
+            IReadOnlyList<EtatNotionDeclare>? notions = null,
             CancellationToken ct = default)
         {
             var valide = PretControle.VerdictValide(verdict);
@@ -855,8 +981,62 @@ namespace SchoolWebApp.Dal.Repositories
             controle.PretObservation = string.IsNullOrWhiteSpace(observation) ? null : observation.Trim();
             controle.PretLe = maintenant;
 
+            if (notions is { Count: > 0 })
+            {
+                await PoserEtatsDuProfesseurAsync(controleId, notions, maintenant, ct);
+            }
+
             await _context.SaveChangesAsync(ct);
             return true;
+        }
+
+        /// <summary>
+        /// L'état que le professeur donne à chaque notion avec son verdict —
+        /// Camara, le 13/10/2026. Rapproché par libellé : le nom du
+        /// référentiel ou le texte libre, à l'accent et à la casse près ; à
+        /// défaut, l'un contenu dans l'autre, si une seule notion répond. Ce
+        /// qui ne se rapproche pas n'écrit rien : poser « tenue » sur la
+        /// mauvaise notion serait pire que de laisser la barre.
+        /// </summary>
+        private async Task PoserEtatsDuProfesseurAsync(
+            int controleId, IReadOnlyList<EtatNotionDeclare> notions, DateTime maintenant, CancellationToken ct)
+        {
+            var lignes = await _context.ControlesNotions
+                .Include(n => n.Competence)
+                .Where(n => n.ControleId == controleId)
+                .ToListAsync(ct);
+
+            if (lignes.Count == 0) return;
+
+            foreach (var notion in notions)
+            {
+                var etat = PretControle.EtatNotionValide(notion.Etat);
+                if (etat is null) continue;
+
+                var cle = LibelleNotion.CleSouple(notion.Libelle);
+                if (cle.Length == 0) continue;
+
+                var ligne = lignes.FirstOrDefault(
+                    n => LibelleNotion.CleSouple(n.Competence?.Libelle ?? n.Libelle) == cle);
+
+                if (ligne is null)
+                {
+                    var proches = lignes
+                        .Where(n =>
+                        {
+                            var sienne = LibelleNotion.CleSouple(n.Competence?.Libelle ?? n.Libelle);
+                            return sienne.Contains(cle) || cle.Contains(sienne);
+                        })
+                        .ToList();
+
+                    if (proches.Count == 1) ligne = proches[0];
+                }
+
+                if (ligne is null) continue;
+
+                ligne.EtatProfesseur = etat;
+                ligne.EtatProfesseurLe = maintenant;
+            }
         }
 
         public async Task<ResultatEnregistre?> EnregistrerResultatAsync(
@@ -881,6 +1061,7 @@ namespace SchoolWebApp.Dal.Repositories
             controle.BilanLe = maintenant;
 
             var lignes = await _context.ControlesNotions
+                .Include(n => n.Competence)
                 .Where(n => n.ControleId == controleId)
                 .ToListAsync(ct);
 
@@ -911,11 +1092,13 @@ namespace SchoolWebApp.Dal.Repositories
                 var libelle = Tronquer(notion.Libelle, 200);
                 if (libelle is null) continue;
 
-                var ligne = notion.CompetenceId.HasValue
-                    ? lignes.FirstOrDefault(n => n.CompetenceId == notion.CompetenceId)
-                    : lignes.FirstOrDefault(n => n.CompetenceId == null && Cle(n.Libelle) == Cle(libelle));
+                var ligne = LigneDeLaNotion(lignes, notion);
 
-                if (ligne is null)
+                if (ligne is not null)
+                {
+                    Rattacher(ligne, notion, libelle);
+                }
+                else
                 {
                     ligne = new ControleNotion
                     {
@@ -1211,6 +1394,25 @@ namespace SchoolWebApp.Dal.Repositories
             await _context.SaveChangesAsync(ct);
         }
 
+        public async Task<bool> SignalerEchecLectureDocumentAsync(
+            int documentId, DateTime maintenant, CancellationToken ct = default)
+        {
+            // En SQL, d'un bloc : la séance et la tâche de fond peuvent échouer
+            // sur le même document au même moment.
+            await _context.ControlesDocuments
+                .Where(d => d.Id == documentId && d.Transcription == null)
+                .ExecuteUpdateAsync(s => s.SetProperty(d => d.Tentatives, d => d.Tentatives + 1), ct);
+
+            var abandonnes = await _context.ControlesDocuments
+                .Where(d => d.Id == documentId && d.Transcription == null && d.Tentatives >= DocumentControle.LecturesMax)
+                .ExecuteUpdateAsync(s => s
+                    .SetProperty(d => d.Transcription, DocumentControle.MentionAbandon)
+                    .SetProperty(d => d.Donnees, (byte[]?)null)
+                    .SetProperty(d => d.DonneesEffaceesLe, maintenant), ct);
+
+            return abandonnes > 0;
+        }
+
         public async Task<IReadOnlyList<DocumentControle>> GetCoursPourSeanceAsync(
             int controleId, CancellationToken ct = default)
         {
@@ -1232,6 +1434,86 @@ namespace SchoolWebApp.Dal.Repositories
                     DateCreation = d.DateCreation,
                 })
                 .ToListAsync(ct);
+        }
+
+        /// <summary>
+        /// L'état de chaque ligne tel que l'observation du professeur le dit,
+        /// par identifiant de ligne. Même rapprochement que la ligne `notions:` :
+        /// à la plume près, sinon l'un contenu dans l'autre si une seule ligne
+        /// répond.
+        /// </summary>
+        private static Dictionary<int, string> EtatsDeduits(string? observation, List<(int Id, string Libelle)> lignes)
+        {
+            var deduits = new Dictionary<int, string>();
+
+            foreach (var lu in ObservationPret.Etats(observation))
+            {
+                if (TrouverParLibelle(lignes, lu.Libelle) is int id) deduits.TryAdd(id, lu.Etat);
+            }
+
+            return deduits;
+        }
+
+        private static int? TrouverParLibelle(List<(int Id, string Libelle)> lignes, string libelle)
+        {
+            var cle = LibelleNotion.CleSouple(libelle);
+            if (cle.Length == 0) return null;
+
+            var exacte = lignes.Where(l => LibelleNotion.CleSouple(l.Libelle) == cle).ToList();
+            if (exacte.Count > 0) return exacte[0].Id;
+
+            var proches = lignes
+                .Where(l =>
+                {
+                    var sienne = LibelleNotion.CleSouple(l.Libelle);
+                    return sienne.Length > 0 && (sienne.Contains(cle) || cle.Contains(sienne));
+                })
+                .ToList();
+
+            return proches.Count == 1 ? proches[0].Id : null;
+        }
+
+        /// <summary>
+        /// LA MÊME NOTION NE PREND JAMAIS DEUX LIGNES — relevé en prod le
+        /// 13/10/2026 (Syan, 3e) : « l’Univers » au référentiel, « l'Univers »
+        /// sous la plume du professeur, et deux lignes pour une seule notion —
+        /// l'une mesurée, l'autre coincée à 25 % qui tirait la moyenne vers le
+        /// bas. Le seul endroit où l'on cherche une ligne existante, pour les
+        /// deux chemins qui en créent (le programme et le résultat d'une copie).
+        ///
+        /// Par la compétence d'abord. Puis par le libellé, à la plume près
+        /// (accents, casse, apostrophes, « de … ») : une ligne en texte libre
+        /// répond toujours ; une ligne déjà rattachée seulement si la notion
+        /// cherchée n'a pas de compétence — deux compétences de deux classes
+        /// peuvent porter le même nom, et ce ne sont pas les mêmes.
+        /// </summary>
+        private static ControleNotion? LigneDeLaNotion(List<ControleNotion> lignes, NotionDeclaree notion)
+        {
+            if (notion.CompetenceId is int id && lignes.FirstOrDefault(n => n.CompetenceId == id) is { } rattachee)
+            {
+                return rattachee;
+            }
+
+            var cle = LibelleNotion.CleSouple(notion.Libelle);
+            if (cle.Length == 0) return null;
+
+            return lignes.FirstOrDefault(n =>
+                (n.CompetenceId is null || notion.CompetenceId is null)
+                && LibelleNotion.CleSouple(n.Competence?.Libelle ?? n.Libelle) == cle);
+        }
+
+        /// <summary>
+        /// Une ligne en texte libre retrouvée par son libellé, alors que la
+        /// notion arrive rattachée : elle prend la compétence et le libellé du
+        /// référentiel. C'est ce qui la rend MESURABLE — sans compétence, aucune
+        /// observation ne l'atteint jamais.
+        /// </summary>
+        private static void Rattacher(ControleNotion ligne, NotionDeclaree notion, string libelle)
+        {
+            if (ligne.CompetenceId is not null || notion.CompetenceId is not int id) return;
+
+            ligne.CompetenceId = id;
+            ligne.Libelle = libelle;
         }
 
         private static string? Tronquer(string? texte, int max)

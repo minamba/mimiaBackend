@@ -15,5 +15,6 @@ namespace SchoolWebApp.Domain.Models
         string? Notes,
         string? Url,
         string? DernierHashPage,
-        string? DernierStatutVeille);
+        string? DernierStatutVeille,
+        DateTime? CopieArchiveDu = null);
 }

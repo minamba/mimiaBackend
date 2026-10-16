@@ -38,7 +38,8 @@ namespace SchoolWebApp.Domain.Repositories
         /// signal disparaîtrait de l'écran au bout d'un jour.
         /// </summary>
         Task EnregistrerReleveAsync(
-            int id, string hash, string? statut, DateTime maintenant, CancellationToken ct = default);
+            int id, string hash, string? statut, DateTime maintenant, DateTime? copieArchiveDu = null,
+            CancellationToken ct = default);
 
         /// <summary>
         /// Enregistre un relevé EN ÉCHEC : la page n'a pas pu être lue. Ne

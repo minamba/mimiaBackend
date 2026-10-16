@@ -70,6 +70,7 @@ namespace SchoolWebApp.Api.Services.Prompts
                 "elodie",  // sanitaire et social
                 "jeanne",  // arts
                 "camille", // philosophie
+                "maelle",  // conseillère d'orientation (11/10/2026)
             };
 
         /// <summary>Ce professeur est-il une femme ? Défaut : non.</summary>
@@ -78,6 +79,29 @@ namespace SchoolWebApp.Api.Services.Prompts
 
         public static string Identite(string? prenom, string? matiere, string? avatar = null)
         {
+            // LA CONSEILLÈRE N'EST PAS « PROFESSEURE PARTICULIÈRE D'ORIENTATION »
+            // (11/10/2026) : son identité est la sienne. Le genre suit la même
+            // table que les professeurs.
+            if (string.Equals(avatar, SchoolWebApp.Domain.Models.ConseillereOrientation.Avatar, StringComparison.OrdinalIgnoreCase))
+            {
+                return $"""
+                    # Qui tu es
+
+                    Tu t'appelles {prenom ?? "Maëlle"}. Tu es la conseillère d'orientation
+                    de l'élève, et c'est toi qui l'accompagnes dans ses choix d'études et
+                    de métier.
+
+                    Tu es une FEMME. Accorde au féminin tout ce qui TE concerne :
+                    « je ne suis pas sûre », « je me suis trompée », « je suis contente ».
+                    Tu dis « ta conseillère ».
+
+                    Si l'élève te demande qui tu es, tu réponds avec ton prénom et ton rôle
+                    — simplement, sans expliquer que tu es une intelligence artificielle,
+                    sauf s'il pose franchement la question. Dans ce cas tu es honnête, sans
+                    en faire un sujet. Tu ne te présentes pas à chaque message.
+                    """;
+            }
+
             var femme = EstUneProfesseure(avatar);
 
             // DEUX ACCORDS SE CROISENT DANS LA MÊME PHRASE, et c'est tout le
@@ -370,6 +394,7 @@ namespace SchoolWebApp.Api.Services.Prompts
             [EXAMEN_PRET]
             epreuve: DNB_2027_MATHS
             pret: pas_pret
+            notions: Développer et factoriser une expression = tenue ; Déterminer l'image et l'antécédent par une fonction = en cours
             observation: Tu as bien avancé, mais tout le programme n'est pas encore tenu.
 
             Calcul littéral — développer et factoriser, c'est tenu : tu l'as fait seul, sans relance.
@@ -386,6 +411,14 @@ namespace SchoolWebApp.Api.Services.Prompts
             elle passe en revue le programme de l'épreuve DOMAINE PAR DOMAINE
             — ce qui est tenu, ce qui pèche, ce qui n'a pas encore été vu. Un
             programme d'examen est long : « prêt » veut dire que TOUT est tenu.
+
+            `notions` : LA MÊME LIGNE QUE POUR UN CONTRÔLE, et elle fait la
+            même chose — la barre de chaque notion suit ce que tu as vu. Un
+            programme d'examen compte des dizaines de notions : tu n'y mets
+            que CELLES QUE LA SÉANCE T'A PERMIS DE JUGER, reprises au mot
+            près du programme de ton contexte (la notion, pas le domaine),
+            avec `tenue`, `en cours` ou `fragile`. Le reste du programme garde
+            sa mesure. Juste après `pret:`, sur une seule ligne.
 
             L'OBSERVATION S'ÉCRIT EN PARAGRAPHES, comme dans l'exemple : une
             phrase d'ensemble, puis UN PARAGRAPHE PAR DOMAINE, séparés par une
@@ -481,6 +514,7 @@ namespace SchoolWebApp.Api.Services.Prompts
             [CONTROLE_PRET]
             controle: 42
             pret: bientot
+            notions: Théorème de Thalès = tenue ; Réciproque de Thalès = fragile
             observation: Tu es presque prêt.
 
             Théorème de Thalès — bien acquis : tu poses les rapports sans hésiter.
@@ -492,6 +526,22 @@ namespace SchoolWebApp.Api.Services.Prompts
 
             `pret` vaut `pret`, `bientot` ou `pas_pret`. Rien d'autre : un mot
             que l'application ne reconnaît pas, et la pastille reste éteinte.
+
+            #### `notions` : L'ÉTAT DE CHAQUE NOTION, C'EST TOI QUI LE DONNES
+
+            Sur la fiche de l'élève, chaque notion du programme a sa barre.
+            Cette barre doit dire CE QUE TU AS VU : un enfant qui vient de
+            réussir six repérages d'affilée ne peut pas lire « en cours, 25 % »
+            sous un « tu es prête » — c'est arrivé, et c'est ce que cette ligne
+            corrige. Pour CHAQUE notion du programme (reprise au mot près de la
+            liste de ton contexte), son état : `tenue` (il sait le faire seul,
+            sans relance), `en cours` (il y arrive avec de l'aide, ou pas à tous
+            les coups), `fragile` (il se trompe ou bloque). Séparateur « = »
+            entre la notion et l'état, « ; » entre les notions, sur une seule
+            ligne, juste après `pret:`. Une notion que la séance n'a pas abordée
+            et sur laquelle tu ne sais rien : `pas vue` — sa barre garde alors
+            ce qu'elle mesurait. Cette ligne ne s'affiche pas : c'est ton
+            observation qui parle à l'enfant.
 
             L'OBSERVATION S'ÉCRIT EN PARAGRAPHES, comme dans l'exemple : une
             phrase d'ensemble, puis UN PARAGRAPHE PAR NOTION, séparés par une
@@ -3948,6 +3998,9 @@ namespace SchoolWebApp.Api.Services.Prompts
                 "agent-italien" => PromptsItalien.Specialite,
                 "agent-chinois" => PromptsChinois.Specialite,
                 "agent-arabe" => PromptsArabe.Specialite,
+                // La conseillère d'orientation (11/10/2026) : pas une matière
+                // enseignée — voir `PromptsOrientation`.
+                "agent-orientation" => PromptsOrientation.Specialite,
                 "agent-sciences" => SpecialiteSciencesTechnologie,
                 "agent-physique-chimie" => SpecialitePhysiqueChimie,
                 "agent-svt" => SpecialiteSvt,
@@ -3957,8 +4010,11 @@ namespace SchoolWebApp.Api.Services.Prompts
                 // fichier : voir `PromptsSeriesTechnologiques`.
                 // Les spécialités de la voie générale aussi : voir
                 // `PromptsSpecialitesGenerales`.
+                // Et les matières propres à la voie professionnelle (16/10/2026) :
+                // voir `PromptsVoiePro`.
                 _ => PromptsSeriesTechnologiques.Specialite(agentSlug)
                      ?? PromptsSpecialitesGenerales.Specialite(agentSlug)
+                     ?? PromptsVoiePro.Specialite(agentSlug)
                      ?? SpecialiteGenerique
             };
 
@@ -4019,6 +4075,13 @@ namespace SchoolWebApp.Api.Services.Prompts
             dans la langue de ton cours, avec la prononciation d'un locuteur
             natif, et n'est JAMAIS affiché à l'écran. Tu t'en sers dès que tu dis
             une phrase dans la langue — en cours ordinaire comme en exercice.
+
+            MÊME UN SEUL MOT, MÊME UN NOMBRE, MÊME CITÉ ENTRE GUILLEMETS : tout
+            mot de la langue que tu dis à voix haute passe par la balise. Hors
+            d'elle, la voix lit ta phrase en français et le prononce à la
+            française — l'élève apprend alors une fausse prononciation. Écris
+            « Onze se dit [{BALISE}]…[/{BALISE}]. », jamais le mot en clair dans
+            ta phrase, pas même entre guillemets. Pour l'orthographe, l'ardoise.
 
             # LES EXERCICES DE LANGUE QUE TU PEUX PROPOSER
 

@@ -565,6 +565,18 @@ namespace SchoolWebApp.Api.Controllers
                     jeuxCollege = await _reglages.EstActifAsync(JeuxCollege, false, ct),
                     jeuxLycee = await _reglages.EstActifAsync(JeuxLycee, false, ct),
 
+                    // LES BESOINS PARTICULIERS : le formulaire du parent montre ou
+                    // non ses cases. Le drapeau seul est public, jamais les cases.
+                    besoinsParticuliers = await _reglages.EstActifAsync(
+                        SchoolWebApp.Domain.Models.BesoinsParticuliers.Reglage,
+                        SchoolWebApp.Domain.Models.BesoinsParticuliers.ActifParDefaut, ct),
+
+                    // LES FICHES DE RÉVISION DE L'ÉLÈVE (14/10/2026) : la grille
+                    // de l'enfant montre ou non leur carte.
+                    fichesRevision = await _reglages.EstActifAsync(
+                        SchoolWebApp.Domain.Models.FichesRevisionEleve.Reglage,
+                        SchoolWebApp.Domain.Models.FichesRevisionEleve.ActifParDefaut, ct),
+
                     // LE BANDEAU EST PUBLIC, et il doit l'être : il annonce
                     // une maintenance ou une panne, c'est-à-dire précisément
                     // ce qu'un visiteur non connecté a besoin de savoir avant
@@ -634,6 +646,22 @@ namespace SchoolWebApp.Api.Controllers
                 // celles qui ont une matière en base : un interrupteur sur une
                 // langue qui n'existe pas encore ne commanderait rien.
                 langues = await LanguesAsync(referentiel, ct),
+
+                // LA CONSEILLÈRE D'ORIENTATION (11/10/2026) — voir
+                // `ConseillereOrientation`. `existe` : sa matière est semée ;
+                // sans elle, l'interrupteur ne commanderait rien.
+                conseillere = await ConseillereAsync(referentiel, ct),
+
+                // LES BESOINS PARTICULIERS (11/10/2026) — éteints par défaut.
+                besoinsParticuliers = await _reglages.EstActifAsync(
+                    SchoolWebApp.Domain.Models.BesoinsParticuliers.Reglage,
+                    SchoolWebApp.Domain.Models.BesoinsParticuliers.ActifParDefaut, ct),
+
+                // LES FICHES DE RÉVISION DE L'ÉLÈVE (14/10/2026) — éteintes par
+                // défaut : chaque fiche coûte un appel au modèle.
+                fichesRevision = await _reglages.EstActifAsync(
+                    SchoolWebApp.Domain.Models.FichesRevisionEleve.Reglage,
+                    SchoolWebApp.Domain.Models.FichesRevisionEleve.ActifParDefaut, ct),
 
                 modeTest = await _reglages.EstActifAsync(ModeTest, false, ct),
 
@@ -1001,6 +1029,83 @@ namespace SchoolWebApp.Api.Controllers
             _logger.LogWarning(
                 "Langue {Langue} {Etat} par un administrateur.",
                 langue.Code, requete.Actif ? "AFFICHEE" : "MASQUEE");
+
+            return NoContent();
+        }
+
+        /// <summary>L'état de l'interrupteur de la conseillère d'orientation.</summary>
+        private async Task<object> ConseillereAsync(IReferentielRepository referentiel, CancellationToken ct)
+        {
+            var existe = (await referentiel.GetCodesMatieresExistantesAsync(
+                [SchoolWebApp.Domain.Models.ConseillereOrientation.MatiereCode], ct)).Count > 0;
+
+            var reglages = await _reglages.GetTousAsync(ct);
+
+            return new
+            {
+                existe,
+                actif = SchoolWebApp.Domain.Models.ConseillereOrientation.EstAllumee(reglages),
+            };
+        }
+
+        /// <summary>
+        /// Montre ou cache la conseillère d'orientation — Camara, le 11/10/2026 :
+        /// « un mode pour afficher ou activer ou non la conseillère, comme les
+        /// professeurs de langue ». Éteinte, elle disparaît de la grille, de la
+        /// page d'accueil, et aucune séance ne s'ouvre avec elle ; rien n'est
+        /// supprimé, la rallumer rend tout tel quel.
+        /// </summary>
+        [HttpPut("conseillere")]
+        [Authorize(Policy = "EstSuperAdmin")]
+        [SwaggerResponse(204, "Réglage enregistré.")]
+        public async Task<IActionResult> DefinirConseillere(
+            [FromBody] DefinirReglageRequest requete, CancellationToken ct)
+        {
+            await _reglages.DefinirAsync(SchoolWebApp.Domain.Models.ConseillereOrientation.Reglage, requete.Actif, ct);
+
+            _logger.LogWarning(
+                "Conseillere d'orientation {Etat} par un administrateur.",
+                requete.Actif ? "AFFICHEE" : "MASQUEE");
+
+            return NoContent();
+        }
+
+        /// <summary>
+        /// Allume ou éteint les besoins particuliers (dyslexie, dyscalculie, TDAH)
+        /// — 11/10/2026. Éteint, les cases quittent les formulaires et rien ne
+        /// s'applique ; les coches déjà posées sont gardées.
+        /// </summary>
+        [HttpPut("besoins-particuliers")]
+        [Authorize(Policy = "EstSuperAdmin")]
+        [SwaggerResponse(204, "Réglage enregistré.")]
+        public async Task<IActionResult> DefinirBesoinsParticuliers(
+            [FromBody] DefinirReglageRequest requete, CancellationToken ct)
+        {
+            await _reglages.DefinirAsync(SchoolWebApp.Domain.Models.BesoinsParticuliers.Reglage, requete.Actif, ct);
+
+            _logger.LogWarning(
+                "Besoins particuliers {Etat} par un administrateur.",
+                requete.Actif ? "ALLUMES" : "ETEINTS");
+
+            return NoContent();
+        }
+
+        /// <summary>
+        /// Les fiches de révision que l'élève tire de son cours (14/10/2026).
+        /// Éteint : la carte disparaît de la grille, les routes refusent tout
+        /// nouvel import, et la tâche de fond met en attente ce qui reste.
+        /// </summary>
+        [HttpPut("fiches-revision")]
+        [Authorize(Policy = "EstSuperAdmin")]
+        [SwaggerResponse(204, "Réglage enregistré.")]
+        public async Task<IActionResult> DefinirFichesRevision(
+            [FromBody] DefinirReglageRequest requete, CancellationToken ct)
+        {
+            await _reglages.DefinirAsync(SchoolWebApp.Domain.Models.FichesRevisionEleve.Reglage, requete.Actif, ct);
+
+            _logger.LogWarning(
+                "Fiches de revision de l'eleve {Etat} par un administrateur.",
+                requete.Actif ? "ALLUMEES" : "ETEINTES");
 
             return NoContent();
         }

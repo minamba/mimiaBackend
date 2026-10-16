@@ -134,8 +134,18 @@ namespace SchoolWebApp.Domain.Models
         public string? Resultat { get; set; }
 
         /// <summary>
+        /// L'état que le professeur a donné à cette notion à la fin de la
+        /// dernière préparation (« tenue », « en-cours », « fragile »), ou
+        /// null s'il ne s'est pas prononcé. Voir <see cref="PretControle"/>.
+        /// </summary>
+        public string? EtatProfesseur { get; set; }
+
+        public DateTime? EtatProfesseurLe { get; set; }
+
+        /// <summary>
         /// Où il en est SUR CETTE NOTION, de 0 à 100 — la mesure du moteur de
-        /// maîtrise, ramenée sur cent.
+        /// maîtrise, ramenée sur cent ; ou l'état du professeur quand il est
+        /// plus récent (voir le dépôt).
         ///
         /// C'est ce qui donne à la fiche sa raison d'être : une barre par
         /// notion montre à l'enfant ce qui est tenu et ce qui reste, là où un

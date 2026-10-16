@@ -24,6 +24,9 @@ namespace SchoolWebApp.Domain.Models
     /// </summary>
     public static class OngletsAdmin
     {
+        /// <summary>Le droit de créer un enfant pour un parent, depuis l'onglet Parents.</summary>
+        public const string CreationEnfant = "creation_enfant";
+
         /// <summary>
         /// Les clés, dans l'ordre de la barre d'onglets.
         ///
@@ -47,6 +50,12 @@ namespace SchoolWebApp.Domain.Models
             // — la barre d'onglets ne les connaît pas, donc ils n'y créent rien.
             "cout",
             "revenu",
+
+            // UN GESTE DE L'ONGLET PARENTS — voulu par Camara le 16/10/2026 :
+            // le bouton « Créer un enfant » sur la ligne d'un parent. Décoché,
+            // le bouton n'existe pas, et la route le refuse aussi
+            // (AdminController.CreerEnfant) : un bouton caché n'interdit rien.
+            CreationEnfant,
 
             "mails",
             "promos",

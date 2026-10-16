@@ -41,6 +41,15 @@ namespace SchoolWebApp.Dal.Entities
 
         public DateTime? DonneesEffaceesLe { get; set; }
 
+        /// <summary>
+        /// Les lectures qui ont PLANTÉ (pas celles qui ont rendu un texte vide).
+        /// Au bout de trois, le document est déclaré illisible et ses octets
+        /// partent (Camara, le 16/10/2026) : sans cette limite, un fichier qui
+        /// fait toujours échouer la lecture restait en base pour toujours, et
+        /// chaque séance repayait un essai.
+        /// </summary>
+        public int Tentatives { get; set; }
+
         public DateTime DateCreation { get; set; }
 
         public virtual ControleScolaire? Controle { get; set; }

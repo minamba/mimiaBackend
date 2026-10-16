@@ -193,6 +193,9 @@ namespace SchoolWebApp.Dal.Repositories
         /// sur un silence. Un seul message suffit en revanche à ne rien
         /// perdre : mieux vaut un bilan trop bref que pas de bilan du tout.
         /// </summary>
+        /// <summary>Un échange qui suit le rapport de si près n'est qu'un au revoir.</summary>
+        private static readonly TimeSpan AuRevoirApresRapport = TimeSpan.FromMinutes(10);
+
         public async Task<bool> ADuTravailNonConcluAsync(int conversationId, CancellationToken ct = default)
         {
             var dernierRapport = await _context.RapportsSeance
@@ -203,11 +206,41 @@ namespace SchoolWebApp.Dal.Repositories
 
             var depuis = dernierRapport ?? DateTime.MinValue;
 
-            return await _context.Messages.AnyAsync(
-                m => m.ConversationId == conversationId
+            var dernierMessageEleve = await _context.Messages
+                .Where(m => m.ConversationId == conversationId
                     && m.Role == "user"
-                    && m.DateCreation > depuis,
+                    && m.DateCreation > depuis)
+                .OrderByDescending(m => m.DateCreation)
+                .Select(m => (DateTime?)m.DateCreation)
+                .FirstOrDefaultAsync(ct);
+
+            if (dernierMessageEleve is null) return false;
+
+            // UN AU REVOIR APRÈS LE RAPPORT N'EST PAS DU TRAVAIL — relevé le
+            // 11/10/2026 : rapport écrit, puis « Merci, bon dimanche » — « À très
+            // bientôt ! [FIN_SEANCE] ». L'élève a cliqué sur « Quitter » : ce
+            // dernier échange passait pour du travail non conclu, une conclusion
+            // était forcée, le professeur écrivait un rapport vide (« rien de
+            // nouveau ») qui, à moins de deux minutes du vrai, LE REMPLAÇAIT.
+            // Le professeur a répondu au dernier message de l'élève en fermant
+            // la séance, ET un rapport précède de peu cet échange : ce n'était
+            // qu'un au revoir, la séance est conclue. Sans rapport récent, on
+            // conclut quand même — un [FIN_SEANCE] sans [RAPPORT] ne doit pas
+            // faire perdre le compte rendu du travail.
+            if (dernierRapport is null || dernierMessageEleve.Value - dernierRapport.Value > AuRevoirApresRapport)
+            {
+                return true;
+            }
+
+            var fermeeApres = await _context.Messages.AnyAsync(
+                m => m.ConversationId == conversationId
+                    && m.Role == "assistant"
+                    && m.DateCreation >= dernierMessageEleve
+                    && m.Contenu != null
+                    && m.Contenu.Contains("[FIN_SEANCE]"),
                 ct);
+
+            return !fermeeApres;
         }
 
         public async Task<string?> GetIdentityUserIdAsync(

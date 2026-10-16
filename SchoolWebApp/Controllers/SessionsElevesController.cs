@@ -67,7 +67,10 @@ namespace SchoolWebApp.Api.Controllers
         [SwaggerResponse(403, "Accès suspendu par le parent.")]
         [SwaggerResponse(404, "Code inconnu.")]
         [SwaggerResponse(429, "Trop de tentatives.")]
-        public async Task<IActionResult> Ouvrir([FromBody] CodeRequest requete)
+        public async Task<IActionResult> Ouvrir(
+            [FromBody] CodeRequest requete,
+            [FromServices] IEleveRepository repertoireEleves,
+            [FromServices] IReglageRepository reglages)
         {
             var cle = $"session-eleve:{HttpContext.Connection.RemoteIpAddress}";
             var tentatives = _cache.Get<int>(cle);
@@ -116,6 +119,19 @@ namespace SchoolWebApp.Api.Controllers
             _logger.LogInformation(
                 "Session ouverte pour l'eleve {EleveId} ({Session}).", eleve.Id, session.Id);
 
+            // LA CONNEXION DE L'ENFANT COMPTE COMME UNE ACTIVITÉ (11/10/2026) —
+            // dans « dernière activité », qui est la sienne. « Dernière connexion »
+            // reste celle du PARENT : voir ParentRepository.GetParentByIdentityUserIdAsync.
+            await repertoireEleves.NoterActiviteAsync(eleve.Id, HttpContext.RequestAborted);
+
+            // LES BESOINS PARTICULIERS NE PARTENT PAS : l'enfant ne reçoit que
+            // l'affichage qui en découle (11/10/2026).
+            var moduleBesoins = await reglages.EstActifAsync(
+                Domain.Models.BesoinsParticuliers.Reglage, Domain.Models.BesoinsParticuliers.ActifParDefaut,
+                HttpContext.RequestAborted);
+            var affichage = Domain.Models.BesoinsParticuliers.AffichageDe(
+                eleve.BesoinsParticuliers ?? [], eleve.EcranAdapte ?? true, moduleBesoins);
+
             return Ok(new
             {
                 jeton,
@@ -140,6 +156,9 @@ namespace SchoolWebApp.Api.Controllers
                     // lui, la séance d'un enfant entré par son code parlait à un
                     // adolescent de douze ans par défaut.
                     eleve.Age,
+
+                    // L'AFFICHAGE ADAPTÉ (lecture aérée, calme), jamais les besoins.
+                    affichage = new { lectureAeree = affichage.LectureAeree, calme = affichage.Calme },
                 },
             });
         }

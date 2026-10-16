@@ -14,5 +14,6 @@ namespace SchoolWebApp.Domain.Models
         string? DernierStatutVeille,
         DateTime? DernierePageVerifieeLe,
         DateTime? DerniereAlerteLe,
-        DateTime? TraiteeLe);
+        DateTime? TraiteeLe,
+        DateTime? CopieArchiveDu = null);
 }

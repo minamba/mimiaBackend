@@ -311,6 +311,32 @@ namespace SchoolWebApp.Api.Controllers
             return NoContent();
         }
 
+        /// <summary>
+        /// LE FORFAIT EST ÉPUISÉ EN PLEINE SÉANCE — Camara, le 16/10/2026 :
+        /// essai ou formule, le navigateur a coupé la séance à l'échéance. Le
+        /// serveur décompte ce qui restait (un rechargement ne doit pas rendre
+        /// de temps) et marque la sortie, pour que le compte rendu soit écrit.
+        /// </summary>
+        [HttpPost("{id:int}/fin-forfait")]
+        [SwaggerResponse(204, "Reste décompté, sortie enregistrée.")]
+        public async Task<IActionResult> FinForfait(int id)
+        {
+            try
+            {
+                await _chatBuilder.TerminerForfaitAsync(id, HttpContext.RequestAborted);
+                return NoContent();
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return NotFound();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Erreur a la fin de forfait de la conversation {ConversationId}.", id);
+                return NoContent();
+            }
+        }
+
         [HttpPost("{id:int}/quitter")]
         [SwaggerResponse(204, "Sortie enregistrée.")]
         public async Task<IActionResult> Quitter(int id)
@@ -575,7 +601,24 @@ namespace SchoolWebApp.Api.Controllers
             var verdict = await _chatBuilder.VerifierQuotaAsync(
                 conversationId, HttpContext.RequestAborted);
 
-            if (verdict.Autorise) return false;
+            if (verdict.Autorise)
+            {
+                // L'ÉCHÉANCE DU FORFAIT, À CHAQUE TOUR (16/10/2026) : essai ou
+                // formule payante, le navigateur coupe la séance net quand elle
+                // tombe — ni avant, ni après, même au milieu d'une phrase. Rien
+                // n'est envoyé au compte sans limite.
+                var echeance = await _chatBuilder.EcheanceAsync(conversationId, HttpContext.RequestAborted);
+                if (echeance is not null)
+                {
+                    await EcrireEvenementAsync(new
+                    {
+                        type = "echeance",
+                        secondesRestantes = echeance.Secondes,
+                        motif = echeance.Motif.ToString(),
+                    });
+                }
+                return false;
+            }
 
             _logger.LogInformation(
                 "Quota refuse ({Motif}) pour la conversation {ConversationId}.",

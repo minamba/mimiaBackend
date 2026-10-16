@@ -495,6 +495,101 @@ namespace SchoolWebApp.Api.Controllers
             });
 
         /// <summary>
+        /// L'encart « Fiches de révision » de « Mon forfait » (16/10/2026) : la
+        /// réserve de la famille, les fiches du mois de chaque enfant, les
+        /// packs en vente. Séparé des heures, comme à l'écran.
+        /// </summary>
+        [HttpGet("fiches")]
+        [Authorize]
+        [SwaggerResponse(200, "Réserve, fiches du mois par enfant, packs.")]
+        public Task<IActionResult> Fiches(
+            [FromServices] SchoolWebApp.Api.Services.MesFiches.QuotaFichesService quota,
+            [FromServices] ICreditsFichesRepository fiches,
+            [FromServices] AccesForfaitService acces,
+            CancellationToken ct) =>
+            Executer(async parentId =>
+            {
+                var (credits, maximum, remiseLe, enfants) = await quota.LireFamilleAsync(parentId, ct);
+                var porte = await acces.LireAsync(parentId, ct);
+                var packs = (await fiches.GetOffresAsync(ct))
+                    .Select(p => new { p.Code, p.Libelle, p.Fiches, p.PrixCentimes })
+                    .ToList();
+
+                return Ok(new
+                {
+                    // Sans vrai forfait, l'encadré le dit au lieu de vendre des
+                    // crédits qui ne serviraient à rien (16/10/2026).
+                    forfait = porte.Ouvert,
+                    motif = porte.Motif,
+                    credits,
+                    maximum,
+                    remiseLe,
+                    enfants = enfants.Select(e => new { e.Id, e.Prenom, e.Utilisees }),
+                    packs,
+                });
+            });
+
+        /// <summary>
+        /// Achète un pack de fiches de révision pour la famille (15/10/2026).
+        ///
+        /// Même chemin que les heures : une URL de paiement, et le crédit par
+        /// le webhook seulement. Réservé au parent — cette route n'a pas
+        /// `AutoriseEleve`, l'enfant reçoit un 403 du filtre global.
+        ///
+        /// L'essai n'est PAS refusé, à la différence des heures : les crédits
+        /// tiennent à la famille et n'expirent pas, rien ne se perd à la fin
+        /// de l'essai.
+        /// </summary>
+        [HttpPost("fiches")]
+        [Authorize]
+        [SwaggerResponse(200, "L'URL de paiement, ou le nouveau solde pour un compte exempté.")]
+        [SwaggerResponse(404, "Pack inconnu.")]
+        public Task<IActionResult> AcheterFiches(
+            [FromQuery] string pack,
+            [FromServices] ICaisseStripeService caisse,
+            [FromServices] ICreditsFichesRepository fiches,
+            [FromServices] AccesForfaitService acces,
+            [FromServices] IOptions<OptionsStripe> stripe,
+            CancellationToken ct) =>
+            Executer(async parentId =>
+            {
+                if (string.IsNullOrWhiteSpace(pack)) return BadRequest(new { message = "Pack absent." });
+
+                // PAS DE CRÉDITS SANS FORFAIT (16/10/2026) : les fiches sont
+                // fermées en essai, en pause ou sans abonnement — on ne vend pas
+                // ce qui ne pourrait pas servir.
+                if (!(await acces.LireAsync(parentId, ct)).Ouvert)
+                {
+                    return Conflict(new
+                    {
+                        message = "Les fiches de révision sont réservées aux familles abonnées. "
+                                  + "Choisissez une formule pour acheter des crédits.",
+                    });
+                }
+
+                if (await DoitPayerAsync())
+                {
+                    if (!stripe.Value.EstConfigure)
+                    {
+                        _logger.LogError("Achat de fiches demande sans configuration Stripe.");
+                        return StatusCode(503, new
+                        {
+                            message = "Le paiement est momentanément indisponible. Réessayez plus tard.",
+                        });
+                    }
+
+                    var ouverture = await caisse.OuvrirAchatFichesAsync(parentId, pack, ct);
+
+                    return ouverture is null
+                        ? NotFound(new { message = "Pack inconnu." })
+                        : Ok(new { urlPaiement = ouverture.Url });
+                }
+
+                var solde = await fiches.CrediterAsync(parentId, pack, null, null, ct);
+                return solde is null ? NotFound(new { message = "Pack inconnu." }) : Ok(new { credits = solde });
+            });
+
+        /// <summary>
         /// Résout le parent du jeton puis délègue. Extrait parce que les cinq
         /// routes authentifiées partagent la même résolution et le même filet
         /// d'exceptions — cinq copies finiraient par diverger.

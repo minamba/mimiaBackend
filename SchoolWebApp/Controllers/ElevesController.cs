@@ -75,6 +75,102 @@ namespace SchoolWebApp.Api.Controllers
         }
 
         /// <summary>
+        /// L'ENFANT EST ACTIF — Camara, le 11/10/2026 : un enfant qui ne fait que
+        /// jouer ne laissait aucune trace, et « dernière activité » restait figée.
+        /// Les jeux tournent dans le navigateur ; ils appellent cette route au
+        /// lancement d'une partie. Rien d'autre n'est envoyé : ni le jeu, ni le score.
+        /// Au plus une écriture par heure (voir NoterActiviteAsync).
+        /// </summary>
+        [HttpPost("{id:int}/activite")]
+        [SchoolWebApp.Api.Auth.AutoriseEleve]
+        [SwaggerResponse(204, "Activité notée.")]
+        [SwaggerResponse(404, "Profil inexistant ou n appartenant pas à ce compte.")]
+        public async Task<IActionResult> NoterActivite(
+            int id,
+            [FromServices] IEleveRepository eleves,
+            [FromServices] IChatContexteResolver resolveur,
+            CancellationToken ct)
+        {
+            // La même garde que les autres routes enfant : son parent, ou lui-même.
+            var eleve = await resolveur.ResoudreEleveAsync(id);
+            if (eleve is null) return NotFound();
+
+            await eleves.NoterActiviteAsync(id, ct);
+            return NoContent();
+        }
+
+        /// <summary>
+        /// LES RAPPORTS D'ORIENTATION DE L'ÉLÈVE (11/10/2026), le plus récent
+        /// d'abord : un par séance avec la conseillère. L'élève et son parent les
+        /// lisent. Rien quand la conseillère est éteinte.
+        /// </summary>
+        [HttpGet("{id:int}/rapports-orientation")]
+        [SchoolWebApp.Api.Auth.AutoriseEleve]
+        [SwaggerResponse(200, "Les rapports d'orientation.", typeof(IEnumerable<RapportOrientationEleve>))]
+        [SwaggerResponse(404, "Profil inexistant ou n'appartenant pas à ce compte.")]
+        public async Task<IActionResult> GetRapportsOrientation(
+            int id,
+            [FromServices] IRapportOrientationRepository rapports,
+            [FromServices] IReglageRepository reglages,
+            [FromServices] IChatContexteResolver resolveur,
+            CancellationToken ct)
+        {
+            if (await resolveur.ResoudreEleveAsync(id) is null) return NotFound();
+            if (!await ConseillereAllumeeAsync(reglages, ct)) return Ok(Array.Empty<RapportOrientationEleve>());
+
+            return Ok(await rapports.GetParEleveAsync(id, LimiteOrientation, ct));
+        }
+
+        /// <summary>Combien de rapports d'orientation sont nouveaux pour l'élève, et combien en tout : le pied de la carte de la conseillère.</summary>
+        [HttpGet("{id:int}/rapports-orientation/compte")]
+        [SchoolWebApp.Api.Auth.AutoriseEleve]
+        [SwaggerResponse(404, "Profil inexistant ou n'appartenant pas à ce compte.")]
+        public async Task<IActionResult> CompterRapportsOrientation(
+            int id,
+            [FromServices] IRapportOrientationRepository rapports,
+            [FromServices] IReglageRepository reglages,
+            [FromServices] IChatContexteResolver resolveur,
+            CancellationToken ct)
+        {
+            if (await resolveur.ResoudreEleveAsync(id) is null) return NotFound();
+            if (!await ConseillereAllumeeAsync(reglages, ct)) return Ok(new { nouveaux = 0, total = 0 });
+
+            var total = (await rapports.GetParEleveAsync(id, LimiteOrientation, ct)).Count;
+            return Ok(new { nouveaux = await rapports.CompterNouveauxAsync(id, ct), total });
+        }
+
+        /// <summary>
+        /// L'élève a ouvert ses rapports : ils ne sont plus nouveaux. SEULEMENT
+        /// QUAND C'EST LUI : un parent qui regarde son espace ne doit pas lui
+        /// voler la nouveauté.
+        /// </summary>
+        [HttpPost("{id:int}/rapports-orientation/vus")]
+        [SchoolWebApp.Api.Auth.AutoriseEleve]
+        [SwaggerResponse(204, "Marqués comme vus.")]
+        [SwaggerResponse(404, "Profil inexistant ou n'appartenant pas à ce compte.")]
+        public async Task<IActionResult> MarquerRapportsOrientationVus(
+            int id,
+            [FromServices] IRapportOrientationRepository rapports,
+            [FromServices] IChatContexteResolver resolveur,
+            [FromServices] SchoolWebApp.Api.Utils.ICurrentUserAccessor utilisateur,
+            CancellationToken ct)
+        {
+            if (await resolveur.ResoudreEleveAsync(id) is null) return NotFound();
+            if (utilisateur.EleveId == id) await rapports.MarquerVusAsync(id, ct);
+            return NoContent();
+        }
+
+        /// <summary>
+        /// Combien de rapports et d'observations d'orientation on renvoie : la
+        /// page et la fiche les paginent par dix (12/10/2026). Plus de deux cents
+        /// séances avec la conseillère, c'est des années de suivi.
+        /// </summary>
+        private const int LimiteOrientation = 200;
+
+        private static Task<bool> ConseillereAllumeeAsync(IReglageRepository reglages, CancellationToken ct) =>
+            reglages.EstActifAsync(ConseillereOrientation.Reglage, ConseillereOrientation.AllumeeParDefaut, ct);
+
+        /// <summary>
         /// Le calendrier de l'élève : ses vacances, ses séances par matière,
         /// ses évaluations passées, et celles qui restent à venir.
         ///
@@ -200,7 +296,9 @@ namespace SchoolWebApp.Api.Controllers
                 var matieres = await _eleveBuilder.GetMatieresDeLEleveAsync(id);
                 if (matieres is null) return NotFound();
 
-                if (!matieres.Any(m => m.Id == request.MatiereId)) return BadRequest();
+                // On ne prépare pas un contrôle d'orientation (11/10/2026).
+                if (!matieres.Any(m => m.Id == request.MatiereId
+                        && !SchoolWebApp.Domain.Models.ConseillereOrientation.Est(m.Code))) return BadRequest();
 
                 var posePar = utilisateur.EleveId is not null ? "ELEVE" : "PARENT";
 
@@ -718,7 +816,11 @@ namespace SchoolWebApp.Api.Controllers
         [SchoolWebApp.Api.Auth.AutoriseEleve]
         [SwaggerResponse(200, "Fiche de l'enfant.", typeof(FicheEleve))]
         [SwaggerResponse(404, "Profil inexistant ou n'appartenant pas à ce compte.")]
-        public async Task<IActionResult> GetFiche(int id, [FromServices] IAdminService ficheService, [FromQuery] int? niveau = null)
+        public async Task<IActionResult> GetFiche(
+            int id, [FromServices] IAdminService ficheService, [FromServices] IReglageRepository reglages,
+            [FromServices] IRapportOrientationRepository rapportsOrientation,
+            [FromServices] IRapportRepository rapportsSeance,
+            [FromQuery] int? niveau = null)
         {
             try
             {
@@ -740,7 +842,24 @@ namespace SchoolWebApp.Api.Controllers
                 // sans moyen d'en sortir cacherait le reste du dossier.
                 var fiche = await ficheService.GetFicheEleveAsync(
                     id, niveau ?? eleve.NiveauScolaireId);
-                return fiche is null ? NotFound() : Ok(fiche);
+                if (fiche is null) return NotFound();
+
+                // LE PROJET ET LES RAPPORTS D'ORIENTATION SUIVENT LA CONSEILLÈRE :
+                // éteinte, les professeurs ne lisent plus le projet, et la fiche
+                // ne montre ni l'un ni les autres.
+                if (await ConseillereAllumeeAsync(reglages, HttpContext.RequestAborted))
+                {
+                    fiche.RapportsOrientation = await rapportsOrientation.GetParEleveAsync(
+                        id, LimiteOrientation, HttpContext.RequestAborted);
+                    fiche.ObservationsOrientation = await rapportsSeance.GetObservationsOrientationAsync(
+                        id, LimiteOrientation, HttpContext.RequestAborted);
+                }
+                else
+                {
+                    fiche.ProjetOrientation = null;
+                }
+
+                return Ok(fiche);
             }
             catch (Exception ex)
             {
@@ -1488,12 +1607,20 @@ namespace SchoolWebApp.Api.Controllers
         [SwaggerResponse(200, "L'élève demandé.", typeof(EleveViewModel))]
         [SwaggerResponse(404, "Élève inexistant ou n'appartenant pas au parent authentifié.")]
         [SwaggerResponse(401, "Jeton absent ou invalide.")]
-        public async Task<IActionResult> GetEleveById(int id)
+        public async Task<IActionResult> GetEleveById(
+            int id, [FromServices] SchoolWebApp.Api.Utils.ICurrentUserAccessor utilisateur)
         {
             try
             {
                 var eleve = await _eleveBuilder.GetEleveByIdAsync(id);
-                return eleve is null ? NotFound() : Ok(eleve);
+                if (eleve is null) return NotFound();
+
+                // LES BESOINS PARTICULIERS NE PARTENT PAS VERS L'ENFANT (11/10/2026) :
+                // donnée de santé, réservée au parent. L'enfant reçoit son
+                // affichage adapté à l'ouverture de sa session.
+                if (utilisateur.EleveId is not null) eleve.BesoinsParticuliers = [];
+
+                return Ok(eleve);
             }
             catch (Exception ex)
             {

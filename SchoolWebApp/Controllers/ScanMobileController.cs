@@ -88,7 +88,8 @@ namespace SchoolWebApp.Api.Controllers
         [SwaggerResponse(400, "Fichier refusé — le motif est destiné à l'élève.")]
         [SwaggerResponse(404, "QR code inconnu, expiré ou déjà utilisé.")]
         public async Task<IActionResult> Envoyer(
-            string jeton, IFormFile fichier, [FromServices] Services.CoursDuControleService cours)
+            string jeton, IFormFile fichier, [FromServices] Services.CoursDuControleService cours,
+            [FromServices] Services.MesFiches.ImportCoursService importCours)
         {
             if (fichier is null || fichier.Length == 0)
             {
@@ -131,6 +132,24 @@ namespace SchoolWebApp.Api.Controllers
                     }
 
                     _jetons.Livrer(jeton, ajout.Document.Id);
+                    return Ok(new { recu = true });
+                }
+
+                // UN COURS IMPORTÉ POUR SES FICHES DE RÉVISION — 14/10/2026 : les
+                // mêmes règles que depuis l'ordinateur (ImportCoursService).
+                if (destination.CoursImporteId is int coursId)
+                {
+                    var (page, refus) = await importCours.AjouterPageAsync(
+                        destination.EleveId, coursId, fichier.FileName, fichier.ContentType,
+                        flux.ToArray(), HttpContext.RequestAborted);
+
+                    if (page is null)
+                    {
+                        _jetons.Liberer(jeton);
+                        return BadRequest(new { message = refus?.Message });
+                    }
+
+                    _jetons.Livrer(jeton, page.Id);
                     return Ok(new { recu = true });
                 }
 

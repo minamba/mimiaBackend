@@ -3,8 +3,12 @@ using SchoolWebApp.Domain.Models;
 
 namespace SchoolWebApp.Api.Services
 {
-    /// <summary>Le verdict du professeur sur la préparation d'un contrôle.</summary>
-    public record ControlePretDeclare(int Controle, string Verdict, string? Observation);
+    /// <summary>
+    /// Le verdict du professeur sur la préparation d'un contrôle — et, depuis
+    /// le 13/10/2026, l'état qu'il donne à chaque notion du programme.
+    /// </summary>
+    public record ControlePretDeclare(
+        int Controle, string Verdict, string? Observation, IReadOnlyList<EtatNotionDeclare> Notions);
 
     /// <summary>
     /// Extrait le bloc [CONTROLE_PRET] : à la fin d'une séance de préparation,
@@ -69,9 +73,41 @@ namespace SchoolWebApp.Api.Services
             var observation = LecteurBloc.ChampLong(
                 bloc.Groups["corps"].Value,
                 ["observation", "remarque"],
-                ["controle", "controle_id", "numero", "pret", "verdict", "statut", "observation", "remarque"]);
+                ["controle", "controle_id", "numero", "pret", "verdict", "statut", "observation", "remarque", "notions", "etats"]);
 
-            return new ControlePretDeclare(controle, verdict, observation);
+            var notions = LireNotions(LecteurBloc.Valeur(champs, "notions", "etats"));
+
+            return new ControlePretDeclare(controle, verdict, observation, notions);
+        }
+
+        /// <summary>
+        /// « repérer une personnification = tenue ; les rimes = fragile » : une
+        /// notion et son état par point-virgule, séparés par « = », « : » ou
+        /// un tiret long. Un état inconnu est gardé tel quel : c'est le dépôt
+        /// qui le ramène aux trois mots, ou l'ignore.
+        /// </summary>
+        [GeneratedRegex(@"^(?<libelle>.+?)\s*(=|:|—|–| - )\s*(?<etat>[^=:—–]+)$")]
+        private static partial Regex NotionEtEtat();
+
+        internal static IReadOnlyList<EtatNotionDeclare> LireNotions(string? brut)
+        {
+            if (string.IsNullOrWhiteSpace(brut)) return [];
+
+            var lues = new List<EtatNotionDeclare>();
+
+            foreach (var morceau in brut.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                var trouve = NotionEtEtat().Match(morceau);
+                if (!trouve.Success) continue;
+
+                var libelle = trouve.Groups["libelle"].Value.Trim().Trim('«', '»', '"', '*');
+                var etat = trouve.Groups["etat"].Value.Trim().Trim('.', '*');
+
+                if (libelle.Length == 0 || etat.Length == 0) continue;
+                lues.Add(new EtatNotionDeclare(libelle, etat));
+            }
+
+            return lues;
         }
 
         /// <summary>

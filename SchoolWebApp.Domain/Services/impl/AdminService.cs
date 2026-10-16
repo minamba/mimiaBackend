@@ -56,6 +56,9 @@ namespace SchoolWebApp.Domain.Services.impl
         public Task<bool> DefinirAjoutEnfantAsync(int parentId, bool autorise) =>
             _adminRepository.DefinirAjoutEnfantAsync(parentId, autorise);
 
+        public Task<bool> DefinirFichesParentAsync(int parentId, bool autorise) =>
+            _adminRepository.DefinirFichesParentAsync(parentId, autorise);
+
         public Task<Tunnel> GetTunnelAsync(DateTime debut, DateTime fin) =>
             _adminRepository.GetTunnelAsync(debut, fin);
 

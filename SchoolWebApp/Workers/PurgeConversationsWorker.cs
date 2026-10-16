@@ -125,6 +125,7 @@ namespace SchoolWebApp.Api.Workers
                     await AllegerDocumentsAsync(ct);
                     await PurgerAudiosAsync(ct);
                     await PurgerPhotosEcritesAsync(ct);
+                    await NettoyerControlesAsync(ct);
                 }
                 catch (OperationCanceledException) when (ct.IsCancellationRequested)
                 {
@@ -470,6 +471,54 @@ namespace SchoolWebApp.Api.Workers
 
             return await conversations.PurgerOctetsAsync(
                 TimeSpan.FromDays(options.JoursConservationDocuments), TailleLot, ct);
+        }
+
+        /// <summary>
+        /// LES CONTRÔLES PASSÉS — Camara, le 16/10/2026 : « le jour où j'ai
+        /// 50 000 élèves, ça ne doit pas tuer ma base ».
+        ///
+        /// Un mois après la date (deux si le bilan n'est pas fait), le contrôle
+        /// est ALLÉGÉ : cours importé, détail par notion, observation et style
+        /// de correction partent ; la ligne garde date, matière, sujet, note et
+        /// ressenti, pour le calendrier et « Mes contrôles ». À la bascule de
+        /// l'année scolaire (1er août), les contrôles de l'année finie sont
+        /// SUPPRIMÉS, par le même chemin que la suppression à la main.
+        ///
+        /// La maîtrise des notions ne bouge pas : elle vit dans `MaitriseEleve`.
+        /// </summary>
+        private async Task NettoyerControlesAsync(CancellationToken ct)
+        {
+            var alleges = 0;
+            var supprimes = 0;
+
+            for (var lot = 0; lot < LotsMax; lot++)
+            {
+                using var scope = _scopes.CreateScope();
+                var controles = scope.ServiceProvider.GetRequiredService<Domain.Repositories.IControleScolaireRepository>();
+                var faits = await controles.AllegerControlesPassesAsync(DateTime.UtcNow, TailleLot, ct);
+                alleges += faits;
+                if (faits == 0) break;
+                await Task.Delay(Respiration, ct);
+            }
+
+            for (var lot = 0; lot < LotsMax; lot++)
+            {
+                // Une portée par lot : la suppression à la main charge les
+                // messages à nettoyer, le contexte ne doit pas grossir sans fin.
+                using var scope = _scopes.CreateScope();
+                var controles = scope.ServiceProvider.GetRequiredService<Domain.Repositories.IControleScolaireRepository>();
+                var faits = await controles.SupprimerControlesAnneesPasseesAsync(DateTime.UtcNow, TailleLot, ct);
+                supprimes += faits;
+                if (faits == 0) break;
+                await Task.Delay(Respiration, ct);
+            }
+
+            if (alleges + supprimes > 0)
+            {
+                _logger.LogInformation(
+                    "Controles passes : {Alleges} allege(s), {Supprimes} supprime(s) (annee scolaire finie).",
+                    alleges, supprimes);
+            }
         }
     }
 }

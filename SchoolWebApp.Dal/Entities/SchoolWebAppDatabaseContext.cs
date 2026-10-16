@@ -31,6 +31,24 @@ namespace SchoolWebApp.Dal.Entities
         public virtual DbSet<EpreuveExamen> EpreuvesExamens { get; set; }
         public virtual DbSet<PreparationEpreuve> PreparationsEpreuves { get; set; }
 
+        public virtual DbSet<PreparationEpreuveNotion> PreparationsEpreuvesNotions { get; set; }
+
+        public virtual DbSet<CoursImporte> CoursImportes { get; set; }
+
+        public virtual DbSet<CoursImportePage> CoursImportesPages { get; set; }
+
+        public virtual DbSet<FicheDeCours> FichesDeCours { get; set; }
+
+        public virtual DbSet<CategorieFichesParent> CategoriesFichesParents { get; set; }
+
+        public virtual DbSet<FicheConsommee> FichesConsommees { get; set; }
+
+        public virtual DbSet<CreditFichesFamille> CreditsFichesFamilles { get; set; }
+
+        public virtual DbSet<AchatFiches> AchatsFiches { get; set; }
+
+        public virtual DbSet<OffreFiches> OffresFiches { get; set; }
+
         public virtual DbSet<MaitriseEleve> MaitrisesEleves { get; set; }
         public virtual DbSet<Conversation> Conversations { get; set; }
         public virtual DbSet<Message> Messages { get; set; }
@@ -98,6 +116,14 @@ namespace SchoolWebApp.Dal.Entities
 
         /// <summary>Les appels au modèle qui ne sont pas des tours de dialogue.</summary>
         public virtual DbSet<AppelClaude> AppelsClaude { get; set; }
+
+        /// <summary>L'offre des lycées, pour la conseillère d'orientation (11/10/2026).</summary>
+        public virtual DbSet<EtablissementOrientation> EtablissementsOrientation { get; set; }
+
+        /// <summary>Le journal des imports de cette offre.</summary>
+        public virtual DbSet<ImportOrientation> ImportsOrientation { get; set; }
+
+        public virtual DbSet<RapportOrientation> RapportsOrientation { get; set; }
 
         /// <summary>
         /// Toutes les dates de la base sont en UTC, et repartent qualifiées
@@ -203,6 +229,10 @@ namespace SchoolWebApp.Dal.Entities
                       .HasDefaultValue(true)
                       .HasColumnName("peut_ajouter_enfant");
 
+                // L'espace parent et ses fiches (16/10/2026) : faux par défaut,
+                // accordé un par un dans Admin › Parents.
+                entity.Property(e => e.PeutCreerFiches).HasColumnName("peut_creer_fiches");
+
                 // Un utilisateur du serveur d'identité = un parent, jamais deux.
                 entity.HasIndex(e => e.IdentityUserId).IsUnique();
                 entity.HasIndex(e => e.Mail).IsUnique();
@@ -222,6 +252,81 @@ namespace SchoolWebApp.Dal.Entities
             });
 
             // ---------------------------------------------------------------
+            // EtablissementOrientation / ImportOrientation (11/10/2026)
+            // ---------------------------------------------------------------
+            modelBuilder.Entity<EtablissementOrientation>(entity =>
+            {
+                entity.ToTable("EtablissementOrientation");
+                entity.HasKey(e => e.Uai);
+
+                entity.Property(e => e.Uai).HasMaxLength(10).HasColumnName("uai");
+                entity.Property(e => e.Libelle).HasMaxLength(250).HasColumnName("libelle");
+                entity.Property(e => e.Statut).HasMaxLength(60).HasColumnName("statut");
+                entity.Property(e => e.Commune).HasMaxLength(120).HasColumnName("commune");
+                entity.Property(e => e.CodePostal).HasMaxLength(10).HasColumnName("code_postal");
+                entity.Property(e => e.Departement).HasMaxLength(100).HasColumnName("departement");
+                entity.Property(e => e.Academie).HasMaxLength(100).HasColumnName("academie");
+                entity.Property(e => e.Latitude).HasColumnName("latitude");
+                entity.Property(e => e.Longitude).HasColumnName("longitude");
+                entity.Property(e => e.SiteWeb).HasMaxLength(300).HasColumnName("site_web");
+                entity.Property(e => e.VoieGenerale).HasColumnName("voie_generale");
+                entity.Property(e => e.VoieTechnologique).HasColumnName("voie_technologique");
+                entity.Property(e => e.VoieProfessionnelle).HasColumnName("voie_professionnelle");
+                entity.Property(e => e.SectionEuropeenne).HasColumnName("section_europeenne");
+                entity.Property(e => e.SectionInternationale).HasColumnName("section_internationale");
+                entity.Property(e => e.SectionSportive).HasColumnName("section_sportive");
+                entity.Property(e => e.SectionArts).HasColumnName("section_arts");
+                entity.Property(e => e.PostBac).HasColumnName("post_bac");
+                entity.Property(e => e.Apprentissage).HasColumnName("apprentissage");
+                entity.Property(e => e.Specialites).HasColumnName("specialites");
+                entity.Property(e => e.Options2de).HasColumnName("options_2de");
+                entity.Property(e => e.Formations).HasColumnName("formations");
+                entity.Property(e => e.MisAJourLe).HasColumnName("mis_a_jour_le");
+            });
+
+            // Les rapports d'orientation (11/10/2026) : un par séance avec la
+            // conseillère. L'élève supprimé les emporte.
+            modelBuilder.Entity<RapportOrientation>(entity =>
+            {
+                entity.ToTable("RapportOrientation");
+                entity.HasKey(e => e.Id);
+
+                entity.Property(e => e.Id).HasColumnName("id");
+                entity.Property(e => e.EleveId).HasColumnName("eleve_id");
+                entity.Property(e => e.ConversationId).HasColumnName("conversation_id");
+                entity.Property(e => e.Discussion).HasMaxLength(2000).HasColumnName("discussion");
+                entity.Property(e => e.Pistes).HasMaxLength(2000).HasColumnName("pistes");
+                entity.Property(e => e.Chemin).HasMaxLength(2000).HasColumnName("chemin");
+                entity.Property(e => e.Atouts).HasMaxLength(1000).HasColumnName("atouts");
+                entity.Property(e => e.AConsolider).HasMaxLength(1000).HasColumnName("a_consolider");
+                entity.Property(e => e.Etapes).HasMaxLength(2000).HasColumnName("etapes");
+                entity.Property(e => e.DateCreation).HasColumnName("date_creation");
+                entity.Property(e => e.VuLe).HasColumnName("vu_le");
+
+                entity.HasIndex(e => new { e.EleveId, e.DateCreation });
+
+                entity.HasOne(e => e.Eleve)
+                    .WithMany()
+                    .HasForeignKey(e => e.EleveId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            modelBuilder.Entity<ImportOrientation>(entity =>
+            {
+                entity.ToTable("ImportOrientation");
+                entity.HasKey(e => e.Id);
+
+                entity.Property(e => e.Id).HasColumnName("id");
+                entity.Property(e => e.Date).HasColumnName("date");
+                entity.Property(e => e.Reussi).HasColumnName("reussi");
+                entity.Property(e => e.Message).HasMaxLength(1000).HasColumnName("message");
+                entity.Property(e => e.Lycees).HasColumnName("lycees");
+                entity.Property(e => e.Sources).HasMaxLength(2000).HasColumnName("sources");
+                entity.Property(e => e.DureeSecondes).HasColumnName("duree_secondes");
+
+                entity.HasIndex(e => e.Date);
+            });
+
             // Eleve
             // ---------------------------------------------------------------
             modelBuilder.Entity<Eleve>(entity =>
@@ -246,6 +351,17 @@ namespace SchoolWebApp.Dal.Entities
                 entity.Property(e => e.AccesSuspenduLe).HasColumnName("acces_suspendu_le");
                 entity.Property(e => e.Lv2Espagnol).HasColumnName("lv2_espagnol").HasDefaultValue(false);
                 entity.Property(e => e.Specialites).HasMaxLength(200).HasColumnName("specialites");
+                entity.Property(e => e.EtablissementUai).HasMaxLength(10).HasColumnName("etablissement_uai");
+                entity.Property(e => e.EtablissementLibelle).HasMaxLength(250).HasColumnName("etablissement_libelle");
+                entity.Property(e => e.EtablissementCommune).HasMaxLength(120).HasColumnName("etablissement_commune");
+                entity.Property(e => e.EtablissementLatitude).HasColumnName("etablissement_latitude");
+                entity.Property(e => e.EtablissementLongitude).HasColumnName("etablissement_longitude");
+                entity.Property(e => e.BesoinsParticuliers).HasMaxLength(60).HasColumnName("besoins_particuliers");
+                entity.Property(e => e.BesoinsAccordLe).HasColumnName("besoins_accord_le");
+                entity.Property(e => e.EcranAdapte).HasColumnName("ecran_adapte").HasDefaultValue(true);
+                entity.Property(e => e.ProjetObjectif).HasMaxLength(200).HasColumnName("projet_objectif");
+                entity.Property(e => e.ProjetMatieres).HasMaxLength(3000).HasColumnName("projet_matieres");
+                entity.Property(e => e.ProjetLe).HasColumnName("projet_le");
 
                 // UN CODE NE DÉSIGNE QU'UN ENFANT, ET LA BASE LE GARANTIT.
                 //
@@ -618,6 +734,8 @@ namespace SchoolWebApp.Dal.Entities
                 entity.Property(e => e.TypeMime).HasMaxLength(60).HasColumnName("type_mime");
                 entity.Property(e => e.Taille).HasColumnName("taille");
                 entity.Property(e => e.Donnees).HasColumnName("donnees");
+                entity.Property(e => e.Fichier).HasMaxLength(300).HasColumnName("fichier");
+                entity.Property(e => e.Empreinte).HasMaxLength(64).HasColumnName("empreinte");
                 entity.Property(e => e.Auteur).HasMaxLength(255).HasColumnName("auteur");
                 entity.Property(e => e.Source).HasMaxLength(500).HasColumnName("source");
                 entity.Property(e => e.Licence).HasMaxLength(120).HasColumnName("licence");
@@ -1196,6 +1314,7 @@ namespace SchoolWebApp.Dal.Entities
                 entity.Property(e => e.Donnees).HasColumnName("donnees");
                 entity.Property(e => e.Transcription).HasColumnName("transcription");
                 entity.Property(e => e.DonneesEffaceesLe).HasColumnName("donnees_effacees_le");
+                entity.Property(e => e.Tentatives).HasColumnName("tentatives");
                 entity.Property(e => e.DateCreation).HasColumnName("date_creation");
 
                 // Cascade : le cours n'a aucune vie hors de son contrôle.
@@ -1222,6 +1341,8 @@ namespace SchoolWebApp.Dal.Entities
                 entity.Property(e => e.TravailleeLe).HasColumnName("travaillee_le");
                 entity.Property(e => e.Source).IsRequired().HasMaxLength(20).HasColumnName("source");
                 entity.Property(e => e.Resultat).HasMaxLength(20).HasColumnName("resultat");
+                entity.Property(e => e.EtatProfesseur).HasMaxLength(20).HasColumnName("etat_professeur");
+                entity.Property(e => e.EtatProfesseurLe).HasColumnName("etat_professeur_le");
                 entity.Property(e => e.DateCreation).HasColumnName("date_creation");
 
                 // Cascade, et c'est le seul chemin qui arrive ici : le
@@ -1970,6 +2091,7 @@ namespace SchoolWebApp.Dal.Entities
                 entity.Property(e => e.MatieresCodes).HasMaxLength(200).HasColumnName("matieres_codes");
                 entity.Property(e => e.NiveauxCodes).HasMaxLength(300).HasColumnName("niveaux_codes");
                 entity.Property(e => e.DernierePageVerifieeLe).HasColumnName("derniere_page_verifiee_le");
+                entity.Property(e => e.CopieArchiveDu).HasColumnName("copie_archive_du");
                 entity.Property(e => e.Notes).HasMaxLength(1000).HasColumnName("notes");
                 entity.Property(e => e.DateCreation).HasColumnName("date_creation");
                 entity.Property(e => e.DerniereAlerteLe).HasColumnName("derniere_alerte_le");
@@ -2064,6 +2186,268 @@ namespace SchoolWebApp.Dal.Entities
                 entity.HasIndex(e => new { e.EleveId, e.EpreuveId, e.MatiereId }).IsUnique();
                 entity.HasIndex(e => e.EpreuveId);
                 entity.HasIndex(e => e.MatiereId);
+            });
+
+            modelBuilder.Entity<PreparationEpreuveNotion>(entity =>
+            {
+                entity.ToTable("PreparationEpreuveNotion");
+                entity.HasKey(e => e.Id);
+
+                entity.Property(e => e.Id).HasColumnName("id");
+                entity.Property(e => e.PreparationId).HasColumnName("preparation_id");
+                entity.Property(e => e.CompetenceId).HasColumnName("competence_id");
+                entity.Property(e => e.Etat).IsRequired().HasMaxLength(20).HasColumnName("etat");
+                entity.Property(e => e.Le).HasColumnName("le");
+
+                // Cascade : l'état n'a aucune vie hors de sa préparation.
+                entity.HasOne(e => e.Preparation)
+                      .WithMany()
+                      .HasForeignKey(e => e.PreparationId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                // NoAction, comme ControleNotion : une compétence du
+                // référentiel n'est jamais supprimée.
+                entity.HasOne(e => e.Competence)
+                      .WithMany()
+                      .HasForeignKey(e => e.CompetenceId)
+                      .OnDelete(DeleteBehavior.NoAction);
+
+                entity.HasIndex(e => new { e.PreparationId, e.CompetenceId }).IsUnique();
+                entity.HasIndex(e => e.CompetenceId);
+            });
+
+            // ---------------------------------------------------------------
+            // Fiches de révision de l'élève (14/10/2026) — voir CoursImporte
+            // ---------------------------------------------------------------
+            modelBuilder.Entity<CoursImporte>(entity =>
+            {
+                entity.ToTable("CoursImporte");
+                entity.HasKey(e => e.Id);
+
+                entity.Property(e => e.Id).HasColumnName("id");
+                entity.Property(e => e.EleveId).HasColumnName("eleve_id");
+                entity.Property(e => e.ParentId).HasColumnName("parent_id");
+                entity.Property(e => e.MatiereId).HasColumnName("matiere_id");
+                entity.Property(e => e.CategorieId).HasColumnName("categorie_id");
+                entity.Property(e => e.Titre).HasMaxLength(200).HasColumnName("titre");
+                entity.Property(e => e.Etat).IsRequired().HasMaxLength(20).HasColumnName("etat");
+                entity.Property(e => e.Remarque).HasMaxLength(500).HasColumnName("remarque");
+                entity.Property(e => e.Notions).HasColumnName("notions");
+                entity.Property(e => e.Type).IsRequired().HasMaxLength(20).HasColumnName("type");
+                entity.Property(e => e.NotionsDemandees).HasMaxLength(200).HasColumnName("notions_demandees");
+                entity.Property(e => e.DemandeLe).HasColumnName("demande_le");
+                entity.Property(e => e.Tentatives).HasColumnName("tentatives");
+                entity.Property(e => e.EnvoyeLe).HasColumnName("envoye_le");
+                entity.Property(e => e.Poids).HasColumnName("poids");
+                // Sans clé étrangère : une référence sur la même table ne peut pas
+                // être en cascade sous SQL Server. Le dépôt supprime les compléments
+                // avec leur cours.
+                entity.Property(e => e.ComplementDe).HasColumnName("complement_de");
+                entity.Property(e => e.PagesEffaceesLe).HasColumnName("pages_effacees_le");
+                entity.Property(e => e.DateCreation).HasColumnName("date_creation");
+                entity.Property(e => e.DateModification).HasColumnName("date_modification");
+
+                // L'élève supprimé emporte ses cours, leurs pages et leurs fiches.
+                entity.HasOne(e => e.Eleve)
+                      .WithMany()
+                      .HasForeignKey(e => e.EleveId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(e => e.Matiere)
+                      .WithMany()
+                      .HasForeignKey(e => e.MatiereId)
+                      .OnDelete(DeleteBehavior.NoAction);
+
+                // L'ESPACE PARENT (16/10/2026). EN NO ACTION, PAS EN CASCADE :
+                // SQL Server refuse deux chemins de cascade vers la même ligne
+                // (parent → élève → cours, et parent → cours). La suppression du
+                // compte efface ces cours elle-même (`ParentRepository`), la
+                // suppression d'une catégorie détache ses cours.
+                entity.HasOne(e => e.Parent)
+                      .WithMany()
+                      .HasForeignKey(e => e.ParentId)
+                      .OnDelete(DeleteBehavior.NoAction);
+
+                entity.HasOne(e => e.Categorie)
+                      .WithMany()
+                      .HasForeignKey(e => e.CategorieId)
+                      .OnDelete(DeleteBehavior.NoAction);
+
+                // UN SEUL PROPRIÉTAIRE : un élève, ou un parent.
+                entity.ToTable(t => t.HasCheckConstraint("CK_CoursImporte_Proprietaire",
+                    "(eleve_id IS NOT NULL AND parent_id IS NULL) OR (eleve_id IS NULL AND parent_id IS NOT NULL)"));
+
+                // La liste de l'élève, et la file de la tâche de fond.
+                entity.HasIndex(e => new { e.EleveId, e.DateCreation });
+                entity.HasIndex(e => new { e.ParentId, e.DateCreation });
+                entity.HasIndex(e => e.CategorieId);
+                entity.HasIndex(e => e.Etat);
+                entity.HasIndex(e => e.MatiereId);
+                entity.HasIndex(e => e.ComplementDe);
+            });
+
+            modelBuilder.Entity<CoursImportePage>(entity =>
+            {
+                entity.ToTable("CoursImportePage");
+                entity.HasKey(e => e.Id);
+
+                entity.Property(e => e.Id).HasColumnName("id");
+                entity.Property(e => e.CoursId).HasColumnName("cours_id");
+                entity.Property(e => e.Ordre).HasColumnName("ordre");
+                entity.Property(e => e.NomFichier).HasMaxLength(200).HasColumnName("nom_fichier");
+                entity.Property(e => e.TypeMime).IsRequired().HasMaxLength(60).HasColumnName("type_mime");
+                entity.Property(e => e.Taille).HasColumnName("taille");
+                entity.Property(e => e.NombrePages).HasColumnName("nombre_pages");
+                entity.Property(e => e.Donnees).HasColumnName("donnees");
+                entity.Property(e => e.DateCreation).HasColumnName("date_creation");
+
+                entity.HasOne(e => e.Cours)
+                      .WithMany(c => c.Pages)
+                      .HasForeignKey(e => e.CoursId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasIndex(e => e.CoursId);
+            });
+
+            modelBuilder.Entity<FicheDeCours>(entity =>
+            {
+                entity.ToTable("FicheDeCours");
+                entity.HasKey(e => e.Id);
+
+                entity.Property(e => e.Id).HasColumnName("id");
+                entity.Property(e => e.CoursId).HasColumnName("cours_id");
+                entity.Property(e => e.EleveId).HasColumnName("eleve_id");
+                entity.Property(e => e.ParentId).HasColumnName("parent_id");
+                entity.Property(e => e.MatiereId).HasColumnName("matiere_id");
+                entity.Property(e => e.Type).IsRequired().HasMaxLength(20).HasColumnName("type");
+                entity.Property(e => e.Titre).IsRequired().HasMaxLength(200).HasColumnName("titre");
+                entity.Property(e => e.NotionRang).HasColumnName("notion_rang");
+                entity.Property(e => e.NotionTotal).HasColumnName("notion_total");
+                entity.Property(e => e.Contenu).IsRequired().HasColumnName("contenu");
+                entity.Property(e => e.Quiz).HasColumnName("quiz");
+                entity.Property(e => e.DateCreation).HasColumnName("date_creation");
+
+                // Le cours supprimé emporte ses fiches. Pas de clé vers l'élève :
+                // il est déjà relié par le cours, et SQL Server refuse deux
+                // chemins de cascade vers la même ligne.
+                entity.HasOne(e => e.Cours)
+                      .WithMany(c => c.Fiches)
+                      .HasForeignKey(e => e.CoursId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasIndex(e => e.CoursId);
+                entity.HasIndex(e => new { e.EleveId, e.DateCreation });
+                entity.HasIndex(e => new { e.ParentId, e.DateCreation });
+            });
+
+            // Les catégories de fiches d'un parent (espace parent, 16/10/2026).
+            modelBuilder.Entity<CategorieFichesParent>(entity =>
+            {
+                entity.ToTable("CategorieFichesParent");
+                entity.HasKey(e => e.Id);
+
+                entity.Property(e => e.Id).HasColumnName("id");
+                entity.Property(e => e.ParentId).HasColumnName("parent_id");
+                entity.Property(e => e.Libelle).IsRequired().HasMaxLength(60).HasColumnName("libelle");
+                entity.Property(e => e.Couleur).IsRequired().HasMaxLength(9).HasColumnName("couleur");
+                entity.Property(e => e.Ordre).HasColumnName("ordre");
+                entity.Property(e => e.DateCreation).HasColumnName("date_creation");
+
+                entity.HasOne(e => e.Parent)
+                      .WithMany()
+                      .HasForeignKey(e => e.ParentId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasIndex(e => e.ParentId);
+            });
+
+            // LE QUOTA ET LES CRÉDITS DE FICHES (15/10/2026) — voir `CreditsFiches`.
+
+            modelBuilder.Entity<FicheConsommee>(entity =>
+            {
+                entity.ToTable("FicheConsommee");
+                entity.HasKey(e => e.Id);
+
+                entity.Property(e => e.Id).HasColumnName("id");
+                entity.Property(e => e.EleveId).HasColumnName("eleve_id");
+                entity.Property(e => e.FicheId).HasColumnName("fiche_id");
+                entity.Property(e => e.Imputation).IsRequired().HasMaxLength(20).HasColumnName("imputation");
+                entity.Property(e => e.DateCreation).HasColumnName("date_creation");
+
+                entity.HasOne(e => e.Eleve)
+                      .WithMany()
+                      .HasForeignKey(e => e.EleveId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                // Le compte du mois : un élève, depuis une date.
+                entity.HasIndex(e => new { e.EleveId, e.DateCreation });
+            });
+
+            modelBuilder.Entity<CreditFichesFamille>(entity =>
+            {
+                entity.ToTable("CreditFichesFamille");
+                entity.HasKey(e => e.ParentId);
+
+                entity.Property(e => e.ParentId).ValueGeneratedNever().HasColumnName("parent_id");
+                entity.Property(e => e.Solde).HasColumnName("solde");
+                entity.Property(e => e.DateModification).HasColumnName("date_modification");
+
+                entity.HasOne(e => e.Parent)
+                      .WithMany()
+                      .HasForeignKey(e => e.ParentId)
+                      .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            modelBuilder.Entity<AchatFiches>(entity =>
+            {
+                entity.ToTable("AchatFiches");
+                entity.HasKey(e => e.Id);
+
+                entity.Property(e => e.Id).HasColumnName("id");
+                entity.Property(e => e.ParentId).HasColumnName("parent_id");
+                entity.Property(e => e.Code).IsRequired().HasMaxLength(30).HasColumnName("code");
+                entity.Property(e => e.Fiches).HasColumnName("fiches");
+                entity.Property(e => e.PrixCentimes).HasColumnName("prix_centimes");
+                entity.Property(e => e.DateAchat).HasColumnName("date_achat");
+                entity.Property(e => e.StripeSessionId).HasMaxLength(120).HasColumnName("stripe_session_id");
+                entity.Property(e => e.StripePaiementId).HasMaxLength(120).HasColumnName("stripe_paiement_id");
+                entity.Property(e => e.DateRemboursement).HasColumnName("date_remboursement");
+                entity.Property(e => e.Motif).HasMaxLength(200).HasColumnName("motif");
+
+                // Comme pour `Recharge` : c'est la base qui refuse le double
+                // crédit d'un webhook rejoué, pas un test applicatif.
+                entity.HasIndex(e => e.StripeSessionId)
+                      .IsUnique()
+                      .HasFilter("[stripe_session_id] IS NOT NULL")
+                      .HasDatabaseName("UX_AchatFiches_stripe_session");
+
+                entity.HasIndex(e => e.StripePaiementId)
+                      .HasFilter("[stripe_paiement_id] IS NOT NULL")
+                      .HasDatabaseName("IX_AchatFiches_stripe_paiement");
+
+                entity.HasOne(e => e.Parent)
+                      .WithMany()
+                      .HasForeignKey(e => e.ParentId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasIndex(e => new { e.ParentId, e.DateAchat });
+            });
+
+            modelBuilder.Entity<OffreFiches>(entity =>
+            {
+                entity.ToTable("OffreFiches");
+                entity.HasKey(e => e.Id);
+
+                entity.Property(e => e.Id).HasColumnName("id");
+                entity.Property(e => e.Code).HasMaxLength(30).IsRequired().HasColumnName("code");
+                entity.Property(e => e.Libelle).HasMaxLength(100).HasColumnName("libelle");
+                entity.Property(e => e.Fiches).HasColumnName("fiches");
+                entity.Property(e => e.PrixCentimes).HasColumnName("prix_centimes");
+                entity.Property(e => e.StripePrixId).HasMaxLength(80).HasColumnName("stripe_prix_id");
+                entity.Property(e => e.Ordre).HasColumnName("ordre");
+                entity.Property(e => e.Active).HasColumnName("active");
+
+                entity.HasIndex(e => e.Code).IsUnique();
             });
         }
     }

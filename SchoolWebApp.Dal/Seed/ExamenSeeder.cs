@@ -77,6 +77,30 @@ namespace SchoolWebApp.Dal.Seed
     /// technologique dont la série n'est pas renseignée n'a pas de section : un
     /// « bac » réduit à la philosophie serait faux.
     ///
+    /// ================== BAC PRO 2027 — terminale professionnelle ==================
+    /// Étape 4 de la voie professionnelle, voulue par Camara le 16/10/2026.
+    /// Vérifié le même jour (copies dans le dossier de travail de la session,
+    /// pro-epreuves\ et pro-pse-eco\) :
+    ///   - arrêté du 17/06/2020 (NOR MENE2015195A, BO n° 30 du 23/07/2020),
+    ///     consolidé au 15/10/2026 : article 1 (coefficients), article 4 (QUI
+    ///     passe QUOI en ponctuel), annexes I (français), II (HG-EMC), VI et VII
+    ///     (économie-gestion, économie-droit), VIII (PSE) — aucune annexe
+    ///     modifiée depuis 2020 ;
+    ///   - programme limitatif de français : note MENE2402853N (BO n° 8 du
+    ///     22/02/2024), dernière année en 2026-2027 ;
+    ///   - calendrier : note MENE2622686N, BO spécial n° 2 du 25/08/2026,
+    ///     annexe V — les écrits reviennent en juin, le matin.
+    ///
+    /// QUATRE ÉCRITS POUR UN ÉLÈVE SOUS STATUT SCOLAIRE : français, HG-EMC, PSE,
+    /// et l'économie de sa spécialité. Les mathématiques, la physique-chimie, les
+    /// langues vivantes, les arts appliqués et l'EPS sont en CCF pour lui (article
+    /// 4) : pas de carte, une note le dit. Le « ponctuel sur support
+    /// informatique » de maths et de physique-chimie (24 mai – 4 juin 2027) vise
+    /// les candidats libres et les établissements non habilités au CCF.
+    ///
+    /// L'ÉCONOMIE SUIT LA FILIÈRE : deux cartes, et l'élève ne voit que la sienne
+    /// (`ExamenRepository.ConcerneEleve`, `VoiesScolaires.MatiereDeLaFiliere`).
+    ///
     /// Les échéances de revérification sont dans `EcheanceReferentielSeeder`.
     /// </summary>
     public static class ExamenSeeder
@@ -112,6 +136,13 @@ namespace SchoolWebApp.Dal.Seed
         private const string SourceMathsAnticipees2027 =
             " Épreuve anticipée de mathématiques : arrêté MENE2508110A et note de service MENE2515469N ; "
             + "programmes de première du 26/02/2026 (MENE2602916A, MENE2602917A, MENE2602918A).";
+
+        private const string SourceBacPro2027 =
+            "Arrêté du 17/06/2020 (MENE2015195A), articles 1 et 4, annexes I, II, VI, VII et VIII, consolidé au "
+            + "15/10/2026 ; programme limitatif de français MENE2402853N (BO n° 8 du 22/02/2024) ; calendrier "
+            + "MENE2622686N (BO spécial n° 2 du 25/08/2026, annexe V). Lus le 16/10/2026.";
+
+        private const string TroisAnsPro = "SECONDE_PRO;PREMIERE_PRO;TERMINALE_PRO";
 
         private const string DescriptionPhilosophieTechno =
             "4 h · coefficient 4 — au choix, deux dissertations sur une question simple, ou une "
@@ -455,6 +486,47 @@ namespace SchoolWebApp.Dal.Seed
                 + "exploite des résultats expérimentaux. Pratique de 3 h (coefficient 9).",
                 "Seulement si ta spécialité de terminale est les sciences physiques et chimiques en "
                 + "laboratoire.");
+
+            // ------------------------------------------------- BAC PRO 2027
+            // Toutes les spécialités ensemble : l'économie de l'élève est
+            // choisie par sa filière, le reste est commun.
+            var bacPro = Examen(context, existants, "BAC_PRO_2027", "Bac pro", "Préparation au bac pro", 2027,
+                "TERMINALE_PRO", SourceBacPro2027);
+
+            Epreuve(bacPro, "BAC_PRO_2027_FRANCAIS", "Écrit de français", "FRANCAIS", "TERMINALE_PRO", 1,
+                "Mardi 8 juin 2027, 8 h – 11 h. 3 h · coefficient 2,5. Sur un corpus de textes lié au thème du "
+                + "programme limitatif, « Rythmes et cadences de la vie moderne : quel temps pour soi ? ». "
+                + "Lecture sur 10 points : compréhension et interprétation, jusqu'à confronter les documents. "
+                + "Écriture sur 10 points : un texte argumenté d'une quarantaine de lignes au moins.",
+                "Une œuvre du programme limitatif est étudiée en classe, au choix du professeur parmi six. "
+                + "L'oral n'est pas évalué à cet écrit.",
+                domainesExclus: "Oral");
+
+            Epreuve(bacPro, "BAC_PRO_2027_HG_EMC", "Écrit d'histoire-géographie et EMC", "HISTOIRE_GEO", "TERMINALE_PRO", 2,
+                "Mercredi 9 juin 2027, 8 h – 10 h 30. 2 h 30 · coefficient 2,5. Partie 1 sur 6 points : questions "
+                + "courtes en histoire ou en géographie. Partie 2 sur 8 points : une situation dans l'autre "
+                + "discipline, trois documents au plus. Partie 3 sur 6 points : EMC, un dossier documentaire et "
+                + "une position personnelle argumentée.",
+                "Porte sur le programme de terminale. Si la partie 1 est en histoire, la partie 2 est en "
+                + "géographie, et inversement.");
+
+            Epreuve(bacPro, "BAC_PRO_2027_PSE", "Écrit de prévention-santé-environnement", "PSE", TroisAnsPro, 3,
+                "Lundi 14 juin 2027, 8 h – 10 h. 2 h · coefficient 1. Partie 1 : les thématiques santé et "
+                + "environnement, à partir de documents sur un enjeu sanitaire ou environnemental. Partie 2 : la "
+                + "prévention au travail, à partir d'un dossier sur une situation professionnelle.",
+                "Évalue les compétences de fin de formation : les modules des trois années comptent.");
+
+            Epreuve(bacPro, "BAC_PRO_2027_ECO_DROIT", "Écrit d'économie-droit", "ECONOMIE_DROIT", TroisAnsPro, 4,
+                "Mardi 15 juin 2027, 8 h – 10 h. 2 h · coefficient 1. Deux parties indépendantes : un dossier "
+                + "documentaire à exploiter à l'aide de questions, puis une réponse construite et argumentée à une "
+                + "question d'économie-droit.",
+                "Un seul programme pour les trois ans : tous les modules peuvent tomber.");
+
+            Epreuve(bacPro, "BAC_PRO_2027_ECO_GESTION", "Écrit d'économie-gestion", "ECONOMIE_GESTION", TroisAnsPro, 5,
+                "Mardi 15 juin 2027, 8 h – 10 h. 2 h · coefficient 1. Deux parties indépendantes : des questions "
+                + "sur une situation d'entreprise, puis une réponse argumentée à une question d'économie-gestion, "
+                + "au choix parmi deux.",
+                "Un seul programme pour les trois ans : tous les modules peuvent tomber.");
 
             // LES CARTES DES MATIÈRES RETIRÉES SE SUPPRIMENT — 17/09/2026. Elles ne se
             // ferment pas : une épreuve ne porte pas de drapeau « actif », contrairement

@@ -163,7 +163,11 @@ namespace SchoolWebApp.Api.Services
             // qu'il n'en sache rien que de lui laisser croire une valeur inventée.
             var lignes = planches.Select(p =>
             {
-                var niveau = string.IsNullOrWhiteSpace(p.Niveau) ? "" : $" ({p.Niveau})";
+                // PAS COLLÉ À LA CLÉ (13/10/2026) : présenté « `SCHEMA:x` (CP) »,
+                // il a été recopié au tableau — « SCHEMA:sc-cycle-vie-plante (CP) » —
+                // et l'élève a vu le texte brut. Le site tolère désormais ce
+                // débordement, mais mieux vaut ne pas le suggérer.
+                var niveau = string.IsNullOrWhiteSpace(p.Niveau) ? "" : $" — classe : {p.Niveau}";
 
                 // LA MUETTE S'ANNONCE SUR LA LIGNE DE SA LÉGENDÉE, parce que
                 // c'est la même figure : deux lignes se seraient lues comme

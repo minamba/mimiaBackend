@@ -216,6 +216,9 @@ namespace SchoolWebApp.Dal.Repositories
             await _context.RapportsSeance
                 .Where(r => eleves.Contains(r.EleveId)).ExecuteDeleteAsync(ct);
 
+            await _context.RapportsOrientation
+                .Where(r => eleves.Contains(r.EleveId)).ExecuteDeleteAsync(ct);
+
             await _context.FichesRevision
                 .Where(f => eleves.Contains(f.EleveId)).ExecuteDeleteAsync(ct);
 
@@ -236,6 +239,12 @@ namespace SchoolWebApp.Dal.Repositories
 
             await _context.Recharges
                 .Where(r => abonnements.Contains(r.AbonnementId)).ExecuteDeleteAsync(ct);
+
+            // SES PROPRES FICHES (espace parent, 16/10/2026) : le lien du cours vers
+            // le parent est en NO ACTION (deux chemins de cascade sont refusés),
+            // ils partent donc ici, avec leurs pages et leurs fiches (en cascade
+            // depuis le cours). Ses catégories suivent le parent, en cascade.
+            await _context.CoursImportes.Where(c => c.ParentId == parentId).ExecuteDeleteAsync(ct);
 
             await _context.Eleves.Where(e => e.ParentId == parentId).ExecuteDeleteAsync(ct);
             await _context.Abonnements.Where(a => a.ParentId == parentId).ExecuteDeleteAsync(ct);

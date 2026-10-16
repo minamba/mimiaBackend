@@ -56,10 +56,13 @@ namespace SchoolWebApp.Dal.Repositories
         }
 
         public async Task EnregistrerReleveAsync(
-            int id, string hash, string? statut, DateTime maintenant, CancellationToken ct = default)
+            int id, string hash, string? statut, DateTime maintenant, DateTime? copieArchiveDu = null,
+            CancellationToken ct = default)
         {
             var echeance = await _context.EcheancesReferentiel.FirstOrDefaultAsync(e => e.Id == id, ct);
             if (echeance is null) return;
+
+            echeance.CopieArchiveDu = copieArchiveDu;
 
             // COLLANT : un changement constaté hier et pas encore traité ne
             // redevient pas « inchangée » parce qu'aujourd'hui rien n'a bougé
@@ -102,7 +105,7 @@ namespace SchoolWebApp.Dal.Repositories
                 .Select(e => new EcheanceReferentielDetail(
                     e.Id, e.MatiereLibelle, e.NiveauxConcernes, e.DateEcheance, e.DateConnue, e.Sentinelle,
                     e.TexteOfficiel, e.Notes, e.Url, e.DernierStatutVeille, e.DernierePageVerifieeLe,
-                    e.DerniereAlerteLe, e.TraiteeLe))
+                    e.DerniereAlerteLe, e.TraiteeLe, e.CopieArchiveDu))
                 .ToListAsync(ct);
 
         public async Task<bool> MarquerTraiteeAsync(int id, DateTime maintenant, CancellationToken ct = default)
@@ -186,6 +189,6 @@ namespace SchoolWebApp.Dal.Repositories
         private static System.Linq.Expressions.Expression<Func<EcheanceReferentiel, EcheanceASignaler>> Projeter() =>
             e => new EcheanceASignaler(
                 e.Id, e.MatiereLibelle, e.NiveauxConcernes, e.DateEcheance, e.DateConnue, e.Sentinelle,
-                e.TexteOfficiel, e.Notes, e.Url, e.DernierHashPage, e.DernierStatutVeille);
+                e.TexteOfficiel, e.Notes, e.Url, e.DernierHashPage, e.DernierStatutVeille, e.CopieArchiveDu);
     }
 }

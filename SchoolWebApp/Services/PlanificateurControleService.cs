@@ -17,6 +17,15 @@ namespace SchoolWebApp.Api.Services
         Task<int> PoserProgrammeAsync(
             int eleveId, int controleId, int matiereId, int? niveauScolaireId,
             string? sujet, CancellationToken ct = default);
+
+        /// <summary>
+        /// Rapproche des libellés écrits librement par le professeur des
+        /// notions du référentiel. Rend, par libellé rapproché, la notion
+        /// connue ; un libellé absent du résultat n'a rien trouvé.
+        /// </summary>
+        Task<IReadOnlyDictionary<string, NotionDeclaree>> RapprocherAsync(
+            IReadOnlyList<string> libelles, IReadOnlyList<CompetenceCandidate> referentiel,
+            CancellationToken ct = default);
     }
 
     /// <summary>
@@ -120,17 +129,123 @@ namespace SchoolWebApp.Api.Services
                 eleveId, controleId, matiereId, notions, travaillee: false, ct);
         }
 
+        /// <summary>
+        /// « de repérer une personnification » → la notion du référentiel qui
+        /// dit la même chose, ou rien — Camara, le 13/10/2026.
+        ///
+        /// MÊME LISTE FERMÉE, MÊME GARDE : un code absent de la liste est
+        /// ignoré. Le modèle peut aussi ne rien rendre pour un libellé : une
+        /// notion qui n'est pas au programme de la classe reste en texte libre,
+        /// comme avant. Un appel pour tous les libellés à la fois.
+        /// </summary>
+        public async Task<IReadOnlyDictionary<string, NotionDeclaree>> RapprocherAsync(
+            IReadOnlyList<string> libelles, IReadOnlyList<CompetenceCandidate> referentiel,
+            CancellationToken ct = default)
+        {
+            var resultat = new Dictionary<string, NotionDeclaree>(StringComparer.OrdinalIgnoreCase);
+            if (libelles.Count == 0 || referentiel.Count == 0) return resultat;
+
+            var candidates = referentiel.ToList();
+            var corpus = new StringBuilder();
+            corpus.AppendLine("LIBELLÉS ÉCRITS PAR LE PROFESSEUR :");
+            foreach (var libelle in libelles) corpus.AppendLine($"- {libelle}");
+            corpus.AppendLine();
+            corpus.AppendLine("NOTIONS DU PROGRAMME (choisis uniquement là-dedans) :");
+            foreach (var candidate in candidates)
+            {
+                corpus.AppendLine($"- {candidate.Code} | {candidate.Domaine} | {candidate.Libelle}");
+            }
+
+            var reponse = await AppelerAsync(ConsigneRapprochement, corpus.ToString(), "rattachement-notions", ct);
+
+            var connus = candidates
+                .Where(c => c.Code is not null)
+                .ToDictionary(c => c.Code!, c => c, StringComparer.OrdinalIgnoreCase);
+
+            var debut = reponse.IndexOf('{');
+            var fin = reponse.LastIndexOf('}');
+            if (debut < 0 || fin <= debut) return resultat;
+
+            try
+            {
+                using var document = JsonDocument.Parse(reponse[debut..(fin + 1)]);
+
+                if (!document.RootElement.TryGetProperty("rapprochements", out var lignes)
+                    || lignes.ValueKind != JsonValueKind.Array)
+                {
+                    return resultat;
+                }
+
+                foreach (var element in lignes.EnumerateArray())
+                {
+                    var libelle = element.TryGetProperty("libelle", out var l) ? l.GetString() : null;
+                    var code = element.TryGetProperty("code", out var c) && c.ValueKind == JsonValueKind.String
+                        ? c.GetString()
+                        : null;
+
+                    if (libelle is null || code is null || !connus.TryGetValue(code, out var candidate)) continue;
+
+                    // Le libellé rendu doit être l'un de ceux demandés : le
+                    // modèle ne rapproche pas des notions qu'on ne lui a pas
+                    // données.
+                    var demande = libelles.FirstOrDefault(
+                        d => string.Equals(d, libelle, StringComparison.OrdinalIgnoreCase)
+                            || LibelleNotion.CleSouple(d) == LibelleNotion.CleSouple(libelle));
+                    if (demande is null) continue;
+
+                    resultat[demande] = new NotionDeclaree(candidate.Id, candidate.Libelle ?? code);
+
+                    _logger.LogInformation(
+                        "Notion rapprochee du referentiel : «{Libelle}» -> {Code}.", demande, code);
+                }
+            }
+            catch (JsonException ex)
+            {
+                _logger.LogWarning(ex, "Reponse illisible du rapprochement de notions.");
+            }
+
+            return resultat;
+        }
+
+        private const string ConsigneRapprochement = """
+            Un professeur a nommé, avec ses mots, des notions qu'il vient de
+            travailler avec un élève. On te donne ses LIBELLÉS et la LISTE DES
+            NOTIONS du programme officiel de la classe, dans cette matière.
+
+            Pour chaque libellé, tu dis quelle notion de la liste désigne LA
+            MÊME CHOSE — la même compétence, pas une compétence voisine.
+
+            Règles :
+            - N'invente AUCUN code. Tout code absent de la liste est ignoré.
+            - « de repérer une personnification » et « Repérer comparaison,
+              métaphore et personnification » sont la même notion ; « les
+              rimes » et « Analyser un poème : vers, strophes, rimes, rythme »
+              aussi. « Les fractions » et « Simplifier une fraction » ne le
+              sont pas : le premier est un chapitre, pas une compétence.
+            - Si rien dans la liste ne dit la même chose, rends null pour ce
+              libellé : une notion hors programme reste telle quelle. Mieux
+              vaut null qu'un rapprochement approximatif.
+            - Recopie chaque libellé exactement comme il t'a été donné.
+
+            Réponds en JSON strict, sans autre texte :
+            {"rapprochements":[{"libelle":"de repérer une personnification","code":"FR_5E_LECT_FIGURES"},{"libelle":"les figures de style","code":null}]}
+            """;
+
+        private Task<string> AppelerAsync(
+            string sujet, List<CompetenceCandidate> candidates, CancellationToken ct) =>
+            AppelerAsync(Consigne, Corpus(sujet, candidates), "programme-controle", ct);
+
         private async Task<string> AppelerAsync(
-            string sujet, List<CompetenceCandidate> candidates, CancellationToken ct)
+            string consigne, string corpus, string origine, CancellationToken ct)
         {
             var parametres = new MessageCreateParams
             {
                 Model = _options.Modele(TypeTache.Dialogue),
                 MaxTokens = 800,
-                System = new List<TextBlockParam> { new() { Text = Consigne } },
+                System = new List<TextBlockParam> { new() { Text = consigne } },
                 Messages = new List<MessageParam>
                 {
-                    new() { Role = Role.User, Content = Corpus(sujet, candidates) },
+                    new() { Role = Role.User, Content = corpus },
                 },
 
                 // Choisir dans une liste, pas raisonner : `low` suffit, et
@@ -163,7 +278,7 @@ namespace SchoolWebApp.Api.Services
             }
 
             await _journal.EnregistrerAsync(
-                "programme-controle", modele, entree, sortie, cacheLu, cacheEcrit, ct: ct);
+                origine, modele, entree, sortie, cacheLu, cacheEcrit, ct: ct);
 
             return texte.ToString();
         }

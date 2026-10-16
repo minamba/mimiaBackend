@@ -198,6 +198,7 @@ namespace SchoolWebApp.Api.Services.Fournisseurs
         ///
         /// Ce qu'elle ne voit plus : un crédit épuisé ou le quota du jour atteint.
         /// Les phrases réelles, elles, le voient — et repassent alors par OpenAI.
+        /// Elles le disent au <see cref="CompteurGemini"/>, que la sonde lit d'abord.
         /// </summary>
         private async Task<ResultatSonde> SonderGeminiAsync(CancellationToken ct)
         {
@@ -207,6 +208,17 @@ namespace SchoolWebApp.Api.Services.Fournisseurs
             // répond « ok » même quand Google refuse toute synthèse : sans cette
             // lecture, la carte restait verte pendant que la voix passait par
             // OpenAI. Le compteur, lui, a reçu le refus — c'est lui qui fait foi.
+            // LE CRÉDIT, VU PAR LES VRAIES PHRASES — même raison, en plus grave :
+            // le quota revient à 9 h, le crédit seulement à la recharge.
+            if (_compteurGemini.CreditEpuise() is { } refus)
+            {
+                return new ResultatSonde(
+                    StatutFournisseur.CreditEpuise,
+                    refus.CodeHttp,
+                    refus.CodeErreur,
+                    "Google refuse la synthèse faute de crédit prépayé : la voix des professeurs passe par OpenAI jusqu'à la recharge.");
+            }
+
             var maintenant = DateTime.UtcNow;
             if (_compteurGemini.JourEstPlein(maintenant))
             {

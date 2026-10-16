@@ -32,6 +32,14 @@ namespace SchoolWebApp.Api.Services.Paiement
             int parentId, string codePack, CancellationToken ct = default);
 
         /// <summary>
+        /// Ouvre la caisse d'un pack de fiches de révision (paiement unique),
+        /// depuis « Mon forfait ». Null si le pack est inconnu ou sans tarif
+        /// Stripe.
+        /// </summary>
+        Task<OuvertureCaisse?> OuvrirAchatFichesAsync(
+            int parentId, string codePack, CancellationToken ct = default);
+
+        /// <summary>
         /// Ouvre le portail client : changer de carte, lire ses factures,
         /// résilier. Null si le parent n'a jamais payé — il n'a alors pas de
         /// client chez Stripe, donc rien à y consulter.
@@ -102,15 +110,18 @@ namespace SchoolWebApp.Api.Services.Paiement
     {
         private readonly IAbonnementRepository _abonnements;
         private readonly IParentRepository _parents;
+        private readonly ICreditsFichesRepository _fiches;
         private readonly IOptions<OptionsStripe> _options;
         private readonly ILogger<CaisseStripeService> _logger;
 
         public CaisseStripeService(
             IAbonnementRepository abonnements,
             IParentRepository parents,
+            ICreditsFichesRepository fiches,
             IOptions<OptionsStripe> options,
             ILogger<CaisseStripeService> logger)
         {
+            _fiches = fiches ?? throw new ArgumentNullException(nameof(fiches));
             _abonnements = abonnements ?? throw new ArgumentNullException(nameof(abonnements));
             _parents = parents ?? throw new ArgumentNullException(nameof(parents));
             _options = options ?? throw new ArgumentNullException(nameof(options));
@@ -237,6 +248,60 @@ namespace SchoolWebApp.Api.Services.Paiement
 
             _logger.LogInformation(
                 "Caisse ouverte pour le parent {ParentId} : recharge {Pack}, session {Session}.",
+                parentId, pack.Code, session.Id);
+
+            return new OuvertureCaisse(session.Url);
+        }
+
+        public async Task<OuvertureCaisse?> OuvrirAchatFichesAsync(
+            int parentId, string codePack, CancellationToken ct = default)
+        {
+            var reglages = _options.Value;
+            if (!reglages.EstConfigure) throw new InvalidOperationException("Aucune clé Stripe configurée.");
+
+            var pack = (await _fiches.GetOffresAsync(ct))
+                .FirstOrDefault(o => string.Equals(o.Code, codePack, StringComparison.OrdinalIgnoreCase));
+
+            if (pack is null) return null;
+
+            if (string.IsNullOrWhiteSpace(pack.StripePrixId))
+            {
+                _logger.LogError("Pack de fiches {Pack} sans tarif Stripe : catalogue non synchronise.", codePack);
+                return null;
+            }
+
+            var client = new StripeClient(reglages.CleSecrete);
+            var clientId = await AssurerClientAsync(client, parentId, ct);
+
+            // Le même drapeau que les recharges, une autre valeur : le webhook
+            // crédite des fiches à la famille, pas des heures à l'abonnement.
+            var etiquettes = new Dictionary<string, string>
+            {
+                [EtiquetteParent] = parentId.ToString(),
+                [EtiquetteOffre] = pack.Code,
+                [EtiquetteType] = CreditsFiches.TypeStripe,
+            };
+
+            var session = await new SessionService(client).CreateAsync(
+                new SessionCreateOptions
+                {
+                    Mode = "payment",
+                    Customer = clientId,
+                    LineItems = [new SessionLineItemOptions { Price = pack.StripePrixId, Quantity = 1 }],
+
+                    // Le parent achète depuis « Mon forfait » (Camara, le
+                    // 16/10/2026) et y revient : `paiement=ok` ouvre l'onglet,
+                    // `achat=fiches` dit à l'encart des fiches de se relire.
+                    SuccessUrl = $"{reglages.UrlRetour}?paiement=ok&achat=fiches",
+                    CancelUrl = $"{reglages.UrlAnnulation}?paiement=abandon",
+
+                    Metadata = etiquettes,
+                    PaymentIntentData = new SessionPaymentIntentDataOptions { Metadata = etiquettes },
+                },
+                cancellationToken: ct);
+
+            _logger.LogInformation(
+                "Caisse ouverte pour le parent {ParentId} : fiches {Pack}, session {Session}.",
                 parentId, pack.Code, session.Id);
 
             return new OuvertureCaisse(session.Url);

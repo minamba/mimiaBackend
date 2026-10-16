@@ -99,7 +99,7 @@ namespace SchoolWebApp.Api.Builders.impl
             return eleve is null ? null : _mapper.Map<EleveViewModel>(eleve);
         }
 
-        public async Task<EleveViewModel?> AddEleveAsync(EleveRequest model)
+        public async Task<EleveViewModel?> AddEleveAsync(EleveRequest model, int? parentId = null)
         {
             var niveau = await _referentielService.GetNiveauScolaireByIdAsync(model.NiveauScolaireId);
 
@@ -112,11 +112,13 @@ namespace SchoolWebApp.Api.Builders.impl
                 return null;
             }
 
-            var parent = await ResoudreParentAsync();
+            // Le parent connecté, ou celui que l'administration a choisi : la
+            // route d'admin a déjà vérifié qu'il existe et qu'on en a le droit.
+            var idParent = parentId ?? (await ResoudreParentAsync()).Id;
 
             var eleve = _mapper.Map<DomainEleve>(model);
             eleve.Id = 0;
-            eleve.ParentId = parent.Id;      // jamais depuis la requête
+            eleve.ParentId = idParent;       // jamais depuis la requête
             eleve.DateCreation = DateTime.UtcNow;
             eleve.Specialites = VoiesScolaires.SpecialitesRetenues(niveau.Code, model.Specialites);
 
@@ -128,9 +130,13 @@ namespace SchoolWebApp.Api.Builders.impl
             eleve.Specialites.AddRange(
                 VoiesScolaires.LanguesRetenues(niveau.Code, model.Langues).Where(ouvertesALaCreation.Contains));
 
+            // ET SA FILIÈRE PROFESSIONNELLE, dans la même liste (15/10/2026).
+            eleve.Specialites.AddRange(VoiesScolaires.FiliereProRetenue(
+                niveau.Code, model.FamilleMetiers, model.SpecialitePro, model.SpecialiteProLibre));
+
             var cree = await _eleveService.AddEleveAsync(eleve);
 
-            _logger.LogInformation("Profil eleve {EleveId} cree pour le parent {ParentId}.", cree.Id, parent.Id);
+            _logger.LogInformation("Profil eleve {EleveId} cree pour le parent {ParentId}.", cree.Id, idParent);
 
             return _mapper.Map<EleveViewModel>(cree);
         }
@@ -195,6 +201,14 @@ namespace SchoolWebApp.Api.Builders.impl
                     .ToList();
 
             eleve.Specialites.AddRange(VoiesScolaires.LanguesRetenues(codeNiveau, languesVoulues));
+
+            // LA FILIÈRE PROFESSIONNELLE (15/10/2026) : un écran qui ne l'envoie
+            // pas la laisse telle qu'elle était ; un passage hors de la voie pro
+            // l'efface (le filtre de classe s'en charge).
+            var filiere = model.FamilleMetiers is null && model.SpecialitePro is null && model.SpecialiteProLibre is null
+                ? VoiesScolaires.FiliereProDe(existant.Specialites)
+                : new VoiesScolaires.FiliereProfessionnelle(model.FamilleMetiers, model.SpecialitePro, model.SpecialiteProLibre);
+            eleve.Specialites.AddRange(VoiesScolaires.FiliereProRetenue(codeNiveau, filiere.Famille, filiere.Specialite, filiere.Libre));
 
             var maj = await _eleveService.UpdateEleveAsync(eleve);
             return maj is null ? null : _mapper.Map<EleveViewModel>(maj);

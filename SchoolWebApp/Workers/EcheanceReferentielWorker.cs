@@ -218,7 +218,7 @@ namespace SchoolWebApp.Api.Workers
 
                         await repository.EnregistrerReleveAsync(
                             echeance.Id, echeance.DernierHashPage!,
-                            EcheanceReferentielRepository.StatutInchangee, maintenant, ct);
+                            EcheanceReferentielRepository.StatutInchangee, maintenant, releve.CopieDu, ct);
                         continue;
                     }
 
@@ -230,7 +230,7 @@ namespace SchoolWebApp.Api.Workers
                 // Enregistré même si RIEN n'a changé : c'est ce qui permet de
                 // comparer au relevé SUIVANT, et non plus seulement au tout
                 // premier.
-                await repository.EnregistrerReleveAsync(echeance.Id, releve.Hash, statut, maintenant, ct);
+                await repository.EnregistrerReleveAsync(echeance.Id, releve.Hash, statut, maintenant, releve.CopieDu, ct);
             }
         }
 
@@ -374,6 +374,13 @@ namespace SchoolWebApp.Api.Workers
                         "Premier relevé de cette page : rien à comparer encore, la prochaine "
                         + "alerte dira si elle a bougé.",
                 };
+
+                // Lue sur une copie : on dit laquelle, et que le site bloque le robot.
+                if (echeance.CopieArchiveDu is { } copie && echeance.DernierStatutVeille != EcheanceReferentielRepository.StatutInjoignable)
+                {
+                    constat += $" (Constaté sur la copie de l'Internet Archive du {copie:dd/MM/yyyy} : "
+                        + "le site officiel bloque les robots.)";
+                }
 
                 ligne += $"<br><a href=\"{echeance.Url}\">{echeance.Url}</a><br>{constat}";
             }

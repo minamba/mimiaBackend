@@ -10,6 +10,18 @@ namespace SchoolWebApp.Domain.Models
         /// <summary>Au plus six documents par contrôle, comme les pièces d'un message.</summary>
         public const int Maximum = 6;
 
+        /// <summary>Trois lectures plantées, et le document est abandonné (16/10/2026).</summary>
+        public const int LecturesMax = 3;
+
+        /// <summary>
+        /// La mention que le professeur lit à la place du cours abandonné : elle
+        /// lui dit quoi demander à l'élève, dont l'écran n'affiche pas l'état
+        /// de lecture.
+        /// </summary>
+        public const string MentionAbandon =
+            "(document illisible : la lecture a échoué trois fois — demande à l'élève de le réimporter, "
+            + "en photo nette ou en PDF)";
+
         public int Id { get; set; }
 
         public int ControleId { get; set; }

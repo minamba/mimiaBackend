@@ -190,6 +190,22 @@ namespace SchoolWebApp.Dal.Repositories
             return true;
         }
 
+        /// <summary>
+        /// L'ESPACE PARENT (16/10/2026) : coché, le parent voit « Mon espace
+        /// parent » et y crée ses propres fiches. Lu à chaque appel de l'espace
+        /// (pas dans le jeton) : l'effet est immédiat, sans reconnexion.
+        /// </summary>
+        public async Task<bool> DefinirFichesParentAsync(int parentId, bool autorise)
+        {
+            var parent = await _context.Parents.FirstOrDefaultAsync(p => p.Id == parentId);
+            if (parent is null) return false;
+
+            parent.PeutCreerFiches = autorise;
+            await _context.SaveChangesAsync();
+
+            return true;
+        }
+
         public async Task<bool> DefinirAdministrateurAsync(int parentId, bool actif)
         {
             var parent = await _context.Parents.FirstOrDefaultAsync(p => p.Id == parentId);
@@ -859,6 +875,15 @@ FROM sys.database_files;";
                 .Select(r => r.PrixCentimes)
                 .ToListAsync();
 
+            // Les packs de fiches : même règle, `PrixCentimes > 0` écarte les
+            // crédits posés sans paiement (comptes exemptés).
+            var packsFiches = await _context.AchatsFiches
+                .AsNoTracking()
+                .Where(a => a.DateAchat >= debutUtc && a.DateAchat < finUtc
+                            && a.DateRemboursement == null && a.PrixCentimes > 0)
+                .Select(a => a.PrixCentimes)
+                .ToListAsync();
+
             var detail = lignes.Values
                 .Select(l =>
                 {
@@ -885,9 +910,11 @@ FROM sys.database_files;";
                 AnnuelsEuros = annuelsLignes.Sum(l => l.Euros),
                 Packs = packs.Count,
                 PacksEuros = packs.Sum() / 100m,
+                PacksFiches = packsFiches.Count,
+                PacksFichesEuros = packsFiches.Sum() / 100m,
             };
 
-            revenu.TotalEuros = revenu.MensuelsEuros + revenu.AnnuelsEuros + revenu.PacksEuros;
+            revenu.TotalEuros = revenu.MensuelsEuros + revenu.AnnuelsEuros + revenu.PacksEuros + revenu.PacksFichesEuros;
 
             return revenu;
         }
@@ -1023,6 +1050,22 @@ FROM sys.database_files;";
                 });
             }
 
+            // LES FICHES DE RÉVISION SORTENT DES FRAIS DE FOND (15/10/2026) :
+            // c'est l'enfant qui les demande. Elles ont leur ligne chez les
+            // familles, avec ce qu'elles ont produit sur la période.
+            var postesFiches = postes.Where(p => p.Origine.StartsWith(PrefixeFiches, StringComparison.Ordinal)).ToList();
+            postes = postes.Except(postesFiches).ToList();
+
+            var fiches = postesFiches.Sum(p => p.Dollars);
+
+            var fichesCreees = await _context.FichesDeCours
+                .AsNoTracking()
+                .CountAsync(f => f.DateCreation >= debutUtc && f.DateCreation < finUtc);
+
+            var coursLus = await _context.CoursImportes
+                .AsNoTracking()
+                .CountAsync(c => c.EnvoyeLe != null && c.EnvoyeLe >= debutUtc && c.EnvoyeLe < finUtc);
+
             var tachesDeFond = postes.Sum(p => p.Dollars);
 
             return new CoutPeriode
@@ -1035,7 +1078,11 @@ FROM sys.database_files;";
                 Voix = detailVoix,
                 TachesDeFondDollars = Math.Round(tachesDeFond, 4),
                 Postes = postes.OrderByDescending(p => p.Dollars).ToList(),
-                TotalDollars = Math.Round(dialogue + voix + tachesDeFond, 4),
+                FichesDollars = Math.Round(fiches, 4),
+                FichesAppels = postesFiches.Sum(p => p.Appels),
+                FichesCreees = fichesCreees,
+                CoursLus = coursLus,
+                TotalDollars = Math.Round(dialogue + voix + tachesDeFond + fiches, 4),
                 MinutesTravaillees = await MinutesTravailleesAsync(debut, fin),
             };
         }
@@ -1193,6 +1240,7 @@ FROM sys.database_files;";
                     DerniereConnexion = p.DerniereConnexion,
                     EstAdministrateur = p.EstAdministrateur,
                     PeutAjouterEnfant = p.PeutAjouterEnfant,
+                    PeutCreerFiches = p.PeutCreerFiches,
 
                     // LA CONSOMMATION DE LA PÉRIODE EN COURS.
                     //
@@ -1268,8 +1316,60 @@ FROM sys.database_files;";
                 .ToListAsync();
 
             await RenseignerLesCoutsAsync(lignes, debut, fin);
+            await RenseignerLesEtatsAsync(lignes);
 
             return lignes;
+        }
+
+        /// <summary>
+        /// L'ÉTAT DE CHAQUE COMPTE (16/10/2026) — voir `EtatsCompte`. Lu sur
+        /// l'abonnement le plus RÉCENT : souscrire clôt le précédent, c'est donc
+        /// lui qui dit où en est la famille. Deux requêtes pour toute la liste,
+        /// et le calcul en mémoire : la règle reste écrite à un seul endroit.
+        /// </summary>
+        private async Task RenseignerLesEtatsAsync(List<ParentAdmin> lignes)
+        {
+            if (lignes.Count == 0) return;
+
+            var ids = lignes.Select(l => l.Id).ToList();
+
+            var derniers = await _context.Abonnements
+                .AsNoTracking()
+                .Where(a => ids.Contains(a.ParentId))
+                .GroupBy(a => a.ParentId)
+                .Select(g => g
+                    .OrderByDescending(a => a.DateCreation)
+                    .ThenByDescending(a => a.Id)
+                    .Select(a => new
+                    {
+                        a.ParentId,
+                        a.Statut,
+                        a.ImpayeDepuis,
+                        a.PeriodeFin,
+                        a.DateFin,
+                        a.ResiliationDemandeeLe,
+                        ParStripe = a.StripeAbonnementId != null,
+                        Essai = a.Offre != null && a.Offre.EstEssai,
+                    })
+                    .First())
+                .ToDictionaryAsync(a => a.ParentId);
+
+            // Les adresses bannies sont normalisées à l'écriture (minuscules,
+            // sans espaces) : on compare à la même forme.
+            var bannies = (await _context.MailsBannis.AsNoTracking().Select(b => b.Mail).ToListAsync())
+                .ToHashSet(StringComparer.Ordinal);
+
+            var maintenant = DateTime.UtcNow;
+
+            foreach (var ligne in lignes)
+            {
+                var banni = ligne.Mail is not null && bannies.Contains(ligne.Mail.Trim().ToLowerInvariant());
+                derniers.TryGetValue(ligne.Id, out var a);
+
+                ligne.EtatCompte = EtatsCompte.Calculer(
+                    banni, a?.Statut, a?.ImpayeDepuis, a?.PeriodeFin ?? default, a?.DateFin,
+                    a?.ResiliationDemandeeLe, a?.ParStripe ?? false, a?.Essai ?? false, maintenant);
+            }
         }
 
         /// <summary>La lecture de cache : un dixième du tarif d'entrée.</summary>
@@ -1595,6 +1695,9 @@ GROUP BY parent_id";
         /// </remarks>
         /// <summary>L'origine, dans le journal des appels, d'un appel de synthèse vocale.</summary>
         private const string OrigineVoix = "voix";
+
+        /// <summary>Les origines des appels des fiches de révision : `fiches-lecture`, `fiches-redaction`.</summary>
+        private const string PrefixeFiches = "fiches-";
 
         /// <summary>Les appels de synthèse journalisés d'un modèle, et leurs jetons.</summary>
         private sealed record AppelsVoix(string? Modele, int Appels, long Entree, long Sortie);
@@ -1993,6 +2096,16 @@ GROUP BY parent_id";
 
             if (fiche is null) return null;
 
+            // --- son projet d'orientation (11/10/2026) ------------------------
+            // Lu à part : la relecture du JSON ne se traduit pas en SQL.
+            var projet = await _context.Eleves
+                .AsNoTracking()
+                .Where(e => e.Id == eleveId)
+                .Select(e => new { e.ProjetObjectif, e.ProjetMatieres, e.ProjetLe })
+                .FirstAsync();
+            fiche.ProjetOrientation = Domain.Models.ProjetOrientation.Lire(
+                projet.ProjetObjectif, projet.ProjetMatieres, projet.ProjetLe);
+
             // --- les années qu'il a passées chez nous ------------------------
             //
             // Elles viennent de l'HISTORIQUE DES CLASSES, pas du travail lui-même :
@@ -2056,9 +2169,20 @@ GROUP BY parent_id";
             // faux, et « 6 cours » — une par matière — ne changerait jamais
             // d'une année sur l'autre. Les séances, elles, sont datées et
             // parlent : « 49 cours suivis en 3e » dit quelque chose.
+            // L'ORIENTATION N'EST PAS UN COURS — Camara, le 11/10/2026 : « une
+            // section spécifique pour la conseillère, ça ne se mélange pas avec
+            // les cours ». Ses séances sortent des chiffres, des matières et
+            // des derniers cours ; elles ont leur section à part sur la fiche.
+            var idOrientation = await _context.Matieres
+                .AsNoTracking()
+                .Where(m => m.Code == Domain.Models.ConseillereOrientation.MatiereCode)
+                .Select(m => (int?)m.Id)
+                .FirstOrDefaultAsync();
+
             var seancesParMatiere = await _context.RapportsSeance
                 .AsNoTracking()
                 .Where(r => r.EleveId == eleveId)
+                .Where(r => r.MatiereId != idOrientation)
                 .Where(r => depuis == null || r.DateCreation >= depuis)
                 .Where(r => jusqua == null || r.DateCreation < jusqua)
                 .GroupBy(r => r.MatiereId)
@@ -2071,6 +2195,7 @@ GROUP BY parent_id";
             var messagesParMatiere = await _context.Messages
                 .AsNoTracking()
                 .Where(m => m.Conversation!.EleveId == eleveId && m.Role == "assistant")
+                .Where(m => m.Conversation!.MatiereId != idOrientation)
                 .Where(m => depuis == null || m.DateCreation >= depuis)
                 .Where(m => jusqua == null || m.DateCreation < jusqua)
                 .GroupBy(m => m.Conversation!.MatiereId)
@@ -2157,6 +2282,7 @@ GROUP BY parent_id";
             var toutes = await _context.Matieres
                 .AsNoTracking()
                 .Where(m => m.Active)
+                .Where(m => m.Id != idOrientation)
                 .OrderBy(m => m.Ordre)
                 .ToListAsync();
 
@@ -2214,6 +2340,7 @@ GROUP BY parent_id";
             var seances = await _context.Conversations
                 .AsNoTracking()
                 .Where(c => c.EleveId == eleveId)
+                .Where(c => c.MatiereId != idOrientation)
                 // Les fils qui ont VÉCU pendant l'année, et non ceux qui y ont
                 // été ouverts : une conversation de maths commencée en 3e et
                 // poursuivie en 2de appartient aux deux.
@@ -2427,8 +2554,12 @@ GROUP BY parent_id";
                 var langues = VoiesScolaires.LanguesRetenues(
                     codeNiveau, VoiesScolaires.LireSpecialites(entite.Specialites));
 
+                // SA FILIÈRE PROFESSIONNELLE AUSSI (15/10/2026), reprise telle quelle.
+                var deja = VoiesScolaires.FiliereProDe(VoiesScolaires.LireSpecialites(entite.Specialites));
+                var filiere = VoiesScolaires.FiliereProRetenue(codeNiveau, deja.Famille, deja.Specialite, deja.Libre);
+
                 entite.Specialites = VoiesScolaires.EcrireSpecialites(
-                    VoiesScolaires.SpecialitesRetenues(codeNiveau, specialites).Concat(langues));
+                    VoiesScolaires.SpecialitesRetenues(codeNiveau, specialites).Concat(langues).Concat(filiere));
             }
 
             await _context.SaveChangesAsync();

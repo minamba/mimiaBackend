@@ -39,6 +39,22 @@ services:
       #
       # A creer avant le premier demarrage : mkdir -p ./donnees/audio
       - ./donnees/audio:/donnees/audio
+
+      # LES IMAGES DES PLANCHES, SORTIES DE LA BASE LE 15/10/2026.
+      #
+      # Mesure : ~490 Ko par planche, deux par figure (legendee + muette),
+      # dans une base qui plafonne a 10 Go. Le disque en a 400.
+      #
+      # A LA DIFFERENCE DE L AUDIO, CE DOSSIER SE SAUVEGARDE : une planche ne
+      # se regenere pas. exploitation/sauvegarde-base.sh le copie chaque nuit.
+      #
+      # La marque STOCKAGE-MIMIA dit a l API que le dossier est bien ce
+      # montage : sans elle, les planches restent en base. A creer AVANT le
+      # demarrage, puis docker compose up -d mimia (un simple restart ne
+      # prend pas un nouveau montage) :
+      #   mkdir -p ./donnees/planches
+      #   echo "Dossier des planches de Mimia" > ./donnees/planches/STOCKAGE-MIMIA
+      - ./donnees/planches:/donnees/planches
     networks:
       - web
       - geekai_internal

@@ -94,6 +94,19 @@ namespace SchoolWebApp.Api.Builders
             int conversationId, CancellationToken ct = default);
 
         /// <summary>
+        /// L'échéance du forfait de l'élève de cette conversation, le tour en
+        /// cours déjà retiré ; null quand rien ne doit couper (16/10/2026).
+        /// </summary>
+        Task<Domain.Models.EcheanceForfait?> EcheanceAsync(int conversationId, CancellationToken ct = default);
+
+        /// <summary>
+        /// Le forfait (essai ou formule) est arrivé à son terme pendant la
+        /// séance : ce qui restait est décompté, et la sortie est marquée (le
+        /// compte rendu est dû). Faux sans échéance.
+        /// </summary>
+        Task<bool> TerminerForfaitAsync(int conversationId, CancellationToken ct = default);
+
+        /// <summary>
         /// Note que l'élève a quitté le cours, pour qu'il soit accueilli à son
         /// retour sans qu'on ait à le déduire d'un délai de silence.
         /// </summary>

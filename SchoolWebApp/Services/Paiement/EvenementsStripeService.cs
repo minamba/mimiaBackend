@@ -47,6 +47,7 @@ namespace SchoolWebApp.Api.Services.Paiement
         private readonly IAbonnementRepository _abonnements;
         private readonly IOffreLancementService _lancement;
         private readonly IParentRepository _parents;
+        private readonly ICreditsFichesRepository _fiches;
         private readonly Notifications.ITelegramService _telegram;
         private readonly SchoolWebApp.Domain.Emails.IServiceEmail _email;
         private readonly IOptions<OptionsStripe> _options;
@@ -56,6 +57,7 @@ namespace SchoolWebApp.Api.Services.Paiement
             IAbonnementRepository abonnements,
             IOffreLancementService lancement,
             IParentRepository parents,
+            ICreditsFichesRepository fiches,
             IOptions<OptionsStripe> options,
             Notifications.ITelegramService telegram,
             SchoolWebApp.Domain.Emails.IServiceEmail email,
@@ -64,6 +66,7 @@ namespace SchoolWebApp.Api.Services.Paiement
             _abonnements = abonnements ?? throw new ArgumentNullException(nameof(abonnements));
             _lancement = lancement ?? throw new ArgumentNullException(nameof(lancement));
             _parents = parents ?? throw new ArgumentNullException(nameof(parents));
+            _fiches = fiches ?? throw new ArgumentNullException(nameof(fiches));
             _telegram = telegram ?? throw new ArgumentNullException(nameof(telegram));
             _email = email ?? throw new ArgumentNullException(nameof(email));
             _options = options ?? throw new ArgumentNullException(nameof(options));
@@ -169,6 +172,25 @@ namespace SchoolWebApp.Api.Services.Paiement
             if (string.Equals(type, CaisseStripeService.TypeRecharge, StringComparison.OrdinalIgnoreCase))
             {
                 await CrediterRechargeAsync(session, parentId, codeOffre, ct);
+                return;
+            }
+
+            // Un pack de fiches de révision : crédité à la FAMILLE, sans lien
+            // avec l'abonnement ni sa période (les crédits n'expirent pas).
+            if (string.Equals(type, CreditsFiches.TypeStripe, StringComparison.OrdinalIgnoreCase))
+            {
+                var solde = await _fiches.CrediterAsync(parentId, codeOffre, session.Id, session.PaymentIntentId, ct);
+                if (solde is null)
+                {
+                    _logger.LogWarning(
+                        "Fiches {Pack} non creditees au parent {ParentId} (session {Session}) : "
+                        + "pack inconnu ou paiement deja traite.", codeOffre, parentId, session.Id);
+                    return;
+                }
+
+                _logger.LogWarning(
+                    "Fiches {Pack} creditees au parent {ParentId} (session {Session}) : solde {Solde}.",
+                    codeOffre, parentId, session.Id, solde);
                 return;
             }
 
@@ -379,6 +401,17 @@ namespace SchoolWebApp.Api.Services.Paiement
                 return;
             }
 
+            // Un achat de fiches remboursé : ses crédits non utilisés repartent.
+            if (await _fiches.RembourserAsync(charge.PaymentIntentId, ct))
+            {
+                _logger.LogWarning(
+                    "Credits de fiches REPRIS apres remboursement total du paiement {Paiement}.",
+                    charge.PaymentIntentId);
+
+                await PrevenirDuRemboursementAsync(charge, total: true, heuresReprises: false, ct, fichesReprises: true);
+                return;
+            }
+
             var repris = await _abonnements.RembourserRechargeAsync(charge.PaymentIntentId, ct);
 
             if (!repris)
@@ -415,7 +448,7 @@ namespace SchoolWebApp.Api.Services.Paiement
         /// justement le cas où le silence serait le plus mal compris.
         /// </summary>
         private async Task PrevenirDuRemboursementAsync(
-            Charge charge, bool total, bool heuresReprises, CancellationToken ct)
+            Charge charge, bool total, bool heuresReprises, CancellationToken ct, bool fichesReprises = false)
         {
             try
             {
@@ -431,7 +464,9 @@ namespace SchoolWebApp.Api.Services.Paiement
                 var dernier = charge.Refunds?.Data?.LastOrDefault()?.Amount;
                 var centimes = dernier ?? charge.AmountRefunded;
 
-                var consequence = heuresReprises
+                var consequence = fichesReprises
+                    ? "Les fiches de révision achetées et pas encore utilisées ont été retirées de vos crédits."
+                    : heuresReprises
                     ? "Les heures achetées ont été retirées de votre forfait."
                     : total
                         ? "Votre forfait n'est pas modifié."
@@ -521,20 +556,16 @@ namespace SchoolWebApp.Api.Services.Paiement
         /// <summary>
         /// Un prélèvement a échoué.
         ///
-        /// ON NE COUPE PAS L'ACCÈS ICI, et on ne le laisse pas courir non plus.
+        /// L'ABONNEMENT EST MARQUÉ IMPAYÉ, et c'est ce marquage qui ferme la
+        /// porte une fois l'échéance passée (`VerifierAsync`).
         ///
-        /// Pas de coupure : Stripe relance la carte plusieurs fois sur une
-        /// quinzaine de jours, et la plupart de ces échecs se résolvent seuls —
-        /// un plafond atteint en fin de mois. Couper au premier refus
-        /// priverait de cours un enfant dont le parent a changé de carte. La
-        /// période en cours est payée, elle reste servie jusqu'au bout.
-        ///
-        /// Mais l'abonnement est marqué, et c'est nouveau : à l'échéance, la
-        /// période ne se renouvellera pas tant que la facture n'est pas réglée.
-        /// Auparavant elle repartait quoi qu'il arrive, et le compte restait
-        /// pleinement utilisable — jusqu'à ce que Stripe abandonne deux
-        /// semaines plus tard, et pour toujours si ce dernier webhook se
-        /// perdait.
+        /// OPTION A — Camara, le 16/10/2026 : Stripe prélève au DÉBUT de la
+        /// période qu'il facture, donc un refus à l'échéance tombe quand le mois
+        /// payé est déjà fini. Les séances sont alors suspendues jusqu'au
+        /// règlement, et reprennent d'elles-mêmes à la facture payée — une
+        /// relance de Stripe (huit en deux semaines) ou le parent qui règle
+        /// depuis le courriel. Un refus en milieu de période (changement de
+        /// formule au prorata) ne coupe rien : la période en cours est payée.
         /// </summary>
         private async Task AlerterAsync(Invoice facture, CancellationToken ct)
         {
@@ -557,6 +588,88 @@ namespace SchoolWebApp.Api.Services.Paiement
                     : "Prelevement refuse pour l'abonnement {Sub} (facture {Facture}), deja "
                       + "marque impaye ou inconnu ici.",
                 abonnementId, facture.Id);
+
+            // AU PREMIER REFUS SEULEMENT : `marque` n'est vrai que quand
+            // l'impayé vient de s'ouvrir. Stripe réémet cet événement à chaque
+            // nouvelle tentative (jusqu'à huit en deux semaines) et rejoue un
+            // webhook qui n'a pas répondu : un courriel à chaque fois serait
+            // du harcèlement. Le bandeau de « Mon forfait » prend le relais.
+            if (marque) await PrevenirDuRefusAsync(facture, ct);
+        }
+
+        /// <summary>
+        /// Écrit au parent que son prélèvement n'est pas passé — voulu par
+        /// Camara le 16/10/2026 : « quand un paiement a échoué, qu'un mail soit
+        /// automatiquement envoyé au parent ».
+        ///
+        /// CE QU'IL DIT : rien n'est coupé, jusqu'à quand les heures restent
+        /// ouvertes, quand Stripe réessaiera (`NextPaymentAttempt`), et un
+        /// bouton qui règle. Le bouton mène à la page de la facture chez Stripe
+        /// (`HostedInvoiceUrl`) : le parent y paie, ou y met une autre carte,
+        /// sans se connecter. À défaut, à son forfait chez nous.
+        ///
+        /// UN COURRIEL RATÉ NE FAIT PAS ÉCHOUER LE WEBHOOK, comme pour le
+        /// remboursement : l'impayé est marqué, c'est l'essentiel ; rejouer
+        /// l'événement ne renverrait d'ailleurs rien (`marque` serait faux).
+        /// </summary>
+        private async Task PrevenirDuRefusAsync(Invoice facture, CancellationToken ct)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(facture.CustomerId)) return;
+
+                var parent = await _parents.GetParentParClientStripeAsync(facture.CustomerId, ct);
+                if (string.IsNullOrWhiteSpace(parent?.Mail)) return;
+
+                var etat = await _abonnements.GetEtatQuotaAsync(parent.Id, ct);
+                var jour = (DateTime utc) => HeureFrance.Locale(utc).ToString("dd/MM/yyyy");
+
+                var prochaine = facture.NextPaymentAttempt is DateTime suivante
+                    ? $"Une nouvelle tentative de prélèvement aura lieu automatiquement le {jour(suivante)} ; si elle passe, tout reprend de soi-même."
+                    : "Aucune nouvelle tentative automatique n'est prévue : le règlement se fait depuis le bouton ci-dessous.";
+
+                // À L'ÉCHÉANCE, LES SÉANCES SONT SUSPENDUES (option A) ; en milieu
+                // de période, la période en cours, payée, continue.
+                var suspendu = etat is null || etat.PeriodeFin <= DateTime.UtcNow;
+                var situation = suspendu
+                    ? "<strong>Les séances de vos enfants sont suspendues jusqu'au règlement.</strong> "
+                      + "Dès que le paiement passe, elles reprennent aussitôt, avec les heures du nouveau mois."
+                    : $"Rien n'est coupé pour l'instant : <strong>vos heures restent disponibles jusqu'au {jour(etat!.PeriodeFin)}</strong>. "
+                      + "Sans règlement d'ici là, les séances seront suspendues à cette date.";
+
+                var lien = !string.IsNullOrWhiteSpace(facture.HostedInvoiceUrl)
+                    ? facture.HostedInvoiceUrl!
+                    : _options.Value.UrlRetour ?? string.Empty;
+
+                await _email.EnvoyerAsync(
+                    parent.Mail!,
+                    "Votre prélèvement n'a pas pu être effectué",
+                    "prelevement-echoue",
+                    new Dictionary<string, string>
+                    {
+                        // Le gabarit ne protège rien : le prénom, saisi par le parent, est échappé ici.
+                        ["salutation"] = string.IsNullOrWhiteSpace(parent.Prenom)
+                            ? "Bonjour"
+                            : $"Bonjour {System.Net.WebUtility.HtmlEncode(parent.Prenom.Trim())}",
+                        ["offre"] = etat?.OffreLibelle ?? "Mimia",
+                        ["montant"] = $"{facture.AmountDue / 100m:0.00} €".Replace('.', ','),
+                        ["date"] = jour(DateTime.UtcNow),
+                        ["situation"] = situation,
+                        ["prochaineTentative"] = prochaine,
+                        ["lien"] = lien,
+                        ["lienForfait"] = _options.Value.UrlRetour ?? string.Empty,
+                    },
+                    ct);
+
+                _logger.LogInformation(
+                    "Courriel de prelevement refuse envoye a {Mail} (facture {Facture}).",
+                    parent.Mail, facture.Id);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex,
+                    "Courriel de prelevement refuse NON ENVOYE pour la facture {Facture}.", facture.Id);
+            }
         }
 
         /// <summary>

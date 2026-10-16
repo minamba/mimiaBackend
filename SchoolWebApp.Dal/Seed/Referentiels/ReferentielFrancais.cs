@@ -284,6 +284,54 @@ namespace SchoolWebApp.Dal.Seed.Referentiels
                 ("PREMIERE", "FR_1RE_LANG_NEGATION",    "Étude de la langue", "Analyser une phrase négative pour la question de grammaire", 18),
                 ("PREMIERE", "FR_1RE_ORAL_EXPRESSION",  "Oral", "S'exprimer douze minutes sans lire ses notes", 19),
 
+                // --- Seconde et première professionnelles (15/10/2026) ---
+                //
+                // Elles héritaient par le rang du français de seconde et de première
+                // GÉNÉRALES : la première pro recevait la préparation au bac de français
+                // anticipé (dissertation, commentaire, question de grammaire), qu'elle ne
+                // passe pas. Sources : seconde pro, arrêté du 03/04/2019, NOR MENE1908622A,
+                // BO spécial n° 5 du 11/04/2019 ; première pro, arrêté du 03/02/2020, NOR
+                // MENE2003001A, BO spécial n° 1 du 06/02/2020, annexe 1. Tous deux en
+                // vigueur, seulement étendus aux classes de BMA par l'arrêté du 16/02/2026.
+                // Les lignes « métier » relèvent de la co-intervention, pas du seul cours.
+                ("SECONDE_PRO", "FR_2PRO_LECT_ECRITURE_SOI", "Littérature", "Lire une œuvre d’écriture de soi : récit de vie, journal, correspondance, poésie lyrique", 1),
+                ("SECONDE_PRO", "FR_2PRO_LECT_IDENTITE", "Littérature", "Analyser comment un auteur se raconte, entre l’intime et son rapport aux autres", 2),
+                ("SECONDE_PRO", "FR_2PRO_ECR_SE_DECRIRE", "Écriture", "Se décrire et se raconter avec un lexique précis et des procédés d’écriture", 3),
+                ("SECONDE_PRO", "FR_2PRO_ECR_PRESENTATION_SOI", "Écriture", "Rédiger une présentation de soi (CV) en séparant sphère privée et sphère publique", 4),
+                ("SECONDE_PRO", "FR_2PRO_LECT_INFORMATION", "Littérature", "Analyser comment une information se construit dans la presse, à l’écran et en ligne", 5),
+                ("SECONDE_PRO", "FR_2PRO_METH_SOURCES", "Méthode", "Vérifier une source, croiser les points de vue et distinguer un fait d’une opinion", 6),
+                ("SECONDE_PRO", "FR_2PRO_ECR_INFORMER", "Écriture", "Produire et diffuser une information de manière rigoureuse et responsable", 7),
+                ("SECONDE_PRO", "FR_2PRO_LECT_THEATRE", "Littérature", "Lire une pièce de théâtre en entier et comparer ses mises en scène", 8),
+                ("SECONDE_PRO", "FR_2PRO_LECT_ELOQUENCE", "Littérature", "Repérer les procédés de l’éloquence dans un discours ou un poème et leurs effets", 9),
+                ("SECONDE_PRO", "FR_2PRO_ORAL_DIRE", "Oral", "Dire un texte ou réciter un poème en travaillant la voix, le ton, le débit et le rythme", 10),
+                ("SECONDE_PRO", "FR_2PRO_ORAL_DISCOURS", "Oral", "Préparer et prononcer un discours pour émouvoir, persuader ou convaincre", 11),
+                ("SECONDE_PRO", "FR_2PRO_ORAL_EXPERIENCE", "Oral", "Se présenter et rendre compte d’une expérience de stage à l’oral", 12),
+                ("SECONDE_PRO", "FR_2PRO_METH_INTERPRETER", "Méthode", "Reformuler un texte lu puis justifier son interprétation par des passages choisis", 13),
+                ("SECONDE_PRO", "FR_2PRO_ECR_REPRENDRE", "Écriture", "Améliorer un écrit long en reprenant son brouillon et en se relisant", 14),
+                ("SECONDE_PRO", "FR_2PRO_LANG_PHRASE", "Étude de la langue", "Analyser la phrase simple et la phrase complexe : coordination, subordination", 15),
+                ("SECONDE_PRO", "FR_2PRO_LANG_TEMPS_PRONOMS", "Étude de la langue", "Employer les temps et les pronoms (je, nous, on) pour se raconter", 16),
+                ("SECONDE_PRO", "FR_2PRO_LANG_ENONCIATION", "Étude de la langue", "Repérer dans un article l’énonciation, la modalisation et les paroles rapportées", 17),
+                ("SECONDE_PRO", "FR_2PRO_LANG_LEXIQUE_ORTHO", "Étude de la langue", "Enrichir son lexique et corriger son orthographe à partir de ses propres erreurs", 18),
+
+                ("PREMIERE_PRO", "FR_1PRO_LECT_RECUEIL", "Littérature", "Lire un recueil de poésie et étudier sa construction : titre, ordre des poèmes", 1),
+                ("PREMIERE_PRO", "FR_1PRO_LECT_FORME_SENS", "Littérature", "Analyser le lien entre la forme et le sens dans un poème", 2),
+                ("PREMIERE_PRO", "FR_1PRO_LECT_CREATION", "Littérature", "Retracer la genèse d’une œuvre par les brouillons, entretiens et témoignages d’artistes", 3),
+                ("PREMIERE_PRO", "FR_1PRO_ORAL_POEME", "Oral", "Mettre en voix un poème et justifier ses choix de lecture", 4),
+                ("PREMIERE_PRO", "FR_1PRO_ECR_PRESENTER_OEUVRE", "Écriture", "Écrire une quatrième de couverture, une préface ou une présentation critique", 5),
+                ("PREMIERE_PRO", "FR_1PRO_LECT_ROMAN", "Littérature", "Lire un roman du XVIIIe siècle à nos jours en suivant l’itinéraire d’un personnage", 6),
+                ("PREMIERE_PRO", "FR_1PRO_LECT_PERSONNAGE", "Littérature", "Analyser la construction d’un personnage : évolution, valeurs, rapport au monde", 7),
+                ("PREMIERE_PRO", "FR_1PRO_LECT_MISE_EN_RECIT", "Littérature", "Analyser la mise en récit : choix des événements, point de vue, jeu avec le temps", 8),
+                ("PREMIERE_PRO", "FR_1PRO_LECT_DESCRIPTION", "Littérature", "Analyser une description et la façon dont elle caractérise un personnage", 9),
+                ("PREMIERE_PRO", "FR_1PRO_LECT_GROUPEMENT", "Littérature", "Comparer un personnage à d’autres du même type, à ses adaptations ou à sa crise", 10),
+                ("PREMIERE_PRO", "FR_1PRO_ORAL_RACONTER", "Oral", "Raconter oralement ce qu’on a lu et en reformuler le sens", 11),
+                ("PREMIERE_PRO", "FR_1PRO_ECR_CARNET", "Écriture", "Tenir un carnet de lecture : citations, réactions et jugements critiques", 12),
+                ("PREMIERE_PRO", "FR_1PRO_ECR_ARGUMENTER", "Écriture", "Rédiger un écrit d’invention, de réflexion ou d’argumentation sur une lecture", 13),
+                ("PREMIERE_PRO", "FR_1PRO_LANG_POESIE", "Étude de la langue", "Analyser la polysémie, la connotation et l’écart entre phrase et vers", 14),
+                ("PREMIERE_PRO", "FR_1PRO_LANG_PAROLES", "Étude de la langue", "Identifier comment le récit rapporte les paroles et les pensées des personnages", 15),
+                ("PREMIERE_PRO", "FR_1PRO_ECR_METIER", "Écriture", "Rédiger une note, un compte rendu, un rapport d’activité ou une note d’intention", 16),
+                ("PREMIERE_PRO", "FR_1PRO_ORAL_METIER", "Oral", "Expliquer une tâche et argumenter à l’oral en adaptant son registre de langue", 17),
+                ("PREMIERE_PRO", "FR_1PRO_METH_DOCUMENT", "Méthode", "Lire un document qui mêle texte, image, graphique et schéma", 18),
+
                 // --- Terminale professionnelle : le français continue ici ---
                 //
                 // Il s'arrête en première dans les voies générale et
@@ -297,15 +345,21 @@ namespace SchoolWebApp.Dal.Seed.Referentiels
                 ("TERMINALE_PRO", "FR_TPRO_LECT_FORMES", "Littérature", "Reconnaître les formes de la littérature d’idées : essai, apologue, utopie, dystopie", 3),
                 ("TERMINALE_PRO", "FR_TPRO_LECT_METIER", "Littérature", "Lire une étude ou un essai sur le monde du travail et ses évolutions", 4),
                 ("TERMINALE_PRO", "FR_TPRO_ECR_REFLEXIF", "Écriture", "Rédiger un écrit réflexif qui développe un raisonnement", 5),
-                ("TERMINALE_PRO", "FR_TPRO_ECR_HIERARCHISER", "Écriture", "Trier et hiérarchiser ses connaissances à l’appui d’une thèse", 6),
+                ("TERMINALE_PRO", "FR_TPRO_ECR_HIERARCHISER", "Écriture", "Sélectionner et hiérarchiser ses connaissances, mobiliser des références", 6),
                 ("TERMINALE_PRO", "FR_TPRO_ECR_NUANCER", "Écriture", "Nuancer son point de vue et envisager les arguments contraires", 7),
                 ("TERMINALE_PRO", "FR_TPRO_ECR_COMPTE_RENDU", "Écriture", "Rédiger un compte rendu à partir de paroles prononcées", 8),
-                ("TERMINALE_PRO", "FR_TPRO_ECR_PROFESSIONNEL", "Écriture", "Adapter son écrit au support : courriel et message professionnel", 9),
+                ("TERMINALE_PRO", "FR_TPRO_ECR_PROFESSIONNEL", "Écriture", "Respecter les usages et les normes d’un courriel, d’un SMS ou d’un message bref", 9),
                 ("TERMINALE_PRO", "FR_TPRO_ORAL_DEBAT", "Oral", "Prendre part à un débat d’idées en formulant sa pensée", 10),
                 ("TERMINALE_PRO", "FR_TPRO_ORAL_REAGIR", "Oral", "S’adapter à son interlocuteur, relancer et préciser sa pensée", 11),
                 ("TERMINALE_PRO", "FR_TPRO_ORAL_PRESENTER", "Oral", "Présenter et justifier une démarche à l’oral", 12),
-                ("TERMINALE_PRO", "FR_TPRO_METH_CONVAINCRE", "Méthode", "Distinguer convaincre, persuader et négocier", 13),
+                ("TERMINALE_PRO", "FR_TPRO_METH_CONVAINCRE", "Méthode", "Distinguer démontrer et négocier, convaincre et persuader", 13),
                 ("TERMINALE_PRO", "FR_TPRO_METH_POINTS_VUE", "Méthode", "Confronter des points de vue pour construire un raisonnement personnel", 14),
+                // Vérifié le 15/10/2026 contre l'annexe 2 de MENE2003001A : trois libellés
+                // resserrés sur le texte, et l'étude de la langue, qui manquait.
+                ("TERMINALE_PRO", "FR_TPRO_LECT_THESE", "Littérature", "Distinguer thème et thèse, suivre la progression d’un texte et en reformuler les idées", 15),
+                ("TERMINALE_PRO", "FR_TPRO_ECR_PARAGRAPHE", "Écriture", "Construire un paragraphe argumentatif avec un exemple analysé et une citation insérée", 16),
+                ("TERMINALE_PRO", "FR_TPRO_LANG_NUANCE", "Étude de la langue", "Employer la concession, l’hypothèse et les modes verbaux pour nuancer", 17),
+                ("TERMINALE_PRO", "FR_TPRO_LANG_COHERENCE", "Étude de la langue", "Enchaîner ses idées : reprises, liens logiques, lexique de l’abstraction", 18),
             };
 
         /// <summary>

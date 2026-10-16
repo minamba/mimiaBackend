@@ -85,8 +85,12 @@ namespace SchoolWebApp.Dal.Repositories
                 Sexe = model.Sexe,
                 Lv2Espagnol = model.Lv2Espagnol,
                 Specialites = Domain.Models.VoiesScolaires.EcrireSpecialites(model.Specialites),
-                DateCreation = model.DateCreation == default ? DateTime.UtcNow : model.DateCreation
+                DateCreation = model.DateCreation == default ? DateTime.UtcNow : model.DateCreation,
+                EcranAdapte = model.EcranAdapte ?? true,
             };
+
+            // LA COCHE VAUT ACCORD, ET SA DATE EN EST LA PREUVE (11/10/2026).
+            DefinirBesoins(entity, model.BesoinsParticuliers);
 
             _context.Eleves.Add(entity);
             await _context.SaveChangesAsync();
@@ -125,8 +129,27 @@ namespace SchoolWebApp.Dal.Repositories
             entity.Lv2Espagnol = model.Lv2Espagnol;
             entity.Specialites = Domain.Models.VoiesScolaires.EcrireSpecialites(model.Specialites);
 
+            // Les besoins particuliers : seulement s'ils ont été envoyés. Un
+            // formulaire qui ne les porte pas (module éteint, écran ancien) ne
+            // les efface pas.
+            if (model.BesoinsParticuliers is not null) DefinirBesoins(entity, model.BesoinsParticuliers);
+            if (model.EcranAdapte is { } ecran) entity.EcranAdapte = ecran;
+
             await _context.SaveChangesAsync();
             return await GetEleveByIdAsync(entity.Id);
+        }
+
+        /// <summary>
+        /// Écrit les besoins cochés. La date de l'accord suit la coche : posée
+        /// quand la liste change et n'est pas vide, effacée quand elle se vide.
+        /// </summary>
+        private static void DefinirBesoins(Eleve entity, IEnumerable<string>? codes)
+        {
+            var nouveaux = Domain.Models.BesoinsParticuliers.Ecrire(codes);
+            if (nouveaux == entity.BesoinsParticuliers) return;
+
+            entity.BesoinsParticuliers = nouveaux;
+            entity.BesoinsAccordLe = nouveaux is null ? null : DateTime.UtcNow;
         }
 
         /// <summary>
@@ -203,12 +226,31 @@ namespace SchoolWebApp.Dal.Repositories
             await _context.Evaluations.Where(e => e.EleveId == id).ExecuteDeleteAsync();
             await _context.MaitrisesEleves.Where(m => m.EleveId == id).ExecuteDeleteAsync();
             await _context.Conversations.Where(c => c.EleveId == id).ExecuteDeleteAsync();
+            await _context.RapportsOrientation.Where(r => r.EleveId == id).ExecuteDeleteAsync();
+
+            // Les cours importés pour ses fiches de révision (14/10/2026) : leurs
+            // pages et leurs fiches partent avec eux (cascade). Des photos de son
+            // cahier ne survivent pas à son profil.
+            await _context.CoursImportes.Where(c => c.EleveId == id).ExecuteDeleteAsync();
 
             entity.Prenom = "Profil supprimé";
             entity.Nom = null;
             entity.Age = 0;
             entity.Sexe = Domain.Models.Sexe.NonPrecise;
             entity.DerniereActivite = null;
+            // Une donnée de santé ne survit pas à l'effacement du profil.
+            entity.BesoinsParticuliers = null;
+            entity.BesoinsAccordLe = null;
+            // L'établissement non plus : avec la classe, il situe l'enfant.
+            entity.EtablissementUai = null;
+            entity.EtablissementLibelle = null;
+            entity.EtablissementCommune = null;
+            entity.EtablissementLatitude = null;
+            entity.EtablissementLongitude = null;
+            // Ni son projet d'orientation.
+            entity.ProjetObjectif = null;
+            entity.ProjetMatieres = null;
+            entity.ProjetLe = null;
             entity.ArchiveLe ??= DateTime.UtcNow;
             entity.AnonymiseLe = DateTime.UtcNow;
 
@@ -283,6 +325,62 @@ namespace SchoolWebApp.Dal.Repositories
             return modifiees > 0;
         }
 
+        /// <summary>
+        /// L'ACTIVITÉ HORS COURS — Camara, le 11/10/2026 : « quand un enfant se
+        /// connecte et va directement dans les jeux, la dernière activité ne se
+        /// met pas à jour ». Elle n'était notée qu'à un message de cours.
+        ///
+        /// UNE ÉCRITURE PAR HEURE AU PLUS : la colonne se lit au jour près, et
+        /// une partie relancée dix fois ne doit pas écrire dix fois. Le filtre
+        /// est dans la requête même — une seule instruction, sans lecture.
+        /// </summary>
+        /// <summary>
+        /// L'ÉTABLISSEMENT DE L'ÉLÈVE (11/10/2026), par une route à part : les
+        /// formulaires de profil le réécriraient à vide s'ils le portaient sans
+        /// le connaître. Une seule instruction, sans lecture.
+        /// </summary>
+        public async Task<bool> DefinirEtablissementAsync(
+            int eleveId, string? uai, string? libelle, string? commune,
+            double? latitude, double? longitude, CancellationToken ct = default)
+        {
+            var modifiees = await _context.Eleves
+                .Where(e => e.Id == eleveId)
+                .ExecuteUpdateAsync(m => m
+                    .SetProperty(e => e.EtablissementUai, uai)
+                    .SetProperty(e => e.EtablissementLibelle, libelle)
+                    .SetProperty(e => e.EtablissementCommune, commune)
+                    .SetProperty(e => e.EtablissementLatitude, latitude)
+                    .SetProperty(e => e.EtablissementLongitude, longitude), ct);
+
+            return modifiees > 0;
+        }
+
+        public async Task NoterActiviteAsync(int eleveId, CancellationToken ct = default)
+        {
+            var maintenant = DateTime.UtcNow;
+            var ilYaUneHeure = maintenant.AddHours(-1);
+
+            await _context.Eleves
+                .Where(e => e.Id == eleveId
+                    && (e.DerniereActivite == null || e.DerniereActivite < ilYaUneHeure))
+                .ExecuteUpdateAsync(m => m.SetProperty(e => e.DerniereActivite, maintenant), ct);
+        }
+
+        public async Task DefinirProjetOrientationAsync(
+            int eleveId, Domain.Models.ProjetOrientation? projet, CancellationToken ct = default)
+        {
+            var objectif = projet?.Objectif;
+            var matieres = projet is null ? null : Domain.Models.ProjetOrientation.Ecrire(projet.Matieres);
+            var le = projet?.Le;
+
+            await _context.Eleves
+                .Where(e => e.Id == eleveId)
+                .ExecuteUpdateAsync(m => m
+                    .SetProperty(e => e.ProjetObjectif, objectif)
+                    .SetProperty(e => e.ProjetMatieres, matieres)
+                    .SetProperty(e => e.ProjetLe, le), ct);
+        }
+
         private static DomainEleve Map(Eleve entity) => new()
         {
             Id = entity.Id,
@@ -305,7 +403,16 @@ namespace SchoolWebApp.Dal.Repositories
             NiveauCycle = entity.NiveauScolaire?.Cycle,
             AcademieId = entity.AcademieId,
             AcademieLibelle = entity.Academie?.Libelle,
-            Zone = entity.Academie?.Zone
+            Zone = entity.Academie?.Zone,
+            EtablissementUai = entity.EtablissementUai,
+            EtablissementLibelle = entity.EtablissementLibelle,
+            EtablissementCommune = entity.EtablissementCommune,
+            EtablissementLatitude = entity.EtablissementLatitude,
+            EtablissementLongitude = entity.EtablissementLongitude,
+            BesoinsParticuliers = Domain.Models.BesoinsParticuliers.Lire(entity.BesoinsParticuliers),
+            BesoinsAccordLe = entity.BesoinsAccordLe,
+            EcranAdapte = entity.EcranAdapte,
+            ProjetOrientation = Domain.Models.ProjetOrientation.Lire(entity.ProjetObjectif, entity.ProjetMatieres, entity.ProjetLe),
         };
     }
 }

@@ -11,6 +11,10 @@ namespace SchoolWebApp.Api.Services.Fournisseurs
     /// passage : la carte passe à « Quota atteint », et l'alerte Telegram part par
     /// le même chemin que toutes les autres — une fois, puis « fonctionne de
     /// nouveau » à la remise à zéro.
+    ///
+    /// DE MÊME POUR LE CRÉDIT (13/10/2026) : au premier refus faute de crédit
+    /// prépayé, la carte passe au rouge (Telegram + courriel) ; à la première
+    /// phrase acceptée après la recharge, « fonctionne de nouveau ».
     /// </summary>
     public sealed class AlerteQuotaGemini : IHostedService
     {
@@ -28,12 +32,14 @@ namespace SchoolWebApp.Api.Services.Fournisseurs
         public Task StartAsync(CancellationToken cancellationToken)
         {
             _compteur.JourPlein += Verifier;
+            _compteur.CreditChange += Verifier;
             return Task.CompletedTask;
         }
 
         public Task StopAsync(CancellationToken cancellationToken)
         {
             _compteur.JourPlein -= Verifier;
+            _compteur.CreditChange -= Verifier;
             return Task.CompletedTask;
         }
 
@@ -49,7 +55,7 @@ namespace SchoolWebApp.Api.Services.Fournisseurs
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Quota Gemini atteint, mais la verification immediate a echoue.");
+                    _logger.LogError(ex, "Quota ou credit Gemini change, mais la verification immediate a echoue.");
                 }
             });
         }

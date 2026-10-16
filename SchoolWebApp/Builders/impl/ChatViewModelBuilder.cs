@@ -110,6 +110,12 @@ namespace SchoolWebApp.Api.Builders.impl
         private readonly Services.Jeux.IJeuxService _jeux;
         private readonly ILogger<ChatViewModelBuilder> _logger;
 
+        /// <summary>Pour le projet d'orientation noté par la conseillère (11/10/2026).</summary>
+        private readonly IEleveRepository _eleves;
+
+        /// <summary>Les rapports d'orientation de la conseillère (11/10/2026).</summary>
+        private readonly IRapportOrientationRepository _rapportsOrientation;
+
         public ChatViewModelBuilder(
             IMapper mapper,
             IChatContexteResolver resolver,
@@ -134,8 +140,12 @@ namespace SchoolWebApp.Api.Builders.impl
             IFileAlertesQuota fileAlertes,
             IExamenRepository examens,
             Services.Jeux.IJeuxService jeux,
-            ILogger<ChatViewModelBuilder> logger)
+            ILogger<ChatViewModelBuilder> logger,
+            IEleveRepository eleves,
+            IRapportOrientationRepository rapportsOrientation)
         {
+            _eleves = eleves ?? throw new ArgumentNullException(nameof(eleves));
+            _rapportsOrientation = rapportsOrientation ?? throw new ArgumentNullException(nameof(rapportsOrientation));
             _jeux = jeux ?? throw new ArgumentNullException(nameof(jeux));
             _examens = examens ?? throw new ArgumentNullException(nameof(examens));
             _fiches = fiches ?? throw new ArgumentNullException(nameof(fiches));
@@ -1082,8 +1092,9 @@ namespace SchoolWebApp.Api.Builders.impl
                     + "Dis tout cela AVEC TES MOTS, ne récite pas ce texte. "
                     + "ET À LA FIN DE CETTE SÉANCE — dans ton message de conclusion, avant [FIN_SEANCE] —, "
                     + $"écris [EXAMEN_PRET] avec epreuve: {epreuve.Code}, ton verdict (`pret`, `bientot` ou "
-                    + "`pas_pret`) et une `observation` qui dit, domaine par domaine, ce qui est tenu, ce qui "
-                    + "pèche et ce qui n'a pas encore été travaillé.]";
+                    + "`pas_pret`), une ligne `notions:` avec l'état (`tenue`, `en cours`, `fragile`) de chaque notion "
+                    + "que la séance t'a permis de juger, et une `observation` qui dit, domaine par domaine, ce qui est "
+                    + "tenu, ce qui pèche et ce qui n'a pas encore été travaillé.]";
             }
             catch (Exception ex)
             {
@@ -1113,7 +1124,9 @@ namespace SchoolWebApp.Api.Builders.impl
                     + VerdictPrecedent(matiere.Preparation)
                     + "TON VERDICT EST DÛ DANS CE MESSAGE, avant [FIN_SEANCE] : écris [EXAMEN_PRET] avec "
                     + $"epreuve: {epreuve.Code}, ton verdict et une observation qui passe en revue le programme "
-                    + "DOMAINE PAR DOMAINE — ce qui est tenu, ce qui pèche, ce qui n'a pas encore été vu. "
+                    + "DOMAINE PAR DOMAINE — ce qui est tenu, ce qui pèche, ce qui n'a pas encore été vu — et une "
+                    + "ligne `notions:` avec l'état (`tenue`, `en cours`, `fragile`) de chaque notion que la séance "
+                    + "t'a permis de juger, au mot près du programme ci-dessus. "
                     + "« Prêt » veut dire que tout le programme de l'épreuve est tenu. Ce que tu lui dis de vive "
                     + "voix ne change rien à sa fiche ; seul le bloc le fait. Seule exception : s'il n'a RIEN "
                     + "produit pendant la séance, n'écris pas de verdict — le précédent reste.]";
@@ -3614,6 +3627,18 @@ namespace SchoolWebApp.Api.Builders.impl
                     contexte.Eleve.NiveauScolaireId, contexte.Eleve.Lv2Espagnol, contexte.Eleve.Specialites,
                     resultat.TexteComplet, ct);
 
+                // LE PROJET D'ORIENTATION, CHEZ LA CONSEILLÈRE SEULEMENT : un
+                // professeur qui écrirait [PROJET] n'a pas eu l'accord de l'élève.
+                if (ConseillereOrientation.Est(contexte.Conversation.MatiereCode))
+                {
+                    await EnregistrerProjetAsync(
+                        contexte.Eleve.Id, contexte.Eleve.NiveauScolaireId, contexte.Eleve.Lv2Espagnol,
+                        contexte.Eleve.Specialites, resultat.TexteComplet, ct);
+
+                    await EnregistrerRapportOrientationAsync(
+                        conversationId, contexte.Eleve.Id, resultat.TexteComplet, ct);
+                }
+
                 // LE PÉRIMÈTRE ET LE VERDICT D'UN CONTRÔLE NE S'ÉCRIVENT QUE
                 // DANS SA SÉANCE DE PRÉPARATION, ET POUR LUI SEUL. Un bloc écrit
                 // ailleurs — en cours normal, ou sur un autre numéro — est
@@ -4305,6 +4330,114 @@ namespace SchoolWebApp.Api.Builders.impl
         }
 
         /// <summary>
+        /// LE RAPPORT D'ORIENTATION de la séance (11/10/2026) — voir
+        /// <c>LecteurRapportOrientation</c>. Adressé à l'élève, lu aussi par le
+        /// parent. Silencieux en cas d'échec, comme les autres blocs.
+        /// </summary>
+        private async Task EnregistrerRapportOrientationAsync(
+            int conversationId, int eleveId, string texte, CancellationToken ct)
+        {
+            var rapport = LecteurRapportOrientation.Lire(texte)
+                ?? DepuisLeRapportDeCours(LecteurRapport.Lire(texte));
+            if (rapport is null) return;
+
+            try
+            {
+                await _rapportsOrientation.EnregistrerAsync(eleveId, conversationId, rapport, ct);
+                _logger.LogInformation(
+                    "Rapport d'orientation enregistre pour l'eleve {EleveId} (conversation {ConversationId}).",
+                    eleveId, conversationId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex,
+                    "Echec de l'enregistrement du rapport d'orientation (conversation {ConversationId}).",
+                    conversationId);
+            }
+        }
+
+        /// <summary>
+        /// LE FILET : la conseillère a conclu avec son [RAPPORT] de séance mais
+        /// sans [RAPPORT_ORIENTATION] (11/10/2026). Plutôt qu'une séance sans
+        /// trace pour l'élève, un rapport tiré de SES mots : ce qui a été
+        /// abordé, son observation, ce qui reste à voir. Rien d'inventé.
+        /// </summary>
+        private static RapportOrientationEleve? DepuisLeRapportDeCours(RapportDeclare? cours)
+        {
+            if (cours is null || (string.IsNullOrWhiteSpace(cours.Remarque) && string.IsNullOrWhiteSpace(cours.Travaille)))
+            {
+                return null;
+            }
+
+            return new RapportOrientationEleve
+            {
+                Discussion = string.IsNullOrWhiteSpace(cours.Remarque) ? cours.Travaille : cours.Remarque,
+                Etapes = cours.ARevoir,
+            };
+        }
+
+        /// <summary>
+        /// LE PROJET D'ORIENTATION, noté par la conseillère avec l'accord de
+        /// l'élève (11/10/2026) — voir <c>LecteurProjet</c>. Il remplace le
+        /// précédent ; « but: retiré » l'efface.
+        ///
+        /// CHAQUE MATIÈRE EST UN MOT rapproché des matières de l'élève. Une ligne
+        /// qu'on ne reconnaît pas est ÉCARTÉE (repli à -1) : la ranger dans une
+        /// matière au hasard la ferait lire au mauvais professeur. Silencieux en
+        /// cas d'échec, comme les autres blocs.
+        /// </summary>
+        private async Task EnregistrerProjetAsync(
+            int eleveId, int? niveauScolaireId, bool lv2Espagnol, IReadOnlyCollection<string> specialites,
+            string texte, CancellationToken ct)
+        {
+            var declare = LecteurProjet.Lire(texte);
+            if (declare is null) return;
+
+            try
+            {
+                if (declare.Retire)
+                {
+                    await _eleves.DefinirProjetOrientationAsync(eleveId, null, ct);
+                    _logger.LogInformation("Projet d'orientation retire pour l'eleve {EleveId}.", eleveId);
+                    return;
+                }
+
+                var matieres = (await MatieresDeLEleveAsync(niveauScolaireId, lv2Espagnol, specialites))
+                    .Where(m => !ConseillereOrientation.Est(m.Code))
+                    .ToList();
+
+                var lignes = new List<LigneProjetOrientation>();
+                foreach (var (mot, contenu) in declare.Matieres)
+                {
+                    var id = ResolveurMatiereDeclaree.Resoudre(mot, matieres, -1);
+                    if (id < 0 || lignes.Any(l => l.MatiereId == id)) continue;
+
+                    lignes.Add(new LigneProjetOrientation
+                    {
+                        MatiereId = id,
+                        MatiereLibelle = matieres.First(m => m.Id == id).Libelle ?? mot,
+                        Texte = contenu,
+                    });
+                }
+
+                await _eleves.DefinirProjetOrientationAsync(eleveId, new ProjetOrientation
+                {
+                    Objectif = declare.Objectif!,
+                    Matieres = lignes,
+                    Le = DateTime.UtcNow,
+                }, ct);
+
+                _logger.LogInformation(
+                    "Projet d'orientation note pour l'eleve {EleveId} : {Lignes} matiere(s) sur {Declarees}.",
+                    eleveId, lignes.Count, declare.Matieres.Count);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Echec de l'enregistrement du projet d'orientation de l'eleve {EleveId}.", eleveId);
+            }
+        }
+
+        /// <summary>
         /// Archive un contrôle que l'élève vient d'annoncer en séance.
         ///
         /// SANS DATE, ON N'ARCHIVE RIEN — voir LecteurControleProgramme : la
@@ -4498,7 +4631,7 @@ namespace SchoolWebApp.Api.Builders.impl
             {
                 var pose = await _controles.PoserVerdictPretAsync(
                     eleveId, declare.Controle, matiereId,
-                    declare.Verdict, declare.Observation, DateTime.UtcNow, ct);
+                    declare.Verdict, declare.Observation, DateTime.UtcNow, declare.Notions, ct);
 
                 if (!pose)
                 {
@@ -4548,7 +4681,8 @@ namespace SchoolWebApp.Api.Builders.impl
                 if (epreuve is null) return;
 
                 var pose = await _examens.PoserVerdictAsync(
-                    eleveId, epreuve.Id, matiereId, declare.Verdict, declare.Observation, DateTime.UtcNow, ct);
+                    eleveId, epreuve.Id, matiereId, declare.Verdict, declare.Observation, DateTime.UtcNow,
+                    declare.Notions, ct);
 
                 _logger.LogInformation(
                     "Epreuve {Epreuve} : verdict «{Verdict}» {Pose} pour l'eleve {EleveId}.",
@@ -4819,13 +4953,21 @@ namespace SchoolWebApp.Api.Builders.impl
             }
         }
 
+        /// <summary>
+        /// Rapproche les libellés du référentiel : au mot près d'abord, à la
+        /// plume près ensuite (accents, casse, « de repérer… ») — voir
+        /// <see cref="LibelleNotion"/>. Ce qui reste est rendu en texte libre.
+        /// </summary>
         private static IEnumerable<NotionDeclaree> Rapprocher(
             IReadOnlyList<string> libelles, List<CompetenceCandidate> referentiel) =>
             libelles.Select(libelle =>
             {
                 var connue = referentiel.FirstOrDefault(
                     c => c.Libelle is not null
-                        && LecteurBloc.Normaliser(c.Libelle) == LecteurBloc.Normaliser(libelle));
+                        && LecteurBloc.Normaliser(c.Libelle) == LecteurBloc.Normaliser(libelle))
+                    ?? referentiel.FirstOrDefault(
+                        c => c.Libelle is not null
+                            && LibelleNotion.CleSouple(c.Libelle) == LibelleNotion.CleSouple(libelle));
 
                 return new NotionDeclaree(connue?.Id, connue?.Libelle ?? libelle);
             });
@@ -4876,9 +5018,41 @@ namespace SchoolWebApp.Api.Builders.impl
                 ? (await _maitrises.GetNotionsDuNiveauAsync(matiereId, niveau, ct)).ToList()
                 : [];
 
+            var notions = Rapprocher(libelles, referentiel).ToList();
+
+            // CE QUI N'EST PAS RECONNU À LA PLUME PRÈS PASSE PAR LE
+            // PLANIFICATEUR — Camara, le 13/10/2026. « Les figures de style
+            // dans un poème » et « Repérer comparaison, métaphore et
+            // personnification » sont la même notion ; aucune comparaison de
+            // lettres ne le voit, un professeur le voit tout de suite. Sans
+            // rattachement, la notion ne peut JAMAIS être mesurée : sa barre
+            // reste au plancher quoi que fasse l'élève. Un petit appel, une
+            // seule fois, et seulement s'il reste quelque chose à rapprocher.
+            var libres = notions.Where(n => n.CompetenceId is null).Select(n => n.Libelle).ToList();
+
+            if (libres.Count > 0 && referentiel.Count > 0)
+            {
+                try
+                {
+                    var rapprochees = await _planificateur.RapprocherAsync(libres, referentiel, ct);
+
+                    notions = notions
+                        .Select(n => n.CompetenceId is null
+                            && rapprochees.TryGetValue(n.Libelle, out var connue)
+                                ? connue
+                                : n)
+                        .ToList();
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex,
+                        "Rapprochement des notions impossible : {Nombre} gardee(s) en texte libre (controle {ControleId}).",
+                        libres.Count, controleId);
+                }
+            }
+
             return await _controles.AjouterNotionsAsync(
-                eleveId, controleId, matiereId,
-                Rapprocher(libelles, referentiel), travaillee, ct);
+                eleveId, controleId, matiereId, notions, travaillee, ct);
         }
 
         /// <summary>
@@ -4928,6 +5102,42 @@ namespace SchoolWebApp.Api.Builders.impl
             return contexte is null
                 ? VerdictQuota.Refus(MotifRefus.SansAbonnement)
                 : await _abonnements.VerifierAsync(contexte.Eleve.Id, ct);
+        }
+
+        public async Task<EcheanceForfait?> EcheanceAsync(int conversationId, CancellationToken ct = default)
+        {
+            var contexte = await _resolver.ResoudreConversationAsync(conversationId);
+            if (contexte is null) return null;
+
+            var echeance = await _abonnements.EcheanceAsync(contexte.Eleve.Id, ct);
+            if (echeance is null) return null;
+
+            // LE TOUR EN COURS N'EST PAS ENCORE DÉCOMPTÉ : il le sera à la fin de
+            // la réponse (ImputerQuotaAsync), depuis le dernier message. On le
+            // retire ici, sinon l'échéance donnée au navigateur arriverait trop
+            // tard. Au-delà du plafond d'inactivité, l'attente n'est pas comptée.
+            var dernier = (await _conversationService.GetMessagesAsync(conversationId, 1)).LastOrDefault()?.DateCreation;
+            var enCours = 0;
+            if (dernier is { } date)
+            {
+                var ecoule = DateTime.UtcNow - date;
+                if (ecoule <= PlafondInactivite) enCours = Math.Max(0, (int)ecoule.TotalSeconds);
+            }
+
+            return echeance with { Secondes = Math.Max(0, echeance.Secondes - enCours) };
+        }
+
+        public async Task<bool> TerminerForfaitAsync(int conversationId, CancellationToken ct = default)
+        {
+            var contexte = await _resolver.ResoudreConversationAsync(conversationId)
+                ?? throw new UnauthorizedAccessException();
+
+            if (!await _abonnements.EpuiserAsync(contexte.Eleve.Id, ct)) return false;
+
+            // QUITTER = RAPPORT DÛ, ici aussi : la séance coupée a eu lieu, le
+            // parent doit en lire le compte rendu.
+            await MarquerSortieAsync(conversationId);
+            return true;
         }
 
         /// <summary>

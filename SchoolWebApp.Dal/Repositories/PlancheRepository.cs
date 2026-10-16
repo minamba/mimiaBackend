@@ -1,5 +1,7 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using SchoolWebApp.Dal.Entities;
+using SchoolWebApp.Domain.Services;
 using SchoolWebApp.Domain.Models;
 using SchoolWebApp.Domain.Repositories;
 using DomainPlanche = SchoolWebApp.Domain.Models.Planche;
@@ -9,10 +11,15 @@ namespace SchoolWebApp.Dal.Repositories
     public class PlancheRepository : IPlancheRepository
     {
         private readonly SchoolWebAppDatabaseContext _context;
+        private readonly IStockagePlanches _stockage;
+        private readonly ILogger<PlancheRepository> _logger;
 
-        public PlancheRepository(SchoolWebAppDatabaseContext context)
+        public PlancheRepository(
+            SchoolWebAppDatabaseContext context, IStockagePlanches stockage, ILogger<PlancheRepository> logger)
         {
             _context = context ?? throw new ArgumentNullException(nameof(context));
+            _stockage = stockage ?? throw new ArgumentNullException(nameof(stockage));
+            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
         /// <summary>
@@ -173,7 +180,7 @@ namespace SchoolWebApp.Dal.Repositories
                 .AsNoTracking()
                 .FirstOrDefaultAsync(p => p.Cle == cle && p.Variante == v, ct);
 
-            return entity is null ? null : Map(entity, avecDonnees: true);
+            return entity is null ? null : await AvecImageAsync(entity, ct);
         }
 
         public Task<DomainPlanche?> GetSansDonneesAsync(
@@ -251,10 +258,17 @@ namespace SchoolWebApp.Dal.Repositories
             // relisait — deux appels au modèle par planche, toutes les quatre
             // minutes, indéfiniment. Trois nuits à chercher dans le worker un
             // défaut qui était dans cette ligne-ci.
-            var memesOctets = entity is not null
-                && entity.Donnees is { Length: > 0 }
-                && planche.Donnees is { Length: > 0 }
-                && entity.Donnees.AsSpan().SequenceEqual(planche.Donnees);
+            //
+            // PAR L'EMPREINTE depuis que les images vivent sur le disque : ni
+            // l'ancien fichier à relire, ni l'ancienne image à charger. Les
+            // planches d'avant l'empreinte se comparent encore octet à octet.
+            var octets = planche.Donnees ?? Array.Empty<byte>();
+            var empreinte = octets.Length > 0 ? IStockagePlanches.Empreinte(octets) : null;
+
+            var memesOctets = entity is not null && empreinte is not null
+                && (entity.Empreinte is not null
+                    ? entity.Empreinte == empreinte
+                    : entity.Donnees is { Length: > 0 } && entity.Donnees.AsSpan().SequenceEqual(octets));
 
             if (entity is null)
             {
@@ -279,7 +293,36 @@ namespace SchoolWebApp.Dal.Repositories
             entity.NomFichier = planche.NomFichier;
             entity.TypeMime = planche.TypeMime;
             entity.Taille = planche.Taille;
-            entity.Donnees = planche.Donnees ?? Array.Empty<byte>();
+
+            // L'IMAGE VA SUR LE DISQUE dès que le dossier est prêt ; la base ne
+            // garde que son chemin. Sinon, elle reste en base comme avant —
+            // jamais une image perdue parce que le dossier manquait.
+            string? ancienFichier = null;
+            if (!memesOctets)
+            {
+                ancienFichier = entity.Fichier;
+                entity.Empreinte = empreinte;
+                entity.Fichier = null;
+                entity.Donnees = octets;
+
+                if (_stockage.Pret && empreinte is not null)
+                {
+                    try
+                    {
+                        entity.Fichier = await _stockage.EcrireAsync(
+                            entity.Cle, entity.Variante, octets, empreinte, planche.TypeMime, ct);
+                        entity.Donnees = null;
+                    }
+                    catch (Exception ex) when (ex is not OperationCanceledException)
+                    {
+                        _logger.LogError(ex, "Planche {Cle} gardee en base : ecriture sur le disque impossible.", entity.Cle);
+                    }
+                }
+            }
+            else if (entity.Empreinte is null)
+            {
+                entity.Empreinte = empreinte;
+            }
             entity.Auteur = planche.Auteur;
             entity.Source = planche.Source;
             entity.Licence = planche.Licence;
@@ -307,6 +350,9 @@ namespace SchoolWebApp.Dal.Repositories
 
             await _context.SaveChangesAsync(ct);
 
+            // L'ancienne image ne part qu'une fois la base pointée ailleurs.
+            if (ancienFichier is not null && ancienFichier != entity.Fichier) _stockage.Supprimer(ancienFichier);
+
             return Map(entity, avecDonnees: false);
         }
 
@@ -325,6 +371,11 @@ namespace SchoolWebApp.Dal.Repositories
         {
             var v = VariantePlanche.Normaliser(variante);
 
+            var fichiers = await _context.PlanchesSchemas
+                .Where(p => p.Cle == cle && (v == VariantePlanche.Legende || p.Variante == v) && p.Fichier != null)
+                .Select(p => p.Fichier!)
+                .ToListAsync(ct);
+
             var effacees = v == VariantePlanche.Legende
                 ? await _context.PlanchesSchemas
                     .Where(p => p.Cle == cle)
@@ -332,6 +383,8 @@ namespace SchoolWebApp.Dal.Repositories
                 : await _context.PlanchesSchemas
                     .Where(p => p.Cle == cle && p.Variante == v)
                     .ExecuteDeleteAsync(ct);
+
+            foreach (var fichier in fichiers) _stockage.Supprimer(fichier);
 
             return effacees > 0;
         }
@@ -370,7 +423,7 @@ namespace SchoolWebApp.Dal.Repositories
                 .Take(limite)
                 .ToListAsync(ct);
 
-            return entities.Select(e => Map(e, avecDonnees: true)).ToList();
+            return await AvecImagesAsync(entities, ct);
         }
 
         /// <summary>
@@ -408,7 +461,7 @@ namespace SchoolWebApp.Dal.Repositories
                 .Take(limite)
                 .ToListAsync(ct);
 
-            return entities.Select(e => Map(e, avecDonnees: true)).ToList();
+            return await AvecImagesAsync(entities, ct);
         }
 
         public async Task<IEnumerable<DomainPlanche>> GetSansReperesAsync(
@@ -447,7 +500,7 @@ namespace SchoolWebApp.Dal.Repositories
                 .Take(limite)
                 .ToListAsync(ct);
 
-            return entities.Select(e => Map(e, avecDonnees: true)).ToList();
+            return await AvecImagesAsync(entities, ct);
         }
 
         public Task EnregistrerReperesAsync(
@@ -465,6 +518,77 @@ namespace SchoolWebApp.Dal.Repositories
                     .SetProperty(p => p.Auteur, auteur)
                     .SetProperty(p => p.Source, source)
                     .SetProperty(p => p.Licence, licence), ct);
+
+        private async Task<DomainPlanche> AvecImageAsync(PlancheSchema e, CancellationToken ct)
+        {
+            var planche = Map(e, avecDonnees: true);
+            if (e.Fichier is not null) planche.Donnees = await _stockage.LireAsync(e.Fichier, ct);
+            return planche;
+        }
+
+        private async Task<List<DomainPlanche>> AvecImagesAsync(IEnumerable<PlancheSchema> entities, CancellationToken ct)
+        {
+            var planches = new List<DomainPlanche>();
+            foreach (var e in entities) planches.Add(await AvecImageAsync(e, ct));
+            return planches;
+        }
+
+        /// <summary>
+        /// LES PLANCHES ENCORE EN BASE PARTENT SUR LE DISQUE, par lots (Camara,
+        /// le 15/10/2026). Une à une : l'image est écrite, RELUE ET COMPARÉE, et
+        /// alors seulement retirée de la base. Rien ne bouge tant que le dossier
+        /// n'est pas prêt. Rend le nombre de planches déplacées.
+        /// </summary>
+        public async Task<int> DeplacerVersDisqueAsync(int lot, CancellationToken ct = default)
+        {
+            if (!_stockage.Pret) return 0;
+
+            var aDeplacer = await _context.PlanchesSchemas
+                .AsNoTracking()
+                .Where(p => p.Fichier == null && p.Donnees != null)
+                .OrderBy(p => p.Id)
+                .Select(p => new { p.Id, p.Cle, p.Variante, p.TypeMime })
+                .Take(lot)
+                .ToListAsync(ct);
+
+            var deplacees = 0;
+
+            foreach (var p in aDeplacer)
+            {
+                var octets = await _context.PlanchesSchemas
+                    .AsNoTracking()
+                    .Where(x => x.Id == p.Id)
+                    .Select(x => x.Donnees)
+                    .FirstOrDefaultAsync(ct);
+
+                if (octets is not { Length: > 0 }) continue;
+
+                var empreinte = IStockagePlanches.Empreinte(octets);
+                string fichier;
+                try
+                {
+                    fichier = await _stockage.EcrireAsync(p.Cle, p.Variante, octets, empreinte, p.TypeMime, ct);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    _logger.LogError(ex, "Planche {Cle} ({Variante}) non deplacee : elle reste en base.", p.Cle, p.Variante);
+                    continue;
+                }
+
+                // Conditionnel : si la planche a été remplacée entre-temps, on
+                // ne touche à rien (le fichier écrit sera simplement inutilisé).
+                var faites = await _context.PlanchesSchemas
+                    .Where(x => x.Id == p.Id && x.Fichier == null && x.Donnees != null)
+                    .ExecuteUpdateAsync(m => m
+                        .SetProperty(x => x.Fichier, fichier)
+                        .SetProperty(x => x.Empreinte, empreinte)
+                        .SetProperty(x => x.Donnees, (byte[]?)null), ct);
+
+                deplacees += faites;
+            }
+
+            return deplacees;
+        }
 
         private static DomainPlanche Map(PlancheSchema e, bool avecDonnees) => new()
         {

@@ -120,6 +120,15 @@ namespace SchoolWebApp.Api.Services.Voix
             ["giulia"] = "marin",   // italien — double Lucía
             ["lin"] = "sage",       // chinois — double Inès
             ["youssef"] = "onyx",   // arabe — double Salim
+
+            // La conseillère d'orientation (11/10/2026) : double Élodie, faute de
+            // timbre féminin libre. Non mesurée — la voix en service est Gemini.
+            ["maelle"] = "nova",
+
+            // Le professeur de PSE (16/10/2026) : OpenAI n'est que son secours,
+            // Gemini parle d'abord. Les treize timbres pris, il double Théo
+            // (EPPCS, la matière la moins entendue), même genre. Non mesuré.
+            ["hugo"] = "alloy",
         };
 
         // IL MANQUE UNE VOIX DE FEMME, ET C'EST ARITHMÉTIQUE. Sept professeures
@@ -175,6 +184,8 @@ namespace SchoolWebApp.Api.Services.Voix
             ["giulia"] = "sage",
             ["lin"] = "nova",
             ["youssef"] = "onyx",
+            ["maelle"] = "coral",
+            ["hugo"] = "ash",       // double le secours de Minamba ; non mesuré
         };
 
         private const string VoixParDefaut = "coral";

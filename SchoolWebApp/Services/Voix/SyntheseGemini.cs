@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using SchoolWebApp.Api.Services.Fournisseurs;
 
 namespace SchoolWebApp.Api.Services.Voix
 {
@@ -58,6 +59,16 @@ namespace SchoolWebApp.Api.Services.Voix
             ["giulia"] = "Leda",        // italien — jeune
             ["lin"] = "Autonoe",        // chinois — lumineuse
             ["youssef"] = "Algieba",    // arabe — douce
+
+            // La conseillère d'orientation (11/10/2026) — choisie sur la
+            // description de Google (« chaleureuse »), jamais entendue.
+            ["maelle"] = "Sulafat",
+
+            // LE PROFESSEUR DE PSE (16/10/2026) — Gemini EN PREMIER, voulu par
+            // Camara : « la priorité c'est Gemini ». Choisie À L'OREILLE par
+            // Camara le 16/10/2026, parmi six voix d'homme encore libres
+            // (audition, une même phrase).
+            ["hugo"] = "Sadachbia",
         };
 
         private const string VoixParDefaut = "Kore";
@@ -124,16 +135,26 @@ namespace SchoolWebApp.Api.Services.Voix
             {
                 if (!reponse.IsSuccessStatusCode)
                 {
-                    // Un 429 est un plafond touché ; le reste compte comme une
-                    // requête — Google la compte aussi.
+                    // Un crédit épuisé d'abord : Google le dit en 429 comme un
+                    // freinage, et le prendre pour un freinage, c'était se taire
+                    // (voir CompteurGemini.SignalerCreditEpuise). Puis un 429 est un
+                    // plafond touché ; le reste compte comme une requête — Google
+                    // la compte aussi.
                     var detail = await reponse.Content.ReadAsStringAsync(ct);
+                    var lu = EtatFournisseurs.ClasserGemini((int)reponse.StatusCode, detail);
 
-                    if ((int)reponse.StatusCode == 429) compteur?.Refuser(DateTime.UtcNow, detail);
+                    if (lu.Statut == StatutFournisseur.CreditEpuise)
+                        compteur?.SignalerCreditEpuise(DateTime.UtcNow, (int)reponse.StatusCode, lu.CodeErreur);
+                    else if ((int)reponse.StatusCode == 429) compteur?.Refuser(DateTime.UtcNow, detail);
                     else compteur?.Enregistrer(0, DateTime.UtcNow);
 
+                    // LU COMME : c'est ce qui se cherche au journal. Le message
+                    // exact d'un solde prépayé à zéro n'a encore jamais été vu ;
+                    // s'il passe pour un freinage (« limite ») alors que le solde
+                    // est vide, c'est ici qu'on lira les mots à ajouter à ClasserGemini.
                     logger.LogWarning(
-                        "Synthese Gemini en echec ({Code}) : on repasse par OpenAI. {Detail}",
-                        (int)reponse.StatusCode, detail.Length > 400 ? detail[..400] : detail);
+                        "Synthese Gemini en echec ({Code}, lu comme {Statut}) : on repasse par OpenAI. {Detail}",
+                        (int)reponse.StatusCode, lu.Statut, detail.Length > 400 ? detail[..400] : detail);
                     return UsageSynthese.Rien;
                 }
 
@@ -245,6 +266,7 @@ namespace SchoolWebApp.Api.Services.Voix
                 }
 
                 compteur?.Enregistrer(jetonsEntree, DateTime.UtcNow);
+                compteur?.CreditRetrouve();
 
                 if (emballe)
                 {

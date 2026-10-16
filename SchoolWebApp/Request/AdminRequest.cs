@@ -106,6 +106,28 @@ namespace SchoolWebApp.Api.Request
     }
 
     /// <summary>
+    /// Un ajustement manuel des crédits de fiches de révision d'une famille
+    /// (16/10/2026) : positif pour ajouter, négatif pour retirer. 1 crédit =
+    /// 1 cours importé.
+    /// </summary>
+    public class AjustementCreditsFichesRequest
+    {
+        public int Credits { get; set; }
+
+        /// <summary>Obligatoire. Lu par le parent pour un ajout, quand il est prévenu.</summary>
+        [System.ComponentModel.DataAnnotations.Required]
+        [System.ComponentModel.DataAnnotations.StringLength(200)]
+        public string Motif { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Écrire au parent ? Pour un ajout COMME pour un retrait (Camara, le
+        /// 16/10/2026 : « quand j'enlève, je veux aussi pouvoir prévenir le
+        /// parent »), et la case reste au choix de l'administration.
+        /// </summary>
+        public bool PrevenirLeParent { get; set; } = true;
+    }
+
+    /// <summary>
     /// Un ajustement manuel du pot d'heures.
     /// </summary>
     public class AjustementHeuresRequest

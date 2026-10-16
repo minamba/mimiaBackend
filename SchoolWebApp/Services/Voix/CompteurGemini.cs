@@ -42,6 +42,19 @@ namespace SchoolWebApp.Api.Services.Voix
         private DateTime _minutePleineJusqua = DateTime.MinValue;
         private DateTime _jetonsPleinsJusqua = DateTime.MinValue;
 
+        // LE CRÉDIT PRÉPAYÉ — voir `SignalerCreditEpuise`. Il ne revient pas à
+        // minuit : seule une phrase acceptée après la recharge le rétablit.
+        private bool _creditEpuise;
+        private DateTime _creditReessaiLe = DateTime.MinValue;
+        private (int CodeHttp, string? CodeErreur) _refusCredit;
+
+        /// <summary>
+        /// Le temps entre deux essais quand le crédit est à sec. Sans essai, la
+        /// voix n'appellerait plus jamais Google et ne verrait jamais la recharge ;
+        /// à chaque phrase, elle ajouterait un aller-retour voué au refus.
+        /// </summary>
+        public static readonly TimeSpan ReessaiCredit = TimeSpan.FromMinutes(10);
+
         /// <summary>Un appel abouti (ou refusé autrement que par le quota).</summary>
         public void Enregistrer(int jetonsEntree, DateTime maintenantUtc)
         {
@@ -106,6 +119,68 @@ namespace SchoolWebApp.Api.Services.Voix
         /// </summary>
         public event Action? JourPlein;
 
+        /// <summary>
+        /// PLUS DE CRÉDIT CHEZ GOOGLE — Camara, le 13/10/2026 : « est-ce que je suis
+        /// prévenu sur Telegram, comme avec Anthropic et OpenAI ? ». Il ne l'était
+        /// pas : la sonde lit la fiche du modèle, gratuite, qui répond « ok » même
+        /// solde à zéro ; et le refus d'une vraie phrase passait pour un freinage
+        /// à la minute. La voix filait sans bruit sur OpenAI.
+        ///
+        /// Appelé par la synthèse quand <c>EtatFournisseurs.ClasserGemini</c> lit
+        /// un crédit épuisé dans le refus. La sonde rend alors « crédit épuisé »,
+        /// et l'alerte (Telegram + courriel) part par le chemin commun.
+        /// </summary>
+        public void SignalerCreditEpuise(DateTime maintenantUtc, int codeHttp, string? codeErreur)
+        {
+            bool vientDeSEpuiser;
+
+            lock (_verrou)
+            {
+                ChangerDeJourSiBesoin(maintenantUtc);
+                _refusDuJour++;
+                vientDeSEpuiser = !_creditEpuise;
+                _creditEpuise = true;
+                _creditReessaiLe = maintenantUtc + ReessaiCredit;
+                _refusCredit = (codeHttp, codeErreur);
+            }
+
+            if (vientDeSEpuiser) CreditChange?.Invoke();
+        }
+
+        /// <summary>
+        /// Google a accepté une phrase : s'il manquait du crédit, il est revenu.
+        /// Prévient tout de suite, pour que « fonctionne de nouveau » parte sans
+        /// attendre le prochain passage de la surveillance.
+        /// </summary>
+        public void CreditRetrouve()
+        {
+            bool etaitEpuise;
+
+            lock (_verrou)
+            {
+                etaitEpuise = _creditEpuise;
+                _creditEpuise = false;
+                _creditReessaiLe = DateTime.MinValue;
+            }
+
+            if (etaitEpuise) CreditChange?.Invoke();
+        }
+
+        /// <summary>Le crédit vient de s'épuiser, ou de revenir. Écouté par <c>AlerteQuotaGemini</c>.</summary>
+        public event Action? CreditChange;
+
+        /// <summary>
+        /// Le dernier refus pour crédit, si le crédit est encore à sec ; sinon null.
+        /// Lu par la sonde de surveillance.
+        /// </summary>
+        public (int CodeHttp, string? CodeErreur)? CreditEpuise()
+        {
+            lock (_verrou)
+            {
+                return _creditEpuise ? _refusCredit : null;
+            }
+        }
+
         /// <summary>Le quota du jour est-il atteint ? Lu par la sonde de surveillance.</summary>
         public bool JourEstPlein(DateTime maintenantUtc)
         {
@@ -128,7 +203,8 @@ namespace SchoolWebApp.Api.Services.Voix
             lock (_verrou)
             {
                 ChangerDeJourSiBesoin(maintenantUtc);
-                return _jourPlein || _minutePleineJusqua > maintenantUtc || _jetonsPleinsJusqua > maintenantUtc;
+                return _jourPlein || _minutePleineJusqua > maintenantUtc || _jetonsPleinsJusqua > maintenantUtc
+                       || (_creditEpuise && _creditReessaiLe > maintenantUtc);
             }
         }
 
@@ -140,7 +216,8 @@ namespace SchoolWebApp.Api.Services.Voix
                 ChangerDeJourSiBesoin(maintenantUtc);
                 if (_jourPlein) return ProchaineRemise(maintenantUtc);
 
-                var fin = new[] { _minutePleineJusqua, _jetonsPleinsJusqua }.Max();
+                var credit = _creditEpuise ? _creditReessaiLe : DateTime.MinValue;
+                var fin = new[] { _minutePleineJusqua, _jetonsPleinsJusqua, credit }.Max();
                 return fin > maintenantUtc ? fin : null;
             }
         }

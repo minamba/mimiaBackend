@@ -271,6 +271,10 @@ builder.Services.AddScoped<ICurrentUserAccessor, CurrentUserAccessor>();
 
 builder.Services.AddScoped<IParentRepository, ParentRepository>();
 builder.Services.AddScoped<IEleveRepository, EleveRepository>();
+builder.Services.AddScoped<IOrientationRepository, OrientationRepository>();
+builder.Services.AddScoped<IRapportOrientationRepository, RapportOrientationRepository>();
+builder.Services.AddScoped<IFichesDeCoursRepository, FichesDeCoursRepository>();
+builder.Services.AddScoped<ICreditsFichesRepository, CreditsFichesRepository>();
 builder.Services.AddScoped<IReferentielRepository, ReferentielRepository>();
 
 builder.Services.AddScoped<IParentService, ParentService>();
@@ -298,6 +302,10 @@ builder.Services.AddScoped<IEvaluationPrevueRepository, EvaluationPrevueReposito
 builder.Services.AddScoped<IControleScolaireRepository, ControleScolaireRepository>();
 builder.Services.AddScoped<IExamenRepository, ExamenRepository>();
 builder.Services.AddScoped<ISignalementRepository, SignalementRepository>();
+// LES IMAGES DES PLANCHES SUR LE DISQUE (15/10/2026) : un singleton, il ne
+// porte qu une racine de chemin.
+builder.Services.AddSingleton<SchoolWebApp.Domain.Services.IStockagePlanches,
+    SchoolWebApp.Dal.Stockage.StockagePlanchesDisque>();
 builder.Services.AddScoped<IPlancheRepository, PlancheRepository>();
 builder.Services.AddScoped<ISessionEleveRepository, SessionEleveRepository>();
 
@@ -577,6 +585,25 @@ builder.Services.AddHttpClient<ICalendrierScolaireApiService, CalendrierScolaire
 });
 builder.Services.AddHostedService<CalendrierScolaireSyncWorker>();
 
+// LA CONSEILLÈRE D'ORIENTATION (11/10/2026) : l'offre des lycées, lue chaque
+// semaine dans l'open data de l'Onisep et l'Annuaire de l'éducation — voir
+// ImportOrientationService. Le fichier des formations pèse ~60 Mo : la minute
+// par défaut ne suffirait pas.
+builder.Services.AddHttpClient<SchoolWebApp.Api.Services.Orientation.IImportOrientationService,
+    SchoolWebApp.Api.Services.Orientation.ImportOrientationService>(client =>
+{
+    client.Timeout = TimeSpan.FromMinutes(10);
+    client.DefaultRequestHeaders.UserAgent.ParseAdd("Mimia-Orientation/1.0 (https://mimia.fr; contact@mimia.fr)");
+});
+// La recherche d'un établissement dans l'Annuaire, pour le parent.
+builder.Services.AddHttpClient<SchoolWebApp.Api.Services.Orientation.IAnnuaireEtablissementsService,
+    SchoolWebApp.Api.Services.Orientation.AnnuaireEtablissementsService>(client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(15);
+    client.DefaultRequestHeaders.UserAgent.ParseAdd("Mimia-Orientation/1.0 (https://mimia.fr; contact@mimia.fr)");
+});
+builder.Services.AddHostedService<SchoolWebApp.Api.Workers.ImportOrientationWorker>();
+
 // UN VRAI USER-AGENT, PAS CELUI PAR DÉFAUT DE .NET : un site gouvernemental
 // peut bloquer un client anonyme sans le dire — un timeout ou un refus
 // silencieux serait alors pris pour « la page a disparu », à tort.
@@ -585,6 +612,13 @@ builder.Services.AddHttpClient<IVeilleReferentielService, VeilleReferentielServi
     client.Timeout = TimeSpan.FromSeconds(20);
     client.DefaultRequestHeaders.UserAgent.ParseAdd(
         "Mimia-VeilleReferentiel/1.0 (https://mimia.fr; contact@mimia.fr)");
+})
+// LES COPIES DE L'INTERNET ARCHIVE ARRIVENT COMPRESSÉES (15/10/2026) : la version
+// brute rend les octets d'origine, gzip compris. Sans décompression, la page
+// passait pour du bruit et la copie était écartée.
+.ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+{
+    AutomaticDecompression = System.Net.DecompressionMethods.All,
 });
 builder.Services.AddHostedService<EcheanceReferentielWorker>();
 
@@ -601,6 +635,18 @@ builder.Services.AddSingleton<SchoolWebApp.Api.Workers.ReveilDocuments>();
 // encore transcrit plutôt que de préparer sans lui.
 builder.Services.AddSingleton<SchoolWebApp.Api.Services.PiecesJointes.TranscripteurDocuments>();
 builder.Services.AddHostedService<TranscriptionDocumentsWorker>();
+
+// Les fiches de révision tirées du cours de l'élève (14/10/2026) : la
+// sonnette est le rendez-vous entre le contrôleur, qui sonne, et la tâche
+// de fond, qui écoute — un singleton, sinon ils ne se verraient jamais.
+builder.Services.AddSingleton<SchoolWebApp.Api.Workers.ReveilFichesDeCours>();
+builder.Services.AddSingleton<SchoolWebApp.Api.Services.MesFiches.RedacteurFichesService>();
+builder.Services.AddSingleton<SchoolWebApp.Api.Services.MesFiches.EntrainementFicheService>();
+builder.Services.AddScoped<SchoolWebApp.Api.Services.MesFiches.QuotaFichesService>();
+builder.Services.AddScoped<SchoolWebApp.Api.Services.Paiement.AccesForfaitService>();
+builder.Services.AddScoped<SchoolWebApp.Api.Services.MesFiches.ImportCoursService>();
+builder.Services.AddHostedService<SchoolWebApp.Api.Workers.FichesDeCoursWorker>();
+builder.Services.AddHostedService<SchoolWebApp.Api.Workers.DeplacementPlanchesWorker>();
 
 // Décrire les planches importées : sans ça, le professeur affiche une figure
 // qu'il n'a jamais vue et interroge dessus au hasard de ce qu'il croit y être.

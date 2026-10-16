@@ -67,5 +67,38 @@ namespace SchoolWebApp.Domain.Models
         public string? AcademieLibelle { get; set; }
 
         public string? Zone { get; set; }
+
+        /// <summary>
+        /// L'établissement de l'élève (collège ou lycée), choisi par le parent
+        /// dans l'Annuaire de l'éducation — pour la conseillère d'orientation.
+        /// </summary>
+        public string? EtablissementUai { get; set; }
+
+        public string? EtablissementLibelle { get; set; }
+
+        public string? EtablissementCommune { get; set; }
+
+        public double? EtablissementLatitude { get; set; }
+
+        public double? EtablissementLongitude { get; set; }
+
+        /// <summary>
+        /// Les besoins particuliers cochés par le parent (DYSLEXIE, DYSCALCULIE,
+        /// TDAH). NULL dans une requête : le formulaire ne les a pas envoyés, et
+        /// rien ne change. Voir `BesoinsParticuliers`.
+        /// </summary>
+        public List<string>? BesoinsParticuliers { get; set; }
+
+        public DateTime? BesoinsAccordLe { get; set; }
+
+        /// <summary>L'écran adapté ; null dans une requête qui ne l'envoie pas.</summary>
+        public bool? EcranAdapte { get; set; }
+
+        /// <summary>
+        /// Le projet d'orientation noté par la conseillère, avec l'accord de
+        /// l'élève (11/10/2026). Jamais écrit par un formulaire : seule la
+        /// conseillère le pose, voir `IEleveRepository.DefinirProjetOrientationAsync`.
+        /// </summary>
+        public ProjetOrientation? ProjetOrientation { get; set; }
     }
 }

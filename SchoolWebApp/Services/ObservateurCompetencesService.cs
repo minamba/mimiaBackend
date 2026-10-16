@@ -537,7 +537,7 @@ namespace SchoolWebApp.Api.Services
 
                 await _controles.PoserVerdictPretAsync(
                     seance.EleveId, controle.Id, seance.MatiereId,
-                    declare.Verdict, declare.Observation, DateTime.UtcNow, ct);
+                    declare.Verdict, declare.Observation, DateTime.UtcNow, declare.Notions, ct);
 
                 _logger.LogInformation(
                     "Preparation conclue apres coup : controle {ControleId} «{Verdict}» "
@@ -645,7 +645,7 @@ namespace SchoolWebApp.Api.Services
 
             await _examens.PoserVerdictAsync(
                 seance.EleveId, epreuve.Id, seance.MatiereId,
-                declare.Verdict, declare.Observation, DateTime.UtcNow, ct);
+                declare.Verdict, declare.Observation, DateTime.UtcNow, declare.Notions, ct);
 
             _logger.LogInformation(
                 "Preparation d'epreuve conclue apres coup : {Epreuve} «{Verdict}» (seance {ConversationId}).",
@@ -668,6 +668,7 @@ namespace SchoolWebApp.Api.Services
             [EXAMEN_PRET]
             epreuve: {{epreuveCode}}
             pret: pas_pret
+            notions: Développer et factoriser une expression = tenue ; Déterminer l'image et l'antécédent par une fonction = en cours
             observation: Tu as bien avancé, mais tout le programme n'est pas encore tenu.
 
             Calcul littéral — développer et factoriser, c'est tenu : tu l'as fait seul, sans relance.
@@ -678,6 +679,13 @@ namespace SchoolWebApp.Api.Services
             [/EXAMEN_PRET]
 
             `pret` vaut `pret`, `bientot` ou `pas_pret`. Rien d'autre.
+
+            `notions` : les NOTIONS que la séance a permis de juger (reprises
+            au mot près du programme de ton contexte, pas les domaines) et leur
+            état, `tenue`, `en cours` ou `fragile`, séparés par « = », les
+            notions par « ; ». C'est cette ligne qui fait bouger la barre de
+            chaque notion sur la fiche de l'élève. Seulement celles que tu as
+            vues : le reste du programme garde sa mesure.
 
             L'observation s'écrit en paragraphes, comme dans l'exemple : une
             phrase d'ensemble, puis un paragraphe par domaine, séparés par une
@@ -824,6 +832,7 @@ namespace SchoolWebApp.Api.Services
             [CONTROLE_PRET]
             controle: {{controle.Id}}
             pret: bientot
+            notions: Théorème de Thalès = tenue ; Réciproque de Thalès = fragile
             observation: Tu es presque prêt.
 
             Théorème de Thalès — bien acquis : tu poses les rapports sans hésiter.
@@ -834,6 +843,14 @@ namespace SchoolWebApp.Api.Services
             [/CONTROLE_PRET]
 
             `pret` vaut `pret`, `bientot` ou `pas_pret`. Rien d'autre.
+
+            `notions` : CHAQUE notion du programme (reprise au mot près de la
+            liste de ton contexte) et son état, `tenue`, `en cours` ou
+            `fragile`, séparés par « = », les notions par « ; ». C'est cette
+            ligne qui fait bouger la barre de chaque notion sur la fiche de
+            l'élève : sans elle, la barre ignore ce que tu viens de voir. Une
+            notion que la séance n'a pas abordée et sur laquelle tu ne sais
+            rien : `pas vue` — la barre garde alors sa mesure.
 
             L'observation s'écrit en paragraphes, comme dans l'exemple : une
             phrase d'ensemble, puis un paragraphe par notion, séparés par une

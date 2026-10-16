@@ -109,6 +109,14 @@ namespace SchoolWebApp.Dal.Entities
         public DateTime? DernierePageVerifieeLe { get; set; }
 
         /// <summary>
+        /// LE DERNIER RELEVÉ A ÉTÉ FAIT SUR UNE COPIE (15/10/2026) : le site
+        /// officiel bloquait le robot, la page a été lue sur la copie de
+        /// l'Internet Archive de cette date. Null : lue en direct. Ce qu'on sait
+        /// alors, c'est l'état de la page À CETTE DATE, pas aujourd'hui.
+        /// </summary>
+        public DateTime? CopieArchiveDu { get; set; }
+
+        /// <summary>
         /// UNE SENTINELLE N'A PAS D'ÉCHÉANCE : elle surveille une page en
         /// permanence, et n'alerte que lorsque cette page change. La
         /// page-carrefour des programmes du ministère en est une — c'est le

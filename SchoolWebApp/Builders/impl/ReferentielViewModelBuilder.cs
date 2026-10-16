@@ -40,6 +40,14 @@ namespace SchoolWebApp.Api.Builders.impl
                 .Select(l => new SpecialiteViewModel { Code = l.Code, Libelle = l.Libelle })
                 .ToList();
 
+            // LA FILIÈRE PROFESSIONNELLE (15/10/2026) : familles et spécialités.
+            var familles = VoiesScolaires.FamillesMetiers
+                .Select(f => new SpecialiteViewModel { Code = f.Code, Libelle = f.Libelle })
+                .ToList();
+            var specialitesPro = VoiesScolaires.SpecialitesPro
+                .Select(s => new SpecialiteViewModel { Code = s.Code, Libelle = s.Libelle, Precision = s.Famille })
+                .ToList();
+
             // Le regroupement et le choix possible viennent de la même table que
             // le programme de chaque classe : `VoiesScolaires`.
             foreach (var vue in vues)
@@ -53,6 +61,14 @@ namespace SchoolWebApp.Api.Builders.impl
                 vue.LanguesPossibles = VoiesScolaires.AUneLv2(vue.Code) ? langues : [];
                 vue.NombreSpecialites = VoiesScolaires.NombreSpecialites(vue.Code);
                 vue.SpecialitesPossibles = vue.NombreSpecialites > 0 ? proposees : [];
+                vue.FilierePro = VoiesScolaires.EstVoiePro(vue.Code)
+                    ? new FilieresProViewModel
+                    {
+                        Etape = string.Equals(vue.Code, "SECONDE_PRO", StringComparison.OrdinalIgnoreCase) ? "famille" : "specialite",
+                        Familles = familles,
+                        Specialites = specialitesPro,
+                    }
+                    : null;
             }
 
             return vues;
@@ -144,7 +160,13 @@ namespace SchoolWebApp.Api.Builders.impl
                 // L'équipe suit l'ordre des matières, pas l'ordre du
                 // regroupement : sans ce tri, `GroupBy` rend les professeurs
                 // dans un ordre qui n'est garanti nulle part.
-                .OrderBy(p => matieres.First(m => m.Code == p.Code).Ordre)
+                //
+                // LA CONSEILLÈRE D'ORIENTATION EN TÊTE — Camara, le 11/10/2026 :
+                // « en première position, à la place de Nora ; ça décale juste
+                // les professeurs ». Sur l'équipe seulement : la grille de
+                // l'élève garde l'ordre de ses matières.
+                .OrderBy(p => SchoolWebApp.Domain.Models.ConseillereOrientation.Est(p.Code) ? 0 : 1)
+                .ThenBy(p => matieres.First(m => m.Code == p.Code).Ordre)
                 .ToList();
         }
 
@@ -190,8 +212,14 @@ namespace SchoolWebApp.Api.Builders.impl
                     // La NSI a son propre professeur depuis le 15/09/2026 : elle
                     // n'apparaît plus dans la fiche de Nora.
                     "NSI" => ("Informatique", "Programmer, c'est apprendre à donner des instructions claires : on écrit du code, on le teste, on se trompe, et on comprend peu à peu comment marchent les outils numériques de tous les jours."),
+                    // Le professeur de PSE de la voie professionnelle (16/10/2026).
+                    "PSE" => ("Prévention santé environnement", "Ta santé, ta sécurité au travail et les gestes qui sauvent : on part de situations de ton futur métier pour repérer les risques et savoir comment agir."),
                     "EPPCS" => ("Sport","Le sport se vit et se pense : on relie la pratique, le corps et la place du sport dans la société."),
                     "ARTS_PLASTIQUES" => ("Arts", "Chaque œuvre a quelque chose à dire : on apprend à la regarder, à l'écouter et à en parler avec tes propres mots."),
+                    // La conseillère d'orientation (11/10/2026). Depuis le même
+                    // jour, elle transmet le projet aux professeurs, avec
+                    // l'accord de l'élève : sa présentation le dit.
+                    "ORIENTATION" => ("Conseillère d'orientation", "Après la 3e, après la 2de, après le bac : on parle de ce que tu aimes, on regarde tes points forts et ce qui reste à renforcer, et on construit ton projet. Si tu es d'accord, je le transmets à tes professeurs pour qu'ils t'aident à avancer vers ton objectif. C'est toi qui choisis."),
                     _ => null,
                 };
 
@@ -242,6 +270,7 @@ namespace SchoolWebApp.Api.Builders.impl
                 case "SANITAIRE_SOCIAL" or "BIOLOGIE_HUMAINE": return "Série ST2S";
                 case "BIOTECHNOLOGIES" or "SPCL": return "Série STL";
                 case "ESPAGNOL" or "ALLEMAND" or "ITALIEN" or "CHINOIS" or "ARABE": return "En LV2";
+                case "PSE" or "ECONOMIE_DROIT" or "ECONOMIE_GESTION": return "Voie professionnelle";
             }
 
             var specialite = niveauMin >= 11 && VoiesScolaires.SpecialitesGenerales
@@ -284,6 +313,9 @@ namespace SchoolWebApp.Api.Builders.impl
             "BIOLOGIE_HUMAINE" => "Biologie humaine",
             "BIOTECHNOLOGIES" => "Biotechnologies",
             "SPCL" => "SPCL",
+            "PSE" => "PSE",
+            "ECONOMIE_DROIT" => "Économie-droit (bac pro)",
+            "ECONOMIE_GESTION" => "Économie-gestion (bac pro)",
             _ => libelle ?? string.Empty,
         };
     }

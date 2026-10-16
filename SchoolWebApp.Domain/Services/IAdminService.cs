@@ -30,6 +30,8 @@ namespace SchoolWebApp.Domain.Services
         /// <summary>Accorde ou retire le droit d'enregistrer un enfant.</summary>
         Task<bool> DefinirAjoutEnfantAsync(int parentId, bool autorise);
 
+        Task<bool> DefinirFichesParentAsync(int parentId, bool autorise);
+
         /// <summary>Le tunnel : visiteurs, essais lancés, essais convertis.</summary>
         Task<Tunnel> GetTunnelAsync(DateTime debut, DateTime fin);
 

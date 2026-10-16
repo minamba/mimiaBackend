@@ -39,7 +39,8 @@ namespace SchoolWebApp.Domain.Repositories
         /// </summary>
         Task<bool> PoserVerdictAsync(
             int eleveId, int epreuveId, int matiereId, string verdict, string? observation,
-            DateTime maintenant, CancellationToken ct = default);
+            DateTime maintenant, IReadOnlyList<EtatNotionDeclare>? notions = null,
+            CancellationToken ct = default);
 
         /// <summary>
         /// Toutes les cartes d'examen actives, avec le nombre de notions retenues

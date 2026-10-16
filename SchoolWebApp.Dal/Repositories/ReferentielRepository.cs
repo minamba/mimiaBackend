@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using SchoolWebApp.Dal.Entities;
 using SchoolWebApp.Domain.Repositories;
 using LanguesVivantes = SchoolWebApp.Domain.Models.LanguesVivantes;
+using ConseillereOrientation = SchoolWebApp.Domain.Models.ConseillereOrientation;
 using DomainMatiere = SchoolWebApp.Domain.Models.Matiere;
 using DomainNiveau = SchoolWebApp.Domain.Models.NiveauScolaire;
 using DomainAcademie = SchoolWebApp.Domain.Models.Academie;
@@ -80,10 +81,17 @@ namespace SchoolWebApp.Dal.Repositories
         {
             var reglages = await _context.Reglages
                 .AsNoTracking()
-                .Where(r => r.Cle.StartsWith(LanguesVivantes.Prefixe))
+                .Where(r => r.Cle.StartsWith(LanguesVivantes.Prefixe)
+                    || r.Cle == ConseillereOrientation.Reglage)
                 .ToDictionaryAsync(r => r.Cle, r => r.Valeur);
 
-            return LanguesVivantes.MatieresEteintes(reglages);
+            var eteintes = LanguesVivantes.MatieresEteintes(reglages);
+
+            // LA CONSEILLÈRE D'ORIENTATION, MÊME RÈGLE (11/10/2026) : éteinte, elle
+            // n'existe pour personne. Voir `ConseillereOrientation`.
+            if (!ConseillereOrientation.EstAllumee(reglages)) eteintes.Add(ConseillereOrientation.MatiereCode);
+
+            return eteintes;
         }
 
         public async Task<IReadOnlyList<string>> GetCodesMatieresExistantesAsync(

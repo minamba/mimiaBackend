@@ -471,7 +471,13 @@ namespace SchoolWebApp.Api.Controllers
             // fenêtres absurdes, et `AddYears(-100000)` lève une exception.
             decalage = Math.Clamp(decalage, -600, 0);
 
-            var aujourdhui = DateTime.UtcNow.Date;
+            // LE JOUR DE PARIS, PAS CELUI DE GREENWICH — relevé par Camara le
+            // 15/10/2026 : une fiche créée à 0 h 13 n'apparaissait nulle part.
+            // Les bornes sont des jours de Paris (le dépôt les convertit), mais
+            // « aujourd'hui » était la date UTC : de minuit à 2 h, le tableau
+            // affichait encore la veille, et ce qui venait de se passer tombait
+            // dans un jour qu'il ne laissait pas ouvrir.
+            var aujourdhui = HeureFrance.Locale(DateTime.UtcNow).Date;
 
             return periode?.ToLowerInvariant() switch
             {
@@ -673,6 +679,118 @@ namespace SchoolWebApp.Api.Controllers
         public record DefinirAjoutEnfantRequest(bool Autorise);
 
         /// <summary>
+        /// Crée le profil d'un enfant POUR un parent — voulu par Camara le
+        /// 16/10/2026 : « un bouton qui permet de créer un enfant pour le parent
+        /// sélectionné ».
+        ///
+        /// LE SUPER-ADMINISTRATEUR, TOUJOURS ; un administrateur, seulement si
+        /// la case « Création d'enfant » de ses droits est cochée. Le bouton
+        /// est caché aux autres, mais un bouton caché n'interdit rien : la
+        /// route vérifie elle-même.
+        ///
+        /// QUI A LE DROIT CRÉE SANS LIMITE — Camara, le 16/10/2026 : « je suis
+        /// super admin, je dois pouvoir créer des enfants sans limite », puis
+        /// « un admin qui a le droit de créer un enfant peut créer des enfants
+        /// pour les autres parents ». Ni la colonne « Peut ajouter » du parent
+        /// (elle règle ce que LE PARENT peut faire) ni sa formule n'arrêtent le
+        /// super-administrateur ou l'administrateur coché.
+        ///
+        /// Au-delà de la formule, la réponse le dit (`horsFormule`) : à
+        /// l'usage, les séances restent comptées en places
+        /// (`PlaceDisponibleAsync`), et l'enfant en trop serait refusé — ou
+        /// prendrait la place d'un frère. Le compte de l'exploitant n'a pas de
+        /// limite de places (`CapaciteAsync`) : jamais hors formule.
+        /// </summary>
+        [HttpPost("parents/{id:int}/enfants")]
+        [SwaggerResponse(201, "Profil créé, et s'il dépasse la formule du parent.")]
+        [SwaggerResponse(400, "Requête invalide ou niveau scolaire inexistant.")]
+        [SwaggerResponse(403, "Pas le droit « Création d'enfant ».")]
+        [SwaggerResponse(404, "Parent inexistant.")]
+        public async Task<IActionResult> CreerEnfant(
+            int id,
+            [FromBody] EleveRequest model,
+            [FromServices] IParentService parents,
+            [FromServices] IAbonnementRepository abonnements,
+            [FromServices] Builders.IEleveViewModelBuilder eleves,
+            [FromServices] Api.Utils.ICurrentUserAccessor utilisateur)
+        {
+            if (!ModelState.IsValid) return BadRequest(ModelState);
+
+            try
+            {
+                if (!User.IsInRole("SuperAdmin"))
+                {
+                    var droits = await _adminService.GetOngletsAdminParMailAsync(utilisateur?.Mail);
+                    if (!droits.Contains(OngletsAdmin.CreationEnfant))
+                    {
+                        _logger.LogWarning(
+                            "Creation d'enfant REFUSEE a {Admin} pour le parent {ParentId} : droit non accorde.",
+                            utilisateur?.Mail, id);
+
+                        return StatusCode(403, new { message = "Vous n'avez pas le droit de créer un enfant." });
+                    }
+                }
+
+                var parent = await parents.GetParentByIdAsync(id);
+                if (parent is null) return NotFound();
+
+                // Lue AVANT la création : la place qu'il restait. Elle ne refuse
+                // rien — elle dit seulement si l'enfant dépasse la formule.
+                var capacite = await abonnements.CapaciteAsync(parent.Id);
+                var horsFormule = capacite.Actuels >= capacite.Maximum;
+
+                var eleve = await eleves.AddEleveAsync(model, parent.Id);
+                if (eleve is null)
+                {
+                    return BadRequest(new { message = "Le niveau scolaire indiqué n'existe pas." });
+                }
+
+                // TRACÉ EN AVERTISSEMENT : un profil créé par quelqu'un d'autre
+                // que le parent est la ligne qu'on relit en cas de question.
+                _logger.LogWarning(
+                    "Enfant {EleveId} cree par l'administration ({Admin}) pour le parent {ParentId}{HorsFormule}.",
+                    eleve.Id, utilisateur?.Mail, parent.Id,
+                    horsFormule ? $", AU-DELA de la formule ({capacite.Actuels + 1}/{capacite.Maximum})" : "");
+
+                return StatusCode(201, new
+                {
+                    eleve,
+                    horsFormule,
+                    maximum = horsFormule ? capacite.Maximum : (int?)null,
+                    offre = capacite.OffreLibelle,
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Echec de la creation d'un enfant pour le parent {ParentId}.", id);
+                return StatusCode(500, new { message = "Une erreur est survenue, veuillez réessayer." });
+            }
+        }
+
+        /// <summary>
+        /// L'ESPACE PARENT ET SES FICHES (16/10/2026) — Camara : « dans les droits,
+        /// il faut cette option à cocher pour donner l'autorisation ». Pour TOUT
+        /// parent, comme l'ajout d'enfant : un administrateur coché n'a ni limite
+        /// ni quota, un autre puise dans les crédits de sa famille.
+        /// </summary>
+        [HttpPut("parents/{id:int}/fiches-parent")]
+        [SwaggerResponse(204, "Droit mis à jour.")]
+        [SwaggerResponse(404, "Parent inexistant.")]
+        public async Task<IActionResult> DefinirFichesParent(int id, [FromBody] DefinirAjoutEnfantRequest requete)
+        {
+            try
+            {
+                var fait = await _adminService.DefinirFichesParentAsync(id, requete?.Autorise ?? false);
+                return fait ? NoContent() : NotFound();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Echec de la mise a jour du droit aux fiches du parent {ParentId}.", id);
+                return StatusCode(500, new { message = "Une erreur est survenue, veuillez réessayer." });
+            }
+        }
+
+        /// <summary>
         /// LA FICHE D'UN PARENT CRÉÉ PAR L'ADMINISTRATION — Camara, le
         /// 16/09/2026. Le navigateur enchaîne, comme pour la suppression mais
         /// dans l'autre sens : l'identité d'abord (serveur d'identité), la
@@ -681,12 +799,23 @@ namespace SchoolWebApp.Api.Controllers
         /// Sans cette route, la fiche n'apparaîtrait qu'à la première
         /// connexion du parent (`GetOrCreateAsync`) : l'administrateur
         /// venait de créer un compte qu'il ne voyait pas dans sa liste.
+        ///
+        /// L'ESSAI S'OUVRE AVEC LE COMPTE — Camara, le 16/10/2026 : un parent
+        /// créé ici n'avait aucun abonnement, donc pas de séance d'essai tant
+        /// qu'il n'allait pas la chercher sur les tarifs. Mêmes gardes que
+        /// partout (`SouscrireAsync`) : essais fermés dans les Modes, ou
+        /// adresse qui a déjà eu le sien, et il ne s'ouvre pas. Un échec
+        /// n'annule pas le compte : la réponse dit seulement `essai = false`.
+        /// Les comptes de l'exploitant, exemptés de facturation, n'en ont pas
+        /// besoin.
         /// </summary>
         [HttpPost("parents")]
         [SwaggerResponse(201, "Fiche créée.")]
         [SwaggerResponse(409, "Un parent existe déjà avec cette adresse ou cette identité.")]
         public async Task<IActionResult> CreerParent(
-            [FromBody] CreerParentRequest requete, [FromServices] IParentService parents)
+            [FromBody] CreerParentRequest requete,
+            [FromServices] IParentService parents,
+            [FromServices] IAbonnementRepository abonnements)
         {
             if (!ModelState.IsValid) return BadRequest(ModelState);
 
@@ -711,7 +840,27 @@ namespace SchoolWebApp.Api.Controllers
 
                 _logger.LogWarning("Fiche parent {ParentId} creee par un administrateur.", cree.Id);
 
-                return StatusCode(201, new { id = cree.Id, mail = cree.Mail });
+                var essai = false;
+                if (!_exemptions.EstExempte(cree.Mail))
+                {
+                    try
+                    {
+                        var etat = await abonnements.OuvrirEssaiAsync(cree.Id);
+                        essai = etat?.EstEssai == true;
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Essai non ouvert pour le parent {ParentId} cree par l'administration.", cree.Id);
+                    }
+
+                    _logger.LogInformation(
+                        essai
+                            ? "Essai ouvert pour le parent {ParentId} cree par l'administration."
+                            : "Pas d'essai pour le parent {ParentId} (essais fermes ou adresse deja servie).",
+                        cree.Id);
+                }
+
+                return StatusCode(201, new { id = cree.Id, mail = cree.Mail, essai });
             }
             catch (Exception ex)
             {
@@ -1171,6 +1320,136 @@ namespace SchoolWebApp.Api.Controllers
             {
                 _logger.LogError(ex, "Erreur lors de l'ajustement des heures du parent {ParentId}.", id);
                 return StatusCode(500, new { message = "Une erreur est survenue, veuillez réessayer." });
+            }
+        }
+
+        /// <summary>
+        /// L'historique des crédits de fiches de révision d'une famille, avec
+        /// son solde (16/10/2026) : achats, crédits offerts, ajustements.
+        /// </summary>
+        [HttpGet("parents/{id:int}/credits-fiches")]
+        [SwaggerResponse(200, "Solde et historique des crédits de fiches.")]
+        public async Task<IActionResult> HistoriqueCreditsFiches(
+            int id,
+            [FromServices] ICreditsFichesRepository credits,
+            CancellationToken ct)
+        {
+            try
+            {
+                return Ok(new
+                {
+                    solde = await credits.SoldeAsync(id, ct),
+                    lignes = await credits.HistoriqueAsync(id, ct),
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Erreur lors de la lecture des credits de fiches du parent {ParentId}.", id);
+                return StatusCode(500, new { message = "Une erreur est survenue, veuillez réessayer." });
+            }
+        }
+
+        /// <summary>
+        /// AJOUTE OU RETIRE DES CRÉDITS DE FICHES À LA MAIN — Camara, le
+        /// 16/10/2026, « un peu comme pour les heures ». Même règles : un motif
+        /// obligatoire, un retrait qui ne descend jamais sous zéro. Le parent
+        /// est prévenu par courriel d'un ajout comme d'un retrait, quand la
+        /// case est cochée.
+        ///
+        /// Aucun abonnement n'est exigé : les crédits tiennent à la famille, pas
+        /// à une période.
+        /// </summary>
+        [HttpPost("parents/{id:int}/credits-fiches")]
+        [SwaggerResponse(200, "Le nouveau solde.")]
+        [SwaggerResponse(400, "Crédits à zéro, motif absent, ou retrait supérieur au solde.")]
+        public async Task<IActionResult> AjusterCreditsFiches(
+            int id,
+            [FromBody] AjustementCreditsFichesRequest model,
+            [FromServices] ICreditsFichesRepository credits,
+            [FromServices] IParentRepository parents,
+            [FromServices] SchoolWebApp.Domain.Emails.IServiceEmail email,
+            CancellationToken ct)
+        {
+            if (!ModelState.IsValid) return BadRequest(ModelState);
+            if (model.Credits == 0) return BadRequest(new { message = "Indiquez un nombre de crédits non nul." });
+            if (string.IsNullOrWhiteSpace(model.Motif)) return BadRequest(new { message = "Le motif est obligatoire." });
+
+            try
+            {
+                var solde = await credits.AjusterAsync(id, model.Credits, model.Motif, ct);
+                if (solde is null)
+                {
+                    return BadRequest(new { message = "Retrait refusé : il est supérieur aux crédits de la famille." });
+                }
+
+                _logger.LogWarning(
+                    "Credits de fiches ajustes A LA MAIN : {Credits} sur le compte {ParentId}. Motif : {Motif}",
+                    model.Credits, id, model.Motif);
+
+                if (model.PrevenirLeParent)
+                {
+                    await PrevenirDesCreditsAsync(id, model, solde.Value, parents, email);
+                }
+
+                return Ok(new { solde });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Erreur lors de l'ajustement des credits de fiches du parent {ParentId}.", id);
+                return StatusCode(500, new { message = "Une erreur est survenue, veuillez réessayer." });
+            }
+        }
+
+        /// <summary>
+        /// Écrit au parent que ses crédits de fiches ont bougé, dans un sens ou
+        /// dans l'autre. Comme pour les heures : le motif est le corps du
+        /// message — un solde qui baisse sans explication se lit comme une
+        /// panne —, et un échec d'envoi est avalé : le geste est fait, le
+        /// refaire le doublerait.
+        /// </summary>
+        private async Task PrevenirDesCreditsAsync(
+            int parentId,
+            AjustementCreditsFichesRequest model,
+            int solde,
+            IParentRepository parents,
+            SchoolWebApp.Domain.Emails.IServiceEmail email)
+        {
+            try
+            {
+                var parent = await parents.GetParentByIdAsync(parentId);
+                if (string.IsNullOrWhiteSpace(parent?.Mail)) return;
+
+                static string Credits(int n) => n > 1 ? $"{n} crédits" : $"{n} crédit";
+
+                var ajout = model.Credits > 0;
+                var nombre = Credits(Math.Abs(model.Credits));
+
+                await email.EnvoyerAsync(
+                    parent.Mail!,
+                    ajout
+                        ? $"{nombre} de fiches de révision ajoutés à votre compte"
+                        : $"{nombre} de fiches de révision retirés de votre compte",
+                    "ajustement-credits-fiches",
+                    new Dictionary<string, string>
+                    {
+                        ["titre"] = ajout
+                            ? $"Nous avons ajouté {nombre} de fiches de révision à votre compte"
+                            : $"Nous avons retiré {nombre} de fiches de révision de votre compte",
+                        ["date"] = DateTime.UtcNow.ToString("dd/MM/yyyy"),
+                        ["explication"] = model.Motif.Trim(),
+                        ["mouvement"] = ajout
+                            ? $"<strong>+{nombre}</strong> ajoutés"
+                            : $"<strong>−{nombre}</strong> retirés",
+                        ["solde"] = Credits(solde),
+                        ["lien"] = "https://mimia.fr/profil?onglet=forfait",
+                    });
+
+                _logger.LogInformation(
+                    "Courriel de credits de fiches envoye a {Mail} ({Credits}).", parent.Mail, model.Credits);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Courriel de credits de fiches NON ENVOYE au parent {ParentId}.", parentId);
             }
         }
 

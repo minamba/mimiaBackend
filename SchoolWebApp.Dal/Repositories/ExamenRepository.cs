@@ -34,6 +34,20 @@ namespace SchoolWebApp.Dal.Repositories
             // presque tous, l'espagnol pour ceux dont la famille l'a coché. Camara,
             // le 14/09/2026 : « pour l'anglais, c'est la même logique ». Aucune
             // n'a d'épreuve finale ; seules les spécialités de langue en ont une.
+            // LE BAC PRO (16/10/2026) : pour un élève sous statut scolaire, les
+            // mathématiques, la physique-chimie et les langues vivantes sont en
+            // CCF (arrêté du 17/06/2020, article 4) — aucune carte, mais il doit
+            // savoir pourquoi. La physique-chimie seulement si sa filière l'a.
+            if (examen.Code.StartsWith("BAC_PRO", StringComparison.Ordinal))
+            {
+                var enCours = VoiesScolaires.MatiereDeLaFiliere("PHYSIQUE_CHIMIE", niveauCode, specialites)
+                    ? "Tes mathématiques, ta physique-chimie et ton anglais"
+                    : "Tes mathématiques et tes langues vivantes";
+
+                return [$"{enCours} n'ont pas d'épreuve finale : ils sont évalués au lycée, pendant ta formation, "
+                    + "en contrôle en cours de formation (CCF). Tes professeurs t'y préparent comme pour un écrit."];
+            }
+
             if (!examen.Code.StartsWith("BAC", StringComparison.Ordinal) || !VoiesScolaires.AUneLv2(niveauCode))
             {
                 return [];
@@ -90,8 +104,18 @@ namespace SchoolWebApp.Dal.Repositories
         /// montrer les mathématiques de l'enseignement scientifique à un élève
         /// qui prépare celles de la spécialité serait pire que ne rien montrer.
         /// </summary>
-        private static bool ConcerneEleve(EpreuveExamen e, IReadOnlyCollection<string> specialites)
+        private static bool ConcerneEleve(EpreuveExamen e, IReadOnlyCollection<string> specialites, string? niveauCode)
         {
+            // LA FILIÈRE DU BAC PRO (16/10/2026) : l'épreuve d'économie-droit
+            // n'est pas celle d'un élève de MELEC, celle de physique-chimie pas
+            // celle d'un élève de commerce. Même règle que la grille des
+            // matières ; dans le doute (filière inconnue), l'épreuve reste.
+            if (VoiesScolaires.EstVoiePro(niveauCode)
+                && !Codes(e.MatieresCodes).Any(m => VoiesScolaires.MatiereDeLaFiliere(m, niveauCode, specialites)))
+            {
+                return false;
+            }
+
             if (!string.IsNullOrWhiteSpace(e.SpecialiteRequise)
                 && !specialites.Contains(e.SpecialiteRequise, StringComparer.OrdinalIgnoreCase))
             {
@@ -191,7 +215,7 @@ namespace SchoolWebApp.Dal.Repositories
 
             var epreuves = await AssemblerAsync(
                 eleveId, examen,
-                examen.Epreuves.Where(e => ConcerneEleve(e, specialites)).OrderBy(e => e.Ordre).ToList(), ct);
+                examen.Epreuves.Where(e => ConcerneEleve(e, specialites, niveauCode)).OrderBy(e => e.Ordre).ToList(), ct);
 
             // Une épreuve sans aucune matière ouverte n'a rien à montrer.
             epreuves = epreuves.Where(e => e.Matieres.Count > 0).ToList();
@@ -221,7 +245,7 @@ namespace SchoolWebApp.Dal.Repositories
 
             // Une adresse recopiée vers l'épreuve d'une spécialité que l'élève n'a
             // pas ne mène à rien, comme une épreuve d'une autre classe.
-            if (!ConcerneEleve(epreuve, await SpecialitesDeLEleveAsync(eleveId, ct))) return null;
+            if (!ConcerneEleve(epreuve, await SpecialitesDeLEleveAsync(eleveId, ct), niveauCode)) return null;
 
             var assemblee = (await AssemblerAsync(eleveId, examen, [epreuve], ct)).FirstOrDefault();
             return assemblee is null || assemblee.Matieres.Count == 0 ? null : assemblee;
@@ -293,6 +317,21 @@ namespace SchoolWebApp.Dal.Repositories
                 .Where(p => p.EleveId == eleveId && epreuveIds.Contains(p.EpreuveId))
                 .ToListAsync(ct);
 
+            // LES ÉTATS DONNÉS PAR LE PROFESSEUR (13/10/2026), pour toutes les
+            // préparations d'un coup — voir PreparationEpreuveNotion.
+            var preparationIds = preparations.Select(p => p.Id).ToList();
+
+            var etatsProfesseur = preparationIds.Count == 0
+                ? []
+                : await _context.PreparationsEpreuvesNotions
+                    .AsNoTracking()
+                    .Where(n => preparationIds.Contains(n.PreparationId))
+                    .Select(n => new { n.PreparationId, n.CompetenceId, n.Etat, n.Le })
+                    .ToListAsync(ct);
+
+            var parPreparationEtCompetence = etatsProfesseur
+                .ToDictionary(n => (n.PreparationId, n.CompetenceId));
+
             var maintenant = DateTime.UtcNow;
             var resultat = new List<EpreuvePreparation>();
 
@@ -319,6 +358,9 @@ namespace SchoolWebApp.Dal.Repositories
 
                     var notions = new List<NotionControle>();
 
+                    var preparation = preparations.FirstOrDefault(p =>
+                        p.EpreuveId == epreuve.Id && p.MatiereId == matiere.Id);
+
                     foreach (var c in competences
                         .Where(c => c.MatiereId == matiere.Id
                             && ordreParNiveau.ContainsKey(c.NiveauScolaireId)
@@ -329,10 +371,34 @@ namespace SchoolWebApp.Dal.Repositories
                     {
                         var mesuree = parCompetence.TryGetValue(c.Id, out var m) ? m : null;
 
-                        var etat = mesuree is null
+                        var etatMesure = mesuree is null
                             ? "a-decouvrir"
                             : SeuilsMaitrise.Etat(
                                 mesuree.Score, mesuree.NombreObservations, mesuree.DerniereEvaluation, maintenant);
+
+                        var valideeParMesure = mesuree?.Source is "Evaluation" or "Controle";
+                        var etat = etatMesure;
+                        var pourcent = mesuree is null ? 0 : Math.Clamp((int)Math.Round(mesuree.Score * 100), 0, 100);
+
+                        // LE PROFESSEUR L'EMPORTE, sauf devant une séance postérieure —
+                        // la même règle que pour un contrôle, voir
+                        // ControleScolaireRepository.GetPreparationsAsync.
+                        var jugement = preparation is not null
+                            && parPreparationEtCompetence.TryGetValue((preparation.Id, c.Id), out var j)
+                                ? j
+                                : null;
+
+                        if (jugement is not null
+                            && PretControle.ProfesseurPrevaut(jugement.Le, mesuree?.DerniereEvaluation))
+                        {
+                            var pourcentProfesseur = PretControle.PourcentEtat(jugement.Etat);
+
+                            if (!valideeParMesure || pourcentProfesseur >= pourcent)
+                            {
+                                pourcent = pourcentProfesseur;
+                                etat = PretControle.EtatAfficheDe(jugement.Etat);
+                            }
+                        }
 
                         notions.Add(new NotionControle
                         {
@@ -341,14 +407,13 @@ namespace SchoolWebApp.Dal.Repositories
                             Libelle = c.Libelle ?? string.Empty,
                             Domaine = c.Domaine,
                             Etat = etat,
-                            EtatMesure = etat,
-                            Pourcent = mesuree is null ? 0 : Math.Clamp((int)Math.Round(mesuree.Score * 100), 0, 100),
-                            ValideeParMesure = mesuree?.Source is "Evaluation" or "Controle",
+                            EtatMesure = etatMesure,
+                            Pourcent = pourcent,
+                            EtatProfesseur = jugement?.Etat,
+                            EtatProfesseurLe = jugement?.Le,
+                            ValideeParMesure = valideeParMesure,
                         });
                     }
-
-                    var preparation = preparations.FirstOrDefault(p =>
-                        p.EpreuveId == epreuve.Id && p.MatiereId == matiere.Id);
 
                     var revisionCommencee = (preparation?.NombrePreparations ?? 0) > 0
                         || notions.Any(n => parCompetence.ContainsKey(n.Id));
@@ -415,7 +480,8 @@ namespace SchoolWebApp.Dal.Repositories
 
         public async Task<bool> PoserVerdictAsync(
             int eleveId, int epreuveId, int matiereId, string verdict, string? observation,
-            DateTime maintenant, CancellationToken ct = default)
+            DateTime maintenant, IReadOnlyList<EtatNotionDeclare>? notions = null,
+            CancellationToken ct = default)
         {
             var valide = PretControle.VerdictValide(verdict);
             if (valide is null) return false;
@@ -451,8 +517,75 @@ namespace SchoolWebApp.Dal.Repositories
 
             preparation.PretLe = maintenant;
 
+            if (notions is { Count: > 0 })
+            {
+                await PoserEtatsDuProfesseurAsync(preparation, matiere.Preparation.Notions, notions, maintenant, ct);
+            }
+
             await _context.SaveChangesAsync(ct);
             return true;
+        }
+
+        /// <summary>
+        /// L'état que le professeur donne aux notions de l'épreuve avec son
+        /// verdict — Camara, le 13/10/2026. Rapproché par libellé contre LE
+        /// PROGRAMME DE LA MATIÈRE DANS CETTE ÉPREUVE, à la plume près ; à
+        /// défaut, l'un contenu dans l'autre si une seule notion répond. Ce
+        /// qui ne se rapproche pas n'écrit rien. Une ligne par compétence,
+        /// remplacée au verdict suivant.
+        /// </summary>
+        private async Task PoserEtatsDuProfesseurAsync(
+            PreparationEpreuve preparation, IReadOnlyList<NotionControle> programme,
+            IReadOnlyList<EtatNotionDeclare> notions, DateTime maintenant, CancellationToken ct)
+        {
+            if (programme.Count == 0) return;
+
+            var existantes = await _context.PreparationsEpreuvesNotions
+                .Where(n => n.PreparationId == preparation.Id)
+                .ToListAsync(ct);
+
+            foreach (var notion in notions)
+            {
+                var etat = PretControle.EtatNotionValide(notion.Etat);
+                if (etat is null) continue;
+
+                var cle = LibelleNotion.CleSouple(notion.Libelle);
+                if (cle.Length == 0) continue;
+
+                var visee = programme.FirstOrDefault(n => LibelleNotion.CleSouple(n.Libelle) == cle);
+
+                if (visee is null)
+                {
+                    var proches = programme
+                        .Where(n =>
+                        {
+                            var sienne = LibelleNotion.CleSouple(n.Libelle);
+                            return sienne.Contains(cle) || cle.Contains(sienne);
+                        })
+                        .ToList();
+
+                    if (proches.Count == 1) visee = proches[0];
+                }
+
+                if (visee?.CompetenceId is not int competenceId) continue;
+
+                var ligne = existantes.FirstOrDefault(n => n.CompetenceId == competenceId);
+
+                if (ligne is null)
+                {
+                    ligne = new PreparationEpreuveNotion
+                    {
+                        PreparationId = preparation.Id,
+                        CompetenceId = competenceId,
+                    };
+
+                    _context.PreparationsEpreuvesNotions.Add(ligne);
+                    existantes.Add(ligne);
+                }
+
+                ligne.Etat = etat;
+                ligne.Le = maintenant;
+            }
         }
 
         /// <summary>

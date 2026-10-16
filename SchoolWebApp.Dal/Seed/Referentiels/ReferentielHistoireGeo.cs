@@ -229,6 +229,83 @@ namespace SchoolWebApp.Dal.Seed.Referentiels
                 ("TERMINALE", "HG_TLE_HIST_FRANCE_1974", "Histoire", "Analyser le tournant social et politique de la France de 1974 à 1988", 23),
 
                 ("TERMINALE", "HG_TLE_METH_NUANCER",  "Méthode", "Nuancer une thèse en confrontant les échelles et les acteurs", 18),
+
+                // ================================================================
+                // VOIE PROFESSIONNELLE (15/10/2026)
+                // ================================================================
+                //
+                // Les trois classes pro héritaient par le rang de l'histoire-géographie
+                // de la voie générale, qui n'étudie pas les mêmes thèmes. Sources :
+                //   Histoire-géo 2de pro   arrêté du 03/04/2019, NOR MENE1908625A,
+                //                          BO spécial n° 5 du 11/04/2019 ;
+                //   Histoire-géo 1re, Tle  arrêté du 03/02/2020, NOR MENE2003002A,
+                //                          BO spécial n° 1 du 06/02/2020, annexes 1 et 2 ;
+                //                          tous deux en vigueur, étendus au BMA le 16/02/2026.
+                //   EMC, les trois classes arrêté du 29/05/2024, NOR MENE2413934A, BO n° 24
+                //                          du 13/06/2024 — NOUVEAU programme, commun aux trois
+                //                          voies : 2de pro 2024, 1re pro 2025, Tle pro 2026.
+                //                          Les annales d'EMC de Tle d'avant 2027 suivent
+                //                          l'ancien programme.
+                ("SECONDE_PRO", "HG_2PRO_HIST_EXPANSION",   "Histoire", "Expliquer comment le monde connu s’élargit et se relie du XVe au XVIIIe siècle", 1),
+                ("SECONDE_PRO", "HG_2PRO_HIST_EMPIRES",     "Histoire", "Comparer sur des cartes les territoires colonisés au début et à la fin de la période", 2),
+                ("SECONDE_PRO", "HG_2PRO_HIST_PRODUIT",     "Histoire", "Décrire le circuit d’un produit : thé, tabac, porcelaine, étoffes indiennes ou sucre", 3),
+                ("SECONDE_PRO", "HG_2PRO_HIST_TRAITE",      "Histoire", "Expliquer la colonisation des Amériques et la traite atlantique des esclaves africains", 4),
+                ("SECONDE_PRO", "HG_2PRO_HIST_FRISE",       "Histoire", "Réaliser une frise chronologique des révolutions de l’espace atlantique (1760-1804)", 5),
+                ("SECONDE_PRO", "HG_2PRO_HIST_REVOLUTIONS", "Histoire", "Raconter l’une des trois révolutions : américaine, française ou de Saint-Domingue", 6),
+                ("SECONDE_PRO", "HG_2PRO_HIST_COMPAGNONS",  "Histoire", "Décrire le Tour de France d’un compagnon et le rôle du chef-d’œuvre au XIXe siècle", 7),
+                ("SECONDE_PRO", "HG_2PRO_GEO_RESEAUX",      "Géographie", "Expliquer comment production et échanges s’organisent en réseaux mondialisés", 8),
+                ("SECONDE_PRO", "HG_2PRO_GEO_CIRCUIT",      "Géographie", "Décrire le circuit d’un bien, de sa conception à sa consommation à l’échelle mondiale", 9),
+                ("SECONDE_PRO", "HG_2PRO_GEO_PORT",         "Géographie", "Compléter le croquis d’un espace portuaire ou aéroportuaire et sa légende", 10),
+                ("SECONDE_PRO", "HG_2PRO_GEO_MOBILITES",    "Géographie", "Distinguer migrants, réfugiés, expatriés, touristes et étudiants à l’étranger", 11),
+                ("SECONDE_PRO", "HG_2PRO_GEO_TOURISME",     "Géographie", "Situer les grands bassins touristiques et réaliser le croquis d’un aménagement", 12),
+                ("SECONDE_PRO", "HG_2PRO_GEO_CLIMAT",       "Géographie", "Expliquer le lien entre transports, mobilités et changement climatique", 13),
+                ("SECONDE_PRO", "HG_2PRO_EMC_ETAT_DROIT",   "EMC", "Expliquer comment l’État de droit et la laïcité garantissent nos libertés", 14),
+                ("SECONDE_PRO", "HG_2PRO_EMC_INFORMATION",  "EMC", "Évaluer la fiabilité d’une information et les limites de la liberté d’expression", 15),
+                ("SECONDE_PRO", "HG_2PRO_EMC_ENVIRONNEMENT","EMC", "Expliquer les droits et responsabilités liés à la protection de l’environnement", 16),
+                ("SECONDE_PRO", "HG_2PRO_METH_DOCUMENT",    "Méthode", "Analyser à l’oral ou à l’écrit les informations essentielles d’un document", 17),
+                ("SECONDE_PRO", "HG_2PRO_METH_CONTEXTE",    "Méthode", "Situer un acteur ou un document dans son contexte pour expliquer son rôle", 18),
+                ("SECONDE_PRO", "HG_2PRO_METH_TEXTE",       "Méthode", "Dégager le sens et l’intérêt d’un texte patrimonial ou d’une œuvre d’art", 19),
+                ("SECONDE_PRO", "HG_2PRO_METH_ECHELLE",     "Méthode", "Identifier l’échelle appropriée pour étudier un flux ou un phénomène", 20),
+                ("PREMIERE_PRO", "HG_1PRO_HIST_TRAVAIL",         "Histoire", "Décrire le travail des paysans, artisans, ouvriers et employés du XIXe siècle à 1945", 1),
+                ("PREMIERE_PRO", "HG_1PRO_HIST_COLONIES",        "Histoire", "Décrire le travail dans les colonies françaises : plantations et chantiers de l’État", 2),
+                ("PREMIERE_PRO", "HG_1PRO_HIST_QUESTION_SOCIALE","Histoire", "Construire une frise des acteurs et des grandes avancées de la question sociale", 3),
+                ("PREMIERE_PRO", "HG_1PRO_HIST_GRANDE_GUERRE",   "Histoire", "Expliquer pourquoi la Grande Guerre devient une guerre totale et mondiale", 4),
+                ("PREMIERE_PRO", "HG_1PRO_HIST_SECONDE_GUERRE",  "Histoire", "Expliquer pourquoi les civils sont les principales victimes de la Seconde Guerre mondiale", 5),
+                ("PREMIERE_PRO", "HG_1PRO_HIST_GENOCIDES",       "Histoire", "Situer et caractériser les génocides des Arméniens, des Juifs et des Tsiganes", 6),
+                ("PREMIERE_PRO", "HG_1PRO_HIST_VICHY",           "Histoire", "Distinguer attentisme, collaboration et résistance face au régime de Vichy", 7),
+                ("PREMIERE_PRO", "HG_1PRO_HIST_PAIX",            "Histoire", "Confronter des points de vue sur les traités de paix et la sécurité collective (SDN, ONU)", 8),
+                ("PREMIERE_PRO", "HG_1PRO_GEO_METROPOLISATION",  "Géographie", "Expliquer la métropolisation et la périurbanisation du territoire français", 9),
+                ("PREMIERE_PRO", "HG_1PRO_GEO_PAYSAGE",          "Géographie", "Analyser un paysage urbain ou périurbain et réaliser le croquis d’un aménagement", 10),
+                ("PREMIERE_PRO", "HG_1PRO_GEO_AMENAGEMENT",      "Géographie", "Identifier les acteurs d’un aménagement périurbain et débattre des conflits d’usage", 11),
+                ("PREMIERE_PRO", "HG_1PRO_GEO_AFRIQUE",          "Géographie", "Expliquer les défis démographiques et de développement du continent africain", 12),
+                ("PREMIERE_PRO", "HG_1PRO_GEO_RESSOURCES",       "Géographie", "Situer les ressources stratégiques de l’Afrique et caractériser son urbanisation", 13),
+                ("PREMIERE_PRO", "HG_1PRO_GEO_CHINE",            "Géographie", "Rendre compte des stratégies d’implantation de la Chine en Afrique", 14),
+                ("PREMIERE_PRO", "HG_1PRO_EMC_COHESION",         "EMC", "Expliquer comment la solidarité et la lutte contre les inégalités renforcent la cohésion", 15),
+                ("PREMIERE_PRO", "HG_1PRO_EMC_EGALITE",          "EMC", "Analyser l’égalité femmes-hommes et la lutte contre les discriminations et le racisme", 16),
+                ("PREMIERE_PRO", "HG_1PRO_EMC_NATION",           "EMC", "Expliquer ce qui fonde la Nation : indivisibilité, nationalité, mémoire et citoyenneté", 17),
+                ("PREMIERE_PRO", "HG_1PRO_EMC_DEFENSE",          "EMC", "Expliquer les enjeux de la défense et de la sécurité nationale (terrorisme, cyber)", 18),
+                ("PREMIERE_PRO", "HG_1PRO_METH_OEUVRE",          "Méthode", "Contextualiser une œuvre montrant des femmes ou des hommes au travail pour l’analyser", 19),
+                ("PREMIERE_PRO", "HG_1PRO_METH_CARTES",          "Méthode", "Compléter et mettre en relation deux cartes de la dimension mondiale des guerres", 20),
+                ("TERMINALE_PRO", "HG_TPRO_HIST_GUERRE_FROIDE",  "Histoire", "Caractériser la guerre froide et confronter les points de vue des États-Unis et de l’URSS", 1),
+                ("TERMINALE_PRO", "HG_TPRO_HIST_DECOLONISATION", "Histoire", "Raconter le rôle d’un leader ou d’une organisation dans l’indépendance d’un pays", 2),
+                ("TERMINALE_PRO", "HG_TPRO_HIST_EUROPE",         "Histoire", "Situer les grandes étapes de la construction européenne depuis 1951", 3),
+                ("TERMINALE_PRO", "HG_TPRO_HIST_APRES_1991",     "Histoire", "Expliquer l’affirmation de puissances régionales et de nouveaux conflits après 1991", 4),
+                ("TERMINALE_PRO", "HG_TPRO_HIST_RECONSTRUCTION", "Histoire", "Expliquer la reconstruction démocratique et sociale de la France après 1945", 5),
+                ("TERMINALE_PRO", "HG_TPRO_HIST_VE_REPUBLIQUE",  "Histoire", "Situer la naissance de la Ve République et ses grandes réformes dans leur contexte", 6),
+                ("TERMINALE_PRO", "HG_TPRO_HIST_SOCIETE",        "Histoire", "Décrire les mutations de la société française : Trente Glorieuses, femmes, jeunesse", 7),
+                ("TERMINALE_PRO", "HG_TPRO_HIST_TRAVAIL",        "Histoire", "Expliquer les transformations du travail depuis 1980 et la création du bac pro", 8),
+                ("TERMINALE_PRO", "HG_TPRO_GEO_RESSOURCES",      "Géographie", "Expliquer la pression sur les ressources et ses liens avec les changements globaux", 9),
+                ("TERMINALE_PRO", "HG_TPRO_GEO_CONFLIT_USAGE",   "Géographie", "Analyser un conflit d’usage autour d’une ressource à partir d’une étude de cas", 10),
+                ("TERMINALE_PRO", "HG_TPRO_GEO_AMENAGEMENT",     "Géographie", "Réaliser le croquis d’un aménagement répondant à un objectif de développement durable", 11),
+                ("TERMINALE_PRO", "HG_TPRO_GEO_RISQUES",         "Géographie", "Distinguer aléa et risque et analyser le traitement médiatique d’un risque", 12),
+                ("TERMINALE_PRO", "HG_TPRO_GEO_CLIMAT",          "Géographie", "Situer un risque climatique dans son contexte et justifier l’organisation de sa gestion", 13),
+                ("TERMINALE_PRO", "HG_TPRO_GEO_PREVENTION",      "Géographie", "Cartographier la vulnérabilité d’un territoire et défendre un plan de prévention", 14),
+                ("TERMINALE_PRO", "HG_TPRO_EMC_DEBAT",           "EMC", "Expliquer le rôle des partis, de l’opinion publique et du débat dans la démocratie", 15),
+                ("TERMINALE_PRO", "HG_TPRO_EMC_PARTICIPATION",   "EMC", "Identifier les espaces de démocratie participative et les voies d’engagement des jeunes", 16),
+                ("TERMINALE_PRO", "HG_TPRO_EMC_NUMERIQUE",       "EMC", "Interroger la fiabilité des sondages et des débats sur les réseaux sociaux", 17),
+                ("TERMINALE_PRO", "HG_TPRO_EMC_DELIBERATION",    "EMC", "Expliquer comment une délibération aboutit à une décision : loi, Union européenne, ONU", 18),
+                ("TERMINALE_PRO", "HG_TPRO_METH_DOCUMENT",       "Méthode", "Dégager l’intérêt, la portée et le sens d’un document : discours, traité, affiche", 19),
+                ("TERMINALE_PRO", "HG_TPRO_METH_ARGUMENTER",     "Méthode", "Construire une argumentation historique ou géographique et la justifier", 20),
             };
 
         /// <summary>

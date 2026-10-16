@@ -1,9 +1,11 @@
 using System.Text.RegularExpressions;
+using SchoolWebApp.Domain.Models;
 
 namespace SchoolWebApp.Api.Services
 {
     /// <summary>Le verdict du professeur sur la préparation d'une épreuve d'examen.</summary>
-    public record ExamenPretDeclare(string Epreuve, string Verdict, string? Observation);
+    public record ExamenPretDeclare(
+        string Epreuve, string Verdict, string? Observation, IReadOnlyList<EtatNotionDeclare> Notions);
 
     /// <summary>
     /// Extrait le bloc [EXAMEN_PRET] — le pendant de [CONTROLE_PRET] pour une
@@ -45,9 +47,13 @@ namespace SchoolWebApp.Api.Services
             var observation = LecteurBloc.ChampLong(
                 bloc.Groups["corps"].Value,
                 ["observation", "remarque"],
-                ["epreuve", "code", "pret", "verdict", "statut", "observation", "remarque"]);
+                ["epreuve", "code", "pret", "verdict", "statut", "observation", "remarque", "notions", "etats"]);
 
-            return new ExamenPretDeclare(epreuve.Trim(), verdict, observation);
+            // LA MÊME LIGNE `notions` QUE [CONTROLE_PRET], lue par le même
+            // lecteur : un seul format d'état de notion.
+            var notions = LecteurControlePret.LireNotions(LecteurBloc.Valeur(champs, "notions", "etats"));
+
+            return new ExamenPretDeclare(epreuve.Trim(), verdict, observation, notions);
         }
     }
 }

@@ -185,6 +185,7 @@ namespace SchoolWebApp.Domain.Repositories
         Task<bool> PoserVerdictPretAsync(
             int eleveId, int controleId, int matiereId,
             string verdict, string? observation, DateTime maintenant,
+            IReadOnlyList<EtatNotionDeclare>? notions = null,
             CancellationToken ct = default);
 
         /// <summary>
@@ -276,6 +277,29 @@ namespace SchoolWebApp.Domain.Repositories
         /// </summary>
         Task EnregistrerTranscriptionDocumentAsync(
             int documentId, string transcription, DateTime maintenant, CancellationToken ct = default);
+
+        /// <summary>
+        /// Une lecture du document a planté. Au troisième échec, le document
+        /// est déclaré illisible et ses octets sont effacés. Rend vrai quand il
+        /// vient d'être abandonné.
+        /// </summary>
+        Task<bool> SignalerEchecLectureDocumentAsync(int documentId, DateTime maintenant, CancellationToken ct = default);
+
+        /// <summary>
+        /// ALLÈGE LES CONTRÔLES PASSÉS (Camara, le 16/10/2026) : un mois après
+        /// la date — deux si le bilan n'est pas fait —, le cours importé, le
+        /// détail par notion, l'observation et le style de correction partent.
+        /// Restent la date, la matière, le sujet, la note et le ressenti. Rend
+        /// le nombre de contrôles allégés (au plus `lot`).
+        /// </summary>
+        Task<int> AllegerControlesPassesAsync(DateTime maintenant, int lot, CancellationToken ct = default);
+
+        /// <summary>
+        /// SUPPRIME LES CONTRÔLES DES ANNÉES SCOLAIRES PASSÉES (bascule au 1er
+        /// août, `AnneeScolaire`), par le même chemin que la suppression à la
+        /// main. Rend le nombre de contrôles supprimés (au plus `lot`).
+        /// </summary>
+        Task<int> SupprimerControlesAnneesPasseesAsync(DateTime maintenant, int lot, CancellationToken ct = default);
 
         /// <summary>
         /// Le cours d'un contrôle pour une séance : transcrit, ou encore avec

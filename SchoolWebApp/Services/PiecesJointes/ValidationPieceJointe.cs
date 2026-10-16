@@ -55,14 +55,15 @@ namespace SchoolWebApp.Api.Services.PiecesJointes
         /// </summary>
         public const int PagesMax = 10;
 
-        public static VerdictPieceJointe Valider(byte[] donnees, string? typeAnnonce)
+        public static VerdictPieceJointe Valider(
+            byte[] donnees, string? typeAnnonce, int pagesMax = PagesMax, int tailleMax = TailleMax)
         {
             if (donnees.Length == 0)
             {
                 return new VerdictPieceJointe(false, "Le fichier est vide.");
             }
 
-            if (donnees.Length > TailleMax)
+            if (donnees.Length > tailleMax)
             {
                 return new VerdictPieceJointe(false,
                     "Ce fichier est trop lourd. Essaie une photo un peu moins grande.");
@@ -87,7 +88,7 @@ namespace SchoolWebApp.Api.Services.PiecesJointes
 
             if (typeReel != TypePdf) return new VerdictPieceJointe(true, null, 0);
 
-            return CompterPages(donnees);
+            return CompterPages(donnees, pagesMax);
         }
 
         /// <summary>Le type réel, lu dans les premiers octets. Null si inconnu.</summary>
@@ -120,18 +121,23 @@ namespace SchoolWebApp.Api.Services.PiecesJointes
             return true;
         }
 
-        private static VerdictPieceJointe CompterPages(byte[] donnees)
+        private static VerdictPieceJointe CompterPages(byte[] donnees, int pagesMax)
         {
             try
             {
                 using var document = PdfDocument.Open(donnees);
                 var pages = document.NumberOfPages;
 
-                if (pages > PagesMax)
+                if (pages > pagesMax)
                 {
+                    // Le plafond par défaut est celui d'une séance ; un autre
+                    // (l'import d'un cours pour ses fiches de révision) a sa phrase.
                     return new VerdictPieceJointe(false,
-                        $"Ce PDF fait {pages} pages, c'est trop pour une séance. "
-                        + $"Envoie-moi seulement les pages qui t'intéressent ({PagesMax} au maximum).");
+                        pagesMax == PagesMax
+                            ? $"Ce PDF fait {pages} pages, c'est trop pour une séance. "
+                                + $"Envoie-moi seulement les pages qui t'intéressent ({pagesMax} au maximum)."
+                            : $"Ce PDF fait {pages} pages, c'est trop pour un cours. "
+                                + $"Garde seulement les pages du chapitre ({pagesMax} au maximum).");
                 }
 
                 return new VerdictPieceJointe(true, null, pages);

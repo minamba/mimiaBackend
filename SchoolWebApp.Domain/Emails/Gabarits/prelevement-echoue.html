@@ -1,0 +1,61 @@
+<h1 style="margin:0 0 6px 0; font-family:Georgia,'Times New Roman',serif; font-size:27px; line-height:1.25; font-weight:normal; color:#16233a;">
+  Votre prélèvement n'a pas pu être effectué
+</h1>
+
+<p style="margin:0 0 24px 0; font-size:15px; line-height:1.6; color:#8b93a3;">
+  Formule {{offre}} &nbsp;·&nbsp; {{montant}} &nbsp;·&nbsp; le {{date}}
+</p>
+
+<!-- DIRE LA VÉRITÉ, PUIS LA SORTIE (option A, 16/10/2026).
+     À l'échéance, un prélèvement refusé suspend les séances jusqu'au
+     règlement : le courriel le dit sans détour (`situation`), et dit aussitôt
+     que tout reprend dès que le paiement passe. Un refus en milieu de période
+     (changement de formule) ne coupe rien : la phrase le dit aussi. -->
+<p style="margin:0 0 22px 0;">
+  {{salutation}}, votre banque a refusé le prélèvement de votre forfait.
+  {{situation}}
+</p>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+       style="margin:0 0 26px 0; background-color:#faf7f2; border-radius:14px;">
+  <tr>
+    <td style="padding:20px 22px;">
+      <div style="font-size:13px; font-weight:600; letter-spacing:0.07em; text-transform:uppercase; color:#8b93a3;">
+        Ce qui se passe maintenant
+      </div>
+      <div style="margin-top:10px; font-size:15px; line-height:1.8; color:#16233a;">
+        {{prochaineTentative}}<br>
+        Les causes les plus fréquentes&nbsp;: une carte expirée ou remplacée, un
+        plafond atteint, un solde insuffisant ce jour-là.
+      </div>
+    </td>
+  </tr>
+</table>
+
+<p style="margin:0 0 24px 0;">
+  Pour régler tout de suite, sans attendre la prochaine tentative&nbsp;:
+</p>
+
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 22px 0;">
+  <tr>
+    <td style="border-radius:999px; background-color:#d63f1c;">
+      <a href="{{lien}}"
+         style="display:inline-block; padding:13px 28px; font-family:-apple-system,'Segoe UI',Helvetica,Arial,sans-serif; font-size:15px; font-weight:600; color:#ffffff; text-decoration:none;">
+        Régler maintenant
+      </a>
+    </td>
+  </tr>
+</table>
+
+<!-- La page de facture règle CETTE facture ; la carte des prochains
+     prélèvements se change dans le portail, depuis « Mon forfait ». -->
+<p style="margin:0 0 22px 0;">
+  Votre carte a changé&nbsp;? Mettez-la à jour pour les prochains mois depuis
+  <a href="{{lienForfait}}" style="color:#d63f1c; text-decoration:underline;">Mon forfait</a>,
+  bouton «&nbsp;Mettre ma carte à jour&nbsp;».
+</p>
+
+<p style="margin:0 0 8px 0; font-size:14px; line-height:1.6; color:#8b93a3;">
+  Si vous avez déjà réglé entre-temps, ne tenez pas compte de ce message.
+  Une question&nbsp;? Écrivez-nous, nous vous aidons.
+</p>

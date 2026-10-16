@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -7,7 +8,11 @@ namespace SchoolWebApp.Api.Services
     /// <summary>Ce qu'un relevé de page a constaté — jamais ce qu'il en pense.</summary>
     /// <param name="Reussi">Faux si la page n'a pas pu être lue (réseau, page retirée, blocage).</param>
     /// <param name="Hash">L'empreinte du contenu lu, si la lecture a réussi.</param>
-    public record ReleveVeille(bool Reussi, string? Hash);
+    /// <param name="CopieDu">
+    /// La page n'a pas pu être lue sur le site officiel, mais sur la copie de
+    /// l'Internet Archive de cette date. Null : lue en direct.
+    /// </param>
+    public record ReleveVeille(bool Reussi, string? Hash, DateTime? CopieDu = null);
 
     public interface IVeilleReferentielService
     {
@@ -96,7 +101,198 @@ namespace SchoolWebApp.Api.Services
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
+        // ================================================================
+        // LE SECOURS : L'INTERNET ARCHIVE — 15/10/2026
+        // ================================================================
+        //
+        // Ce jour-là, les 41 adresses surveillées étaient « injoignables » : les
+        // sites du ministère (education.gouv.fr, Éduscol, Légifrance) bloquent
+        // désormais les robots derrière Cloudflare — 403, même à un navigateur
+        // simulé. La veille était aveugle sans le savoir. Camara : « c'est une
+        // tâche très importante pour l'application ».
+        //
+        // Quand la lecture directe échoue, on lit la DERNIÈRE COPIE de la page
+        // conservée par l'Internet Archive, en version BRUTE (`id_` : les octets
+        // d'origine, sans la barre de l'Archive). Le texte en est extrait de la
+        // même façon : une page inchangée garde la même empreinte, qu'elle soit
+        // lue en direct ou sur la copie — passer de l'une à l'autre ne crée
+        // aucune fausse alerte.
+        //
+        // CE QUE ÇA NE DIT PAS : « la page n'a pas bougé aujourd'hui », mais « elle
+        // n'avait pas bougé à la date de la copie ». La date est gardée et
+        // affichée. Une copie de plus de 14 jours déclenche une demande de copie
+        // fraîche (« Save Page Now »), au plus dix par jour, sans l'attendre.
+
+        // L'index CDX, et non l'API « available » : celle-ci répond « aucune
+        // copie » pour la moitié des pages qui en ont pourtant (vérifié le
+        // 15/10/2026 : 17 pages sur 35 « sans copie », toutes présentes au CDX).
+        // « limit=-1 » rend la DERNIÈRE copie lue avec succès (statut 200).
+        private const string IndexArchive =
+            "https://web.archive.org/cdx/search/cdx?filter=statuscode:200&limit=-1&fl=timestamp&url=";
+        private static readonly TimeSpan CopieTropAncienne = TimeSpan.FromDays(14);
+        private const int DemandesDeCopieParJour = 10;
+
+        // L'ARCHIVE RATIONNE : interrogée en rafale, elle répond « Temporarily
+        // Offline » (vu le 15/10/2026, 9 échecs sur 35 pour des pages pourtant
+        // copiées). Un appel à la fois, deux secondes entre deux appels, et deux
+        // reprises espacées (10 s puis 30 s) quand elle refuse. La nuit, les
+        // 35 pages prennent un peu plus de deux minutes : rien ne presse.
+        private static readonly SemaphoreSlim UnAppelALaFois = new(1, 1);
+        private static readonly TimeSpan EcartEntreAppels = TimeSpan.FromSeconds(2);
+        private static readonly TimeSpan[] AttentesAvantReprise = { TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(30) };
+        private static DateTime _dernierAppel = DateTime.MinValue;
+
+        private static readonly object VerrouDemandes = new();
+        private static DateTime _jourDesDemandes;
+        private static int _demandesDuJour;
+
         public async Task<ReleveVeille> RelireAsync(string url, CancellationToken ct = default)
+        {
+            var direct = await RelireEnDirectAsync(url, ct);
+            if (direct.Reussi) return direct;
+
+            return await RelireDepuisArchiveAsync(url, ct) ?? direct;
+        }
+
+        private async Task<ReleveVeille?> RelireDepuisArchiveAsync(string url, CancellationToken ct)
+        {
+            try
+            {
+                var horodatage = (await LireALArchiveAsync(IndexArchive + Uri.EscapeDataString(url), url, ct))?.Trim();
+                if (horodatage is null) return null;
+
+                if (horodatage.Length == 0)
+                {
+                    // Aucune copie : on en demande une, elle servira la nuit suivante.
+                    _logger.LogInformation("Veille referentiel : aucune copie de {Url} a l'Internet Archive.", url);
+                    DemanderUneCopieFraiche(url);
+                    return null;
+                }
+
+                if (!DateTime.TryParseExact(horodatage, "yyyyMMddHHmmss", CultureInfo.InvariantCulture,
+                        DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var copieDu))
+                {
+                    _logger.LogWarning("Veille referentiel : reponse inattendue de l'index de l'Archive pour {Url}.", url);
+                    return null;
+                }
+
+                var html = await LireALArchiveAsync($"https://web.archive.org/web/{horodatage}id_/{url}", url, ct);
+                if (html is null) return null;
+
+                var texte = ExtraireTexte(html);
+                if (EstUnDefi(html) || texte.Length < LongueurMinimale) return null;
+
+                if (DateTime.UtcNow - copieDu > CopieTropAncienne) DemanderUneCopieFraiche(url);
+
+                _logger.LogInformation(
+                    "Veille referentiel : {Url} lue sur la copie de l'Internet Archive du {Copie:dd/MM/yyyy}.", url, copieDu);
+
+                return new ReleveVeille(true, Empreinte(texte), copieDu);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Veille referentiel : copie de l'Internet Archive illisible pour {Url}.", url);
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Un appel à l'Archive, au rythme qu'elle tolère. Null : elle a refusé
+        /// trois fois, ou répondu une erreur qui ne se reprend pas (404…).
+        /// </summary>
+        private async Task<string?> LireALArchiveAsync(string adresse, string url, CancellationToken ct)
+        {
+            for (var essai = 0; ; essai++)
+            {
+                string? corps = null;
+                var reprendre = false;
+
+                await UnAppelALaFois.WaitAsync(ct);
+                try
+                {
+                    var attente = _dernierAppel + EcartEntreAppels - DateTime.UtcNow;
+                    if (attente > TimeSpan.Zero) await Task.Delay(attente, ct);
+
+                    using var reponse = await _http.GetAsync(adresse, ct);
+                    var code = (int)reponse.StatusCode;
+                    if (reponse.IsSuccessStatusCode)
+                    {
+                        corps = await reponse.Content.ReadAsStringAsync(ct);
+                        // La page « hors ligne » arrive parfois avec un statut 200.
+                        reprendre = corps.Contains("Temporarily Offline", StringComparison.OrdinalIgnoreCase);
+                    }
+                    else
+                    {
+                        reprendre = code == 429 || code >= 500;
+                    }
+                }
+                catch (HttpRequestException)
+                {
+                    reprendre = true;
+                }
+                catch (TaskCanceledException) when (!ct.IsCancellationRequested)
+                {
+                    reprendre = true; // délai dépassé
+                }
+                finally
+                {
+                    _dernierAppel = DateTime.UtcNow;
+                    UnAppelALaFois.Release();
+                }
+
+                if (!reprendre) return corps;
+                if (essai >= AttentesAvantReprise.Length)
+                {
+                    _logger.LogWarning("Veille referentiel : l'Internet Archive refuse de repondre pour {Url}.", url);
+                    return null;
+                }
+
+                await Task.Delay(AttentesAvantReprise[essai], ct);
+            }
+        }
+
+        /// <summary>
+        /// Demande à l'Archive de reprendre la page, sans attendre : la copie
+        /// fraîche servira au prochain passage. Au plus dix par jour.
+        /// </summary>
+        private void DemanderUneCopieFraiche(string url)
+        {
+            lock (VerrouDemandes)
+            {
+                var aujourdhui = DateTime.UtcNow.Date;
+                if (_jourDesDemandes != aujourdhui)
+                {
+                    _jourDesDemandes = aujourdhui;
+                    _demandesDuJour = 0;
+                }
+
+                if (_demandesDuJour >= DemandesDeCopieParJour) return;
+                _demandesDuJour += 1;
+            }
+
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    using var reponse = await _http.GetAsync("https://web.archive.org/save/" + url);
+                    _logger.LogInformation(
+                        "Veille referentiel : copie fraiche demandee pour {Url} ({Code}).", url, (int)reponse.StatusCode);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogInformation("Veille referentiel : demande de copie refusee pour {Url} ({Erreur}).", url, ex.Message);
+                }
+            });
+        }
+
+        private static string Empreinte(string texte) =>
+            Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(texte)));
+
+        private async Task<ReleveVeille> RelireEnDirectAsync(string url, CancellationToken ct)
         {
             try
             {
@@ -124,9 +320,7 @@ namespace SchoolWebApp.Api.Services
                     return new ReleveVeille(false, null);
                 }
 
-                var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(texte)));
-
-                return new ReleveVeille(true, hash);
+                return new ReleveVeille(true, Empreinte(texte));
             }
             catch (OperationCanceledException)
             {

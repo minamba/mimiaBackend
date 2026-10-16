@@ -259,6 +259,68 @@ namespace SchoolWebApp.Dal.Seed.Referentiels
                 ("TERMINALE", "AN_TLE_PHONO_PROSODIE", "Phonologie", "Soigner prosodie et intonation pour l’épreuve orale", 18),
 
                 ("TERMINALE", "AN_TLE_CULT_AXES",   "Culture", "Traiter les axes du programme avec des exemples précis", 13),
+
+                // ================================================================
+                // VOIE PROFESSIONNELLE (15/10/2026)
+                // ================================================================
+                //
+                // Source unique pour les trois classes : programme de langues vivantes des
+                // classes de CAP et de bac pro, arrêté du 03/04/2019, NOR MENE1908627A, BO
+                // spécial n° 5 du 11/04/2019 (2de 2019, 1re 2020, Tle 2021), toujours en
+                // vigueur — le programme de LV de 2025 ne vise que le collège et le lycée GT.
+                // Le texte NE DÉCOUPE PAS par année : la répartition suit la progression
+                // CECRL (2de A2→A2+/B1, 1re B1, Tle B1+ visé à l'examen, B2 en fin d'études).
+                // Cinq lignes de terminale viennent de l'épreuve (arrêté du 17/06/2020,
+                // NOR MENE2015195A, annexe V) : comptes rendus en français, écrit de 100 à
+                // 120 mots, exposé de cinq minutes et échange.
+                ("SECONDE_PRO", "AN_2PRO_COMP_SUJET",       "Compréhension", "Identifier le sujet d’une conversation et la thématique d’un document", 1),
+                ("SECONDE_PRO", "AN_2PRO_COMP_PROGRAMME",   "Compréhension", "Comprendre la présentation orale ou écrite d’un programme de visite ou de voyage", 2),
+                ("SECONDE_PRO", "AN_2PRO_COMP_DOC_PRO",     "Compréhension", "Comprendre l’essentiel d’une fiche produit, d’une notice ou d’un mode d’emploi", 3),
+                ("SECONDE_PRO", "AN_2PRO_ORAL_ACCUEIL",     "Expression orale", "Accueillir un client ou un partenaire en face à face ou au téléphone", 4),
+                ("SECONDE_PRO", "AN_2PRO_ORAL_RENSEIGNER",  "Expression orale", "Demander des renseignements pratiques détaillés : prestations, réservations", 5),
+                ("SECONDE_PRO", "AN_2PRO_ORAL_EXPERIENCES", "Expression orale", "Parler de ses expériences, de ses compétences et de ses réalisations", 6),
+                ("SECONDE_PRO", "AN_2PRO_ORAL_CHOIX",       "Expression orale", "Expliquer et justifier ses choix : achats, loisirs, voyages, sport", 7),
+                ("SECONDE_PRO", "AN_2PRO_ECR_BREF",         "Expression écrite", "Répondre par écrit à un message bref : courriel, note, invitation", 8),
+                ("SECONDE_PRO", "AN_2PRO_ECR_TACHE",        "Expression écrite", "Décrire par écrit une tâche courante ou une journée de travail", 9),
+                ("SECONDE_PRO", "AN_2PRO_MED_REFORMULER",   "Médiation", "Reformuler et transmettre une information simple : date, rendez-vous, consigne", 10),
+                ("SECONDE_PRO", "AN_2PRO_CULT_QUOTIDIEN",   "Culture", "Comprendre les usages de la vie quotidienne des pays anglophones et en rendre compte", 11),
+                ("SECONDE_PRO", "AN_2PRO_CULT_REPERES",     "Culture", "Nommer les grands traits géographiques, démographiques et culturels des pays anglophones", 12),
+                ("SECONDE_PRO", "AN_2PRO_LEX_ENTREPRISE",   "Lexique", "Employer le lexique des services de l’entreprise, des métiers et des fonctions", 13),
+                ("SECONDE_PRO", "AN_2PRO_GRAM_OUTILS",      "Grammaire", "Mobiliser les structures grammaticales et syntaxiques utiles à la tâche visée", 14),
+                ("SECONDE_PRO", "AN_2PRO_PHONO_PRONONCER",  "Phonologie", "Prononcer de façon compréhensible en reliant l’écrit et l’oral", 15),
+                ("SECONDE_PRO", "AN_2PRO_METH_SUIVI",       "Méthode", "Situer son niveau sur l’échelle du CECRL et suivre ses progrès dans un carnet de bord", 16),
+                ("PREMIERE_PRO", "AN_1PRO_COMP_PRESSE",      "Compréhension", "Comprendre et rendre compte d’un article de presse, d’un documentaire ou d’une affiche", 1),
+                ("PREMIERE_PRO", "AN_1PRO_COMP_ARGUMENTS",   "Compréhension", "Repérer les arguments d’un propos et les divergences de points de vue", 2),
+                ("PREMIERE_PRO", "AN_1PRO_COMP_OFFRE",       "Compréhension", "Comprendre une publicité professionnelle, une offre commerciale ou une prestation", 3),
+                ("PREMIERE_PRO", "AN_1PRO_ORAL_DEMANDE",     "Expression orale", "Faire expliciter et traiter une demande, une réservation ou une réclamation", 4),
+                ("PREMIERE_PRO", "AN_1PRO_ORAL_PANNE",       "Expression orale", "Signaler et décrire un dysfonctionnement ou une panne", 5),
+                ("PREMIERE_PRO", "AN_1PRO_ORAL_APPAREIL",    "Expression orale", "Expliquer la mise en service ou le fonctionnement d’un appareil", 6),
+                ("PREMIERE_PRO", "AN_1PRO_ORAL_SCHEMA",      "Expression orale", "Décrire le fonctionnement d’un système à partir d’un plan ou d’un schéma", 7),
+                ("PREMIERE_PRO", "AN_1PRO_ECR_COMPTE_RENDU", "Expression écrite", "Rédiger un bref compte rendu ou bilan d’une tâche ou d’une intervention", 8),
+                ("PREMIERE_PRO", "AN_1PRO_ECR_RECLAMATION",  "Expression écrite", "Rédiger une réclamation écrite en tant que client ou consommateur", 9),
+                ("PREMIERE_PRO", "AN_1PRO_MED_CONSIGNE",     "Médiation", "Comprendre et transmettre une consigne professionnelle ou des directives internes", 10),
+                ("PREMIERE_PRO", "AN_1PRO_CULT_CLICHES",     "Culture", "Repérer et questionner les clichés et stéréotypes sur les pays anglophones", 11),
+                ("PREMIERE_PRO", "AN_1PRO_CULT_MEDIAS",      "Culture", "Connaître les médias et réseaux sociaux des pays anglophones, leurs usages et enjeux", 12),
+                ("PREMIERE_PRO", "AN_1PRO_LEX_CHIFFRES",     "Lexique", "Exprimer des données chiffrées : mesures, prix, rabais, devises", 13),
+                ("PREMIERE_PRO", "AN_1PRO_GRAM_COMPARER",    "Grammaire", "Choisir les structures adaptées pour décrire, expliquer et comparer", 14),
+                ("PREMIERE_PRO", "AN_1PRO_PHONO_VOIX",       "Phonologie", "Soigner sa voix, son débit et sa posture pour retenir l’attention", 15),
+                ("PREMIERE_PRO", "AN_1PRO_METH_NOTES",       "Méthode", "Préparer une prise de parole en organisant ses notes", 16),
+                ("TERMINALE_PRO", "AN_TPRO_COMP_ORAL",        "Compréhension", "Rendre compte en français d’un document audio ou vidéo écouté trois fois", 1),
+                ("TERMINALE_PRO", "AN_TPRO_COMP_ECRIT",       "Compréhension", "Rendre compte en français d’un texte authentique : faits, points de vue, implicite", 2),
+                ("TERMINALE_PRO", "AN_TPRO_COMP_CANDIDATURE", "Compréhension", "Lire des CV, lettres de motivation, fiches métiers et fiches de poste", 3),
+                ("TERMINALE_PRO", "AN_TPRO_ECR_CANDIDATURE",  "Expression écrite", "Rédiger un CV et une lettre de motivation", 4),
+                ("TERMINALE_PRO", "AN_TPRO_ECR_EXAMEN",       "Expression écrite", "Rédiger un texte de 100 à 120 mots sur un sujet quotidien ou professionnel", 5),
+                ("TERMINALE_PRO", "AN_TPRO_ORAL_EXPOSE",      "Expression orale", "Présenter cinq minutes, sans lire, un projet ou une expérience professionnelle", 6),
+                ("TERMINALE_PRO", "AN_TPRO_ORAL_INTERAGIR",   "Expression orale", "Répondre spontanément aux questions qui suivent son exposé", 7),
+                ("TERMINALE_PRO", "AN_TPRO_ORAL_ENTRETIEN",   "Expression orale", "Se présenter à un entretien d’embauche et le passer", 8),
+                ("TERMINALE_PRO", "AN_TPRO_ORAL_DEBAT",       "Expression orale", "Défendre sa position dans un débat, réfuter celle de l’autre et convaincre", 9),
+                ("TERMINALE_PRO", "AN_TPRO_ORAL_VENTE",       "Expression orale", "Développer une argumentation de vente ou de service", 10),
+                ("TERMINALE_PRO", "AN_TPRO_MED_SYNTHESE",     "Médiation", "Résumer pour quelqu’un d’autre des informations venant de sources variées", 11),
+                ("TERMINALE_PRO", "AN_TPRO_CULT_ENJEUX",      "Culture", "S’exprimer sur un enjeu de société, éthique ou environnemental du monde anglophone", 12),
+                ("TERMINALE_PRO", "AN_TPRO_CULT_MOBILITE",    "Culture", "Exposer un projet de mobilité européenne ou internationale, puis en rendre compte", 13),
+                ("TERMINALE_PRO", "AN_TPRO_LEX_EMPLOI",       "Lexique", "Mobiliser le lexique de l’emploi, du recrutement et des règles du travail", 14),
+                ("TERMINALE_PRO", "AN_TPRO_GRAM_ARGUMENTER",  "Grammaire", "Mobiliser des structures variées pour argumenter et formuler des propositions", 15),
+                ("TERMINALE_PRO", "AN_TPRO_CECRL",            "Méthode", "Atteindre le niveau B1+ attendu à l’examen et viser le niveau B2", 16),
             };
 
         /// <summary>

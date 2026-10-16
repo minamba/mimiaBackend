@@ -77,7 +77,22 @@ namespace SchoolWebApp.Dal.Entities
 
         public int Taille { get; set; }
 
-        public byte[] Donnees { get; set; } = Array.Empty<byte>();
+        /// <summary>
+        /// L'IMAGE EN BASE — L'ANCIENNE FAÇON, en voie de disparition (Camara,
+        /// le 15/10/2026 : la base plafonne à 10 Go). Null dès que l'image est
+        /// sur le disque (`Fichier`). Ne reste remplie que tant que le dossier
+        /// des planches n'est pas prêt sur le VPS.
+        /// </summary>
+        public byte[]? Donnees { get; set; }
+
+        /// <summary>Le chemin de l'image, relatif au dossier des planches (`IStockagePlanches`).</summary>
+        public string? Fichier { get; set; }
+
+        /// <summary>
+        /// SHA-256 de l'image. C'est elle qui dit « mêmes octets qu'avant » à
+        /// l'import, sans relire le fichier ni charger l'ancienne image.
+        /// </summary>
+        public string? Empreinte { get; set; }
 
         /// <summary>
         /// Les trois mentions qu'imposent CC BY et CC BY-SA. Elles sont

@@ -125,5 +125,12 @@ namespace SchoolWebApp.Domain.Repositories
         Task EnregistrerCreditAsync(
             int id, string? auteur, string? source, string? licence,
             CancellationToken ct = default);
+
+        /// <summary>
+        /// Sort de la base, vers le disque, au plus `lot` planches encore en
+        /// base (15/10/2026). Rien tant que le dossier n'est pas prêt. Rend le
+        /// nombre de planches déplacées.
+        /// </summary>
+        Task<int> DeplacerVersDisqueAsync(int lot, CancellationToken ct = default);
     }
 }

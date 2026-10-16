@@ -38,15 +38,18 @@ namespace SchoolWebApp.Api.Services.Paiement
         private const string Devise = "eur";
 
         private readonly IAbonnementRepository _abonnements;
+        private readonly ICreditsFichesRepository _fiches;
         private readonly IOptions<OptionsStripe> _options;
         private readonly ILogger<CatalogueStripeService> _logger;
 
         public CatalogueStripeService(
             IAbonnementRepository abonnements,
+            ICreditsFichesRepository fiches,
             IOptions<OptionsStripe> options,
             ILogger<CatalogueStripeService> logger)
         {
             _abonnements = abonnements ?? throw new ArgumentNullException(nameof(abonnements));
+            _fiches = fiches ?? throw new ArgumentNullException(nameof(fiches));
             _options = options ?? throw new ArgumentNullException(nameof(options));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
@@ -109,6 +112,30 @@ namespace SchoolWebApp.Api.Services.Paiement
 
                 lignes.Add(new LigneCatalogue(
                     recharge.Code!, recharge.Libelle!,
+                    $"paiement unique {tarif.UnitAmount / 100.0:0.00} €"));
+            }
+
+            foreach (var pack in await _fiches.GetOffresAsync(ct))
+            {
+                var produit = await TrouverOuCreerProduitAsync(
+                    produits, $"fiches-{pack.Code.ToLowerInvariant()}", pack.Libelle ?? pack.Code, ct);
+
+                // LE NOM SUIT LA BASE : c'est lui que le parent lit sur la page de
+                // paiement. Les packs du 15/10 s'appelaient « 10 fiches » alors
+                // qu'on vend des cours (16/10/2026).
+                var nom = $"Mimia — {pack.Libelle ?? pack.Code}";
+                if (produit.Name != nom)
+                {
+                    produit = await produits.UpdateAsync(produit.Id, new ProductUpdateOptions { Name = nom }, cancellationToken: ct);
+                }
+
+                var tarif = await AssurerPrixAsync(
+                    prix, produit.Id, pack.PrixCentimes, null, pack.StripePrixId, ct);
+
+                await _fiches.EnregistrerPrixStripeAsync(pack.Code, tarif.Id, ct);
+
+                lignes.Add(new LigneCatalogue(
+                    pack.Code, pack.Libelle ?? pack.Code,
                     $"paiement unique {tarif.UnitAmount / 100.0:0.00} €"));
             }
 
