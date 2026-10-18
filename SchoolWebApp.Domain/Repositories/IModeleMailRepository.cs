@@ -12,6 +12,12 @@ namespace SchoolWebApp.Domain.Repositories
     /// </summary>
     public interface IModeleMailRepository
     {
+        /// <summary>
+        /// Sort un lot de pièces de la base vers le dossier des templates
+        /// (18/10/2026) ; rend le nombre déplacé, 0 quand il n'y a plus rien.
+        /// </summary>
+        Task<int> DeplacerPiecesVersDisqueAsync(int lot, CancellationToken ct = default);
+
         /// <summary>Les modèles d'une nature, les plus récemment modifiés d'abord.</summary>
         Task<IReadOnlyList<ModeleMailResume>> GetResumesAsync(string nature, CancellationToken ct = default);
 

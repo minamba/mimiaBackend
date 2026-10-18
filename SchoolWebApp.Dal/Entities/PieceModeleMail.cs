@@ -3,10 +3,10 @@ namespace SchoolWebApp.Dal.Entities
     /// <summary>
     /// Une image ou un document d'un modèle de courriel.
     ///
-    /// LES OCTETS SONT EN BASE, comme pour les bandeaux promotionnels : le
-    /// disque du conteneur ne survit pas à un `docker restart`, et un template
-    /// qui perdrait ses images au premier déploiement partirait avec des cadres
-    /// vides chez tous les parents.
+    /// LES OCTETS SONT SUR LE DISQUE (18/10/2026, règle « aucun document en
+    /// base ») : `Fichier` est leur chemin dans le dossier des templates, monté
+    /// depuis l'hôte et sauvegardé. `Donnees` ne sert plus qu'au repli, tant que
+    /// ce dossier n'est pas prêt — puis il est vidé au démarrage.
     ///
     /// LE RANG FAIT LA RÉFÉRENCE. `[image:2]` dans le texte désigne l'image de
     /// rang 2. Les rangs sont donc tenus SANS TROU, par genre : retirer une
@@ -31,7 +31,11 @@ namespace SchoolWebApp.Dal.Entities
 
         public int Taille { get; set; }
 
-        public byte[] Donnees { get; set; } = Array.Empty<byte>();
+        /// <summary>Le chemin du fichier dans le dossier des templates ; nul tant qu'il est en base.</summary>
+        public string? Fichier { get; set; }
+
+        /// <summary>Les octets, seulement tant que le dossier des templates n'est pas prêt.</summary>
+        public byte[]? Donnees { get; set; }
 
         public DateTime DateCreation { get; set; }
 

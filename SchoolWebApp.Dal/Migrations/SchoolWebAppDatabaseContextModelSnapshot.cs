@@ -3554,9 +3554,13 @@ namespace SchoolWebApp.Dal.Migrations
                         .HasColumnName("date_creation");
 
                     b.Property<byte[]>("Donnees")
-                        .IsRequired()
                         .HasColumnType("varbinary(max)")
                         .HasColumnName("donnees");
+
+                    b.Property<string>("Fichier")
+                        .HasMaxLength(260)
+                        .HasColumnType("nvarchar(260)")
+                        .HasColumnName("fichier");
 
                     b.Property<string>("Genre")
                         .IsRequired()

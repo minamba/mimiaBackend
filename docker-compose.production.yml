@@ -55,6 +55,15 @@ services:
       #   mkdir -p ./donnees/planches
       #   echo "Dossier des planches de Mimia" > ./donnees/planches/STOCKAGE-MIMIA
       - ./donnees/planches:/donnees/planches
+
+      # LES IMAGES ET DOCUMENTS DES TEMPLATES DE COURRIEL, SORTIS DE LA BASE
+      # LE 18/10/2026 (regle : aucun document en base). Comme les planches, ils
+      # ne se regenerent pas : ce dossier SE SAUVEGARDE (etape 6 de
+      # exploitation/sauvegarde-base.sh). Sans la marque, ils restent en base.
+      # A creer AVANT le demarrage, puis docker compose up -d mimia :
+      #   mkdir -p ./donnees/modeles-mail
+      #   echo "Dossier des templates de courriel de Mimia" > ./donnees/modeles-mail/STOCKAGE-MIMIA
+      - ./donnees/modeles-mail:/donnees/modeles-mail
     networks:
       - web
       - geekai_internal

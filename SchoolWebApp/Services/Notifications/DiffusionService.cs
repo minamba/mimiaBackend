@@ -122,6 +122,49 @@ namespace SchoolWebApp.Api.Services.Notifications
         private static readonly Regex Gras = new(@"\*\*(.+?)\*\*", RegexOptions.Compiled);
 
         /// <summary>
+        /// LES LIENS (Camara, le 18/10/2026 : « l'affichage des liens se fait-il
+        /// bien ? »). `[voir les formules](https://mimia.fr/tarifs)` : un lien
+        /// avec son texte. Appliqué au texte DÉJÀ échappé : l'adresse ne peut
+        /// rien ouvrir d'autre qu'un lien http(s).
+        /// </summary>
+        private static readonly Regex LienNomme = new(
+            @"\[([^\]\n]{1,200})\]\((https?://[^\s)<]+)\)", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+        /// <summary>
+        /// Une adresse tapée telle quelle — https://… ou www.… — devient cliquable.
+        /// La ponctuation qui la suit (« . », « , », « ) »…) reste du texte, et une
+        /// adresse déjà dans un lien n'est pas reprise.
+        /// </summary>
+        private static readonly Regex AdresseNue = new(
+            @"(?<![""'=/>\w])((?:https?://|www\.)[^\s<]+?)(?=[.,;:!?)\]]*(?:\s|<|$))",
+            RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+        private const string StyleLien = "color:#e8603c; font-weight:600; text-decoration:underline;";
+
+        /// <summary>Les liens d'un bloc de texte déjà échappé.</summary>
+        private static string Lier(string contenu)
+        {
+            // Les liens nommés d'abord : leur adresse ne doit pas être reprise
+            // une seconde fois comme adresse nue.
+            var liens = new List<string>();
+            contenu = LienNomme.Replace(contenu, m =>
+            {
+                liens.Add($"<a href=\"{m.Groups[2].Value}\" style=\"{StyleLien}\">{m.Groups[1].Value}</a>");
+                return $"\u0001{liens.Count - 1}\u0001";
+            });
+
+            contenu = AdresseNue.Replace(contenu, m =>
+            {
+                var adresse = m.Groups[1].Value;
+                var cible = adresse.StartsWith("www.", StringComparison.OrdinalIgnoreCase) ? "https://" + adresse : adresse;
+                return $"<a href=\"{cible}\" style=\"{StyleLien}\">{adresse}</a>";
+            });
+
+            for (var i = 0; i < liens.Count; i++) contenu = contenu.Replace($"\u0001{i}\u0001", liens[i]);
+            return contenu;
+        }
+
+        /// <summary>
         /// `{{prenom}}`, avec l'espace qui le précède : une variable vide
         /// l'emporte avec elle, et « Bonjour {{prenom}}, » devient « Bonjour, »
         /// plutôt que « Bonjour , ».
@@ -200,6 +243,11 @@ namespace SchoolWebApp.Api.Services.Notifications
             foreach (var bloc in blocs)
             {
                 var contenu = WebUtility.HtmlEncode(bloc.Trim()).Replace("\n", "<br>");
+
+                // LES LIENS, juste après l'échappement et avant le reste : les
+                // images insérées plus bas portent une adresse cid: qu'il ne faut
+                // pas transformer.
+                contenu = Lier(contenu);
 
                 // LE GRAS, RÉINTRODUIT APRÈS L'ÉCHAPPEMENT LUI AUSSI.
                 //

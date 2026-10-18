@@ -1,5 +1,6 @@
 using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using SchoolWebApp.Dal.Entities;
 using SchoolWebApp.Domain.Emails;
 using SchoolWebApp.Domain.Models;
@@ -24,9 +25,96 @@ namespace SchoolWebApp.Dal.Repositories
 
         private readonly SchoolWebAppDatabaseContext _context;
 
-        public ModeleMailRepository(SchoolWebAppDatabaseContext context)
+        private readonly SchoolWebApp.Domain.Services.IStockageModelesMail? _stockage;
+        private readonly Microsoft.Extensions.Logging.ILogger<ModeleMailRepository>? _logger;
+
+        public ModeleMailRepository(
+            SchoolWebAppDatabaseContext context,
+            SchoolWebApp.Domain.Services.IStockageModelesMail? stockage = null,
+            Microsoft.Extensions.Logging.ILogger<ModeleMailRepository>? logger = null)
         {
             _context = context ?? throw new ArgumentNullException(nameof(context));
+            _stockage = stockage;
+            _logger = logger;
+        }
+
+        /// <summary>
+        /// OÙ RANGER UNE PIÈCE (18/10/2026) : sur le disque dès que le dossier des
+        /// templates est prêt ; en base sinon, ou si l'écriture échoue — on ne
+        /// perd jamais une pièce.
+        /// </summary>
+        private async Task<(string? Fichier, byte[]? Donnees)> RangerAsync(
+            byte[] donnees, string nomFichier, CancellationToken ct)
+        {
+            if (_stockage is not { Pret: true }) return (null, donnees);
+
+            try
+            {
+                return (await _stockage.EcrireAsync(donnees, nomFichier, ct), null);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger?.LogError(ex, "Piece de template {Nom} gardee en base : ecriture sur le disque impossible.", nomFichier);
+                return (null, donnees);
+            }
+        }
+
+        /// <summary>Les octets d'une pièce, où qu'ils soient.</summary>
+        private async Task<byte[]> OctetsAsync(string? fichier, byte[]? donnees, CancellationToken ct)
+        {
+            if (!string.IsNullOrEmpty(fichier) && _stockage is not null)
+            {
+                return await _stockage.LireAsync(fichier, ct) ?? Array.Empty<byte>();
+            }
+
+            return donnees ?? Array.Empty<byte>();
+        }
+
+        public async Task<int> DeplacerPiecesVersDisqueAsync(int lot, CancellationToken ct = default)
+        {
+            if (_stockage is not { Pret: true }) return 0;
+
+            var aDeplacer = await _context.PiecesModelesMail
+                .AsNoTracking()
+                .Where(p => p.Fichier == null && p.Donnees != null)
+                .OrderBy(p => p.Id)
+                .Select(p => new { p.Id, p.NomFichier })
+                .Take(lot)
+                .ToListAsync(ct);
+
+            var deplacees = 0;
+            foreach (var p in aDeplacer)
+            {
+                var octets = await _context.PiecesModelesMail.AsNoTracking()
+                    .Where(x => x.Id == p.Id).Select(x => x.Donnees).FirstOrDefaultAsync(ct);
+                if (octets is not { Length: > 0 }) continue;
+
+                string fichier;
+                try
+                {
+                    fichier = await _stockage.EcrireAsync(octets, p.NomFichier, ct);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    _logger?.LogError(ex, "Piece de template {Id} non deplacee : elle reste en base.", p.Id);
+                    continue;
+                }
+
+                // Conditionnel : une pièce retirée entre-temps n'est pas touchée,
+                // et le fichier écrit pour rien est effacé.
+                var faites = await _context.PiecesModelesMail
+                    .Where(x => x.Id == p.Id && x.Fichier == null && x.Donnees != null)
+                    .ExecuteUpdateAsync(m => m
+                        .SetProperty(x => x.Fichier, fichier)
+                        .SetProperty(x => x.Donnees, (byte[]?)null), ct);
+
+                if (faites == 0) _stockage.Supprimer(fichier);
+                deplacees += faites;
+            }
+
+            // Plus rien à déplacer dans ce lot (tout a échoué) : on s'arrête, au
+            // lieu de reboucler sur les mêmes pièces.
+            return deplacees == 0 && aDeplacer.Count > 0 ? 0 : deplacees;
         }
 
         /// <summary>
@@ -134,30 +222,20 @@ namespace SchoolWebApp.Dal.Repositories
         }
 
         public async Task<IReadOnlyList<PieceModeleMailContenu>> GetPiecesAsync(
-            int id, CancellationToken ct = default) =>
-            await _context.PiecesModelesMail
+            int id, CancellationToken ct = default)
+        {
+            var lignes = await _context.PiecesModelesMail
                 .AsNoTracking()
                 .Where(p => p.ModeleMailId == id)
                 .OrderBy(p => p.Genre)
                 .ThenBy(p => p.Rang)
-                .Select(p => new PieceModeleMailContenu
-                {
-                    Id = p.Id,
-                    Genre = p.Genre,
-                    Rang = p.Rang,
-                    NomFichier = p.NomFichier,
-                    TypeMime = p.TypeMime,
-                    Taille = p.Taille,
-                    Donnees = p.Donnees,
-                })
+                .Select(p => new { p.Id, p.Genre, p.Rang, p.NomFichier, p.TypeMime, p.Taille, p.Fichier, p.Donnees })
                 .ToListAsync(ct);
 
-        public Task<PieceModeleMailContenu?> GetPieceAsync(
-            int id, int pieceId, CancellationToken ct = default) =>
-            _context.PiecesModelesMail
-                .AsNoTracking()
-                .Where(p => p.Id == pieceId && p.ModeleMailId == id)
-                .Select(p => new PieceModeleMailContenu
+            var pieces = new List<PieceModeleMailContenu>();
+            foreach (var p in lignes)
+            {
+                pieces.Add(new PieceModeleMailContenu
                 {
                     Id = p.Id,
                     Genre = p.Genre,
@@ -165,9 +243,35 @@ namespace SchoolWebApp.Dal.Repositories
                     NomFichier = p.NomFichier,
                     TypeMime = p.TypeMime,
                     Taille = p.Taille,
-                    Donnees = p.Donnees,
-                })
+                    Donnees = await OctetsAsync(p.Fichier, p.Donnees, ct),
+                });
+            }
+
+            return pieces;
+        }
+
+        public async Task<PieceModeleMailContenu?> GetPieceAsync(
+            int id, int pieceId, CancellationToken ct = default)
+        {
+            var p = await _context.PiecesModelesMail
+                .AsNoTracking()
+                .Where(x => x.Id == pieceId && x.ModeleMailId == id)
+                .Select(x => new { x.Id, x.Genre, x.Rang, x.NomFichier, x.TypeMime, x.Taille, x.Fichier, x.Donnees })
                 .FirstOrDefaultAsync(ct);
+
+            return p is null
+                ? null
+                : new PieceModeleMailContenu
+                {
+                    Id = p.Id,
+                    Genre = p.Genre,
+                    Rang = p.Rang,
+                    NomFichier = p.NomFichier,
+                    TypeMime = p.TypeMime,
+                    Taille = p.Taille,
+                    Donnees = await OctetsAsync(p.Fichier, p.Donnees, ct),
+                };
+        }
 
         public async Task<ModeleMailDetail> CreerAsync(
             string nature,
@@ -200,8 +304,8 @@ namespace SchoolWebApp.Dal.Repositories
 
             // L'ORDRE REÇU FAIT LE RANG : la première image envoyée par l'écran
             // est celle que le texte appelle `[image:1]`.
-            Ajouter(modele, GenrePieceMail.Image, images, maintenant);
-            Ajouter(modele, GenrePieceMail.Document, documents, maintenant);
+            await AjouterAsync(modele, GenrePieceMail.Image, images, maintenant, ct);
+            await AjouterAsync(modele, GenrePieceMail.Document, documents, maintenant, ct);
 
             _context.ModelesMail.Add(modele);
             await _context.SaveChangesAsync(ct);
@@ -209,11 +313,12 @@ namespace SchoolWebApp.Dal.Repositories
             return (await GetDetailAsync(modele.Id, ct))!;
         }
 
-        private static void Ajouter(
-            ModeleMail modele, string genre, IReadOnlyList<NouvellePieceMail> pieces, DateTime date)
+        private async Task AjouterAsync(
+            ModeleMail modele, string genre, IReadOnlyList<NouvellePieceMail> pieces, DateTime date, CancellationToken ct)
         {
             for (var i = 0; i < pieces.Count; i++)
             {
+                var (fichier, donnees) = await RangerAsync(pieces[i].Donnees, pieces[i].NomFichier, ct);
                 modele.Pieces.Add(new PieceModeleMail
                 {
                     Genre = genre,
@@ -221,7 +326,8 @@ namespace SchoolWebApp.Dal.Repositories
                     NomFichier = pieces[i].NomFichier,
                     TypeMime = pieces[i].TypeMime,
                     Taille = pieces[i].Donnees.Length,
-                    Donnees = pieces[i].Donnees,
+                    Fichier = fichier,
+                    Donnees = donnees,
                     DateCreation = date,
                 });
             }
@@ -279,6 +385,7 @@ namespace SchoolWebApp.Dal.Repositories
                 .Where(p => p.ModeleMailId == id && p.Genre == genre)
                 .MaxAsync(p => (int?)p.Rang, ct) ?? 0) + 1;
 
+            var (fichier, donnees) = await RangerAsync(piece.Donnees, piece.NomFichier, ct);
             var ligne = new PieceModeleMail
             {
                 ModeleMailId = id,
@@ -287,7 +394,8 @@ namespace SchoolWebApp.Dal.Repositories
                 NomFichier = piece.NomFichier,
                 TypeMime = piece.TypeMime,
                 Taille = piece.Donnees.Length,
-                Donnees = piece.Donnees,
+                Fichier = fichier,
+                Donnees = donnees,
                 DateCreation = DateTime.UtcNow,
             };
 
@@ -329,7 +437,7 @@ namespace SchoolWebApp.Dal.Repositories
 
             var piece = await _context.PiecesModelesMail
                 .Where(p => p.Id == pieceId && p.ModeleMailId == id)
-                .Select(p => new { p.Genre, p.Rang })
+                .Select(p => new { p.Genre, p.Rang, p.Fichier })
                 .FirstOrDefaultAsync(ct);
 
             // Déjà retirée — un double clic : rien à faire, le modèle tel quel.
@@ -353,6 +461,10 @@ namespace SchoolWebApp.Dal.Repositories
             await _context.SaveChangesAsync(ct);
             await transaction.CommitAsync(ct);
 
+            // Le fichier part après la validation : une transaction annulée ne
+            // laisse jamais une ligne pointer vers un fichier effacé.
+            _stockage?.Supprimer(piece.Fichier);
+
             return await GetDetailAsync(id, ct);
         }
 
@@ -361,9 +473,13 @@ namespace SchoolWebApp.Dal.Repositories
             // Les codes protégés sont DANS la condition : un courriel relié à un
             // envoi ne peut pas disparaître par cette porte, même appelée par
             // erreur. Les pièces partent avec, par la cascade de la clé étrangère.
-            var supprimes = await _context.ModelesMail
-                .Where(m => m.Id == id && (m.Code == null || !CodesProteges.Contains(m.Code)))
-                .ExecuteDeleteAsync(ct);
+            var requete = _context.ModelesMail
+                .Where(m => m.Id == id && (m.Code == null || !CodesProteges.Contains(m.Code)));
+
+            // Leurs fichiers partent avec eux (les lignes suivent en cascade).
+            var fichiers = await requete.SelectMany(m => m.Pieces.Where(p => p.Fichier != null).Select(p => p.Fichier!)).ToListAsync(ct);
+            var supprimes = await requete.ExecuteDeleteAsync(ct);
+            if (supprimes > 0) foreach (var f in fichiers) _stockage?.Supprimer(f);
 
             return supprimes > 0;
         }

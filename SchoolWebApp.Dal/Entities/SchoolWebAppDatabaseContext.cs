@@ -1867,7 +1867,8 @@ namespace SchoolWebApp.Dal.Entities
                 entity.Property(e => e.NomFichier).IsRequired().HasMaxLength(255).HasColumnName("nom_fichier");
                 entity.Property(e => e.TypeMime).IsRequired().HasMaxLength(100).HasColumnName("type_mime");
                 entity.Property(e => e.Taille).HasColumnName("taille");
-                entity.Property(e => e.Donnees).IsRequired().HasColumnName("donnees");
+                entity.Property(e => e.Fichier).HasMaxLength(260).HasColumnName("fichier");
+                entity.Property(e => e.Donnees).HasColumnName("donnees");
                 entity.Property(e => e.DateCreation).HasColumnName("date_creation");
 
                 // Cascade : une image n'a aucune vie hors de son modèle.

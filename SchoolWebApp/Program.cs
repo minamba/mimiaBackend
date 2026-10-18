@@ -364,6 +364,9 @@ builder.Services.AddScoped<IAvisRepository, AvisRepository>();
 builder.Services.AddScoped<IPromoRepository, PromoRepository>();
 builder.Services.AddScoped<IIdeeRepository, IdeeRepository>();
 builder.Services.AddScoped<IModeleMailRepository, ModeleMailRepository>();
+// LES PIÈCES DES TEMPLATES SUR LE DISQUE (18/10/2026) : une racine de chemin, un singleton.
+builder.Services.AddSingleton<SchoolWebApp.Domain.Services.IStockageModelesMail,
+    SchoolWebApp.Dal.Stockage.StockageModelesMailDisque>();
 // Sans état, et appuyé sur le service de diffusion qui est lui-même un
 // singleton : un template se compose comme un message tapé à la main.
 builder.Services.AddSingleton<SchoolWebApp.Api.Services.Notifications.IComposeurModeleMail,
@@ -655,6 +658,7 @@ builder.Services.AddScoped<SchoolWebApp.Api.Services.Paiement.AccesForfaitServic
 builder.Services.AddScoped<SchoolWebApp.Api.Services.MesFiches.ImportCoursService>();
 builder.Services.AddHostedService<SchoolWebApp.Api.Workers.FichesDeCoursWorker>();
 builder.Services.AddHostedService<SchoolWebApp.Api.Workers.DeplacementPlanchesWorker>();
+builder.Services.AddHostedService<SchoolWebApp.Api.Workers.DeplacementPiecesModelesWorker>();
 
 // Décrire les planches importées : sans ça, le professeur affiche une figure
 // qu'il n'a jamais vue et interroge dessus au hasard de ce qu'il croit y être.

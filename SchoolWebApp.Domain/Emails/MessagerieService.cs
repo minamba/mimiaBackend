@@ -213,7 +213,13 @@ namespace SchoolWebApp.Domain.Emails
 
                 if (!string.IsNullOrWhiteSpace(html))
                 {
-                    html = Nettoyer(html!);
+                    // LES IMAGES DU MESSAGE LUI-MÊME, À LEUR PLACE (Camara, le
+                    // 18/10/2026 : « les pièces que j'ai mises ne s'affichent pas »).
+                    // Une image en pièce liée (cid:) que le message contient est
+                    // incorporée ; seules celles qu'il ne contient pas — le logo
+                    // d'un courriel cité — sont retirées par Nettoyer, comme avant.
+                    html = IncorporerImagesLiees(html!, message);
+                    html = Nettoyer(html);
 
                     if (!afficherImages)
                     {
@@ -243,7 +249,7 @@ namespace SchoolWebApp.Domain.Emails
                         {
                             NomFichier = p.FileName ?? "document",
                             TypeMime = p.ContentType?.MimeType ?? "application/octet-stream",
-                            Taille = 0,
+                            Taille = TailleDe(p),
                         })
                         .ToList(),
                 };
@@ -744,6 +750,47 @@ namespace SchoolWebApp.Domain.Emails
 
         private static MailboxAddress? Expediteur(Envelope? enveloppe) =>
             enveloppe?.From?.Mailboxes?.FirstOrDefault();
+
+        /// <summary>
+        /// Remplace chaque `cid:` par l'image que le message porte sous cet
+        /// identifiant, en base64 — le navigateur ne sait pas résoudre `cid:`.
+        /// Plafonné à 10 Mo d'images : au-delà, elles restent à télécharger.
+        /// </summary>
+        private static string IncorporerImagesLiees(string html, MimeMessage message)
+        {
+            var total = 0L;
+            foreach (var partie in message.BodyParts.OfType<MimePart>())
+            {
+                if (string.IsNullOrEmpty(partie.ContentId) || partie.ContentType?.MediaType != "image") continue;
+                if (!html.Contains($"cid:{partie.ContentId}", StringComparison.OrdinalIgnoreCase)) continue;
+
+                using var memoire = new MemoryStream();
+                partie.Content.DecodeTo(memoire);
+                total += memoire.Length;
+                if (total > 10 * 1024 * 1024) break;
+
+                html = Regex.Replace(html, $"cid:{Regex.Escape(partie.ContentId)}",
+                    $"data:{partie.ContentType.MimeType};base64,{Convert.ToBase64String(memoire.ToArray())}",
+                    RegexOptions.IgnoreCase);
+            }
+
+            return html;
+        }
+
+        /// <summary>La taille d'une pièce jointe, une fois décodée.</summary>
+        private static long TailleDe(MimePart partie)
+        {
+            try
+            {
+                using var memoire = new MemoryStream();
+                partie.Content?.DecodeTo(memoire);
+                return memoire.Length;
+            }
+            catch
+            {
+                return 0;
+            }
+        }
 
         /// <summary>« Répondre à », seulement s'il diffère de l'expéditeur.</summary>
         private static string? AutreAdresse(MailboxAddress? repondreA, MailboxAddress? expediteur) =>

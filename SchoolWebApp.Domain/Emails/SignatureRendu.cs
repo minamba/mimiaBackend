@@ -100,14 +100,15 @@ namespace SchoolWebApp.Domain.Emails
             // paragraphe du message garde déjà sa marge du bas.
             sb.Append($"<table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"margin:12px 0 0 0;\"><tr>");
 
-            // Le logo.
-            sb.Append($"<td style=\"padding:0 18px 0 0; vertical-align:middle;\"><img src=\"{Image("signature-logo")}\" width=\"112\" alt=\"mimia.fr\" style=\"display:block; width:112px; height:auto; border:0;\" /></td>");
+            // Le logo. Les classes `sig-*` laissent le gabarit le rétrécir sur
+            // téléphone (18/10/2026) : sans cela, l'adresse se coupait en deux.
+            sb.Append($"<td class=\"sig-logo\" style=\"padding:0 18px 0 0; vertical-align:middle;\"><img src=\"{Image("signature-logo")}\" width=\"112\" alt=\"mimia.fr\" style=\"display:block; width:112px; height:auto; border:0;\" /></td>");
 
             // Le trait vertical, orange en haut, bleu en bas.
             sb.Append($"<td style=\"width:3px; vertical-align:middle;\"><img src=\"{Image("signature-trait")}\" width=\"3\" height=\"132\" alt=\"\" style=\"display:block; width:3px; height:132px; border:0;\" /></td>");
 
             // Le texte.
-            sb.Append($"<td style=\"padding:0 0 0 20px; vertical-align:middle; font-family:{police};\">");
+            sb.Append($"<td class=\"sig-texte\" style=\"padding:0 0 0 20px; vertical-align:middle; font-family:{police};\">");
             sb.Append($"<div style=\"font-size:21px; line-height:1.2; font-weight:800; color:{couleur};\">{E(nom)}</div>");
 
             if (modele.AfficherRole && !string.IsNullOrWhiteSpace(qui.Role))
@@ -118,7 +119,7 @@ namespace SchoolWebApp.Domain.Emails
             if (modele.AfficherAdresse && !string.IsNullOrWhiteSpace(qui.Adresse))
             {
                 sb.Append(LigneIcone(Image("signature-mail"), "✉",
-                    $"<a href=\"mailto:{E(qui.Adresse)}\" style=\"color:#16233a; text-decoration:none;\">{E(qui.Adresse)}</a>", 10));
+                    $"<a href=\"mailto:{E(qui.Adresse)}\" style=\"color:#16233a; text-decoration:none; white-space:nowrap;\">{E(qui.Adresse)}</a>", 10));
             }
 
             // LE TÉLÉPHONE, SOUS L'ADRESSE MAIL (Camara, le 17/10/2026).
