@@ -127,6 +127,63 @@ namespace SchoolWebApp.Api.Controllers
             return NoContent();
         }
 
+        /// <summary>
+        /// MES COURRIELS — Camara, le 17/10/2026 : un parent désabonné ne pouvait
+        /// se réabonner que par le lien d'un ancien courriel ; s'il l'avait
+        /// effacé, plus rien. Ici, chaque catégorie se coche et se décoche quand
+        /// il veut. Les bilans et les messages sur le compte n'y figurent pas :
+        /// ils font partie du service et ne se coupent pas.
+        /// </summary>
+        [HttpGet("courriels")]
+        [SwaggerResponse(200, "Les catégories et leur état pour ce parent.")]
+        public async Task<IActionResult> Courriels(
+            [FromServices] Domain.Repositories.IEnvoiAutomatiqueRepository envois, CancellationToken ct)
+        {
+            var parent = await ResoudreAsync();
+            var categories = new[]
+            {
+                Domain.Models.CategorieDesabonnement.Diffusion,
+                Domain.Models.CategorieDesabonnement.Avis,
+                Domain.Models.CategorieDesabonnement.Relance,
+                Domain.Models.CategorieDesabonnement.Rappels,
+            };
+
+            var etat = new List<object>();
+            foreach (var categorie in categories)
+            {
+                etat.Add(new { categorie, abonne = !await envois.EstDesabonneAsync(parent.Id, categorie, ct) });
+            }
+
+            return Ok(etat);
+        }
+
+        /// <summary>S'abonne ou se désabonne d'une catégorie, depuis son compte.</summary>
+        [HttpPut("courriels/{categorie}")]
+        [SwaggerResponse(204, "Choix enregistré.")]
+        [SwaggerResponse(400, "Catégorie inconnue.")]
+        public async Task<IActionResult> ChoisirCourriel(
+            string categorie,
+            [FromBody] CourrielRequest requete,
+            [FromServices] Domain.Repositories.IEnvoiAutomatiqueRepository envois,
+            CancellationToken ct)
+        {
+            if (!Domain.Models.CategorieDesabonnement.EstConnue(categorie))
+            {
+                return BadRequest(new { message = "Catégorie inconnue." });
+            }
+
+            var parent = await ResoudreAsync();
+            if (requete?.Abonne == true) await envois.ReabonnerAsync(parent.Id, categorie, ct);
+            else await envois.DesabonnerAsync(parent.Id, categorie, ct);
+
+            _logger.LogInformation("Parent {ParentId} {Choix} « {Categorie} » depuis son compte.",
+                parent.Id, requete?.Abonne == true ? "abonne a" : "desabonne de", categorie);
+            return NoContent();
+        }
+
+        /// <param name="Abonne">Vrai pour recevoir cette catégorie, faux pour ne plus la recevoir.</param>
+        public record CourrielRequest(bool Abonne);
+
         private Task<Domain.Models.Parent> ResoudreAsync()
         {
             var identifiant = _currentUser.IdentityUserId;

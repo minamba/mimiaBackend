@@ -61,6 +61,9 @@ namespace SchoolWebApp.Domain.Models
 
         public int? JourMois { get; set; }
 
+        /// <summary>À qui il part, pour un courriel programmé par cible — voir `CibleEnvoi`.</summary>
+        public string? Cible { get; set; }
+
         public bool Actif { get; set; }
 
         public DateTime? DerniereOccurrence { get; set; }

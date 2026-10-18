@@ -1629,6 +1629,43 @@ namespace SchoolWebApp.Api.Controllers
             }
         }
 
+        /// <summary>
+        /// LE BILAN HEBDOMADAIRE DE L'ENFANT, À LIRE SUR LE SITE — Camara, le
+        /// 17/10/2026 : « un bouton Voir le bilan hebdomadaire sur la fiche ».
+        ///
+        /// Celui de la semaine close lundi dernier, rendu comme le courriel. Son
+        /// texte vient de `BilanRedige` : mot pour mot celui du courriel, et
+        /// aucun nouvel appel au modèle quand le lundi l'a déjà écrit.
+        ///
+        /// AU PARENT SEUL : pas de `[AutoriseEleve]`, la session d'un enfant est
+        /// refusée (`RestrictionEleveFilter`) ; l'enfant d'un autre parent rend 404.
+        /// </summary>
+        [HttpGet("{id:int}/bilan")]
+        [Produces("text/html")]
+        [SwaggerResponse(200, "Le bilan de la semaine passée, en HTML.")]
+        [SwaggerResponse(404, "Élève inconnu de ce parent, ou aucune semaine à résumer.")]
+        public async Task<IActionResult> GetBilan(
+            int id,
+            [FromServices] IEnvoiBilansService envoi,
+            CancellationToken ct)
+        {
+            try
+            {
+                var eleve = await _eleveBuilder.GetEleveByIdAsync(id);
+                if (eleve is null) return NotFound();
+
+                var html = await envoi.ApercuAsync(id, null, ct);
+                return html is null
+                    ? NotFound(new { message = "Aucun bilan pour l'instant : le premier arrive lundi." })
+                    : Content(html, "text/html; charset=utf-8");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Erreur lors du bilan de l'eleve {EleveId}.", id);
+                return StatusCode(500, new { message = "Le bilan n'a pas pu être préparé." });
+            }
+        }
+
         [HttpPost]
         [SwaggerResponse(201, "Profil créé.", typeof(EleveViewModel))]
         [SwaggerResponse(400, "Requête invalide ou niveau scolaire inexistant.")]

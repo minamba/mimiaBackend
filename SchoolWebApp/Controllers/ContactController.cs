@@ -127,20 +127,38 @@ namespace SchoolWebApp.Api.Controllers
                 });
             }
 
-            var envoye = await _email.EnvoyerAsync(
-                destinataire,
-                $"[Contact] {requete.Sujet}",
-                "contact",
-                new Dictionary<string, string>
+            // « RÉPONDRE À » = LE VISITEUR (Camara, le 18/10/2026 : « j'ai répondu et
+            // le destinataire n'a jamais reçu »). Le message part au nom de
+            // no-reply@mimia.fr : sans cet en-tête, « Répondre » visait no-reply,
+            // une adresse qui ne reçoit rien.
+            var enTetes = MimeKit.MailboxAddress.TryParse(mail, out var visiteur)
+                ? new Dictionary<string, string>
                 {
-                    ["sujet"] = requete.Sujet,
-                    ["nom"] = requete.Nom,
-                    ["mail"] = mail,
-                    ["message"] = requete.Message,
-                    ["statutCompte"] = connecte ? "membre connecté" : "visiteur non connecté",
-                    ["sujetReponse"] = Uri.EscapeDataString($"Re : {requete.Sujet}"),
-                },
-                ct);
+                    ["Reply-To"] = new MimeKit.MailboxAddress(requete.Nom?.Trim() ?? string.Empty, visiteur.Address).ToString(),
+                }
+                : null;
+
+            bool envoye;
+            await using (var session = _email.OuvrirSession())
+            {
+                envoye = await session.EnvoyerAsync(
+                    destinataire,
+                    $"[Contact] {requete.Sujet}",
+                    "contact",
+                    new Dictionary<string, string>
+                    {
+                        ["sujet"] = requete.Sujet,
+                        ["nom"] = requete.Nom,
+                        ["mail"] = mail,
+                        ["message"] = requete.Message,
+                        ["statutCompte"] = connecte ? "membre connecté" : "visiteur non connecté",
+                        ["sujetReponse"] = Uri.EscapeDataString($"Re : {requete.Sujet}"),
+                    },
+                    null,
+                    null,
+                    enTetes,
+                    ct);
+            }
 
             if (!envoye)
             {

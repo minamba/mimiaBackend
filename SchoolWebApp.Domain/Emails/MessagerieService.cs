@@ -85,27 +85,66 @@ namespace SchoolWebApp.Domain.Emails
 
         public bool Disponible => _options.Configure;
 
-        public async Task<ResultatBoite> ListerAsync(CancellationToken ct = default)
+        public IMessagerieService Pour(CompteMessagerie compte) =>
+            new MessagerieService(Options.Create(_options.AvecCompte(compte)), _logger);
+
+        public async Task<string?> VerifierAsync(CancellationToken ct = default)
+        {
+            if (!Disponible) return "La boite n'est pas configuree.";
+            try
+            {
+                using var client = await ConnecterAsync(ct);
+                await client.DisconnectAsync(true, CancellationToken.None);
+                return null;
+            }
+            catch (MailKit.Security.AuthenticationException)
+            {
+                return "Adresse ou mot de passe refusé par la boîte mail.";
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Messagerie : verification de la boite {Adresse} impossible.", _options.Adresse);
+                return $"La boîte mail ne répond pas : {ex.Message}";
+            }
+        }
+
+        public async Task<ResultatBoite> ListerAsync(
+            string? dossier = null, int page = 1, int taille = 10, CancellationToken ct = default)
         {
             if (!Disponible) return new ResultatBoite([], "La boite n'est pas configuree.");
 
             try
             {
                 using var client = await ConnecterAsync(ct);
-                var boite = client.Inbox;
+                var boite = await DossierAsync(client, dossier, ct);
+                if (boite is null) return new ResultatBoite([], "Le dossier des messages envoyés est introuvable dans la boîte.");
+
+                // Les non lus de TOUT le dossier, pas de la seule page : demandés
+                // avant l'ouverture (STATUS ne se pose pas sur le dossier ouvert).
+                var nonLus = 0;
+                if (boite == client.Inbox)
+                {
+                    await boite.StatusAsync(StatusItems.Unread, ct);
+                    nonLus = boite.Unread;
+                }
+
                 await boite.OpenAsync(FolderAccess.ReadOnly, ct);
 
                 var total = boite.Count;
-                if (total == 0) return new ResultatBoite([]);
+                if (total == 0) return new ResultatBoite([], Total: 0, NonLus: nonLus);
 
-                // Les N derniers, dans l'ordre d'arrivée : une boîte de support
-                // se lit par le haut, et rapatrier des années de courrier à
-                // chaque ouverture d'écran serait absurde.
-                var depuis = Math.Max(0, total - _options.TailleListe);
+                // UNE PAGE, LES PLUS RÉCENTS D'ABORD (17/10/2026 : dix par page).
+                // Les numéros IMAP suivent l'ordre d'arrivée : la page 1 est la
+                // fin du dossier. Rapatrier toute la boîte à chaque ouverture
+                // d'écran serait absurde.
+                taille = Math.Clamp(taille, 1, 100);
+                var fin = total - 1 - (Math.Max(1, page) - 1) * taille;
+                if (fin < 0) return new ResultatBoite([], Total: total, NonLus: nonLus);
+                var depuis = Math.Max(0, fin - taille + 1);
 
                 var resumes = await boite.FetchAsync(
                     depuis,
-                    -1,
+                    fin,
                     MessageSummaryItems.UniqueId
                         | MessageSummaryItems.Envelope
                         | MessageSummaryItems.Flags
@@ -119,6 +158,9 @@ namespace SchoolWebApp.Domain.Emails
                         Identifiant = r.UniqueId.Id,
                         DeNom = Expediteur(r.Envelope)?.Name,
                         DeAdresse = Expediteur(r.Envelope)?.Address,
+                        RepondreA = AutreAdresse(r.Envelope?.ReplyTo?.Mailboxes?.FirstOrDefault(), Expediteur(r.Envelope)),
+                        ANom = r.Envelope?.To?.Mailboxes?.FirstOrDefault()?.Name,
+                        AAdresse = r.Envelope?.To?.Mailboxes?.FirstOrDefault()?.Address,
                         Sujet = r.Envelope?.Subject,
                         Date = (r.Envelope?.Date ?? DateTimeOffset.UtcNow).UtcDateTime,
                         Lu = r.Flags?.HasFlag(MessageFlags.Seen) ?? false,
@@ -130,7 +172,7 @@ namespace SchoolWebApp.Domain.Emails
                     .ToList();
 
                 await client.DisconnectAsync(true, CancellationToken.None);
-                return new ResultatBoite(messages);
+                return new ResultatBoite(messages, Total: total, NonLus: nonLus);
             }
             catch (Exception ex)
             {
@@ -147,14 +189,15 @@ namespace SchoolWebApp.Domain.Emails
         }
 
         public async Task<MessageDetail?> LireAsync(
-            uint identifiant, bool afficherImages = false, CancellationToken ct = default)
+            uint identifiant, bool afficherImages = false, CancellationToken ct = default, string? dossier = null)
         {
             if (!Disponible) return null;
 
             try
             {
                 using var client = await ConnecterAsync(ct);
-                var boite = client.Inbox;
+                var boite = await DossierAsync(client, dossier, ct);
+                if (boite is null) return null;
 
                 // Lecture-écriture : ouvrir un message le marque lu, et c'est
                 // ce qu'on attend d'une messagerie.
@@ -185,6 +228,9 @@ namespace SchoolWebApp.Domain.Emails
                     Identifiant = identifiant,
                     DeNom = message.From.Mailboxes.FirstOrDefault()?.Name,
                     DeAdresse = message.From.Mailboxes.FirstOrDefault()?.Address,
+                    RepondreA = AutreAdresse(message.ReplyTo.Mailboxes.FirstOrDefault(), message.From.Mailboxes.FirstOrDefault()),
+                    ANom = message.To.Mailboxes.FirstOrDefault()?.Name,
+                    AAdresse = message.To.Mailboxes.FirstOrDefault()?.Address,
                     Sujet = message.Subject,
                     Date = message.Date.UtcDateTime,
                     Lu = true,
@@ -217,14 +263,15 @@ namespace SchoolWebApp.Domain.Emails
         }
 
         public async Task<(byte[] Donnees, string TypeMime, string NomFichier)?> PieceJointeAsync(
-            uint identifiant, string nomFichier, CancellationToken ct = default)
+            uint identifiant, string nomFichier, CancellationToken ct = default, string? dossier = null)
         {
             if (!Disponible) return null;
 
             try
             {
                 using var client = await ConnecterAsync(ct);
-                var boite = client.Inbox;
+                var boite = await DossierAsync(client, dossier, ct);
+                if (boite is null) return null;
                 await boite.OpenAsync(FolderAccess.ReadOnly, ct);
 
                 var message = await boite.GetMessageAsync(new UniqueId(identifiant), ct);
@@ -292,25 +339,40 @@ namespace SchoolWebApp.Domain.Emails
                 // reste à répondre — et le parent recevrait deux réponses.
                 await boite.AddFlagsAsync(uid, MessageFlags.Answered | MessageFlags.Seen, true, ct);
 
+                // À QUI RÉPONDRE (18/10/2026) : « Répondre à » d'abord, comme tout
+                // client de messagerie — le formulaire de contact l'y met, son
+                // expéditeur étant no-reply@mimia.fr.
+                var destinataire = origine.ReplyTo.Mailboxes.FirstOrDefault()
+                                   ?? origine.From.Mailboxes.FirstOrDefault();
+
+                if (destinataire is null)
+                {
+                    await boite.RemoveFlagsAsync(uid, MessageFlags.Answered, true, CancellationToken.None);
+                    return new ResultatEnvoi(false, Detail: "Le message d'origine n'a pas d'expediteur lisible.");
+                }
+
+                // UNE ADRESSE QUI NE REÇOIT RIEN : on refuse, au lieu d'envoyer dans le vide.
+                if (NeRecoitPas(destinataire.Address))
+                {
+                    await boite.RemoveFlagsAsync(uid, MessageFlags.Answered, true, CancellationToken.None);
+                    return new ResultatEnvoi(false, Detail:
+                        $"Ce message vient de {destinataire.Address}, une adresse qui ne reçoit pas de réponse. "
+                        + "S'il vient du formulaire de contact, l'adresse de la personne est écrite dans le message : "
+                        + "écrivez-lui avec « Écrire un nouveau message ».");
+                }
+
                 // Le corps est composé À PARTIR du message déjà en main : plus
                 // aucune relecture, donc plus aucune connexion supplémentaire.
                 var texte = await composer(new MessageDetail
                 {
                     Identifiant = identifiant,
-                    DeNom = origine.From.Mailboxes.FirstOrDefault()?.Name,
-                    DeAdresse = origine.From.Mailboxes.FirstOrDefault()?.Address,
+                    DeNom = destinataire.Name,
+                    DeAdresse = destinataire.Address,
                     Sujet = origine.Subject,
                     Date = origine.Date.UtcDateTime,
                     Lu = true,
                     Texte = origine.TextBody,
                 });
-
-                var destinataire = origine.From.Mailboxes.FirstOrDefault();
-
-                if (destinataire is null)
-                {
-                    return new ResultatEnvoi(false, Detail: "Le message d'origine n'a pas d'expediteur lisible.");
-                }
 
                 var reponse = new MimeMessage();
                 reponse.From.Add(new MailboxAddress(
@@ -360,6 +422,9 @@ namespace SchoolWebApp.Domain.Emails
                         image.ContentId = "logoMimia";
                     }
                 }
+
+                // Les images de la signature, jointes de la même façon.
+                ImagesSignature.Attacher(corps);
 
                 reponse.Body = corps.ToMessageBody();
 
@@ -449,14 +514,15 @@ namespace SchoolWebApp.Domain.Emails
             }
         }
 
-        public async Task MarquerLuAsync(uint identifiant, bool lu, CancellationToken ct = default)
+        public async Task MarquerLuAsync(uint identifiant, bool lu, CancellationToken ct = default, string? dossier = null)
         {
             if (!Disponible) return;
 
             try
             {
                 using var client = await ConnecterAsync(ct);
-                var boite = client.Inbox;
+                var boite = await DossierAsync(client, dossier, ct);
+                if (boite is null) return;
                 await boite.OpenAsync(FolderAccess.ReadWrite, ct);
 
                 var uid = new UniqueId(identifiant);
@@ -470,6 +536,159 @@ namespace SchoolWebApp.Domain.Emails
             {
                 _logger.LogError(ex, "Messagerie : marquage du message {Id} impossible.", identifiant);
             }
+        }
+
+        public async Task<CompteursBoite> CompterAsync(CancellationToken ct = default)
+        {
+            if (!Disponible) return new CompteursBoite(0, 0, 0, "La boite n'est pas configuree.");
+
+            try
+            {
+                using var client = await ConnecterAsync(ct);
+
+                // STATUS : les nombres seuls, sans ouvrir ni lire aucun message.
+                await client.Inbox.StatusAsync(StatusItems.Count | StatusItems.Unread, ct);
+                var envoyes = await DossierAsync(client, DossiersMessagerie.Envoyes, ct);
+                if (envoyes is not null) await envoyes.StatusAsync(StatusItems.Count, ct);
+
+                var compteurs = new CompteursBoite(client.Inbox.Count, client.Inbox.Unread, envoyes?.Count ?? 0);
+                await client.DisconnectAsync(true, CancellationToken.None);
+                return compteurs;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Messagerie : compteurs de la boite {Adresse} illisibles.", _options.Adresse);
+                return new CompteursBoite(0, 0, 0, ex.Message);
+            }
+        }
+
+        public async Task<int> SupprimerAsync(
+            IReadOnlyCollection<uint> identifiants, string? dossier = null, CancellationToken ct = default)
+        {
+            if (!Disponible || identifiants.Count == 0) return 0;
+
+            try
+            {
+                using var client = await ConnecterAsync(ct);
+                var boite = await DossierAsync(client, dossier, ct);
+                if (boite is null) return 0;
+
+                await boite.OpenAsync(FolderAccess.ReadWrite, ct);
+                var uids = identifiants.Distinct().Select(i => new UniqueId(i)).ToList();
+
+                // À LA CORBEILLE, PAS À LA BROYEUSE : un clic de trop se rattrape
+                // depuis le webmail. Effacé pour de bon seulement sans corbeille.
+                var corbeille = await DossierSpecialAsync(client, SpecialFolder.Trash,
+                    ["Trash", "INBOX.Trash", "Corbeille", "Deleted Items", "Deleted Messages"], ct);
+
+                if (corbeille is not null && corbeille.FullName != boite.FullName)
+                {
+                    await boite.MoveToAsync(uids, corbeille, ct);
+                }
+                else
+                {
+                    await boite.AddFlagsAsync(uids, MessageFlags.Deleted, true, ct);
+                    await boite.ExpungeAsync(uids, ct);
+                }
+
+                await client.DisconnectAsync(true, CancellationToken.None);
+
+                _logger.LogWarning(
+                    "Messagerie : {Nombre} message(s) supprime(s) du dossier {Dossier} de {Adresse}{Corbeille}.",
+                    uids.Count, boite.FullName, _options.Adresse, corbeille is null ? " (efface, pas de corbeille)" : " (vers la corbeille)");
+                return uids.Count;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Messagerie : suppression impossible dans {Dossier}.", dossier);
+                throw;
+            }
+        }
+
+        public async Task<bool> DeposerCopieAsync(
+            string destinataire,
+            string sujet,
+            string html,
+            IReadOnlyList<PieceMail>? imagesIntegrees = null,
+            IReadOnlyList<PieceMail>? piecesJointes = null,
+            CancellationToken ct = default)
+        {
+            if (!Disponible) return false;
+
+            try
+            {
+                var copie = new MimeMessage();
+                copie.From.Add(new MailboxAddress(_options.Nom ?? "Mimia", _options.Adresse!));
+                copie.To.Add(MailboxAddress.Parse(destinataire));
+                copie.Subject = sujet;
+                copie.Date = DateTimeOffset.Now;
+
+                // Les mêmes pièces liées que le message parti : la copie se relit
+                // telle que le parent l'a reçue.
+                var corps = new BodyBuilder { HtmlBody = html, TextBody = VersTexte(html) };
+                await using (var flux = typeof(MessagerieService).Assembly
+                    .GetManifestResourceStream("SchoolWebApp.Domain.Emails.Ressources.bann_mail.jpg"))
+                {
+                    if (flux is not null)
+                    {
+                        var image = corps.LinkedResources.Add("bann_mail.jpg", flux);
+                        image.ContentId = "logoMimia";
+                    }
+                }
+                ImagesSignature.Attacher(corps);
+                foreach (var image in imagesIntegrees ?? [])
+                {
+                    var liee = corps.LinkedResources.Add(image.NomFichier, image.Donnees, ContentType.Parse(image.TypeMime));
+                    liee.ContentId = image.Reference;
+                }
+                foreach (var piece in piecesJointes ?? [])
+                {
+                    corps.Attachments.Add(piece.NomFichier, piece.Donnees, ContentType.Parse(piece.TypeMime));
+                }
+                copie.Body = corps.ToMessageBody();
+
+                using var client = await ConnecterAsync(ct);
+                var depose = await DeposerDansEnvoyesAsync(client, copie, ct);
+                await client.DisconnectAsync(true, CancellationToken.None);
+                return depose;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Messagerie : copie de « {Sujet} » non deposee dans Envoyes. Le message est bien parti.", sujet);
+                return false;
+            }
+        }
+
+        /// <summary>Le dossier IMAP d'un dossier de l'écran : la réception, ou « Envoyés ».</summary>
+        private async Task<IMailFolder?> DossierAsync(ImapClient client, string? dossier, CancellationToken ct) =>
+            DossiersMessagerie.Normaliser(dossier) == DossiersMessagerie.Envoyes
+                ? await DossierSpecialAsync(client, SpecialFolder.Sent, ["Sent", "INBOX.Sent", "Sent Items", "Envoyés"], ct)
+                : client.Inbox;
+
+        /// <summary>
+        /// Un dossier spécial : celui que le serveur déclare d'abord — son NOM varie
+        /// selon la langue de l'hébergeur —, sinon les noms courants.
+        /// </summary>
+        private static async Task<IMailFolder?> DossierSpecialAsync(
+            ImapClient client, SpecialFolder special, string[] noms, CancellationToken ct)
+        {
+            IMailFolder? trouve = null;
+            try { trouve = client.GetFolder(special); }
+            catch (NotSupportedException) { }
+
+            if (trouve is not null) return trouve;
+
+            foreach (var nom in noms)
+            {
+                try
+                {
+                    trouve = await client.GetFolderAsync(nom, ct);
+                    if (trouve is not null) return trouve;
+                }
+                catch (FolderNotFoundException) { }
+            }
+
+            return null;
         }
 
         /// <summary>
@@ -490,22 +709,8 @@ namespace SchoolWebApp.Domain.Emails
                 // lequel il considère comme « Envoyés », et son NOM varie selon
                 // la langue de l'hébergeur — « Sent », « Sent Items »,
                 // « Éléments envoyés ».
-                var envoyes = client.GetFolder(SpecialFolder.Sent);
-
-                if (envoyes is null)
-                {
-                    var noms = new[] { "Sent", "INBOX.Sent", "Sent Items", "Envoyés" };
-
-                    foreach (var nom in noms)
-                    {
-                        try
-                        {
-                            envoyes = await client.GetFolderAsync(nom, ct);
-                            if (envoyes is not null) break;
-                        }
-                        catch (FolderNotFoundException) { }
-                    }
-                }
+                var envoyes = await DossierSpecialAsync(client, SpecialFolder.Sent,
+                    ["Sent", "INBOX.Sent", "Sent Items", "Envoyés"], ct);
 
                 if (envoyes is null)
                 {
@@ -540,6 +745,21 @@ namespace SchoolWebApp.Domain.Emails
         private static MailboxAddress? Expediteur(Envelope? enveloppe) =>
             enveloppe?.From?.Mailboxes?.FirstOrDefault();
 
+        /// <summary>« Répondre à », seulement s'il diffère de l'expéditeur.</summary>
+        private static string? AutreAdresse(MailboxAddress? repondreA, MailboxAddress? expediteur) =>
+            repondreA is null || string.Equals(repondreA.Address, expediteur?.Address, StringComparison.OrdinalIgnoreCase)
+                ? null
+                : repondreA.Address;
+
+        /// <summary>Une adresse qui ne lit pas ses courriels : no-reply, ou la boîte elle-même.</summary>
+        private bool NeRecoitPas(string? adresse)
+        {
+            if (string.IsNullOrWhiteSpace(adresse)) return true;
+            var locale = adresse.Split('@')[0].ToLowerInvariant().Replace("-", "").Replace("_", "").Replace(".", "");
+            return locale is "noreply" or "donotreply" or "nepasrepondre"
+                   || string.Equals(adresse, _options.Adresse, StringComparison.OrdinalIgnoreCase);
+        }
+
         private static string? Raccourcir(string? texte, int taille)
         {
             if (string.IsNullOrWhiteSpace(texte)) return null;
@@ -567,9 +787,7 @@ namespace SchoolWebApp.Domain.Emails
             return propre;
         }
 
-        private static string VersTexte(string html) =>
-            Regex.Replace(
-                Regex.Replace(html, "<br\\s*/?>|</p>", "\n", RegexOptions.IgnoreCase),
-                "<[^>]+>", string.Empty).Trim();
+        /// <summary>La version texte : la même conversion que tous les autres envois (18/10/2026).</summary>
+        private static string VersTexte(string html) => TexteBrut.Depuis(html);
     }
 }

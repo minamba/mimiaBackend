@@ -32,14 +32,17 @@ namespace SchoolWebApp.Api.Services
         private readonly AnthropicClient _client;
         private readonly OptionsClaude _options;
         private readonly IJournalClaudeRepository _journal;
+        private readonly IBilansRedigesRepository? _rediges;
         private readonly ILogger<RedacteurBilanService> _logger;
 
         public RedacteurBilanService(
             AnthropicClient client,
             IOptions<OptionsClaude> options,
             IJournalClaudeRepository journal,
-            ILogger<RedacteurBilanService> logger)
+            ILogger<RedacteurBilanService> logger,
+            IBilansRedigesRepository? rediges = null)
         {
+            _rediges = rediges;
             _client = client ?? throw new ArgumentNullException(nameof(client));
             _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
             _journal = journal ?? throw new ArgumentNullException(nameof(journal));
@@ -52,8 +55,30 @@ namespace SchoolWebApp.Api.Services
 
             try
             {
+                // ÉCRIT UNE FOIS PAR SEMAINE (17/10/2026) : l'envoi du lundi et le
+                // bouton « Voir le bilan hebdomadaire » lisent le MÊME texte —
+                // mot pour mot celui du courriel — et seul le premier paie
+                // l'appel. Voir `BilanRedige`.
+                var garde = _rediges is null || bilan.EleveId <= 0
+                    ? null
+                    : await _rediges.LireAsync(bilan.EleveId, bilan.Fin, ct);
+
+                if (garde is not null)
+                {
+                    Appliquer(bilan, garde);
+                    return;
+                }
+
                 var reponse = await AppelerAsync(bilan, ct);
                 Appliquer(bilan, reponse);
+
+                // Gardé seulement s'il a donné quelque chose : une réponse vide
+                // ou illisible doit pouvoir être retentée à la prochaine lecture.
+                if (_rediges is not null && bilan.EleveId > 0
+                    && (bilan.Remarque is not null || bilan.Matieres.Any(m => m.Travaille is not null || m.Difficultes is not null)))
+                {
+                    await _rediges.EnregistrerAsync(bilan.EleveId, bilan.Fin, reponse, ct);
+                }
             }
             catch (Exception ex)
             {

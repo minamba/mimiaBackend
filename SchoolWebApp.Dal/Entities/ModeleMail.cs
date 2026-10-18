@@ -63,6 +63,12 @@ namespace SchoolWebApp.Dal.Entities
         /// </summary>
         public int? JourMois { get; set; }
 
+        /// <summary>
+        /// À qui il part (17/10/2026) : « tous », « abonnes », « essai »… — voir
+        /// `CibleEnvoi`. Nul pour les courriels reliés à une règle codée.
+        /// </summary>
+        public string? Cible { get; set; }
+
         /// <summary>Programmé ? Éteint, le planificateur ne l'envoie jamais.</summary>
         public bool Actif { get; set; }
 

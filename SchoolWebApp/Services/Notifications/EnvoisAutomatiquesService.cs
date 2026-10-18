@@ -81,10 +81,16 @@ namespace SchoolWebApp.Api.Services.Notifications
         public async Task<string> ExecuterAsync(
             ModeleMailDetail modele, DateTime occurrenceUtc, CancellationToken ct = default)
         {
-            if (!CodeModeleMail.EnvoiGenerique(modele.Code))
+            // PAR CIBLE (17/10/2026) : Relance, Rappels et les courriels créés
+            // depuis l'écran partent à toute la cible choisie, à chaque envoi.
+            var parCible = CodeModeleMail.EnvoiParCible(modele.Code);
+
+            if (!CodeModeleMail.EnvoiGenerique(modele.Code) && !(parCible && CibleEnvoi.EstConnue(modele.Cible)))
             {
                 return "Ce courriel n’a pas de règle d’envoi.";
             }
+
+            var code = CodeModeleMail.CodeJournal(modele.Code, modele.Id);
 
             if (string.IsNullOrWhiteSpace(modele.Sujet) || string.IsNullOrWhiteSpace(modele.Texte))
             {
@@ -99,7 +105,9 @@ namespace SchoolWebApp.Api.Services.Notifications
             }
 
             var limite = Math.Max(1, _configuration.GetValue("Courrier:EnvoisAutomatiques:ParPassage", 100));
-            var destinataires = await DestinatairesAsync(modele.Code!, occurrenceUtc, limite, ct);
+            var destinataires = parCible
+                ? await _envois.GetDestinatairesCibleAsync(modele.Cible!, categorie!, DateTime.UtcNow, ct)
+                : await DestinatairesAsync(modele.Code!, occurrenceUtc, limite, ct);
 
             if (destinataires.Count == 0) return "Aucun destinataire.";
 
@@ -115,15 +123,19 @@ namespace SchoolWebApp.Api.Services.Notifications
             {
                 ct.ThrowIfCancellationRequested();
 
-                var cle = modele.Code switch
-                {
-                    CodeModeleMail.FinEssai => $"abonnement:{destinataire.AbonnementId}",
-                    CodeModeleMail.AvisEssai => $"parent:{destinataire.ParentId}",
-                    _ => null,
-                };
+                // Par cible, la clé est l'envoi lui-même : un redémarrage en plein
+                // envoi ne réécrit pas à qui l'a déjà reçu cette fois-ci.
+                var cle = parCible
+                    ? $"envoi:{occurrenceUtc:yyyyMMddHHmm}:parent:{destinataire.ParentId}"
+                    : modele.Code switch
+                    {
+                        CodeModeleMail.FinEssai => $"abonnement:{destinataire.AbonnementId}",
+                        CodeModeleMail.AvisEssai => $"parent:{destinataire.ParentId}",
+                        _ => null,
+                    };
 
                 var reservation = await _envois.ReserverAsync(
-                    modele.Code!, destinataire.ParentId, cle, occurrenceUtc, ct);
+                    code, destinataire.ParentId, cle, occurrenceUtc, ct);
 
                 if (reservation is null) continue;
 
@@ -172,7 +184,7 @@ namespace SchoolWebApp.Api.Services.Notifications
 
             var resultat = $"{envoyes} envoyé(s), {echecs} échec(s)";
 
-            if (destinataires.Count >= limite)
+            if (!parCible && destinataires.Count >= limite)
             {
                 resultat += " — plafond atteint, la suite au prochain envoi";
             }

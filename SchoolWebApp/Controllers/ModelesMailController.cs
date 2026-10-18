@@ -262,12 +262,17 @@ namespace SchoolWebApp.Api.Controllers
                 return BadRequest(new { message = "Seul un courriel automatique se programme." });
             }
 
-            if (CodeModeleMail.ReglesADefinir(detail.Code))
+            // À QUI IL PART (17/10/2026) : Relance, Rappels et les courriels créés
+            // depuis l'écran se programment en choisissant leur cible.
+            string? cible = null;
+            if (CodeModeleMail.EnvoiParCible(detail.Code))
             {
-                return BadRequest(new
+                if (!CibleEnvoi.EstConnue(requete.Cible))
                 {
-                    message = "Les règles de ce courriel ne sont pas encore définies : il ne peut pas être programmé.",
-                });
+                    return BadRequest(new { message = "Choisissez à qui ce courriel part." });
+                }
+
+                cible = requete.Cible;
             }
 
             if (!FrequenceEnvoi.EstConnue(requete.Frequence) || requete.Frequence == FrequenceEnvoi.Aucune)
@@ -308,12 +313,13 @@ namespace SchoolWebApp.Api.Controllers
                 regle.JourMois,
                 requete.Actif,
                 Planification.OccurrencePrecedente(DateTime.UtcNow, regle),
+                cible,
                 ct);
 
             _logger.LogWarning(
-                "Courriel automatique {Code} {Etat} : {Frequence} a {Heure} (jour {JourSemaine}/{JourMois}).",
-                detail.Code, requete.Actif ? "PROGRAMME" : "deprogramme",
-                regle.Frequence, requete.Heure, regle.JourSemaine, regle.JourMois);
+                "Courriel automatique {Code} {Etat} : {Frequence} a {Heure} (jour {JourSemaine}/{JourMois}), cible {Cible}.",
+                CodeModeleMail.CodeJournal(detail.Code, detail.Id), requete.Actif ? "PROGRAMME" : "deprogramme",
+                regle.Frequence, requete.Heure, regle.JourSemaine, regle.JourMois, cible ?? "-");
 
             var aJour = await _modeles.GetDetailAsync(id, ct);
             return Ok(DecrireDetail(aJour!));
@@ -423,7 +429,10 @@ namespace SchoolWebApp.Api.Controllers
             int id,
             [FromServices] IServiceEmail email,
             [FromServices] IEnvoiBilansService bilans,
-            CancellationToken ct)
+            [FromServices] IBoitesAdminService boites,
+            CancellationToken ct,
+            [FromQuery] bool signature = false,
+            [FromQuery(Name = "boite")] string? depuis = null)
         {
             var detail = await _modeles.GetDetailAsync(id, ct);
             if (detail is null) return NotFound();
@@ -448,7 +457,16 @@ namespace SchoolWebApp.Api.Controllers
                 Exemples(),
                 categorie is null ? null : _diffusion.ComposerMentionPied("#"));
 
-            var html = await email.RendreAsync(courriel.Sujet, "diffusion", courriel.Valeurs);
+            // LA SIGNATURE DANS L'APERÇU (17/10/2026) : envoyé à un parent, le
+            // template part signé de son nom — l'aperçu le montre aussi.
+            var valeurs = new Dictionary<string, string>(courriel.Valeurs);
+            var support = string.Equals(depuis, "support", StringComparison.OrdinalIgnoreCase);
+            if (signature && (await boites.ExpediteurAsync(support, ct)).Expediteur is { } signataire)
+            {
+                valeurs["signature"] = signataire.Signature;
+            }
+
+            var html = await email.RendreAsync(courriel.Sujet, "diffusion", valeurs);
 
             // Les images en base64 pour le navigateur, qui ne résout pas `cid:`.
             // GUILLEMET COMPRIS dans le motif, et rangs décroissants : sans
@@ -513,8 +531,26 @@ namespace SchoolWebApp.Api.Controllers
             [FromBody] EnvoiParentRequest requete,
             [FromServices] IServiceEmail email,
             [FromServices] IBannissementRepository bannis,
-            CancellationToken ct)
+            [FromServices] SchoolWebApp.Api.Services.IBoitesAdminService boites,
+            CancellationToken ct,
+            [FromQuery(Name = "boite")] string? depuis = null)
         {
+            // DEPUIS SA BOÎTE, AVEC SA SIGNATURE (17/10/2026) — comme « Écrire à
+            // un parent » sans template : le parent répond à qui lui a écrit.
+            // Depuis la boîte Support : support@mimia.fr, « L'équipe Mimia ».
+            var support = string.Equals(depuis, "support", StringComparison.OrdinalIgnoreCase);
+            var (boite, nonPrete) = await boites.ExpediteurAsync(support, ct);
+            if (boite is null)
+            {
+                return support
+                    ? StatusCode(503, new { message = "La boîte du support n'est pas configurée sur le serveur." })
+                    : StatusCode(409, new
+                    {
+                        code = nonPrete?.Raison ?? "a_configurer",
+                        message = "Connectez d'abord votre boîte mail (Mails › Messagerie) pour envoyer ce message.",
+                    });
+            }
+
             var adresse = requete?.Destinataire?.Trim() ?? string.Empty;
 
             try
@@ -546,9 +582,14 @@ namespace SchoolWebApp.Api.Controllers
                 await _modeles.GetPiecesAsync(id, ct),
                 new Dictionary<string, ValeurVariable> { ["prenom"] = new(string.Empty) });
 
+            var valeurs = new Dictionary<string, string>(courriel.Valeurs)
+            {
+                ["signature"] = boite.Signature,
+            };
+
             var resultat = await email.DiffuserAsync(
-                new[] { adresse }, courriel.Sujet, "diffusion", courriel.Valeurs,
-                courriel.Images, courriel.Documents, ct: ct);
+                new[] { adresse }, courriel.Sujet, "diffusion", valeurs,
+                courriel.Images, courriel.Documents, ct: ct, expediteur: boite.Expediteur);
 
             if (resultat.Envoyes == 0)
             {
@@ -559,10 +600,17 @@ namespace SchoolWebApp.Api.Controllers
             // des templates n'a pas à devenir un carnet d'adresses.
             await _modeles.NoterEnvoiAsync(id, DateTime.UtcNow, "Envoyé à un parent", ct);
 
+            // Une copie dans « Messages envoyés » de sa boîte (17/10/2026).
+            var copieDeposee = await boite.Boite.DeposerCopieAsync(
+                adresse, courriel.Sujet, await email.ComposerAsync(courriel.Sujet, "diffusion", valeurs),
+                courriel.Images, courriel.Documents, ct);
+
             _logger.LogInformation(
                 "Template {Id} envoye a un parent : « {Sujet} ».", id, courriel.Sujet);
 
-            return Ok(new { message = "Message envoyé." });
+            // EN DÉVELOPPEMENT, LE DÉTOUR SE DIT : le message est parti vers
+            // l'adresse de redirection, pas vers ce parent.
+            return Ok(new { message = "Message envoyé.", redirection = _options.RedirectionDev, copieDeposee });
         }
 
         // ------------------------------------------------------------ outils
@@ -697,9 +745,21 @@ namespace SchoolWebApp.Api.Controllers
         private static DateTime? Utc(DateTime? date) =>
             date is null ? null : DateTime.SpecifyKind(date.Value, DateTimeKind.Utc);
 
-        /// <summary>Un courriel automatique sans règle d'envoi : il ne se programme pas.</summary>
+        /// <summary>
+        /// Un courriel automatique sans règle d'envoi : programmable par cible,
+        /// mais dont la cible n'est pas encore choisie (17/10/2026).
+        /// </summary>
         private static bool SansRegle(ModeleMailResume m) =>
-            m.Nature == NatureModeleMail.Automatique && CodeModeleMail.ReglesADefinir(m.Code);
+            m.Nature == NatureModeleMail.Automatique && CodeModeleMail.EnvoiParCible(m.Code)
+            && !CibleEnvoi.EstConnue(m.Cible);
+
+        /// <summary>Un courriel automatique dont on choisit à qui il part.</summary>
+        private static bool ParCible(ModeleMailResume m) =>
+            m.Nature == NatureModeleMail.Automatique && CodeModeleMail.EnvoiParCible(m.Code);
+
+        /// <summary>Les cibles de la liste déroulante, pour un courriel par cible.</summary>
+        private static object? Cibles(ModeleMailResume m) =>
+            ParCible(m) ? CibleEnvoi.Options.Select(o => new { code = o.Code, libelle = o.Libelle }) : null;
 
         /// <summary>Programmé et doté d'une règle d'envoi : il a une prochaine date.</summary>
         private static DateTime? Prochaine(ModeleMailResume m) =>
@@ -720,8 +780,10 @@ namespace SchoolWebApp.Api.Controllers
             heure = m.HeureEnvoi?.ToString("HH:mm"),
             m.JourSemaine,
             m.JourMois,
+            m.Cible,
             m.Actif,
             reglesADefinir = SansRegle(m),
+            parCible = ParCible(m),
             supprimable = !CodeModeleMail.EstRelieAUnEnvoi(m.Code),
             prochaineExecution = Prochaine(m),
             dernierEnvoiLe = Utc(m.DernierEnvoiLe),
@@ -747,8 +809,11 @@ namespace SchoolWebApp.Api.Controllers
             heure = d.HeureEnvoi?.ToString("HH:mm"),
             d.JourSemaine,
             d.JourMois,
+            d.Cible,
             d.Actif,
             reglesADefinir = SansRegle(d),
+            parCible = ParCible(d),
+            cibles = Cibles(d),
             supprimable = !CodeModeleMail.EstRelieAUnEnvoi(d.Code),
             prochaineExecution = Prochaine(d),
             dernierEnvoiLe = Utc(d.DernierEnvoiLe),
@@ -801,6 +866,9 @@ namespace SchoolWebApp.Api.Controllers
             public string? Heure { get; set; }
 
             public int? JourSemaine { get; set; }
+
+            /// <summary>À qui il part, pour un courriel par cible — voir `CibleEnvoi`.</summary>
+            public string? Cible { get; set; }
 
             public int? JourMois { get; set; }
         }

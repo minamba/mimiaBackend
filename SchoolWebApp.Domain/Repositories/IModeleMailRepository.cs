@@ -109,6 +109,7 @@ namespace SchoolWebApp.Domain.Repositories
             int? jourMois,
             bool actif,
             DateTime? derniereOccurrence,
+            string? cible,
             CancellationToken ct = default);
 
         /// <summary>

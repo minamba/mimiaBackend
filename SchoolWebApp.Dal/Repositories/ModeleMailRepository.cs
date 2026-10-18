@@ -50,6 +50,7 @@ namespace SchoolWebApp.Dal.Repositories
                 HeureEnvoi = m.HeureEnvoi,
                 JourSemaine = m.JourSemaine,
                 JourMois = m.JourMois,
+                Cible = m.Cible,
                 Actif = m.Actif,
                 DerniereOccurrence = m.DerniereOccurrence,
                 DernierEnvoiLe = m.DernierEnvoiLe,
@@ -95,6 +96,7 @@ namespace SchoolWebApp.Dal.Repositories
                     HeureEnvoi = m.HeureEnvoi,
                     JourSemaine = m.JourSemaine,
                     JourMois = m.JourMois,
+                Cible = m.Cible,
                     Actif = m.Actif,
                     DerniereOccurrence = m.DerniereOccurrence,
                     DernierEnvoiLe = m.DernierEnvoiLe,
@@ -408,6 +410,7 @@ namespace SchoolWebApp.Dal.Repositories
             int? jourMois,
             bool actif,
             DateTime? derniereOccurrence,
+            string? cible,
             CancellationToken ct = default)
         {
             var modifies = await _context.ModelesMail
@@ -417,6 +420,7 @@ namespace SchoolWebApp.Dal.Repositories
                     .SetProperty(m => m.HeureEnvoi, heure)
                     .SetProperty(m => m.JourSemaine, jourSemaine)
                     .SetProperty(m => m.JourMois, jourMois)
+                    .SetProperty(m => m.Cible, cible)
                     .SetProperty(m => m.Actif, actif)
                     .SetProperty(m => m.DerniereOccurrence, derniereOccurrence)
                     .SetProperty(m => m.DateModification, DateTime.UtcNow), ct);

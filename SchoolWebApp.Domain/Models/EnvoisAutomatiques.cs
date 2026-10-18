@@ -36,16 +36,68 @@ namespace SchoolWebApp.Domain.Models
         public static bool ReglesADefinir(string? code) => !EstRelieAUnEnvoi(code);
 
         /// <summary>
+        /// PROGRAMMABLE EN CHOISISSANT À QUI IL PART — Camara, le 17/10/2026 :
+        /// Relance, Rappels et tout courriel créé depuis l'écran. Ses
+        /// destinataires sont une cible (`CibleEnvoi`) choisie dans la
+        /// programmation ; il part à chaque envoi à toute la cible.
+        /// </summary>
+        public static bool EnvoiParCible(string? code) => !EstRelieAUnEnvoi(code);
+
+        /// <summary>Le code sous lequel le journal range ses envois : un courriel créé depuis l'écran n'en a pas.</summary>
+        public static string CodeJournal(string? code, int modeleId) => code ?? $"MODELE:{modeleId}";
+
+        /// <summary>
         /// La catégorie de désabonnement d'un courriel, ou nulle s'il fait
         /// partie du service (bilans, fin d'essai) et part à tous.
         /// </summary>
         public static string? Categorie(string? code) => code switch
         {
+            Bilans or FinEssai => null,
             AvisEssai or AvisGeneral => CategorieDesabonnement.Avis,
             Relance => CategorieDesabonnement.Relance,
             Rappels => CategorieDesabonnement.Rappels,
-            _ => null,
+
+            // Un courriel créé depuis l'écran est une annonce de Mimia : on
+            // s'en désabonne comme d'une diffusion (17/10/2026).
+            _ => CategorieDesabonnement.Diffusion,
         };
+    }
+
+    /// <summary>
+    /// À QUI PART UN COURRIEL AUTOMATIQUE PROGRAMMÉ PAR CIBLE — Camara, le
+    /// 17/10/2026 : une liste à choisir dans la programmation. Les adresses
+    /// bannies et les parents désabonnés de la catégorie restent exclus.
+    /// </summary>
+    public static class CibleEnvoi
+    {
+        public const string Tous = "tous";
+        public const string Abonnes = "abonnes";
+        public const string Essai = "essai";
+        public const string SansFormule = "sans_formule";
+        public const string Nouveaux = "nouveaux";
+        public const string Inactifs = "inactifs";
+
+        /// <summary>« Inscrits depuis moins de 30 jours ».</summary>
+        public const int JoursNouveaux = 30;
+
+        /// <summary>« Sans activité depuis 14 jours ».</summary>
+        public const int JoursInactifs = 14;
+
+        /// <summary>Dans l'ordre de la liste déroulante.</summary>
+        public static readonly IReadOnlyList<(string Code, string Libelle)> Options =
+        [
+            (Tous, "Tous les parents"),
+            (Abonnes, "Les abonnés (formule payante en cours)"),
+            (Essai, "Les parents en période d’essai"),
+            (SansFormule, "Les parents sans formule"),
+            (Nouveaux, $"Les inscrits depuis moins de {JoursNouveaux} jours"),
+            (Inactifs, $"Les parents dont aucun enfant n’a d’activité depuis {JoursInactifs} jours"),
+        ];
+
+        public static bool EstConnue(string? cible) => Options.Any(o => o.Code == cible);
+
+        public static string Libelle(string? cible) =>
+            Options.FirstOrDefault(o => o.Code == cible).Libelle ?? "—";
     }
 
     /// <summary>Les catégories dont un parent peut se désabonner.</summary>

@@ -41,6 +41,24 @@ namespace SchoolWebApp.Dal.Entities
 
         public virtual DbSet<CategorieFichesParent> CategoriesFichesParents { get; set; }
 
+        /// <summary>Le texte des bilans hebdomadaires, gardé (17/10/2026) — voir `BilanRedige`.</summary>
+        public virtual DbSet<BilanRedige> BilansRediges { get; set; }
+
+        /// <summary>Les rôles des comptes parents (17/10/2026) — voir `RoleUtilisateur`.</summary>
+        public virtual DbSet<RoleUtilisateur> RolesUtilisateurs { get; set; }
+
+        /// <summary>Les boîtes mail des administrateurs (17/10/2026) — voir `BoiteMailAdmin`.</summary>
+        public virtual DbSet<BoiteMailAdmin> BoitesMailAdmins { get; set; }
+
+        /// <summary>Les brouillons de la messagerie (17/10/2026) — voir `BrouillonMail`.</summary>
+        public virtual DbSet<BrouillonMail> BrouillonsMail { get; set; }
+
+        /// <summary>Les pièces des brouillons (18/10/2026) — voir `PieceBrouillonMail`.</summary>
+        public virtual DbSet<PieceBrouillonMail> PiecesBrouillonsMail { get; set; }
+
+        /// <summary>Les modèles de signature de courriel (17/10/2026) — voir `SignatureMail`.</summary>
+        public virtual DbSet<SignatureMail> SignaturesMail { get; set; }
+
         public virtual DbSet<FicheConsommee> FichesConsommees { get; set; }
 
         public virtual DbSet<CreditFichesFamille> CreditsFichesFamilles { get; set; }
@@ -232,6 +250,22 @@ namespace SchoolWebApp.Dal.Entities
                 // L'espace parent et ses fiches (16/10/2026) : faux par défaut,
                 // accordé un par un dans Admin › Parents.
                 entity.Property(e => e.PeutCreerFiches).HasColumnName("peut_creer_fiches");
+
+                // Le rôle (17/10/2026) : supprimer un rôle rend ses comptes
+                // « Utilisateur » (la suppression recalcule aussi leur accès).
+                entity.Property(e => e.RoleId).HasColumnName("role_id");
+
+                // La signature de ses courriels (17/10/2026) : supprimer le
+                // modèle le ramène au modèle par défaut.
+                entity.Property(e => e.SignatureMailId).HasColumnName("signature_mail_id");
+                entity.HasOne(e => e.SignatureMail)
+                      .WithMany()
+                      .HasForeignKey(e => e.SignatureMailId)
+                      .OnDelete(DeleteBehavior.SetNull);
+                entity.HasOne(e => e.Role)
+                      .WithMany()
+                      .HasForeignKey(e => e.RoleId)
+                      .OnDelete(DeleteBehavior.SetNull);
 
                 // Un utilisateur du serveur d'identité = un parent, jamais deux.
                 entity.HasIndex(e => e.IdentityUserId).IsUnique();
@@ -1805,6 +1839,7 @@ namespace SchoolWebApp.Dal.Entities
                 entity.Property(e => e.HeureEnvoi).HasColumnName("heure_envoi");
                 entity.Property(e => e.JourSemaine).HasColumnName("jour_semaine");
                 entity.Property(e => e.JourMois).HasColumnName("jour_mois");
+                entity.Property(e => e.Cible).HasMaxLength(20).HasColumnName("cible");
                 entity.Property(e => e.Actif).HasDefaultValue(false).HasColumnName("actif");
                 entity.Property(e => e.DerniereOccurrence).HasColumnName("derniere_occurrence");
                 entity.Property(e => e.DernierEnvoiLe).HasColumnName("dernier_envoi_le");
@@ -2341,6 +2376,136 @@ namespace SchoolWebApp.Dal.Entities
             });
 
             // Les catégories de fiches d'un parent (espace parent, 16/10/2026).
+            // LA BOÎTE MAIL D'UN ADMINISTRATEUR (17/10/2026) — une par compte.
+            modelBuilder.Entity<BoiteMailAdmin>(entity =>
+            {
+                entity.ToTable("BoiteMailAdmin");
+                entity.HasKey(e => e.Id);
+
+                entity.Property(e => e.Id).HasColumnName("id");
+                entity.Property(e => e.ParentId).HasColumnName("parent_id");
+                entity.Property(e => e.Adresse).IsRequired().HasMaxLength(255).HasColumnName("adresse");
+                entity.Property(e => e.MotDePasseChiffre).IsRequired().HasMaxLength(1000).HasColumnName("mot_de_passe_chiffre");
+                entity.Property(e => e.DateCreation).HasColumnName("date_creation");
+                entity.Property(e => e.DateModification).HasColumnName("date_modification");
+
+                entity.HasOne(e => e.Parent)
+                      .WithMany()
+                      .HasForeignKey(e => e.ParentId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasIndex(e => e.ParentId).IsUnique();
+            });
+
+            // LES BROUILLONS DE LA MESSAGERIE (17/10/2026) — voir `BrouillonMail`.
+            modelBuilder.Entity<BrouillonMail>(entity =>
+            {
+                entity.ToTable("BrouillonMail");
+                entity.HasKey(e => e.Id);
+
+                entity.Property(e => e.Id).HasColumnName("id");
+                entity.Property(e => e.ParentId).HasColumnName("parent_id");
+                entity.Property(e => e.Boite).IsRequired().HasMaxLength(16).HasColumnName("boite");
+                entity.Property(e => e.MessageOrigine).HasColumnName("message_origine");
+                entity.Property(e => e.Destinataire).HasMaxLength(255).HasColumnName("destinataire");
+                entity.Property(e => e.Sujet).HasMaxLength(500).HasColumnName("sujet");
+                entity.Property(e => e.Titre).HasMaxLength(150).HasColumnName("titre");
+                entity.Property(e => e.Texte).IsRequired().HasColumnName("texte");
+                entity.Property(e => e.DateModification).HasColumnName("date_modification");
+
+                entity.HasOne(e => e.Parent)
+                      .WithMany()
+                      .HasForeignKey(e => e.ParentId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                // Un brouillon de réponse par message : la frappe le met à jour.
+                entity.HasIndex(e => new { e.ParentId, e.Boite, e.MessageOrigine })
+                      .IsUnique()
+                      .HasFilter("[message_origine] IS NOT NULL");
+                entity.HasIndex(e => new { e.ParentId, e.Boite, e.DateModification });
+            });
+
+            // LES PIÈCES DES BROUILLONS (18/10/2026) — le chemin, jamais les octets.
+            modelBuilder.Entity<PieceBrouillonMail>(entity =>
+            {
+                entity.ToTable("PieceBrouillonMail");
+                entity.HasKey(e => e.Id);
+
+                entity.Property(e => e.Id).HasColumnName("id");
+                entity.Property(e => e.BrouillonId).HasColumnName("brouillon_id");
+                entity.Property(e => e.Genre).IsRequired().HasMaxLength(10).HasColumnName("genre");
+                entity.Property(e => e.Rang).HasColumnName("rang");
+                entity.Property(e => e.NomFichier).IsRequired().HasMaxLength(255).HasColumnName("nom_fichier");
+                entity.Property(e => e.TypeMime).IsRequired().HasMaxLength(100).HasColumnName("type_mime");
+                entity.Property(e => e.Taille).HasColumnName("taille");
+                entity.Property(e => e.Chemin).IsRequired().HasMaxLength(260).HasColumnName("chemin");
+
+                entity.HasOne(e => e.Brouillon)
+                      .WithMany(b => b.Pieces)
+                      .HasForeignKey(e => e.BrouillonId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasIndex(e => new { e.BrouillonId, e.Genre, e.Rang });
+            });
+
+            // LES MODÈLES DE SIGNATURE (17/10/2026) — voir `SignatureMail`.
+            modelBuilder.Entity<SignatureMail>(entity =>
+            {
+                entity.ToTable("SignatureMail");
+                entity.HasKey(e => e.Id);
+
+                entity.Property(e => e.Id).HasColumnName("id");
+                entity.Property(e => e.Nom).IsRequired().HasMaxLength(60).HasColumnName("nom");
+                entity.Property(e => e.Formule).HasMaxLength(80).HasColumnName("formule");
+                entity.Property(e => e.LigneLibre).HasMaxLength(160).HasColumnName("ligne_libre");
+                entity.Property(e => e.AfficherRole).HasColumnName("afficher_role");
+                entity.Property(e => e.AfficherAdresse).HasColumnName("afficher_adresse");
+                entity.Property(e => e.Telephone).HasMaxLength(30).HasColumnName("telephone");
+                entity.Property(e => e.AfficherSite).HasColumnName("afficher_site");
+                entity.Property(e => e.Couleur).IsRequired().HasMaxLength(9).HasColumnName("couleur");
+                entity.Property(e => e.ParDefaut).HasColumnName("par_defaut");
+                entity.Property(e => e.DateCreation).HasColumnName("date_creation");
+
+                entity.HasIndex(e => e.Nom).IsUnique();
+            });
+
+            // LES RÔLES DES COMPTES PARENTS (17/10/2026) — voir `RoleUtilisateur`.
+            modelBuilder.Entity<RoleUtilisateur>(entity =>
+            {
+                entity.ToTable("RoleUtilisateur");
+                entity.HasKey(e => e.Id);
+
+                entity.Property(e => e.Id).HasColumnName("id");
+                entity.Property(e => e.Nom).IsRequired().HasMaxLength(60).HasColumnName("nom");
+                entity.Property(e => e.Code).HasMaxLength(30).HasColumnName("code");
+                entity.Property(e => e.Onglets).HasMaxLength(500).HasColumnName("onglets");
+                entity.Property(e => e.Ordre).HasColumnName("ordre");
+                entity.Property(e => e.DateCreation).HasColumnName("date_creation");
+
+                entity.HasIndex(e => e.Nom).IsUnique();
+                entity.HasIndex(e => e.Code).IsUnique().HasFilter("[code] IS NOT NULL");
+            });
+
+            // LE TEXTE DES BILANS (17/10/2026) — une ligne par enfant et par semaine.
+            modelBuilder.Entity<BilanRedige>(entity =>
+            {
+                entity.ToTable("BilanRedige");
+                entity.HasKey(e => e.Id);
+
+                entity.Property(e => e.Id).HasColumnName("id");
+                entity.Property(e => e.EleveId).HasColumnName("eleve_id");
+                entity.Property(e => e.FinSemaine).HasColumnName("fin_semaine");
+                entity.Property(e => e.Reponse).IsRequired().HasColumnName("reponse");
+                entity.Property(e => e.DateCreation).HasColumnName("date_creation");
+
+                entity.HasOne(e => e.Eleve)
+                      .WithMany()
+                      .HasForeignKey(e => e.EleveId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasIndex(e => new { e.EleveId, e.FinSemaine }).IsUnique();
+            });
+
             modelBuilder.Entity<CategorieFichesParent>(entity =>
             {
                 entity.ToTable("CategorieFichesParent");

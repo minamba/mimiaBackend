@@ -1,5 +1,26 @@
 namespace SchoolWebApp.Domain.Emails
 {
+    /// <summary>
+    /// LES DOSSIERS DE LA MESSAGERIE — Camara, le 17/10/2026 : « Boîte de
+    /// réception », « Messages envoyés », « Brouillons ». Les deux premiers sont
+    /// les dossiers IMAP de la boîte ; les brouillons sont en base (voir
+    /// `BrouillonMail`).
+    /// </summary>
+    public static class DossiersMessagerie
+    {
+        public const string Reception = "reception";
+        public const string Envoyes = "envoyes";
+        public const string Brouillons = "brouillons";
+
+        /// <summary>Un dossier connu, sinon la réception.</summary>
+        public static string Normaliser(string? dossier) => dossier?.Trim().ToLowerInvariant() switch
+        {
+            Envoyes => Envoyes,
+            Brouillons => Brouillons,
+            _ => Reception,
+        };
+    }
+
     /// <summary>Une ligne de la liste : ce qu'on lit sans ouvrir le message.</summary>
     public class MessageRecu
     {
@@ -15,6 +36,18 @@ namespace SchoolWebApp.Domain.Emails
         public string? DeNom { get; set; }
 
         public string? DeAdresse { get; set; }
+
+        /// <summary>
+        /// L'adresse « Répondre à » quand elle diffère de l'expéditeur (18/10/2026) :
+        /// un message du formulaire de contact part de no-reply@mimia.fr, la
+        /// réponse va au visiteur.
+        /// </summary>
+        public string? RepondreA { get; set; }
+
+        /// <summary>Le premier destinataire : ce qu'on montre dans « Messages envoyés ».</summary>
+        public string? ANom { get; set; }
+
+        public string? AAdresse { get; set; }
 
         public string? Sujet { get; set; }
 
@@ -72,7 +105,15 @@ namespace SchoolWebApp.Domain.Emails
     /// destiné à l'exploitant — pas au parent : personne d'autre qu'un
     /// administrateur ne voit cet écran.
     /// </param>
-    public record ResultatBoite(IReadOnlyList<MessageRecu> Messages, string? Erreur = null);
+    /// <param name="Total">Le nombre de messages du dossier, toutes pages confondues.</param>
+    /// <param name="NonLus">Les non lus du dossier entier (réception seulement).</param>
+    /// <summary>
+    /// Les compteurs des dossiers de la boîte (17/10/2026) : ce que portent les
+    /// pastilles des onglets, lus en une connexion (STATUS, sans rien rapatrier).
+    /// </summary>
+    public record CompteursBoite(int Reception, int NonLus, int Envoyes, string? Erreur = null);
+
+    public record ResultatBoite(IReadOnlyList<MessageRecu> Messages, string? Erreur = null, int Total = 0, int NonLus = 0);
 
     /// <summary>
     /// Ce qu'un envoi a produit, tel que le serveur l'a dit.
@@ -98,8 +139,24 @@ namespace SchoolWebApp.Domain.Emails
         bool CopieDeposee = false,
         string? Detail = null);
 
+    /// <summary>
+    /// La boîte d'un administrateur (17/10/2026) : son adresse chez LWS, son mot
+    /// de passe (déchiffré le temps d'une requête), le nom affiché à l'envoi.
+    /// </summary>
+    public record CompteMessagerie(string Adresse, string MotDePasse, string? Nom);
+
     public interface IMessagerieService
     {
+        /// <summary>
+        /// Le même service, branché sur la boîte d'un administrateur plutôt que
+        /// sur celle du support (17/10/2026) : lecture chez LWS avec SES
+        /// identifiants, envoi par le même service, à SON nom et SON adresse.
+        /// </summary>
+        IMessagerieService Pour(CompteMessagerie compte);
+
+        /// <summary>Ouvre puis referme la boîte : null si l'adresse et le mot de passe sont bons, sinon la raison.</summary>
+        Task<string?> VerifierAsync(CancellationToken ct = default);
+
         /// <summary>Faux si la boîte n'est pas configurée : l'écran le dit au lieu d'échouer.</summary>
         bool Disponible { get; }
 
@@ -112,7 +169,10 @@ namespace SchoolWebApp.Domain.Emails
         /// et on cherchait pourquoi les courriels n'arrivaient plus alors que
         /// c'est la lecture qui échouait.
         /// </summary>
-        Task<ResultatBoite> ListerAsync(CancellationToken ct = default);
+        /// <param name="dossier">Voir `DossiersMessagerie` : réception ou envoyés.</param>
+        /// <param name="page">À partir de 1 : la page 1 porte les plus récents.</param>
+        Task<ResultatBoite> ListerAsync(
+            string? dossier = null, int page = 1, int taille = 10, CancellationToken ct = default);
 
         /// <summary>
         /// Un message avec son corps. Null s'il n'existe plus — supprimé depuis
@@ -125,13 +185,13 @@ namespace SchoolWebApp.Domain.Emails
         /// adresse. On ne les charge que si on le demande.
         /// </param>
         Task<MessageDetail?> LireAsync(
-            uint identifiant, bool afficherImages = false, CancellationToken ct = default);
+            uint identifiant, bool afficherImages = false, CancellationToken ct = default, string? dossier = null);
 
         /// <summary>
         /// Télécharge une pièce jointe d'un message reçu.
         /// </summary>
         Task<(byte[] Donnees, string TypeMime, string NomFichier)?> PieceJointeAsync(
-            uint identifiant, string nomFichier, CancellationToken ct = default);
+            uint identifiant, string nomFichier, CancellationToken ct = default, string? dossier = null);
 
         /// <summary>
         /// Répond à un message, dans le fil.
@@ -168,6 +228,31 @@ namespace SchoolWebApp.Domain.Emails
             CancellationToken ct = default);
 
         /// <summary>Marque un message lu ou non lu.</summary>
-        Task MarquerLuAsync(uint identifiant, bool lu, CancellationToken ct = default);
+        Task MarquerLuAsync(uint identifiant, bool lu, CancellationToken ct = default, string? dossier = null);
+
+        /// <summary>Le nombre de messages reçus, de non lus et d'envoyés, en une connexion.</summary>
+        Task<CompteursBoite> CompterAsync(CancellationToken ct = default);
+
+        /// <summary>
+        /// SUPPRIMER (Camara, le 17/10/2026) : les messages vont à la corbeille de
+        /// la boîte — rattrapables depuis le webmail LWS — et n'en sont effacés
+        /// pour de bon que s'il n'y en a pas. Rend le nombre de messages retirés.
+        /// </summary>
+        Task<int> SupprimerAsync(
+            IReadOnlyCollection<uint> identifiants, string? dossier = null, CancellationToken ct = default);
+
+        /// <summary>
+        /// Dépose dans « Envoyés » la copie d'un message parti par le service
+        /// d'envoi (« Écrire à un parent », un template) : sans elle, il
+        /// n'apparaîtrait nulle part dans la boîte. Tolérante à l'échec : le
+        /// message est déjà parti.
+        /// </summary>
+        Task<bool> DeposerCopieAsync(
+            string destinataire,
+            string sujet,
+            string html,
+            IReadOnlyList<PieceMail>? imagesIntegrees = null,
+            IReadOnlyList<PieceMail>? piecesJointes = null,
+            CancellationToken ct = default);
     }
 }

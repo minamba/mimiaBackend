@@ -35,6 +35,12 @@ namespace SchoolWebApp.Api.Request
 
         [StringLength(100)]
         public string? Nom { get; set; }
+
+        /// <summary>
+        /// Le rôle donné à la création (17/10/2026) ; null = « Utilisateur ».
+        /// Pris en compte pour le seul super-administrateur.
+        /// </summary>
+        public int? RoleId { get; set; }
     }
 
     public class EleveAdminRequest

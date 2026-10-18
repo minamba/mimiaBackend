@@ -40,6 +40,14 @@ namespace SchoolWebApp.Domain.Repositories
         Task<IReadOnlyList<DestinataireAutomatique>> GetDestinatairesDiffusionAsync(CancellationToken ct = default);
 
         /// <summary>
+        /// Les parents d'une cible (`CibleEnvoi`, 17/10/2026), joignables et non
+        /// désabonnés de la catégorie ; une adresse sur deux comptes ne compte
+        /// qu'une fois.
+        /// </summary>
+        Task<IReadOnlyList<DestinataireAutomatique>> GetDestinatairesCibleAsync(
+            string cible, string categorie, DateTime maintenantUtc, CancellationToken ct = default);
+
+        /// <summary>
         /// Réserve un envoi AVANT de le faire. Nul si la clé est déjà prise :
         /// ce courriel est déjà parti à ce parent.
         /// </summary>

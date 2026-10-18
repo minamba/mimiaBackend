@@ -83,6 +83,8 @@ namespace SchoolWebApp.Domain.Emails
                     constructeur.HtmlBody = corps;
                 }
 
+                ImagesSignature.Attacher(constructeur);
+
                 message.Body = constructeur.ToMessageBody();
 
                 using var client = new SmtpClient();
@@ -119,7 +121,8 @@ namespace SchoolWebApp.Domain.Emails
             IReadOnlyList<PieceMail>? imagesIntegrees = null,
             IReadOnlyList<PieceMail>? piecesJointes = null,
             IProgress<int>? avancement = null,
-            CancellationToken ct = default)
+            CancellationToken ct = default,
+            Expediteur? expediteur = null)
         {
             if (!Disponible)
             {
@@ -162,8 +165,9 @@ namespace SchoolWebApp.Domain.Emails
                     try
                     {
                         var message = new MimeMessage();
-                        message.From.Add(new MailboxAddress(
-                            _options.SenderNom ?? "Mimia", _options.SenderEmail!));
+                        message.From.Add(expediteur is null
+                            ? new MailboxAddress(_options.SenderNom ?? "Mimia", _options.SenderEmail!)
+                            : new MailboxAddress(expediteur.Nom ?? _options.SenderNom ?? "Mimia", expediteur.Adresse));
 
                         // UN MESSAGE PAR PERSONNE, jamais une copie collective :
                         // trois cents adresses dans la même enveloppe, ce serait
@@ -184,6 +188,8 @@ namespace SchoolWebApp.Domain.Emails
                         };
 
                         AttacherLogo(constructeur);
+                    ImagesSignature.Attacher(constructeur);
+                        ImagesSignature.Attacher(constructeur);
 
                         foreach (var image in imagesIntegrees ?? [])
                         {
@@ -572,7 +578,8 @@ namespace SchoolWebApp.Domain.Emails
         public async Task<string> RendreAsync(
             string sujet, string gabarit, IDictionary<string, string> valeurs)
         {
-            var corps = await ConstruireCorpsAsync(sujet, gabarit, valeurs);
+            // Les images de la signature, jointes elles aussi dans un vrai envoi.
+            var corps = ImagesSignature.EnDataUri(await ConstruireCorpsAsync(sujet, gabarit, valeurs));
 
             // Dans un mail la bannière est une pièce jointe liée (cid:). Un
             // navigateur ne sait pas résoudre ces adresses : on l'incorpore en
@@ -601,6 +608,13 @@ namespace SchoolWebApp.Domain.Emails
                 ["contenu"] = contenu,
                 ["annee"] = DateTime.UtcNow.Year.ToString(),
                 ["urlSite"] = _options.UrlSite ?? "https://mimia.fr",
+
+                // LE TEXTE D'APERÇU, sous l'objet dans la boîte de réception et dans
+                // les notifications (18/10/2026) : les premiers mots du message.
+                // Vide, la messagerie affichait le début du gabarit.
+                ["apercu"] = valeurs.TryGetValue("apercu", out var a) && !string.IsNullOrWhiteSpace(a)
+                    ? a
+                    : TexteBrut.Apercu(contenu),
 
                 // LA MENTION DU PIED, AVEC UNE VALEUR PAR DÉFAUT.
                 //
@@ -657,15 +671,6 @@ namespace SchoolWebApp.Domain.Emails
         /// Version texte, exigée par les filtres anti-spam : un message
         /// uniquement HTML est fortement pénalisé.
         /// </summary>
-        private static string VersTexte(string html)
-        {
-            var texte = Regex.Replace(html, @"<(style|script)[^>]*>.*?</\1>", " ", RegexOptions.Singleline);
-            texte = Regex.Replace(texte, @"<br\s*/?>|</p>|</tr>|</h[1-6]>", "\n", RegexOptions.IgnoreCase);
-            texte = Regex.Replace(texte, "<.*?>", string.Empty, RegexOptions.Singleline);
-            texte = System.Net.WebUtility.HtmlDecode(texte);
-            texte = Regex.Replace(texte, @"[ \t]+", " ");
-            texte = Regex.Replace(texte, @"\n\s*\n\s*\n+", "\n\n");
-            return texte.Trim();
-        }
+        private static string VersTexte(string html) => TexteBrut.Depuis(html);
     }
 }

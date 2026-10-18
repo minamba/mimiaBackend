@@ -126,6 +126,45 @@ namespace SchoolWebApp.Dal.Repositories
                 .ToList();
         }
 
+        public async Task<IReadOnlyList<DestinataireAutomatique>> GetDestinatairesCibleAsync(
+            string cible, string categorie, DateTime maintenantUtc, CancellationToken ct = default)
+        {
+            var requete = Joignables(categorie);
+
+            // Une formule payante en cours ; un essai en cours (la date fait foi :
+            // un essai expiré reste « Actif » en base tant que personne ne l'a relu).
+            requete = cible switch
+            {
+                CibleEnvoi.Tous => requete,
+                CibleEnvoi.Abonnes => requete.Where(p => p.Abonnements.Any(a =>
+                    a.Statut == StatutAbonnement.Actif && !a.Offre!.EstEssai)),
+                CibleEnvoi.Essai => requete.Where(p =>
+                    p.Abonnements.Any(a => a.Offre!.EstEssai && a.Statut != StatutAbonnement.Resilie
+                                           && a.DateFin != null && a.DateFin > maintenantUtc)
+                    && !p.Abonnements.Any(a => a.Statut == StatutAbonnement.Actif && !a.Offre!.EstEssai)),
+                CibleEnvoi.SansFormule => requete.Where(p =>
+                    !p.Abonnements.Any(a => a.Statut == StatutAbonnement.Actif && !a.Offre!.EstEssai)
+                    && !p.Abonnements.Any(a => a.Offre!.EstEssai && a.Statut != StatutAbonnement.Resilie
+                                               && a.DateFin != null && a.DateFin > maintenantUtc)),
+                CibleEnvoi.Nouveaux => requete.Where(p => p.DateCreation >= maintenantUtc.AddDays(-CibleEnvoi.JoursNouveaux)),
+                CibleEnvoi.Inactifs => requete.Where(p =>
+                    p.Eleves.Any(e => e.ArchiveLe == null)
+                    && !p.Eleves.Any(e => e.ArchiveLe == null && e.DerniereActivite != null
+                                          && e.DerniereActivite >= maintenantUtc.AddDays(-CibleEnvoi.JoursInactifs))),
+                _ => requete.Where(_ => false),
+            };
+
+            var lignes = await requete
+                .OrderBy(p => p.Id)
+                .Select(p => new { p.Id, p.Mail, p.Prenom })
+                .ToListAsync(ct);
+
+            return lignes
+                .GroupBy(p => p.Mail!.Trim(), StringComparer.OrdinalIgnoreCase)
+                .Select(g => new DestinataireAutomatique(g.First().Id, g.Key, g.First().Prenom, null, null))
+                .ToList();
+        }
+
         public async Task<int?> ReserverAsync(
             string codeModele, int parentId, string? cle, DateTime occurrenceUtc, CancellationToken ct = default)
         {

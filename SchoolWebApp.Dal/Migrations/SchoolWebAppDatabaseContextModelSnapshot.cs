@@ -422,6 +422,139 @@ namespace SchoolWebApp.Dal.Migrations
                     b.ToTable("BandeauPromo", (string)null);
                 });
 
+            modelBuilder.Entity("SchoolWebApp.Dal.Entities.BilanRedige", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasColumnName("id");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("DateCreation")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("date_creation");
+
+                    b.Property<int>("EleveId")
+                        .HasColumnType("int")
+                        .HasColumnName("eleve_id");
+
+                    b.Property<DateTime>("FinSemaine")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("fin_semaine");
+
+                    b.Property<string>("Reponse")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)")
+                        .HasColumnName("reponse");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EleveId", "FinSemaine")
+                        .IsUnique();
+
+                    b.ToTable("BilanRedige", (string)null);
+                });
+
+            modelBuilder.Entity("SchoolWebApp.Dal.Entities.BoiteMailAdmin", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasColumnName("id");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Adresse")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)")
+                        .HasColumnName("adresse");
+
+                    b.Property<DateTime>("DateCreation")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("date_creation");
+
+                    b.Property<DateTime>("DateModification")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("date_modification");
+
+                    b.Property<string>("MotDePasseChiffre")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)")
+                        .HasColumnName("mot_de_passe_chiffre");
+
+                    b.Property<int>("ParentId")
+                        .HasColumnType("int")
+                        .HasColumnName("parent_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ParentId")
+                        .IsUnique();
+
+                    b.ToTable("BoiteMailAdmin", (string)null);
+                });
+
+            modelBuilder.Entity("SchoolWebApp.Dal.Entities.BrouillonMail", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasColumnName("id");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Boite")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("nvarchar(16)")
+                        .HasColumnName("boite");
+
+                    b.Property<DateTime>("DateModification")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("date_modification");
+
+                    b.Property<string>("Destinataire")
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)")
+                        .HasColumnName("destinataire");
+
+                    b.Property<long?>("MessageOrigine")
+                        .HasColumnType("bigint")
+                        .HasColumnName("message_origine");
+
+                    b.Property<int>("ParentId")
+                        .HasColumnType("int")
+                        .HasColumnName("parent_id");
+
+                    b.Property<string>("Sujet")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)")
+                        .HasColumnName("sujet");
+
+                    b.Property<string>("Texte")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)")
+                        .HasColumnName("texte");
+
+                    b.Property<string>("Titre")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)")
+                        .HasColumnName("titre");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ParentId", "Boite", "DateModification");
+
+                    b.HasIndex("ParentId", "Boite", "MessageOrigine")
+                        .IsUnique()
+                        .HasFilter("[message_origine] IS NOT NULL");
+
+                    b.ToTable("BrouillonMail", (string)null);
+                });
+
             modelBuilder.Entity("SchoolWebApp.Dal.Entities.CategorieFichesParent", b =>
                 {
                     b.Property<int>("Id")
@@ -2801,6 +2934,11 @@ namespace SchoolWebApp.Dal.Migrations
                         .HasDefaultValue(false)
                         .HasColumnName("actif");
 
+                    b.Property<string>("Cible")
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)")
+                        .HasColumnName("cible");
+
                     b.Property<string>("Code")
                         .HasMaxLength(40)
                         .HasColumnType("nvarchar(40)")
@@ -3163,6 +3301,14 @@ namespace SchoolWebApp.Dal.Migrations
                         .HasColumnType("nvarchar(100)")
                         .HasColumnName("prenom");
 
+                    b.Property<int?>("RoleId")
+                        .HasColumnType("int")
+                        .HasColumnName("role_id");
+
+                    b.Property<int?>("SignatureMailId")
+                        .HasColumnType("int")
+                        .HasColumnName("signature_mail_id");
+
                     b.Property<string>("StripeClientId")
                         .HasMaxLength(255)
                         .HasColumnType("nvarchar(255)")
@@ -3176,6 +3322,10 @@ namespace SchoolWebApp.Dal.Migrations
                     b.HasIndex("Mail")
                         .IsUnique()
                         .HasFilter("[mail] IS NOT NULL");
+
+                    b.HasIndex("RoleId");
+
+                    b.HasIndex("SignatureMailId");
 
                     b.HasIndex("StripeClientId")
                         .IsUnique()
@@ -3224,6 +3374,58 @@ namespace SchoolWebApp.Dal.Migrations
                     b.HasIndex("Zone", "AnneeScolaire");
 
                     b.ToTable("PeriodeVacances", (string)null);
+                });
+
+            modelBuilder.Entity("SchoolWebApp.Dal.Entities.PieceBrouillonMail", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasColumnName("id");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("BrouillonId")
+                        .HasColumnType("int")
+                        .HasColumnName("brouillon_id");
+
+                    b.Property<string>("Chemin")
+                        .IsRequired()
+                        .HasMaxLength(260)
+                        .HasColumnType("nvarchar(260)")
+                        .HasColumnName("chemin");
+
+                    b.Property<string>("Genre")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("nvarchar(10)")
+                        .HasColumnName("genre");
+
+                    b.Property<string>("NomFichier")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)")
+                        .HasColumnName("nom_fichier");
+
+                    b.Property<int>("Rang")
+                        .HasColumnType("int")
+                        .HasColumnName("rang");
+
+                    b.Property<int>("Taille")
+                        .HasColumnType("int")
+                        .HasColumnName("taille");
+
+                    b.Property<string>("TypeMime")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)")
+                        .HasColumnName("type_mime");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BrouillonId", "Genre", "Rang");
+
+                    b.ToTable("PieceBrouillonMail", (string)null);
                 });
 
             modelBuilder.Entity("SchoolWebApp.Dal.Entities.PieceIdee", b =>
@@ -3821,6 +4023,51 @@ namespace SchoolWebApp.Dal.Migrations
                     b.ToTable("Reglage", (string)null);
                 });
 
+            modelBuilder.Entity("SchoolWebApp.Dal.Entities.RoleUtilisateur", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasColumnName("id");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Code")
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)")
+                        .HasColumnName("code");
+
+                    b.Property<DateTime>("DateCreation")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("date_creation");
+
+                    b.Property<string>("Nom")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("nvarchar(60)")
+                        .HasColumnName("nom");
+
+                    b.Property<string>("Onglets")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)")
+                        .HasColumnName("onglets");
+
+                    b.Property<int>("Ordre")
+                        .HasColumnType("int")
+                        .HasColumnName("ordre");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique()
+                        .HasFilter("[code] IS NOT NULL");
+
+                    b.HasIndex("Nom")
+                        .IsUnique();
+
+                    b.ToTable("RoleUtilisateur", (string)null);
+                });
+
             modelBuilder.Entity("SchoolWebApp.Dal.Entities.SessionEleve", b =>
                 {
                     b.Property<int>("Id")
@@ -3915,6 +4162,70 @@ namespace SchoolWebApp.Dal.Migrations
                     b.HasIndex("ParentId");
 
                     b.ToTable("Signalement", (string)null);
+                });
+
+            modelBuilder.Entity("SchoolWebApp.Dal.Entities.SignatureMail", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasColumnName("id");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("AfficherAdresse")
+                        .HasColumnType("bit")
+                        .HasColumnName("afficher_adresse");
+
+                    b.Property<bool>("AfficherRole")
+                        .HasColumnType("bit")
+                        .HasColumnName("afficher_role");
+
+                    b.Property<bool>("AfficherSite")
+                        .HasColumnType("bit")
+                        .HasColumnName("afficher_site");
+
+                    b.Property<string>("Couleur")
+                        .IsRequired()
+                        .HasMaxLength(9)
+                        .HasColumnType("nvarchar(9)")
+                        .HasColumnName("couleur");
+
+                    b.Property<DateTime>("DateCreation")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("date_creation");
+
+                    b.Property<string>("Formule")
+                        .HasMaxLength(80)
+                        .HasColumnType("nvarchar(80)")
+                        .HasColumnName("formule");
+
+                    b.Property<string>("LigneLibre")
+                        .HasMaxLength(160)
+                        .HasColumnType("nvarchar(160)")
+                        .HasColumnName("ligne_libre");
+
+                    b.Property<string>("Nom")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("nvarchar(60)")
+                        .HasColumnName("nom");
+
+                    b.Property<bool>("ParDefaut")
+                        .HasColumnType("bit")
+                        .HasColumnName("par_defaut");
+
+                    b.Property<string>("Telephone")
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)")
+                        .HasColumnName("telephone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Nom")
+                        .IsUnique();
+
+                    b.ToTable("SignatureMail", (string)null);
                 });
 
             modelBuilder.Entity("SchoolWebApp.Dal.Entities.TarifFournisseur", b =>
@@ -4072,6 +4383,39 @@ namespace SchoolWebApp.Dal.Migrations
                         .HasConstraintName("FK_AvisClient_Parent");
 
                     b.Navigation("Eleve");
+
+                    b.Navigation("Parent");
+                });
+
+            modelBuilder.Entity("SchoolWebApp.Dal.Entities.BilanRedige", b =>
+                {
+                    b.HasOne("SchoolWebApp.Dal.Entities.Eleve", "Eleve")
+                        .WithMany()
+                        .HasForeignKey("EleveId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Eleve");
+                });
+
+            modelBuilder.Entity("SchoolWebApp.Dal.Entities.BoiteMailAdmin", b =>
+                {
+                    b.HasOne("SchoolWebApp.Dal.Entities.Parent", "Parent")
+                        .WithMany()
+                        .HasForeignKey("ParentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Parent");
+                });
+
+            modelBuilder.Entity("SchoolWebApp.Dal.Entities.BrouillonMail", b =>
+                {
+                    b.HasOne("SchoolWebApp.Dal.Entities.Parent", "Parent")
+                        .WithMany()
+                        .HasForeignKey("ParentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
 
                     b.Navigation("Parent");
                 });
@@ -4630,6 +4974,34 @@ namespace SchoolWebApp.Dal.Migrations
                     b.Navigation("Conversation");
                 });
 
+            modelBuilder.Entity("SchoolWebApp.Dal.Entities.Parent", b =>
+                {
+                    b.HasOne("SchoolWebApp.Dal.Entities.RoleUtilisateur", "Role")
+                        .WithMany()
+                        .HasForeignKey("RoleId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("SchoolWebApp.Dal.Entities.SignatureMail", "SignatureMail")
+                        .WithMany()
+                        .HasForeignKey("SignatureMailId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Role");
+
+                    b.Navigation("SignatureMail");
+                });
+
+            modelBuilder.Entity("SchoolWebApp.Dal.Entities.PieceBrouillonMail", b =>
+                {
+                    b.HasOne("SchoolWebApp.Dal.Entities.BrouillonMail", "Brouillon")
+                        .WithMany("Pieces")
+                        .HasForeignKey("BrouillonId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Brouillon");
+                });
+
             modelBuilder.Entity("SchoolWebApp.Dal.Entities.PieceIdee", b =>
                 {
                     b.HasOne("SchoolWebApp.Dal.Entities.IdeeEvolution", "IdeeEvolution")
@@ -4804,6 +5176,11 @@ namespace SchoolWebApp.Dal.Migrations
             modelBuilder.Entity("SchoolWebApp.Dal.Entities.Academie", b =>
                 {
                     b.Navigation("Eleves");
+                });
+
+            modelBuilder.Entity("SchoolWebApp.Dal.Entities.BrouillonMail", b =>
+                {
+                    b.Navigation("Pieces");
                 });
 
             modelBuilder.Entity("SchoolWebApp.Dal.Entities.Competence", b =>

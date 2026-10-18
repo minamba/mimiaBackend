@@ -81,6 +81,25 @@ namespace SchoolWebApp.Dal.Entities
         public string? OngletsAdmin { get; set; }
 
         /// <summary>
+        /// LE RÔLE DU COMPTE (17/10/2026) — voir <c>RoleUtilisateur</c>. Null vaut
+        /// « Utilisateur ». Depuis les rôles, les droits viennent du RÔLE et
+        /// <c>EstAdministrateur</c> en est tenu à jour à chaque attribution :
+        /// le serveur d'identité continue de le lire tel quel. <c>OngletsAdmin</c>
+        /// n'est plus lu (gardé pour la reprise des droits d'avant les rôles).
+        /// </summary>
+        public int? RoleId { get; set; }
+
+        public virtual RoleUtilisateur? Role { get; set; }
+
+        /// <summary>
+        /// Le modèle de signature de ses courriels (17/10/2026) ; null = le
+        /// modèle par défaut. Voir <c>SignatureMail</c>.
+        /// </summary>
+        public int? SignatureMailId { get; set; }
+
+        public virtual SignatureMail? SignatureMail { get; set; }
+
+        /// <summary>
         /// Ce parent a-t-il le droit d'enregistrer un enfant de plus ?
         ///
         /// VRAI PAR DÉFAUT : c'est l'état normal. On le retire à un compte

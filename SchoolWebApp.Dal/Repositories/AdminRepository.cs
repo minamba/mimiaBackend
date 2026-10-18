@@ -213,6 +213,15 @@ namespace SchoolWebApp.Dal.Repositories
 
             parent.EstAdministrateur = actif;
 
+            // DEPUIS LES RÔLES (17/10/2026) : accorder donne le rôle
+            // « Administrateur », retirer rend « Utilisateur ».
+            parent.RoleId = actif
+                ? await _context.RolesUtilisateurs
+                    .Where(r => r.Code == RolesComptes.Administrateur)
+                    .Select(r => (int?)r.Id)
+                    .FirstOrDefaultAsync()
+                : null;
+
             // RETIRER LE RÔLE EFFACE LES DROITS, et il le faut. Sans cette ligne,
             // un compte rétrogradé puis repromu six mois plus tard retrouverait
             // exactement les sections qu'on lui avait ouvertes — sans que
@@ -260,13 +269,16 @@ namespace SchoolWebApp.Dal.Repositories
         {
             if (string.IsNullOrWhiteSpace(mail)) return [];
 
+            // LES DROITS VIENNENT DU RÔLE (17/10/2026). Un administrateur d'avant
+            // les rôles qui n'en aurait pas encore (le semeur les reprend au
+            // démarrage) garde ses onglets d'avant.
             var parent = await _context.Parents
                 .AsNoTracking()
                 .Where(p => p.Mail == mail && p.EstAdministrateur)
-                .Select(p => new { p.OngletsAdmin })
+                .Select(p => new { Onglets = p.Role != null ? p.Role.Onglets : p.OngletsAdmin })
                 .FirstOrDefaultAsync();
 
-            return parent is null ? [] : OngletsAdmin.Lire(parent.OngletsAdmin);
+            return parent is null ? [] : OngletsAdmin.Lire(parent.Onglets);
         }
 
         /// <summary>
@@ -1241,6 +1253,8 @@ FROM sys.database_files;";
                     EstAdministrateur = p.EstAdministrateur,
                     PeutAjouterEnfant = p.PeutAjouterEnfant,
                     PeutCreerFiches = p.PeutCreerFiches,
+                    RoleId = p.RoleId,
+                    RoleNom = p.Role != null ? p.Role.Nom : null,
 
                     // LA CONSOMMATION DE LA PÉRIODE EN COURS.
                     //

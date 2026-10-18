@@ -50,7 +50,8 @@ namespace SchoolWebApp.Domain.Emails
             IReadOnlyList<PieceMail>? imagesIntegrees = null,
             IReadOnlyList<PieceMail>? piecesJointes = null,
             IProgress<int>? avancement = null,
-            CancellationToken ct = default)
+            CancellationToken ct = default,
+            Expediteur? expediteur = null)
         {
             var autorises = new List<string>(destinataires.Count);
 
@@ -60,7 +61,7 @@ namespace SchoolWebApp.Domain.Emails
             }
 
             return await _service.DiffuserAsync(
-                autorises, sujet, gabarit, valeurs, imagesIntegrees, piecesJointes, avancement, ct);
+                autorises, sujet, gabarit, valeurs, imagesIntegrees, piecesJointes, avancement, ct, expediteur);
         }
 
         public Task<string> ComposerAsync(string sujet, string gabarit, IDictionary<string, string> valeurs) =>

@@ -577,6 +577,13 @@ namespace SchoolWebApp.Api.Controllers
                         SchoolWebApp.Domain.Models.FichesRevisionEleve.Reglage,
                         SchoolWebApp.Domain.Models.FichesRevisionEleve.ActifParDefaut, ct),
 
+                    // LA CONSEILLÈRE D'ORIENTATION (18/10/2026) : la page des tarifs
+                    // ne l'annonce que si elle est allumée — une offre ne promet
+                    // jamais ce qui est éteint.
+                    conseillereOrientation = await _reglages.EstActifAsync(
+                        SchoolWebApp.Domain.Models.ConseillereOrientation.Reglage,
+                        SchoolWebApp.Domain.Models.ConseillereOrientation.AllumeeParDefaut, ct),
+
                     // LE BANDEAU EST PUBLIC, et il doit l'être : il annonce
                     // une maintenance ou une panne, c'est-à-dire précisément
                     // ce qu'un visiteur non connecté a besoin de savoir avant

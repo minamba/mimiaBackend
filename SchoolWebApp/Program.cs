@@ -275,6 +275,14 @@ builder.Services.AddScoped<IOrientationRepository, OrientationRepository>();
 builder.Services.AddScoped<IRapportOrientationRepository, RapportOrientationRepository>();
 builder.Services.AddScoped<IFichesDeCoursRepository, FichesDeCoursRepository>();
 builder.Services.AddScoped<ICreditsFichesRepository, CreditsFichesRepository>();
+builder.Services.AddScoped<IBilansRedigesRepository, BilansRedigesRepository>();
+builder.Services.AddScoped<IRolesRepository, RolesRepository>();
+builder.Services.AddScoped<IMessagerieAdminRepository, MessagerieAdminRepository>();
+// LES PIÈCES DES BROUILLONS SUR LE DISQUE (18/10/2026) : une racine de chemin, un singleton.
+builder.Services.AddSingleton<SchoolWebApp.Domain.Services.IStockageBrouillonsMail,
+    SchoolWebApp.Dal.Stockage.StockageBrouillonsMailDisque>();
+builder.Services.AddSingleton<SchoolWebApp.Api.Services.IChiffrementBoites, SchoolWebApp.Api.Services.ChiffrementBoites>();
+builder.Services.AddScoped<SchoolWebApp.Api.Services.IBoitesAdminService, SchoolWebApp.Api.Services.BoitesAdminService>();
 builder.Services.AddScoped<IReferentielRepository, ReferentielRepository>();
 
 builder.Services.AddScoped<IParentService, ParentService>();
@@ -769,6 +777,11 @@ using (var scope = app.Services.CreateScope())
             // existante : le texte et la programmation appartiennent à
             // l'administration dès qu'ils ont été semés.
             await ModelesMailSeeder.SeedAsync(db);
+
+            // Les rôles système, et la reprise à l'identique des administrateurs
+            // d'avant les rôles (17/10/2026).
+            await RolesSeeder.SeedAsync(db);
+            await SignaturesSeeder.SeedAsync(db);
             Console.WriteLine("Referentiel et grille tarifaire verifies.");
 
             // LE COUPE-CIRCUIT DU FLUX, RELU AU DÉMARRAGE. L'état de la

@@ -82,6 +82,25 @@ namespace SchoolWebApp.Domain.Emails
         /// </summary>
         public int TailleListe { get; set; } = 50;
 
+        /// <summary>
+        /// LES MÊMES RÉGLAGES, POUR LA BOÎTE D'UN ADMINISTRATEUR (17/10/2026) :
+        /// même hébergeur IMAP, même service d'envoi (Brevo) ; seuls l'adresse,
+        /// le mot de passe de la boîte et le nom affiché changent.
+        /// </summary>
+        public OptionsMessagerie AvecCompte(CompteMessagerie compte) => new()
+        {
+            Hote = Hote,
+            PortImap = PortImap,
+            PortSmtp = PortSmtp,
+            Adresse = compte.Adresse,
+            MotDePasse = compte.MotDePasse,
+            HoteSmtp = HoteSmtp,
+            LoginSmtp = LoginSmtp,
+            MotDePasseSmtp = MotDePasseSmtp,
+            Nom = string.IsNullOrWhiteSpace(compte.Nom) ? Nom : compte.Nom,
+            TailleListe = TailleListe,
+        };
+
         public bool Configure =>
             !string.IsNullOrWhiteSpace(Hote)
             && !string.IsNullOrWhiteSpace(Adresse)

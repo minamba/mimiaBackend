@@ -815,7 +815,8 @@ namespace SchoolWebApp.Api.Controllers
         public async Task<IActionResult> CreerParent(
             [FromBody] CreerParentRequest requete,
             [FromServices] IParentService parents,
-            [FromServices] IAbonnementRepository abonnements)
+            [FromServices] IAbonnementRepository abonnements,
+            [FromServices] IRolesRepository roles)
         {
             if (!ModelState.IsValid) return BadRequest(ModelState);
 
@@ -839,6 +840,18 @@ namespace SchoolWebApp.Api.Controllers
                 });
 
                 _logger.LogWarning("Fiche parent {ParentId} creee par un administrateur.", cree.Id);
+
+                // LE RÔLE CHOISI DANS LE FORMULAIRE (17/10/2026) : pour le seul
+                // super-administrateur — un rôle porte des droits. Ailleurs, le
+                // compte naît « Utilisateur ».
+                if (requete.RoleId is int roleId && User.IsInRole("SuperAdmin"))
+                {
+                    var (_, erreurRole) = await roles.AttribuerAsync(cree.Id, roleId);
+                    if (erreurRole is not null)
+                    {
+                        _logger.LogWarning("Role {RoleId} non attribue au parent {ParentId} : {Erreur}", roleId, cree.Id, erreurRole);
+                    }
+                }
 
                 var essai = false;
                 if (!_exemptions.EstExempte(cree.Mail))
@@ -1541,13 +1554,173 @@ namespace SchoolWebApp.Api.Controllers
         // Messagerie : la boîte de support, lue et répondue depuis l'écran
         // ------------------------------------------------------------------
 
-        /// <summary>Les derniers messages reçus sur support@mimia.fr.</summary>
+        /// <summary>
+        /// Pourquoi la boîte de la personne connectée n'est pas prête : 409 et un
+        /// code que l'écran sait lire — il demande alors l'adresse et le mot de
+        /// passe (première visite), ou dit que la clé manque sur le serveur.
+        /// </summary>
+        private IActionResult BoiteIndisponible(SchoolWebApp.Api.Services.BoiteResolue? b)
+        {
+            if (b is null) return StatusCode(403, new { code = "sans_compte", message = "Aucun compte parent pour cette connexion." });
+
+            return StatusCode(409, new
+            {
+                code = b.Raison ?? "a_configurer",
+                message = b.Raison switch
+                {
+                    "cle_absente" => "La clé de chiffrement des boîtes manque sur le serveur (MIMIA_CLE_BOITES) : aucune boîte ne peut être connectée.",
+                    "illisible" => "Le mot de passe enregistré ne peut plus être lu : saisissez-le de nouveau.",
+                    _ => "Connectez d'abord votre boîte mail (Mails › Messagerie) pour lire et envoyer vos messages.",
+                },
+                adresse = b.Adresse ?? AdresseSuggeree(b.Qui.Mail),
+            });
+        }
+
+        /// <summary>
+        /// DEUX BOÎTES (17/10/2026) : « Ma boîte », celle de la personne connectée
+        /// (sa boîte LWS), ou « Support », la boîte commune, toujours branchée, à
+        /// laquelle on répond depuis support@mimia.fr. `Auteur` : le compte
+        /// connecté, à qui sont ses brouillons — sur l'une comme sur l'autre.
+        /// </summary>
+        private async Task<(SchoolWebApp.Domain.Emails.IMessagerieService Messagerie,
+            SchoolWebApp.Api.Services.BoiteResolue? Boite, int? Auteur, IActionResult? Refus)> ChoisirBoiteAsync(
+            string? boite,
+            SchoolWebApp.Api.Services.IBoitesAdminService boites,
+            SchoolWebApp.Domain.Emails.IMessagerieService support,
+            CancellationToken ct)
+        {
+            var resolue = await boites.ResoudreAsync(ct);
+
+            if (EstSupport(boite)) return (support, null, resolue?.Qui.ParentId, null);
+            if (resolue?.Boite is null) return (support, resolue, null, BoiteIndisponible(resolue));
+            return (resolue.Boite, resolue, resolue.Qui.ParentId, null);
+        }
+
+        private static bool EstSupport(string? boite) =>
+            string.Equals(boite, "support", StringComparison.OrdinalIgnoreCase);
+
+        /// <summary>La clé d'une boîte pour ses brouillons : « support » ou « moi ».</summary>
+        private static string CleBoite(string? boite) => EstSupport(boite) ? "support" : "moi";
+
+        /// <summary>Dix messages par page dans la liste de gauche (Camara, le 17/10/2026).</summary>
+        private const int MessagesParPage = 10;
+
+        /// <summary>L'adresse de connexion si elle est au nom du site : c'est sans doute sa boîte LWS.</summary>
+        private static string? AdresseSuggeree(string? mail) =>
+            mail is not null && mail.EndsWith("@mimia.fr", StringComparison.OrdinalIgnoreCase) ? mail : null;
+
+        /// <summary>L'état de la boîte de la personne connectée.</summary>
+        [HttpGet("messagerie/boite")]
+        [SwaggerResponse(200, "Connectée ou non, et à quelle adresse.")]
+        public async Task<IActionResult> EtatBoite(
+            [FromServices] SchoolWebApp.Api.Services.IBoitesAdminService boites,
+            [FromServices] IOptions<SchoolWebApp.Domain.Emails.OptionsEmail> optionsEmail,
+            CancellationToken ct)
+        {
+            var b = await boites.ResoudreAsync(ct);
+            if (b is null) return StatusCode(403, new { code = "sans_compte" });
+
+            return Ok(new
+            {
+                connectee = b.Boite is not null,
+                code = b.Raison,
+                adresse = b.Adresse ?? AdresseSuggeree(b.Qui.Mail),
+
+                // L'ADRESSE D'UNE DIFFUSION (17/10/2026) : les annonces et les
+                // courriels automatiques partent de l'adresse d'envoi du site, pas
+                // d'une boîte personnelle — l'écran le dit au-dessus du formulaire.
+                diffusion = new
+                {
+                    adresse = optionsEmail.Value.SenderEmail,
+                    nom = optionsEmail.Value.SenderNom,
+                },
+            });
+        }
+
+        /// <summary>
+        /// CONNECTER SA BOÎTE (17/10/2026) : l'adresse et le mot de passe sont
+        /// ESSAYÉS chez LWS avant d'être gardés — un mot de passe faux n'est
+        /// jamais enregistré. Le mot de passe est gardé chiffré.
+        /// </summary>
+        [HttpPut("messagerie/boite")]
+        [SwaggerResponse(204, "Boîte connectée.")]
+        [SwaggerResponse(400, "Adresse invalide, ou refusée par la boîte mail.")]
+        public async Task<IActionResult> ConnecterBoite(
+            [FromBody] BoiteMailRequest requete,
+            [FromServices] SchoolWebApp.Domain.Emails.IMessagerieService messagerie,
+            [FromServices] SchoolWebApp.Domain.Repositories.IMessagerieAdminRepository depot,
+            [FromServices] SchoolWebApp.Api.Services.IChiffrementBoites chiffrement,
+            [FromServices] Api.Utils.ICurrentUserAccessor utilisateur,
+            CancellationToken ct)
+        {
+            if (!chiffrement.Disponible)
+            {
+                return StatusCode(409, new { code = "cle_absente", message = "La clé de chiffrement des boîtes manque sur le serveur (MIMIA_CLE_BOITES)." });
+            }
+
+            var qui = await depot.SignataireAsync(utilisateur.Mail, ct);
+            if (qui is null) return StatusCode(403, new { code = "sans_compte" });
+
+            var adresse = requete?.Adresse?.Trim() ?? string.Empty;
+            try
+            {
+                _ = new System.Net.Mail.MailAddress(adresse);
+            }
+            catch (FormatException)
+            {
+                return BadRequest(new { message = "L'adresse de la boîte n'est pas valide." });
+            }
+
+            if (string.IsNullOrEmpty(requete?.MotDePasse))
+            {
+                return BadRequest(new { message = "Le mot de passe de la boîte est obligatoire." });
+            }
+
+            var refus = await messagerie
+                .Pour(new SchoolWebApp.Domain.Emails.CompteMessagerie(adresse, requete.MotDePasse, null))
+                .VerifierAsync(ct);
+            if (refus is not null) return BadRequest(new { message = refus });
+
+            await depot.EnregistrerBoiteAsync(qui.ParentId, adresse, chiffrement.Chiffrer(requete.MotDePasse), ct);
+            _logger.LogWarning("Boite mail {Adresse} connectee par le parent {ParentId}.", adresse, qui.ParentId);
+            return NoContent();
+        }
+
+        /// <summary>Oublie la boîte de la personne connectée (son mot de passe chiffré est effacé).</summary>
+        [HttpDelete("messagerie/boite")]
+        [SwaggerResponse(204, "Boîte déconnectée.")]
+        public async Task<IActionResult> DeconnecterBoite(
+            [FromServices] SchoolWebApp.Domain.Repositories.IMessagerieAdminRepository depot,
+            [FromServices] Api.Utils.ICurrentUserAccessor utilisateur,
+            CancellationToken ct)
+        {
+            var qui = await depot.SignataireAsync(utilisateur.Mail, ct);
+            if (qui is null) return StatusCode(403, new { code = "sans_compte" });
+
+            await depot.SupprimerBoiteAsync(qui.ParentId, ct);
+            _logger.LogWarning("Boite mail deconnectee par le parent {ParentId}.", qui.ParentId);
+            return NoContent();
+        }
+
+        /// <param name="Adresse">L'adresse de la boîte chez LWS.</param>
+        /// <param name="MotDePasse">Son mot de passe — essayé, puis gardé chiffré.</param>
+        public record BoiteMailRequest(string? Adresse, string? MotDePasse);
+
+        /// <summary>Les derniers messages reçus dans la boîte de la personne connectée.</summary>
         [HttpGet("messagerie")]
         [SwaggerResponse(200, "Messages reçus.", typeof(IEnumerable<SchoolWebApp.Domain.Emails.MessageRecu>))]
         public async Task<IActionResult> Messagerie(
-            [FromServices] SchoolWebApp.Domain.Emails.IMessagerieService messagerie,
-            CancellationToken ct)
+            [FromServices] SchoolWebApp.Api.Services.IBoitesAdminService boites,
+            [FromServices] SchoolWebApp.Domain.Emails.IMessagerieService support,
+            [FromServices] SchoolWebApp.Domain.Repositories.IMessagerieAdminRepository depot,
+            CancellationToken ct,
+            [FromQuery] string? boite = null,
+            [FromQuery] string? dossier = null,
+            [FromQuery] int page = 1)
         {
+            var (messagerie, b, auteur, refus) = await ChoisirBoiteAsync(boite, boites, support, ct);
+            if (refus is not null) return refus;
+
             if (!messagerie.Disponible)
             {
                 // 200 et non 503 : une boîte non configurée n'est pas une
@@ -1556,14 +1729,336 @@ namespace SchoolWebApp.Api.Controllers
                 return Ok(new { configuree = false, messages = Array.Empty<object>() });
             }
 
-            var resultat = await messagerie.ListerAsync(ct);
+            // TROIS DOSSIERS (Camara, le 17/10/2026) : réception, envoyés,
+            // brouillons — dix messages par page.
+            var d = SchoolWebApp.Domain.Emails.DossiersMessagerie.Normaliser(dossier);
+            page = Math.Max(1, page);
+
+            if (d == SchoolWebApp.Domain.Emails.DossiersMessagerie.Brouillons)
+            {
+                if (auteur is not int a) return StatusCode(403, new { code = "sans_compte" });
+
+                var (brouillons, nombre) = await depot.BrouillonsAsync(a, CleBoite(boite), page, MessagesParPage, ct);
+                return Ok(new
+                {
+                    configuree = true,
+                    adresse = b?.Adresse,
+                    dossier = d,
+                    page,
+                    taille = MessagesParPage,
+                    total = nombre,
+                    nonLus = 0,
+                    messages = brouillons.Select(x => new
+                    {
+                        identifiant = x.Id,
+                        messageOrigine = x.MessageOrigine,
+                        aAdresse = x.Destinataire,
+                        sujet = x.Sujet,
+                        extrait = Tronquer(System.Text.RegularExpressions.Regex.Replace(x.Texte, @"\s+", " ").Trim(), 160),
+                        date = x.DateModification,
+                        lu = true,
+                    }),
+                });
+            }
+
+            var resultat = await messagerie.ListerAsync(d, page, MessagesParPage, ct);
+
+            // Les messages auxquels une réponse attend en brouillon : une étiquette dans la liste.
+            var enBrouillon = d == SchoolWebApp.Domain.Emails.DossiersMessagerie.Reception && auteur is int moi
+                ? await depot.MessagesAvecBrouillonAsync(moi, CleBoite(boite), resultat.Messages.Select(m => (long)m.Identifiant), ct)
+                : new HashSet<long>();
 
             return Ok(new
             {
                 configuree = true,
-                messages = resultat.Messages,
+                adresse = b?.Adresse,
+                dossier = d,
+                page,
+                taille = MessagesParPage,
+                total = resultat.Total,
+                nonLus = resultat.NonLus,
+                messages = resultat.Messages.Select(m => new
+                {
+                    m.Identifiant, m.DeNom, m.DeAdresse, m.ANom, m.AAdresse, m.Sujet, m.Date,
+                    m.Lu, m.Repondu, m.Extrait, m.AvecPiecesJointes,
+                    aUnBrouillon = enBrouillon.Contains(m.Identifiant),
+                }),
                 erreur = resultat.Erreur,
             });
+        }
+
+        /// <summary>
+        /// LES PASTILLES DES ONGLETS (Camara, le 17/10/2026) : reçus et non lus,
+        /// envoyés, brouillons — en une requête.
+        /// </summary>
+        [HttpGet("messagerie/compteurs")]
+        [SwaggerResponse(200, "Les compteurs des trois dossiers.")]
+        public async Task<IActionResult> CompteursMessagerie(
+            [FromServices] SchoolWebApp.Api.Services.IBoitesAdminService boites,
+            [FromServices] SchoolWebApp.Domain.Emails.IMessagerieService support,
+            [FromServices] SchoolWebApp.Domain.Repositories.IMessagerieAdminRepository depot,
+            CancellationToken ct,
+            [FromQuery] string? boite = null)
+        {
+            var (messagerie, _, auteur, refus) = await ChoisirBoiteAsync(boite, boites, support, ct);
+            if (refus is not null) return refus;
+
+            var imap = await messagerie.CompterAsync(ct);
+            var brouillons = auteur is int a
+                ? (await depot.BrouillonsAsync(a, CleBoite(boite), 1, 1, ct)).Total
+                : 0;
+
+            return Ok(new
+            {
+                reception = imap.Reception,
+                nonLus = imap.NonLus,
+                envoyes = imap.Envoyes,
+                brouillons,
+                erreur = imap.Erreur,
+            });
+        }
+
+        /// <summary>
+        /// SUPPRIMER DES MESSAGES (Camara, le 17/10/2026), un par un ou toute la
+        /// page : vers la corbeille de la boîte pour la réception et les envoyés,
+        /// définitivement pour ses brouillons.
+        /// </summary>
+        [HttpPost("messagerie/supprimer")]
+        [SwaggerResponse(200, "Le nombre de messages supprimés.")]
+        public async Task<IActionResult> SupprimerMessages(
+            [FromBody] SuppressionMessagesRequest model,
+            [FromServices] SchoolWebApp.Api.Services.IBoitesAdminService boites,
+            [FromServices] SchoolWebApp.Domain.Emails.IMessagerieService support,
+            [FromServices] SchoolWebApp.Domain.Repositories.IMessagerieAdminRepository depot,
+            CancellationToken ct,
+            [FromQuery] string? boite = null,
+            [FromQuery] string? dossier = null)
+        {
+            var (messagerie, _, auteur, refus) = await ChoisirBoiteAsync(boite, boites, support, ct);
+            if (refus is not null) return refus;
+
+            var ids = (model?.Identifiants ?? []).Where(i => i > 0).Distinct().Take(200).ToList();
+            if (ids.Count == 0) return BadRequest(new { message = "Aucun message choisi." });
+
+            var d = SchoolWebApp.Domain.Emails.DossiersMessagerie.Normaliser(dossier);
+            if (d == SchoolWebApp.Domain.Emails.DossiersMessagerie.Brouillons)
+            {
+                if (auteur is not int a) return StatusCode(403, new { code = "sans_compte" });
+                var n = await depot.SupprimerBrouillonsAsync(a, CleBoite(boite), ids.Select(i => (int)i), ct);
+                return Ok(new { supprimes = n });
+            }
+
+            try
+            {
+                var n = await messagerie.SupprimerAsync(ids.Select(i => (uint)i).ToList(), d, ct);
+                return Ok(new { supprimes = n });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(502, new { message = "La boîte mail a refusé la suppression.", detail = ex.Message });
+            }
+        }
+
+        /// <param name="Identifiants">Les messages du dossier (ou les brouillons) à supprimer.</param>
+        public record SuppressionMessagesRequest(long[]? Identifiants);
+
+        /// <summary>Son brouillon de réponse à ce message, s'il en a un.</summary>
+        [HttpGet("messagerie/brouillons/{messageOrigine:long}")]
+        [SwaggerResponse(200, "Le brouillon.")]
+        [SwaggerResponse(404, "Aucun brouillon pour ce message.")]
+        public async Task<IActionResult> BrouillonDuMessage(
+            long messageOrigine,
+            [FromServices] SchoolWebApp.Api.Services.IBoitesAdminService boites,
+            [FromServices] SchoolWebApp.Domain.Emails.IMessagerieService support,
+            [FromServices] SchoolWebApp.Domain.Repositories.IMessagerieAdminRepository depot,
+            CancellationToken ct,
+            [FromQuery] string? boite = null)
+        {
+            var (_, _, auteur, refus) = await ChoisirBoiteAsync(boite, boites, support, ct);
+            if (refus is not null) return refus;
+            if (auteur is not int a) return StatusCode(403, new { code = "sans_compte" });
+
+            var brouillon = await depot.BrouillonPourAsync(a, CleBoite(boite), messageOrigine, ct);
+            return brouillon is null ? NotFound() : Ok(brouillon);
+        }
+
+        /// <summary>
+        /// LE BROUILLON, ENREGISTRÉ AU FIL DE LA FRAPPE (Camara, le 17/10/2026) :
+        /// tant qu'une réponse n'est pas partie, elle est gardée. Un texte vide
+        /// efface le brouillon.
+        /// </summary>
+        [HttpPut("messagerie/brouillons")]
+        [SwaggerResponse(200, "Brouillon enregistré.")]
+        [SwaggerResponse(204, "Texte vide : brouillon effacé.")]
+        public async Task<IActionResult> EnregistrerBrouillon(
+            [FromBody] BrouillonRequest model,
+            [FromServices] SchoolWebApp.Api.Services.IBoitesAdminService boites,
+            [FromServices] SchoolWebApp.Domain.Emails.IMessagerieService support,
+            [FromServices] SchoolWebApp.Domain.Repositories.IMessagerieAdminRepository depot,
+            CancellationToken ct,
+            [FromQuery] string? boite = null)
+        {
+            var (_, _, auteur, refus) = await ChoisirBoiteAsync(boite, boites, support, ct);
+            if (refus is not null) return refus;
+            if (auteur is not int a) return StatusCode(403, new { code = "sans_compte" });
+            if (model is null) return BadRequest(new { message = "Le brouillon est vide." });
+
+            var texte = model.Texte ?? string.Empty;
+            if (texte.Length > 100_000) return BadRequest(new { message = "Le brouillon est trop long." });
+
+            // UN MESSAGE LIBRE — « Écrire à un parent » (Camara, le 17/10/2026) :
+            // pas de message d'origine, le brouillon se reconnaît à son identifiant.
+            if (model.MessageOrigine is not long origine || origine <= 0)
+            {
+                // Un brouillon qui ne porte que des pièces n'est pas vide (18/10/2026).
+                var vide = string.IsNullOrWhiteSpace(texte) && string.IsNullOrWhiteSpace(model.Sujet)
+                    && string.IsNullOrWhiteSpace(model.Titre) && string.IsNullOrWhiteSpace(model.Destinataire)
+                    && !model.AvecPieces;
+                if (vide)
+                {
+                    if (model.Id is int id) await depot.SupprimerBrouillonsAsync(a, CleBoite(boite), [id], ct);
+                    return NoContent();
+                }
+
+                var libre = await depot.EnregistrerBrouillonLibreAsync(
+                    a, CleBoite(boite), model.Id, model.Destinataire, model.Sujet, model.Titre, texte, ct);
+                return Ok(libre);
+            }
+
+            if (string.IsNullOrWhiteSpace(texte))
+            {
+                await depot.SupprimerBrouillonPourAsync(a, CleBoite(boite), origine, ct);
+                return NoContent();
+            }
+
+            var brouillon = await depot.EnregistrerBrouillonAsync(
+                a, CleBoite(boite), origine, model.Destinataire, model.Sujet, texte, ct);
+            return Ok(brouillon);
+        }
+
+        /// <param name="MessageOrigine">Le message de la boîte de réception auquel on répond ; nul pour un message libre.</param>
+        /// <param name="Id">Un brouillon libre déjà enregistré, à mettre à jour.</param>
+        /// <param name="Titre">Le titre affiché dans le message (« Écrire à un parent »).</param>
+        /// <param name="AvecPieces">Vrai si le brouillon porte des images ou documents : il n'est alors jamais « vide ».</param>
+        public record BrouillonRequest(long? MessageOrigine, string? Destinataire, string? Sujet, string? Texte, int? Id = null, string? Titre = null, bool AvecPieces = false);
+
+        /// <summary>Un de ses brouillons, par son identifiant (« Écrire à un parent » le rouvre).</summary>
+        [HttpGet("messagerie/brouillons/libre/{id:int}")]
+        [SwaggerResponse(200, "Le brouillon.")]
+        [SwaggerResponse(404, "Introuvable, ou pas à lui.")]
+        public async Task<IActionResult> BrouillonLibre(
+            int id,
+            [FromServices] SchoolWebApp.Api.Services.IBoitesAdminService boites,
+            [FromServices] SchoolWebApp.Domain.Emails.IMessagerieService support,
+            [FromServices] SchoolWebApp.Domain.Repositories.IMessagerieAdminRepository depot,
+            CancellationToken ct,
+            [FromQuery] string? boite = null)
+        {
+            var (_, _, auteur, refus) = await ChoisirBoiteAsync(boite, boites, support, ct);
+            if (refus is not null) return refus;
+            if (auteur is not int a) return StatusCode(403, new { code = "sans_compte" });
+
+            var brouillon = await depot.BrouillonAsync(a, CleBoite(boite), id, ct);
+            if (brouillon is null) return NotFound();
+
+            // SES PIÈCES (18/10/2026) : ce qu'il faut pour les redemander une à une.
+            var pieces = await depot.PiecesBrouillonAsync(a, CleBoite(boite), id, ct) ?? [];
+            return Ok(new
+            {
+                brouillon.Id,
+                brouillon.MessageOrigine,
+                brouillon.Destinataire,
+                brouillon.Sujet,
+                brouillon.Titre,
+                brouillon.Texte,
+                brouillon.DateModification,
+                pieces = pieces.Select(p => new { p.Id, p.Genre, p.Rang, p.NomFichier, p.TypeMime, p.Taille }),
+            });
+        }
+
+        /// <summary>
+        /// LES PIÈCES D'UN BROUILLON (Camara, le 18/10/2026) : « en rouvrant le
+        /// brouillon je n'ai que le marqueur ». Toutes remplacées d'un coup, dans
+        /// l'ordre (c'est l'ordre qui fait les marqueurs [image:N]) ; les fichiers
+        /// vont sur le disque, jamais en base.
+        /// </summary>
+        [HttpPut("messagerie/brouillons/libre/{id:int}/pieces")]
+        [RequestSizeLimit(TailleMaxDiffusion + 512 * 1024)]
+        [SwaggerResponse(200, "Les pièces du brouillon.")]
+        [SwaggerResponse(400, "Plus de 5 Mo de pièces.")]
+        [SwaggerResponse(404, "Brouillon introuvable, ou pas à lui.")]
+        public async Task<IActionResult> PiecesBrouillon(
+            int id,
+            [FromServices] SchoolWebApp.Api.Services.IBoitesAdminService boites,
+            [FromServices] SchoolWebApp.Domain.Emails.IMessagerieService support,
+            [FromServices] SchoolWebApp.Domain.Repositories.IMessagerieAdminRepository depot,
+            [FromServices] IStockageBrouillonsMail stockage,
+            [FromForm] List<IFormFile>? images = null,
+            [FromForm] List<IFormFile>? documents = null,
+            [FromQuery] string? boite = null,
+            CancellationToken ct = default)
+        {
+            var (_, _, auteur, refus) = await ChoisirBoiteAsync(boite, boites, support, ct);
+            if (refus is not null) return refus;
+            if (auteur is not int a) return StatusCode(403, new { code = "sans_compte" });
+
+            if (await depot.PiecesBrouillonAsync(a, CleBoite(boite), id, ct) is null) return NotFound();
+
+            var fichiers = (images ?? []).Select(f => (Genre: "Image", Fichier: f))
+                .Concat((documents ?? []).Select(f => (Genre: "Document", Fichier: f)))
+                .ToList();
+            if (fichiers.Sum(f => f.Fichier.Length) > TailleMaxDiffusion)
+            {
+                return BadRequest(new { message = "Les pièces dépassent 5 Mo : retirez-en avant de continuer." });
+            }
+
+            var nouvelles = new List<SchoolWebApp.Domain.Repositories.NouvellePieceBrouillon>();
+            var rangs = new Dictionary<string, int>();
+            foreach (var (genre, fichier) in fichiers)
+            {
+                using var memoire = new MemoryStream();
+                await fichier.CopyToAsync(memoire, ct);
+                var chemin = await stockage.EcrireAsync(memoire.ToArray(), fichier.FileName, ct);
+                rangs[genre] = rangs.GetValueOrDefault(genre) + 1;
+                nouvelles.Add(new(genre, rangs[genre], fichier.FileName, fichier.ContentType ?? "application/octet-stream", (int)fichier.Length, chemin));
+            }
+
+            var anciens = await depot.RemplacerPiecesBrouillonAsync(a, CleBoite(boite), id, nouvelles, ct);
+            if (anciens is null)
+            {
+                foreach (var n in nouvelles) stockage.Supprimer(n.Chemin);
+                return NotFound();
+            }
+
+            foreach (var chemin in anciens) stockage.Supprimer(chemin);
+
+            var pieces = await depot.PiecesBrouillonAsync(a, CleBoite(boite), id, ct) ?? [];
+            return Ok(pieces.Select(p => new { p.Id, p.Genre, p.Rang, p.NomFichier, p.TypeMime, p.Taille }));
+        }
+
+        /// <summary>Une pièce d'un de ses brouillons, pour la remettre dans le formulaire.</summary>
+        [HttpGet("messagerie/brouillons/libre/{id:int}/pieces/{pieceId:int}")]
+        [SwaggerResponse(200, "Le fichier.")]
+        [SwaggerResponse(404, "Introuvable.")]
+        public async Task<IActionResult> PieceBrouillon(
+            int id,
+            int pieceId,
+            [FromServices] SchoolWebApp.Api.Services.IBoitesAdminService boites,
+            [FromServices] SchoolWebApp.Domain.Emails.IMessagerieService support,
+            [FromServices] SchoolWebApp.Domain.Repositories.IMessagerieAdminRepository depot,
+            [FromServices] IStockageBrouillonsMail stockage,
+            CancellationToken ct,
+            [FromQuery] string? boite = null)
+        {
+            var (_, _, auteur, refus) = await ChoisirBoiteAsync(boite, boites, support, ct);
+            if (refus is not null) return refus;
+            if (auteur is not int a) return StatusCode(403, new { code = "sans_compte" });
+
+            var piece = (await depot.PiecesBrouillonAsync(a, CleBoite(boite), id, ct))?.FirstOrDefault(p => p.Id == pieceId);
+            if (piece is null) return NotFound();
+
+            var donnees = await stockage.LireAsync(piece.Chemin, ct);
+            return donnees is null ? NotFound() : File(donnees, piece.TypeMime, piece.NomFichier);
         }
 
         /// <summary>Un message avec son corps. Les images distantes sont bloquées par défaut.</summary>
@@ -1572,11 +2067,17 @@ namespace SchoolWebApp.Api.Controllers
         [SwaggerResponse(404, "Message introuvable — supprimé entre-temps.")]
         public async Task<IActionResult> LireMessage(
             long identifiant,
-            [FromServices] SchoolWebApp.Domain.Emails.IMessagerieService messagerie,
+            [FromServices] SchoolWebApp.Api.Services.IBoitesAdminService boites,
+            [FromServices] SchoolWebApp.Domain.Emails.IMessagerieService support,
             CancellationToken ct,
-            [FromQuery] bool images = false)
+            [FromQuery] bool images = false,
+            [FromQuery] string? boite = null,
+            [FromQuery] string? dossier = null)
         {
-            var message = await messagerie.LireAsync((uint)identifiant, images, ct);
+            var (messagerie, b, auteur, refus) = await ChoisirBoiteAsync(boite, boites, support, ct);
+            if (refus is not null) return refus;
+
+            var message = await messagerie.LireAsync((uint)identifiant, images, ct, dossier);
             return message is null ? NotFound() : Ok(message);
         }
 
@@ -1587,10 +2088,16 @@ namespace SchoolWebApp.Api.Controllers
         public async Task<IActionResult> PieceJointeMessage(
             long identifiant,
             [FromQuery] string nom,
-            [FromServices] SchoolWebApp.Domain.Emails.IMessagerieService messagerie,
-            CancellationToken ct)
+            [FromServices] SchoolWebApp.Api.Services.IBoitesAdminService boites,
+            [FromServices] SchoolWebApp.Domain.Emails.IMessagerieService support,
+            CancellationToken ct,
+            [FromQuery] string? boite = null,
+            [FromQuery] string? dossier = null)
         {
-            var piece = await messagerie.PieceJointeAsync((uint)identifiant, nom, ct);
+            var (messagerie, b, auteur, refus) = await ChoisirBoiteAsync(boite, boites, support, ct);
+            if (refus is not null) return refus;
+
+            var piece = await messagerie.PieceJointeAsync((uint)identifiant, nom, ct, dossier);
             if (piece is null) return NotFound();
 
             return File(piece.Value.Donnees, piece.Value.TypeMime, piece.Value.NomFichier);
@@ -1602,10 +2109,16 @@ namespace SchoolWebApp.Api.Controllers
         public async Task<IActionResult> MarquerMessageLu(
             long identifiant,
             [FromQuery] bool lu,
-            [FromServices] SchoolWebApp.Domain.Emails.IMessagerieService messagerie,
-            CancellationToken ct)
+            [FromServices] SchoolWebApp.Api.Services.IBoitesAdminService boites,
+            [FromServices] SchoolWebApp.Domain.Emails.IMessagerieService support,
+            CancellationToken ct,
+            [FromQuery] string? boite = null,
+            [FromQuery] string? dossier = null)
         {
-            await messagerie.MarquerLuAsync((uint)identifiant, lu, ct);
+            var (messagerie, b, auteur, refus) = await ChoisirBoiteAsync(boite, boites, support, ct);
+            if (refus is not null) return refus;
+
+            await messagerie.MarquerLuAsync((uint)identifiant, lu, ct, dossier);
             return NoContent();
         }
 
@@ -1624,11 +2137,17 @@ namespace SchoolWebApp.Api.Controllers
         public async Task<IActionResult> RepondreMessage(
             long identifiant,
             [FromBody] ReponseMessageRequest model,
-            [FromServices] SchoolWebApp.Domain.Emails.IMessagerieService messagerie,
+            [FromServices] SchoolWebApp.Api.Services.IBoitesAdminService boites,
+            [FromServices] SchoolWebApp.Domain.Emails.IMessagerieService support,
             [FromServices] SchoolWebApp.Domain.Emails.IServiceEmail email,
             [FromServices] SchoolWebApp.Domain.Repositories.IBannissementRepository bannis,
-            CancellationToken ct)
+            [FromServices] SchoolWebApp.Domain.Repositories.IMessagerieAdminRepository depot,
+            CancellationToken ct,
+            [FromQuery] string? boite = null)
         {
+            var (messagerie, b, auteur, refus) = await ChoisirBoiteAsync(boite, boites, support, ct);
+            if (refus is not null) return refus;
+
             if (string.IsNullOrWhiteSpace(model?.Texte))
             {
                 return BadRequest(new { message = "La réponse est vide." });
@@ -1644,6 +2163,12 @@ namespace SchoolWebApp.Api.Controllers
             // filtré : le bannissement se vérifie donc ici, dès que l'adresse de
             // l'expéditeur est connue — dans la composition.
             var expediteurBanni = false;
+
+            // SA SIGNATURE (17/10/2026) : son modèle, à son nom, son rôle, son
+            // adresse — ou, depuis la boîte support, « L'équipe Mimia » comme avant.
+            var signature = b is null
+                ? SchoolWebApp.Domain.Emails.SignatureRendu.Equipe
+                : await boites.SignatureHtmlAsync(b, ct);
 
             // LA COMPOSITION EST PASSÉE AU SERVICE, PAS FAITE AVANT.
             //
@@ -1668,20 +2193,22 @@ namespace SchoolWebApp.Api.Controllers
                 {
                     ["titre"] = sujet,
 
-                    // LE PRÉNOM SEUL, PAS LE NOM COMPLET.
-                    //
-                    // « Bonjour Marie Dupont, » sonne comme un publipostage ;
-                    // « Bonjour Marie, » sonne comme quelqu'un qui répond. Et
-                    // quand l'expéditeur n'a pas de nom affiché — beaucoup de
-                    // clients n'en envoient pas — on se contente de « Bonjour, »
-                    // plutôt que d'écrire « Bonjour , ».
-                    ["salutation"] = Salutation(origine.DeNom),
+                    // LE NOM ENTIER, DANS LE BON ORDRE (Camara, le 18/10/2026 :
+                    // « il y a écrit Camara Minamba, et le mail n'a pris que
+                    // Camara »). On ne prenait que le premier mot du nom affiché,
+                    // or beaucoup l'écrivent « Nom Prénom ». Un parent qui a un
+                    // compte est salué par le prénom et le nom de son compte ;
+                    // sinon, par le nom affiché en entier. Sans nom, « Bonjour, ».
+                    ["salutation"] = Salutation(origine.DeNom, await depot.SignataireAsync(origine.DeAdresse, ct)),
 
                     // Vrai pour tout le monde, y compris pour qui n'a pas de compte.
                     ["mentionPied"] =
-                        "Vous recevez ce message en réponse à votre demande adressée au support de Mimia.",
+                        b is null
+                            ? "Vous recevez ce message en réponse à votre demande adressée au support de Mimia."
+                            : "Vous recevez ce message en réponse à votre courriel à Mimia.",
 
                     ["corpsReponse"] = corps,
+                    ["signature"] = signature,
                     ["dateOrigine"] = origine.Date.ToString("dd/MM/yyyy"),
 
                     // Le message d'origine repris en citation. Tronqué : un fil
@@ -1716,6 +2243,12 @@ namespace SchoolWebApp.Api.Controllers
                 "Reponse envoyee a {Destinataire}. Serveur : {Accuse}. Copie deposee : {Copie}",
                 envoye.Destinataire, envoye.Accuse, envoye.CopieDeposee);
 
+            // La réponse est partie : son brouillon n'a plus lieu d'être.
+            if (auteur is int redacteur)
+            {
+                await depot.SupprimerBrouillonPourAsync(redacteur, CleBoite(boite), identifiant, ct);
+            }
+
             return Ok(new
             {
                 message = "Réponse envoyée.",
@@ -1725,20 +2258,25 @@ namespace SchoolWebApp.Api.Controllers
             });
         }
 
-        /// <summary>« Bonjour Marie, » ou « Bonjour, » — jamais « Bonjour , ».</summary>
-        private static string Salutation(string? nomAffiche)
+        /// <summary>« Bonjour Marie Dupont, » ou « Bonjour, » — jamais « Bonjour , ».</summary>
+        private static string Salutation(string? nomAffiche, SchoolWebApp.Domain.Repositories.SignataireAdmin? compte = null)
         {
-            var prenom = nomAffiche?.Trim().Split(' ').FirstOrDefault();
+            var duCompte = compte is null
+                ? null
+                : string.Join(' ', new[] { compte.Prenom, compte.Nom }.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x!.Trim()));
+            var nom = string.IsNullOrWhiteSpace(duCompte)
+                ? System.Text.RegularExpressions.Regex.Replace(nomAffiche ?? string.Empty, @"\s+", " ").Trim().Trim('"')
+                : duCompte;
 
             // Une adresse électronique en guise de nom — « jean.dupont@… » —
             // arrive quand le client de messagerie n'envoie pas de nom
             // affiché. L'utiliser donnerait « Bonjour jean.dupont@gmail.com, ».
-            if (string.IsNullOrWhiteSpace(prenom) || prenom.Contains('@'))
+            if (string.IsNullOrWhiteSpace(nom) || nom.Contains('@'))
             {
                 return "Bonjour,";
             }
 
-            return $"Bonjour {System.Net.WebUtility.HtmlEncode(prenom)},";
+            return $"Bonjour {System.Net.WebUtility.HtmlEncode(nom)},";
         }
 
         private static string Tronquer(string texte, int taille) =>
@@ -1776,8 +2314,12 @@ namespace SchoolWebApp.Api.Controllers
             [FromForm] string texte,
             [FromServices] IDiffusionService diffusion,
             [FromServices] SchoolWebApp.Domain.Emails.IServiceEmail email,
+            [FromServices] SchoolWebApp.Api.Services.IBoitesAdminService boites,
             [FromForm] List<IFormFile>? images = null,
-            [FromForm] List<IFormFile>? documents = null)
+            [FromForm] List<IFormFile>? documents = null,
+            [FromQuery] bool signature = false,
+            [FromQuery] string? boite = null,
+            CancellationToken ct = default)
         {
             var valeurs = new Dictionary<string, string>
             {
@@ -1786,8 +2328,20 @@ namespace SchoolWebApp.Api.Controllers
                 ["corpsMessage"] = diffusion.ComposerCorps(texte ?? string.Empty, images?.Count ?? 0),
                 ["blocPiecesJointes"] = diffusion.ComposerPiecesJointes(
                     documents?.Select(d => d.FileName).ToList() ?? []),
-                ["mentionPied"] = diffusion.ComposerMentionPied(),
+                // LE LIEN DE DÉSABONNEMENT DANS L'APERÇU D'UNE DIFFUSION (17/10/2026) :
+                // à l'envoi, chaque parent a le sien ; l'aperçu le montre à sa place
+                // (il ne mène nulle part d'ici). « Écrire à un parent » (signature)
+                // n'en a pas : c'est une correspondance, pas une annonce.
+                ["mentionPied"] = signature ? diffusion.ComposerMentionPied() : diffusion.ComposerMentionPied("#"),
             };
+
+            // LA SIGNATURE DANS L'APERÇU — Camara, le 17/10/2026 : « on ne voit pas
+            // réellement la forme du mail qui va partir ». « Écrire à un parent »
+            // signe de son nom : l'aperçu aussi. Une diffusion à tous, non.
+            if (signature && (await boites.ExpediteurAsync(EstSupport(boite), ct)).Expediteur is { } signataire)
+            {
+                valeurs["signature"] = signataire.Signature;
+            }
 
             var html = await email.RendreAsync(sujet ?? string.Empty, "diffusion", valeurs);
 
@@ -1889,14 +2443,24 @@ namespace SchoolWebApp.Api.Controllers
             [FromServices] IDiffusionService diffusion,
             [FromServices] SchoolWebApp.Domain.Emails.IServiceEmail email,
             [FromServices] SchoolWebApp.Domain.Repositories.IBannissementRepository bannis,
+            [FromServices] SchoolWebApp.Api.Services.IBoitesAdminService boites,
             [FromForm] List<IFormFile>? images = null,
             [FromForm] List<IFormFile>? documents = null,
+            [FromQuery] string? boite = null,
             CancellationToken ct = default)
         {
             if (string.IsNullOrWhiteSpace(sujet) || string.IsNullOrWhiteSpace(texte))
             {
                 return BadRequest(new { message = "L'objet et le message sont obligatoires." });
             }
+
+            // SOUS SON ADRESSE ET AVEC SA SIGNATURE (17/10/2026) : le parent
+            // répond directement à la personne qui lui a écrit. Depuis la boîte
+            // Support : sous support@mimia.fr, signé « L'équipe Mimia ».
+            var (b, nonPrete) = await boites.ExpediteurAsync(EstSupport(boite), ct);
+            if (b is null) return EstSupport(boite)
+                ? StatusCode(503, new { message = "La boîte du support n'est pas configurée sur le serveur." })
+                : BoiteIndisponible(nonPrete);
 
             var adresse = destinataire?.Trim() ?? string.Empty;
 
@@ -1927,10 +2491,11 @@ namespace SchoolWebApp.Api.Controllers
                 ["blocPiecesJointes"] =
                     diffusion.ComposerPiecesJointes(jointes.Select(d => d.NomFichier).ToList()),
                 ["mentionPied"] = diffusion.ComposerMentionPied(),
+                ["signature"] = b.Signature,
             };
 
             var resultat = await email.DiffuserAsync(
-                new[] { adresse }, sujet, "diffusion", valeurs, lues, jointes, ct: ct);
+                new[] { adresse }, sujet, "diffusion", valeurs, lues, jointes, ct: ct, expediteur: b.Expediteur);
 
             if (resultat.Envoyes == 0)
             {
@@ -1941,7 +2506,16 @@ namespace SchoolWebApp.Api.Controllers
                 "MAIL PARENT ENVOYE a {Destinataire} : « {Sujet} », {Images} image(s), {Docs} document(s).",
                 adresse, sujet, lues.Count, jointes.Count);
 
-            return Ok(new { message = "Message envoyé." });
+            // UNE COPIE DANS « MESSAGES ENVOYÉS » (17/10/2026) : parti par le
+            // service d'envoi, le message n'apparaîtrait sinon nulle part dans sa boîte.
+            var copieDeposee = await b.Boite.DeposerCopieAsync(
+                adresse, sujet, await email.ComposerAsync(sujet, "diffusion", valeurs), lues, jointes, ct);
+
+            // EN DÉVELOPPEMENT, LE DÉTOUR SE DIT : le message est parti vers
+            // l'adresse de redirection, pas vers ce parent.
+            var redirection = HttpContext.RequestServices
+                .GetService<Microsoft.Extensions.Options.IOptions<SchoolWebApp.Domain.Emails.OptionsEmail>>()?.Value.RedirectionDev;
+            return Ok(new { message = "Message envoyé.", redirection, copieDeposee });
         }
 
         /// <summary>

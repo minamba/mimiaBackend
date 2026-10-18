@@ -85,7 +85,9 @@ namespace SchoolWebApp.Api.Workers
             foreach (var modele in await modeles.GetAutomatiquesActifsAsync(ct))
             {
                 // Les bilans ont leur propre envoi, étalé sur plusieurs jours.
-                if (!CodeModeleMail.EnvoiGenerique(modele.Code)) continue;
+                // Les courriels par cible (17/10/2026) partent une fois leur cible choisie.
+                if (!CodeModeleMail.EnvoiGenerique(modele.Code)
+                    && !(CodeModeleMail.EnvoiParCible(modele.Code) && CibleEnvoi.EstConnue(modele.Cible))) continue;
 
                 var occurrence = Planification.OccurrencePrecedente(maintenant, RegleEnvoi.De(modele));
                 if (occurrence is null) continue;

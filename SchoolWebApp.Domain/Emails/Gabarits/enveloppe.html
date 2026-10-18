@@ -10,6 +10,20 @@
     de style externes. Ce qui suit est laid en tant que HTML, et correct en
     tant que courrier.
   -->
+  <!--
+    SUR TÉLÉPHONE (17/10/2026) : la carte de 600 px ne rétrécissait pas —
+    `width:600px` l'emporte sur `max-width:100%` dans un tableau — et le bilan
+    affiché sur le site débordait de l'écran. Sous 620 px, elle prend toute la
+    largeur. Les messageries qui lisent ce bloc (Gmail, Apple Mail) en
+    profitent ; les autres gardent la mise en page en ligne.
+  -->
+  <style type="text/css">
+    @media only screen and (max-width: 620px) {
+      table[width="600"] { width: 100% !important; }
+      img { max-width: 100% !important; height: auto !important; }
+      td { word-break: break-word; }
+    }
+  </style>
 </head>
 <body style="margin:0; padding:0; background-color:#f4efe6; -webkit-font-smoothing:antialiased;">
 

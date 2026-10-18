@@ -76,6 +76,13 @@ namespace SchoolWebApp.Domain.Emails
         int Echecs { get; }
     }
 
+    /// <summary>
+    /// Qui envoie, quand ce n'est pas l'adresse générale du site (17/10/2026) :
+    /// un administrateur qui écrit depuis SA boîte. Le domaine (mimia.fr) est
+    /// authentifié chez le service d'envoi : toute adresse du domaine part.
+    /// </summary>
+    public record Expediteur(string Adresse, string? Nom);
+
     public interface IServiceEmail
     {
         /// <summary>Faux si le SMTP n'est pas configuré : l'appelant journalise au lieu d'échouer.</summary>
@@ -127,7 +134,8 @@ namespace SchoolWebApp.Domain.Emails
             IReadOnlyList<PieceMail>? imagesIntegrees = null,
             IReadOnlyList<PieceMail>? piecesJointes = null,
             IProgress<int>? avancement = null,
-            CancellationToken ct = default);
+            CancellationToken ct = default,
+            Expediteur? expediteur = null);
 
         /// <summary>
         /// Compose le corps mis en page, SANS l.envoyer et SANS toucher au logo.

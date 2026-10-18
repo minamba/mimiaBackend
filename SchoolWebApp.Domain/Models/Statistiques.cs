@@ -260,6 +260,11 @@ namespace SchoolWebApp.Domain.Models
         /// </summary>
         public string EtatCompte { get; set; } = EtatsCompte.Inactif;
 
+        /// <summary>Le rôle du compte (17/10/2026) ; null = « Utilisateur ».</summary>
+        public int? RoleId { get; set; }
+
+        public string? RoleNom { get; set; }
+
         /// <summary>
         /// Ce compte est-il celui du super-administrateur ?
         ///
