@@ -123,6 +123,13 @@ namespace SchoolWebApp.Dal.Entities
         /// </summary>
         public bool PeutCreerFiches { get; set; }
 
+        /// <summary>
+        /// LE TUTORIEL (02/11/2026) : vide tant que ce parent ne l'a pas vu. Il se
+        /// lance une seule fois, à sa première visite sur la page d'un enfant ;
+        /// le bouton « Voir le tuto » le rejoue sans toucher à cette date.
+        /// </summary>
+        public DateTime? TutorielVuLe { get; set; }
+
         public virtual ICollection<Eleve> Eleves { get; set; } = new List<Eleve>();
 
         public virtual ICollection<Abonnement> Abonnements { get; set; } = new List<Abonnement>();

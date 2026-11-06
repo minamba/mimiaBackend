@@ -142,7 +142,7 @@ namespace SchoolWebApp.Api.Controllers
             {
                 await foreach (var fragment in _chatBuilder.StreamReponseAsync(
                     id, model.Contenu ?? string.Empty, pieces,
-                    model.SecondesRestantes, model.VitesseEcoute,
+                    model.SecondesRestantes, model.VitesseEcoute, model.SonJuste,
                     HttpContext.RequestAborted))
                 {
                     await EcrireEvenementAsync(new { type = "delta", texte = fragment });
@@ -333,6 +333,51 @@ namespace SchoolWebApp.Api.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Erreur a la fin de forfait de la conversation {ConversationId}.", id);
+                return NoContent();
+            }
+        }
+
+        /// <summary>
+        /// LE COURS EN PAUSE — Camara, le 03/11/2026 : ce temps n'est pas décompté du
+        /// forfait, et le balayage ne conclut pas la séance. Une panne ici ne gêne pas
+        /// l'enfant : au pire, sa pause serait décomptée.
+        /// </summary>
+        [HttpPost("{id:int}/pause")]
+        [SwaggerResponse(204, "Pause enregistrée.")]
+        public async Task<IActionResult> Pause(int id)
+        {
+            try
+            {
+                await _chatBuilder.PoserPauseAsync(id);
+                return NoContent();
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return NotFound();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Erreur a la pause de la conversation {ConversationId}.", id);
+                return NoContent();
+            }
+        }
+
+        [HttpPost("{id:int}/reprise")]
+        [SwaggerResponse(204, "Reprise enregistrée.")]
+        public async Task<IActionResult> Reprise(int id)
+        {
+            try
+            {
+                await _chatBuilder.LeverPauseAsync(id);
+                return NoContent();
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return NotFound();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Erreur a la reprise de la conversation {ConversationId}.", id);
                 return NoContent();
             }
         }

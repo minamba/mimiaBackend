@@ -151,7 +151,51 @@ namespace SchoolWebApp.Api.Controllers
             _logger.LogInformation(
                 "Signalement {Id} recu ({Categorie}) de {Mail}.", signalement.Id, categorie, parent.Mail);
 
-            return StatusCode(201, new { message = "Signalement transmis." });
+            return StatusCode(201, new { message = "Signalement transmis.", id = signalement.Id });
+        }
+
+        /// <summary>
+        /// UNE CAPTURE D'ÉCRAN OU UN DOCUMENT, JOINT À SON PROPRE SIGNALEMENT — Camara, le
+        /// 03/11/2026. Le parent ne peut rien relire ni supprimer : seule l'administration
+        /// voit les pièces.
+        /// </summary>
+        [HttpPost("{id:int}/pieces")]
+        [RequestSizeLimit(ReglesPieceSignalement.TailleRequeteMax)]
+        [SwaggerResponse(204, "Pièce jointe enregistrée.")]
+        [SwaggerResponse(400, "Fichier refusé.")]
+        [SwaggerResponse(404, "Ce signalement n'existe pas sur ce compte.")]
+        [SwaggerResponse(503, "Stockage indisponible.")]
+        public async Task<IActionResult> AjouterPiece(int id, IFormFile? fichier, CancellationToken ct)
+        {
+            if (fichier is null) return BadRequest(new { message = "Aucun fichier reçu." });
+            if (fichier.Length > ReglesPieceSignalement.TailleMax) return BadRequest(new { message = "Ce fichier dépasse 10 Mo." });
+
+            var identifiant = _currentUser.IdentityUserId;
+            if (string.IsNullOrWhiteSpace(identifiant))
+            {
+                throw new UnauthorizedAccessException("Le jeton ne contient pas de claim `sub`.");
+            }
+
+            var parent = await _parentService.GetOrCreateAsync(
+                identifiant, _currentUser.Mail, _currentUser.Prenom, _currentUser.Nom,
+                noterLaVenue: _currentUser.EleveId is null);
+
+            // SEULEMENT SUR SON PROPRE SIGNALEMENT : même réponse s'il n'existe pas, pour
+            // ne rien apprendre de ceux des autres.
+            var signalement = await _signalements.GetByIdAsync(id, ct);
+            if (signalement is null || signalement.ParentId != parent.Id) return NotFound();
+
+            using var memoire = new MemoryStream();
+            await fichier.CopyToAsync(memoire, ct);
+
+            var ajout = await _signalements.AjouterPieceAsync(id, fichier.FileName, memoire.ToArray(), parent.Mail, ct);
+
+            if (ajout.Introuvable) return NotFound();
+            if (ajout.StockageIndisponible) return StatusCode(503, new { message = ajout.Refus });
+            if (ajout.Piece is null) return BadRequest(new { message = ajout.Refus });
+
+            _evenementsAdmin.Publier("signalement");
+            return NoContent();
         }
     }
 }

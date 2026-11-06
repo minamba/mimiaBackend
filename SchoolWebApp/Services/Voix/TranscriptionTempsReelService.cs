@@ -23,7 +23,15 @@ namespace SchoolWebApp.Api.Services.Voix
     /// un tampon déjà vidé — sans lui, le navigateur attendait huit secondes
     /// une réponse qui ne viendrait jamais, puis rappelait le serveur pour rien.
     /// </param>
-    public record FragmentTranscription(string Texte, bool Final, string? Erreur = null, bool Attente = false)
+    /// <param name="Son">
+    /// Ce texte vient de la voix, pas du transcripteur : « ba » est alors une réponse,
+    /// et non une hésitation. Voir <see cref="RegleVerificationSon"/>.
+    /// </param>
+    /// <param name="Juste">
+    /// Le verdict de la voix quand <paramref name="Son"/> est vrai : l'écran écrit « Bonne prononciation »
+    /// ou « On réessaie » à la place du texte (Camara, le 04/11/2026).
+    /// </param>
+    public record FragmentTranscription(string Texte, bool Final, string? Erreur = null, bool Attente = false, bool Son = false, bool? Juste = null)
     {
         public static readonly FragmentTranscription EnAttente = new("", false, null, true);
     }

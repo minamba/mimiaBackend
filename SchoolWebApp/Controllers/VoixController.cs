@@ -83,6 +83,12 @@ namespace SchoolWebApp.Api.Controllers
                 var sub = _currentUser.IdentityUserId;
                 var reference = string.IsNullOrWhiteSpace(sub) ? null : $"sub:{sub}";
 
+                // LE NAVIGATEUR JOUE CE SON SANS FILTRE : voir BanqueDeSons et obtenirSortieDirecte.
+                if (BanqueDeSons.Cherche(requete.Texte, requete.Avatar, requete.Age, requete.Langue, requete.Dictee) is not null)
+                {
+                    Response.Headers["X-Son-Banque"] = "1";
+                }
+
                 await _synthese.CopierAudioAsync(
                     requete.Texte!, requete.Avatar, requete.Age, Response.Body,
                     requete.Dictee, requete.Langue, requete.Vitesse, reference, ct);

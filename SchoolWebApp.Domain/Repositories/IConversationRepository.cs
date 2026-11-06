@@ -84,6 +84,21 @@ namespace SchoolWebApp.Domain.Repositories
         /// <summary>Sortie signalee par une page qui se ferme, sans identite.</summary>
         Task MarquerFermetureAsync(int conversationId);
 
+        /// <summary>Le cours passe en pause. Une pause déjà en cours garde son début.</summary>
+        Task PoserPauseAsync(int conversationId, int eleveId);
+
+        /// <summary>Le cours reprend : la durée de la pause rejoint le total à retirer.</summary>
+        Task LeverPauseAsync(int conversationId, int eleveId);
+
+        /// <summary>Les secondes de pause depuis le dernier tour décompté, sans y toucher.</summary>
+        Task<int> LirePauseAsync(int conversationId, CancellationToken ct = default);
+
+        /// <summary>
+        /// Les mêmes secondes, au moment de décompter un tour : le total repart de
+        /// zéro, et une pause en cours ne compte plus que ce qui suivra.
+        /// </summary>
+        Task<int> SolderPauseAsync(int conversationId, CancellationToken ct = default);
+
         /// <summary>
         /// Consomme le marqueur de sortie et dit s'il existait. Referme la
         /// fenêtre pendant laquelle deux requêtes concurrentes croiraient

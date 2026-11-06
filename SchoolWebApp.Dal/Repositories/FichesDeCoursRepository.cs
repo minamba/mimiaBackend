@@ -126,6 +126,31 @@ namespace SchoolWebApp.Dal.Repositories
                 .Where(c => c.ParentId == parentId && EtatsEnRoute.Contains(c.Etat))
                 .SumAsync(c => (int?)c.Poids, ct) ?? 0;
 
+        public async Task<string> EssaiFichesAsync(int eleveId, CancellationToken ct = default)
+        {
+            var parentId = await _context.Eleves
+                .AsNoTracking()
+                .Where(e => e.Id == eleveId)
+                .Select(e => (int?)e.ParentId)
+                .FirstOrDefaultAsync(ct);
+            if (parentId is null) return Regles.EssaiUtilise;
+
+            var enfants = _context.Eleves.Where(e => e.ParentId == parentId).Select(e => e.Id);
+
+            // Les décomptes ne s'effacent jamais : un cours supprimé reste compté.
+            if (await _context.FichesConsommees.AnyAsync(f => enfants.Contains(f.EleveId), ct)
+                || await _context.CoursImportes.AnyAsync(
+                    c => c.EleveId != null && enfants.Contains(c.EleveId.Value) && c.Etat == Regles.EtatPret, ct))
+            {
+                return Regles.EssaiUtilise;
+            }
+
+            return await _context.CoursImportes.AnyAsync(
+                    c => c.EleveId != null && enfants.Contains(c.EleveId.Value) && EtatsEnRoute.Contains(c.Etat), ct)
+                ? Regles.EssaiEnRoute
+                : Regles.EssaiLibre;
+        }
+
         public async Task<bool> FamilleSansLimiteAsync(int eleveId, CancellationToken ct = default)
         {
             var parent = await _context.Eleves

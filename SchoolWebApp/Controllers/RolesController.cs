@@ -35,18 +35,43 @@ namespace SchoolWebApp.Api.Controllers
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
-        /// <summary>Les rôles, et la liste des onglets qu'un rôle peut ouvrir.</summary>
+        /// <summary>
+        /// Les rôles, les onglets et les courriels qu'un rôle peut recevoir, et l'interrupteur de
+        /// minamba.camara@mimia.fr pour les courriels de signalement.
+        /// </summary>
         [HttpGet("roles")]
-        [SwaggerResponse(200, "Les rôles et les onglets possibles.")]
-        public async Task<IActionResult> Lister(CancellationToken ct) =>
-            Ok(new { roles = await _roles.ListerAsync(ct), onglets = OngletsAdmin.Toutes });
+        [SwaggerResponse(200, "Les rôles, les onglets et les courriels possibles.")]
+        public async Task<IActionResult> Lister([FromServices] IReglageRepository reglages, CancellationToken ct) =>
+            Ok(new
+            {
+                roles = await _roles.ListerAsync(ct),
+                onglets = OngletsAdmin.Toutes,
+                courriels = CourrielsDeRole.Toutes,
+                adresseMinamba = CourrielsDeRole.AdresseMinamba,
+                copieMinamba = await reglages.EstActifAsync(CourrielsDeRole.ReglageCopieMinamba, false, ct),
+            });
+
+        /// <summary>
+        /// minamba.camara@mimia.fr reçoit-il les courriels de signalement ? — Camara, le 06/11/2026 : « un bouton
+        /// spécial pour l'adresse minamba.camara@mimia.fr que je peux cocher ou pas ».
+        /// </summary>
+        [HttpPut("roles/copie-minamba")]
+        [SwaggerResponse(204, "Réglage enregistré.")]
+        public async Task<IActionResult> DefinirCopieMinamba(
+            [FromBody] CopieRequest requete, [FromServices] IReglageRepository reglages, CancellationToken ct)
+        {
+            await reglages.DefinirAsync(CourrielsDeRole.ReglageCopieMinamba, requete?.Actif ?? false, ct);
+            _logger.LogWarning("Courriels de signalement vers {Adresse} : {Etat}.",
+                CourrielsDeRole.AdresseMinamba, requete?.Actif == true ? "OUI" : "NON");
+            return NoContent();
+        }
 
         [HttpPost("roles")]
         [SwaggerResponse(201, "Rôle créé.", typeof(RoleCompte))]
         [SwaggerResponse(400, "Nom vide, trop long ou déjà pris.")]
         public async Task<IActionResult> Creer([FromBody] RoleRequest requete, CancellationToken ct)
         {
-            var r = await _roles.CreerAsync(requete?.Nom ?? string.Empty, requete?.Onglets, ct);
+            var r = await _roles.CreerAsync(requete?.Nom ?? string.Empty, requete?.Onglets, requete?.Courriels, ct);
             if (r.Role is null) return BadRequest(new { message = r.Erreur });
 
             _logger.LogWarning("Role {Role} cree : {Onglets}.", r.Role.Nom, string.Join(",", r.Role.Onglets));
@@ -59,13 +84,14 @@ namespace SchoolWebApp.Api.Controllers
         [SwaggerResponse(404, "Rôle inexistant.")]
         public async Task<IActionResult> Modifier(int id, [FromBody] RoleRequest requete, CancellationToken ct)
         {
-            var r = await _roles.ModifierAsync(id, requete?.Nom ?? string.Empty, requete?.Onglets, ct);
+            var r = await _roles.ModifierAsync(id, requete?.Nom ?? string.Empty, requete?.Onglets, requete?.Courriels, ct);
             if (r.Introuvable) return NotFound();
             if (r.Role is null) return BadRequest(new { message = r.Erreur });
 
             // TRACÉ EN AVERTISSEMENT : c'est la ligne qu'on relit quand on se
             // demande qui a eu accès à quoi, et depuis quand.
-            _logger.LogWarning("Role {Role} redefini : {Onglets}.", r.Role.Nom, string.Join(",", r.Role.Onglets));
+            _logger.LogWarning("Role {Role} redefini : {Onglets} ; courriels {Courriels}.",
+                r.Role.Nom, string.Join(",", r.Role.Onglets), string.Join(",", r.Role.Courriels));
             return Ok(r.Role);
         }
 
@@ -109,7 +135,10 @@ namespace SchoolWebApp.Api.Controllers
 
         /// <param name="Nom">Le nom du rôle (60 caractères au plus).</param>
         /// <param name="Onglets">Les clés des onglets qu'il ouvre.</param>
-        public record RoleRequest(string? Nom, string[]? Onglets);
+        /// <param name="Courriels">Les codes des courriels que ses comptes reçoivent (<see cref="CourrielsDeRole"/>).</param>
+        public record RoleRequest(string? Nom, string[]? Onglets, string[]? Courriels = null);
+
+        public record CopieRequest(bool Actif);
 
         /// <param name="RoleId">Le rôle ; null pour « Utilisateur ».</param>
         public record RoleParentRequest(int? RoleId);

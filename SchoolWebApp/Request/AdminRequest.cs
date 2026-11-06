@@ -92,6 +92,17 @@ namespace SchoolWebApp.Api.Request
         /// <summary>nouveau / en_cours / traite.</summary>
         [StringLength(20)]
         public string? Etat { get; set; }
+
+        /// <summary>Signalement admin seulement : la compétence / test à réaliser. Vide = inchangée.</summary>
+        [StringLength(1000)]
+        public string? Competence { get; set; }
+    }
+
+    /// <summary>Un commentaire de l'administration sur un signalement.</summary>
+    public class SignalementCommentaireRequest
+    {
+        [StringLength(2000)]
+        public string? Texte { get; set; }
     }
 
     /// <summary>Création ou modification d'une période de vacances — voir « Périodes scolaires ».</summary>
@@ -177,5 +188,11 @@ namespace SchoolWebApp.Api.Request
         [System.ComponentModel.DataAnnotations.Required]
         [System.ComponentModel.DataAnnotations.StringLength(10000)]
         public string Texte { get; set; } = string.Empty;
+
+        /// <summary>Les copies (Cc) — « Répondre à tous », ou ajoutées (19/10/2026).</summary>
+        public List<string>? Cc { get; set; }
+
+        /// <summary>Les copies cachées (Cci).</summary>
+        public List<string>? Cci { get; set; }
     }
 }

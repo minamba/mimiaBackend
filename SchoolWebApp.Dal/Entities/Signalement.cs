@@ -31,8 +31,24 @@ namespace SchoolWebApp.Dal.Entities
         /// <summary>Posée à chaque modification faite par un administrateur.</summary>
         public DateTime? DateMiseAJour { get; set; }
 
+        /// <summary>
+        /// FAIT PAR UN ADMINISTRATEUR, DEPUIS LE BOUTON À CÔTÉ DU BOUCLIER (Camara, le 05/11/2026) : il a son onglet,
+        /// « Signalements Admin », et n'apparaît pas dans celui des parents.
+        /// </summary>
+        public bool EstAdmin { get; set; }
+
+        /// <summary>« Compétence / test à réaliser » : le texte posé dans la ligne du jeu de test.</summary>
+        public string? Competence { get; set; }
+
+        /// <summary>La ligne de jeu de test créée par ce signalement. Sans clé étrangère : la ligne peut être supprimée.</summary>
+        public int? LigneDeTestId { get; set; }
+
         public virtual Parent? Parent { get; set; }
 
         public virtual Eleve? Eleve { get; set; }
+
+        public virtual ICollection<SignalementCommentaire> Commentaires { get; set; } = new List<SignalementCommentaire>();
+
+        public virtual ICollection<SignalementPiece> Pieces { get; set; } = new List<SignalementPiece>();
     }
 }

@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using SchoolWebApp.Api.Auth;
 using SchoolWebApp.Api.Services.Paiement;
 using SchoolWebApp.Api.Utils;
+using SchoolWebApp.Domain.Repositories;
 using Swashbuckle.AspNetCore.Annotations;
 
 namespace SchoolWebApp.Api.Controllers
@@ -33,13 +34,21 @@ namespace SchoolWebApp.Api.Controllers
 
         [HttpGet]
         [AutoriseEleve]
-        [SwaggerResponse(200, "{ ouvert, motif } — motif : essai, sans-forfait ou pause.")]
-        public async Task<IActionResult> Lire(int eleveId, CancellationToken ct)
+        [SwaggerResponse(200, "{ ouvert, motif, essaiFiches } — motif : essai, sans-forfait ou pause ; essaiFiches : libre, en-route, utilise (essai seulement).")]
+        public async Task<IActionResult> Lire(
+            int eleveId, [FromServices] IFichesDeCoursRepository fiches, CancellationToken ct)
         {
             if (await _resolveur.ResoudreEleveAsync(eleveId) is null) return NotFound();
 
             var acces = await _acces.LirePourEleveAsync(eleveId, ct);
-            return Ok(new { ouvert = acces.Ouvert, motif = acces.Motif });
+
+            // L'ESSAI (18/10/2026) : un cours de fiches par famille — la carte
+            // des fiches reste ouverte, la page de création sait s'il reste.
+            var essaiFiches = !acces.Ouvert && acces.Motif == AccesForfaitService.MotifEssai
+                ? await fiches.EssaiFichesAsync(eleveId, ct)
+                : null;
+
+            return Ok(new { ouvert = acces.Ouvert, motif = acces.Motif, essaiFiches });
         }
     }
 }

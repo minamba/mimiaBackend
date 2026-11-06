@@ -34,6 +34,9 @@ namespace SchoolWebApp.Domain.Emails
             {
                 if (!corps.Contains($"cid:{nom}", StringComparison.Ordinal)) continue;
 
+                // Déjà jointe : un second appel ne la double pas (19/10/2026).
+                if (constructeur.LinkedResources.Any(l => l.ContentId == nom)) continue;
+
                 using var flux = Assemblee.GetManifestResourceStream(
                     $"SchoolWebApp.Domain.Emails.Ressources.{nom}.png");
                 if (flux is null) continue;

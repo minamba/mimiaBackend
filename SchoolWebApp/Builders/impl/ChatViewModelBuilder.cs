@@ -116,6 +116,9 @@ namespace SchoolWebApp.Api.Builders.impl
         /// <summary>Les rapports d'orientation de la conseillère (11/10/2026).</summary>
         private readonly IRapportOrientationRepository _rapportsOrientation;
 
+        /// <summary>Les syllabes du CP vérifiées sur la voix (04/11/2026).</summary>
+        private readonly Services.Voix.IVerificationSonService _verificationSon;
+
         public ChatViewModelBuilder(
             IMapper mapper,
             IChatContexteResolver resolver,
@@ -142,8 +145,10 @@ namespace SchoolWebApp.Api.Builders.impl
             Services.Jeux.IJeuxService jeux,
             ILogger<ChatViewModelBuilder> logger,
             IEleveRepository eleves,
-            IRapportOrientationRepository rapportsOrientation)
+            IRapportOrientationRepository rapportsOrientation,
+            Services.Voix.IVerificationSonService verificationSon)
         {
+            _verificationSon = verificationSon ?? throw new ArgumentNullException(nameof(verificationSon));
             _eleves = eleves ?? throw new ArgumentNullException(nameof(eleves));
             _rapportsOrientation = rapportsOrientation ?? throw new ArgumentNullException(nameof(rapportsOrientation));
             _jeux = jeux ?? throw new ArgumentNullException(nameof(jeux));
@@ -176,6 +181,45 @@ namespace SchoolWebApp.Api.Builders.impl
         {
             var conversation = await _conversationService.GetConversationByIdAsync(conversationId);
             return conversation?.MatiereCode;
+        }
+
+        public async Task<string?> LangueDuSonAsync(int conversationId)
+        {
+            var contexte = await _resolver.ResoudreConversationAsync(conversationId);
+
+            return contexte is null ? null : Services.Voix.RegleVerificationSon.LangueDe(
+                contexte.Eleve.NiveauCycle, contexte.Conversation.MatiereCode);
+        }
+
+        public async Task<bool> EnExerciceDeSonsAsync(int conversationId)
+        {
+            var messages = await _conversationService.GetMessagesAsync(conversationId, MessagesPourExerciceDeSons);
+            return Services.Voix.RegleVerificationSon.EnExerciceDeSons(messages.Select(m => ((string?)m.Contenu, m.SonJuste)));
+        }
+
+        public async Task<bool> EnEcouteDeMotsAsync(int conversationId)
+        {
+            var messages = await _conversationService.GetMessagesAsync(conversationId, MessagesPourExerciceDeSons);
+            return Services.Voix.RegleVerificationSon.ContexteDEcoute(messages.Select(m => m.Contenu));
+        }
+
+        public async Task<string?> TypeDEcouteAsync(int conversationId)
+        {
+            var messages = await _conversationService.GetMessagesAsync(conversationId, MessagesPourExerciceDeSons);
+            return Services.Voix.RegleVerificationSon.TypeDEcoute(messages.Select(m => m.Contenu));
+        }
+
+        /// <summary>Assez pour retrouver « le son oin » dit au début de l'exercice.</summary>
+        private const int MessagesPourExerciceDeSons = 12;
+
+        public async Task<string?> DerniereParoleDuProfesseurAsync(int conversationId)
+        {
+            // LE RAPPORT N'EST PAS UNE PAROLE — Camara, le 04/11/2026 : il quitte, revient, Adrien
+            // demande « main », et le rapport de la sortie arrive juste APRÈS cette demande. Lu
+            // comme la dernière parole, il ne demande rien : « Main. » partait en clair.
+            var messages = await _conversationService.GetMessagesAsync(conversationId, 8);
+            return messages.LastOrDefault(m => m.Role == "assistant"
+                && !Services.Voix.RegleVerificationSon.EstUneCloture(m.Contenu))?.Contenu;
         }
 
         public async Task<ConversationViewModel?> CreerConversationAsync(CreerConversationRequest model)
@@ -224,7 +268,9 @@ namespace SchoolWebApp.Api.Builders.impl
                 DatePurge = DateTime.UtcNow.AddDays(JoursConservation)
             });
 
-            return _mapper.Map<ConversationViewModel>(conversation);
+            var vue = _mapper.Map<ConversationViewModel>(conversation);
+            vue.DicteeAuChoix = TypeDeDictee.AuChoix(eleve);
+            return vue;
         }
 
         public async Task<IEnumerable<ConversationViewModel>?> GetConversationsAsync(int eleveId)
@@ -233,7 +279,12 @@ namespace SchoolWebApp.Api.Builders.impl
             if (eleve is null) return null;
 
             var conversations = await _conversationService.GetConversationsByEleveAsync(eleve.Id);
-            return _mapper.Map<IEnumerable<ConversationViewModel>>(conversations);
+            var vues = _mapper.Map<List<ConversationViewModel>>(conversations);
+
+            var auChoix = TypeDeDictee.AuChoix(eleve);
+            foreach (var vue in vues) vue.DicteeAuChoix = auChoix;
+
+            return vues;
         }
 
         public async Task<IEnumerable<MessageViewModel>?> GetMessagesAsync(int conversationId)
@@ -410,10 +461,10 @@ namespace SchoolWebApp.Api.Builders.impl
 
         public IAsyncEnumerable<string> StreamReponseAsync(
             int conversationId, string contenu, IReadOnlyList<int> pieceJointeIds,
-            int? secondesRestantes, string? vitesseEcoute, CancellationToken ct) =>
+            int? secondesRestantes, string? vitesseEcoute, bool? sonJuste, CancellationToken ct) =>
             StreamTourAsync(conversationId, contenu, accueil: false, ct,
                 secondesRestantes: secondesRestantes, pieceJointeIds: pieceJointeIds,
-                vitesseEcoute: vitesseEcoute);
+                vitesseEcoute: vitesseEcoute, sonJuste: sonJuste);
 
         /// <summary>
         /// La sortie signalée par une page qui se ferme, SANS identité.
@@ -451,6 +502,24 @@ namespace SchoolWebApp.Api.Builders.impl
             // `ADuTravailNonConcluAsync` referme la porte dès que le premier
             // est écrit.
             _fileConclusion.Demander(conversationId);
+        }
+
+        public async Task PoserPauseAsync(int conversationId)
+        {
+            var contexte = await _resolver.ResoudreConversationAsync(conversationId)
+                ?? throw new UnauthorizedAccessException(
+                    "Conversation inexistante ou n'appartenant pas au compte authentifié.");
+
+            await _conversationService.PoserPauseAsync(conversationId, contexte.Eleve.Id);
+        }
+
+        public async Task LeverPauseAsync(int conversationId)
+        {
+            var contexte = await _resolver.ResoudreConversationAsync(conversationId)
+                ?? throw new UnauthorizedAccessException(
+                    "Conversation inexistante ou n'appartenant pas au compte authentifié.");
+
+            await _conversationService.LeverPauseAsync(conversationId, contexte.Eleve.Id);
         }
 
         public async Task MarquerSortieAsync(int conversationId)
@@ -1272,13 +1341,41 @@ namespace SchoolWebApp.Api.Builders.impl
         /// à l'arrivée tient trois échanges ; celle qui voyage avec le tour de
         /// l'élève, non. Quelques lignes, hors du préfixe mis en cache.
         /// </summary>
-        private static string MarqueurModeSeance(string mode, int? controleId, string? epreuveCode) => mode switch
+        /// <param name="nbCours">
+        /// LE COURS DE L'ÉLÈVE, DIT EN FAIT À CHAQUE TOUR (26/10/2026). Un parent
+        /// a vu le professeur demander « as-tu des cours à me transmettre ? » à
+        /// une enfant qui les avait importés, puis la faire travailler hors de
+        /// sa leçon. Le cours est bien dans le contexte, avec sa consigne — mais
+        /// une consigne lue une fois ne tient pas ; le fait, répété avec le tour,
+        /// tient. Nul hors d'une préparation.
+        /// </param>
+        /// <param name="nbIllisibles">
+        /// Les documents dont la lecture a échoué (mention à la place du texte) :
+        /// ceux-là, le professeur doit les faire réimporter — le dire ici évite
+        /// que « ne lui redemande pas » contredise la mention du préfixe.
+        /// </param>
+        private static string MarqueurModeSeance(string mode, int? controleId, string? epreuveCode, int? nbCours = null, int nbIllisibles = 0) => mode switch
         {
             ModesSeance.Controle =>
                 $"[SÉANCE DE PRÉPARATION DU CONTRÔLE n° {controleId} : l'élève est entré par le bouton de "
                 + "ce contrôle, c'est de lui qu'on parle. NE PARLE JAMAIS d'un examen (brevet, bac) ni d'un "
                 + $"autre contrôle. Les notions travaillées de ce contrôle vont dans [CONTROLE_NOTIONS] "
-                + $"controle: {controleId} ; ta conclusion porte [CONTROLE_PRET] controle: {controleId}.]",
+                + $"controle: {controleId} ; ta conclusion porte [CONTROLE_PRET] controle: {controleId}. "
+                + (nbCours > 0
+                    ? $"SON COURS EST DÉJÀ IMPORTÉ ({nbCours} document{(nbCours > 1 ? "s" : "")}, dans ta "
+                      + "section « Le cours de l'élève pour ce contrôle ») : NE LUI REDEMANDE PAS sa leçon, "
+                      + "ne lui demande pas s'il a des cours à t'envoyer. PRÉPARE-LE D'ABORD SUR CE QUE CE "
+                      + "COURS CONTIENT, dans son ordre et avec ses mots ; une notion du programme absente "
+                      + "de sa leçon ne vient qu'après, en le lui disant."
+                    : "IL N'A IMPORTÉ AUCUN COURS" + (nbIllisibles > 0 ? " LISIBLE" : "")
+                      + " : si tu veux sa leçon, demande-la UNE fois (il peut la "
+                      + "photographier depuis « Mes contrôles ») ; sinon prépare-le sur le programme du contexte.")
+                + (nbIllisibles > 0
+                    ? $" {nbIllisibles} document{(nbIllisibles > 1 ? "s" : "")} importé{(nbIllisibles > 1 ? "s" : "")} "
+                      + $"{(nbIllisibles > 1 ? "sont" : "est")} ILLISIBLE{(nbIllisibles > 1 ? "S" : "")} (lecture échouée) : "
+                      + "dis-le lui simplement et demande-lui de le réimporter en photo nette ou en PDF."
+                    : "")
+                + "]",
 
             ModesSeance.Bilan =>
                 $"[SÉANCE DE BILAN DU CONTRÔLE n° {controleId}, déjà passé : l'élève est entré par « Faire le "
@@ -2556,7 +2653,8 @@ namespace SchoolWebApp.Api.Builders.impl
             TypeAccueil annonce = TypeAccueil.Aucun,
             int? secondesRestantes = null,
             IReadOnlyList<int>? pieceJointeIds = null,
-            string? vitesseEcoute = null)
+            string? vitesseEcoute = null,
+            bool? sonJuste = null)
         {
             var contexte = await _resolver.ResoudreConversationAsync(conversationId)
                 ?? throw new UnauthorizedAccessException(
@@ -2646,8 +2744,20 @@ namespace SchoolWebApp.Api.Builders.impl
                     // l'autre se tait.
                     var marqueur = contexte.Conversation.DateSortie;
 
+                    // LA SORTIE SE COMPARE AU DERNIER MOT DE L'ÉLÈVE, PAS AU DERNIER
+                    // MESSAGE — Camara, le 01/11/2026 : « quand je suis revenu, le
+                    // prof ne m'a pas dit bonjour ». Relevé en base : il quitte à
+                    // 17:29:25, le worker de conclusion écrit son [RAPPORT] à
+                    // 17:29:28 — un message APRÈS la sortie. Comparée à lui, la
+                    // sortie n'était plus « explicite », et un retour une minute
+                    // plus tard tombait sous le seuil : aucun accueil. Tout ce que
+                    // l'application écrit après le départ (rapport, fiche, abandon)
+                    // est postérieur par construction ; seul l'élève date vraiment
+                    // la fin de sa présence.
+                    var dernierDeLEleve = historique.LastOrDefault(m => m.Role == "user") ?? dernier;
+
                     var sortieExplicite =
-                        marqueur is { } sortie && sortie >= dernier.DateCreation;
+                        marqueur is { } sortie && sortie >= dernierDeLEleve.DateCreation;
 
                     if (marqueur is not null)
                     {
@@ -2694,6 +2804,10 @@ namespace SchoolWebApp.Api.Builders.impl
                     ConversationId = conversationId,
                     Role = "user",
                     Contenu = contenu,
+                    // Le verdict de la voix (04/11/2026) : la bulle écrit « Bonne prononciation » ou
+                    // « On réessaie » à la place du son, et doit le refaire
+                    // au rechargement. Le professeur, lui, lit le son dans `contenu`.
+                    SonJuste = sonJuste,
                     DateCreation = DateTime.UtcNow
                 });
 
@@ -2985,7 +3099,26 @@ namespace SchoolWebApp.Api.Builders.impl
             // prochain » en date absolue pour écrire [CONTROLE_PROGRAMME].
             declencheur += "\n\n" + PromptsPedagogiques.MarqueurDateDuJour(DateTime.UtcNow);
 
-            declencheur += "\n\n" + MarqueurModeSeance(mode, controleMode, epreuveMode);
+            // Le nombre de documents du cours, relu à chaque tour (une requête
+            // légère, sans octets) : c'est le FAIT que le marqueur énonce. Un
+            // document illisible ne compte pas comme cours : il se fait réimporter.
+            int? nbCours = null;
+            var nbIllisibles = 0;
+            if (mode == ModesSeance.Controle && controleMode is int controlePrepare)
+            {
+                try
+                {
+                    var documents = await _controles.GetDocumentsAsync(contexte.Eleve.Id, controlePrepare, ct);
+                    nbCours = documents.Count(d => d.Exploitable);
+                    nbIllisibles = documents.Count(d => d.Illisible);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    _logger.LogWarning(ex, "Documents du controle {ControleId} illisibles pour le marqueur.", controlePrepare);
+                }
+            }
+
+            declencheur += "\n\n" + MarqueurModeSeance(mode, controleMode, epreuveMode, nbCours, nbIllisibles);
 
             // UN CONTRÔLE OUVERT SE RAPPELLE À CHAQUE TOUR, ET C'EST LE CODE QUI
             // S'EN CHARGE.
@@ -3178,6 +3311,53 @@ namespace SchoolWebApp.Api.Builders.impl
                     restant, contexte.Eleve.NiveauCycle, contexte.Eleve.Age);
             }
 
+            Services.Voix.EtatDuMot? etatDuMot = null;
+            var langueDuSon = Services.Voix.RegleVerificationSon.LangueDe(contexte.Eleve.NiveauCycle, contexte.Conversation.MatiereCode);
+
+            // UNIQUEMENT DANS UN EXERCICE DE SONS OU DE SYLLABES — Camara, le 05/11/2026. Hors de lui, le
+            // français garde son rappel d'avant et l'anglais ne reçoit rien : voir EnExerciceDeSons.
+            var enExerciceDeSons = langueDuSon is not null && Services.Voix.RegleVerificationSon.EnExerciceDeSons(
+                historique.TakeLast(MessagesPourExerciceDeSons).Select(m => ((string?)m.Contenu, m.SonJuste))
+                    .Append((contenu, null)));
+
+            if (langueDuSon is not null)
+            {
+                var enAnglais = langueDuSon == SchoolWebApp.Domain.Repositories.LanguesDesSons.Anglais;
+
+                if (!enAnglais) declencheur += "\n\n" + PromptsPedagogiques.MarqueurSonsIsoles;
+
+                if (enExerciceDeSons)
+                {
+                    declencheur += "\n\n" + (enAnglais ? PromptsPedagogiques.MarqueurSonsAnglais : PromptsPedagogiques.RappelExerciceDeSons);
+
+                    // L'EXERCICE CHOISI PAR L'ENFANT, REDIT À CHAQUE TOUR — voir TypeDEcoute.
+                    var typeDEcoute = Services.Voix.RegleVerificationSon.TypeDEcoute(
+                        historique.TakeLast(MessagesPourExerciceDeSons).Select(m => m.Contenu).Append(contenu));
+                    if (typeDEcoute is not null)
+                    {
+                        declencheur += "\n\n" + Services.Voix.RegleVerificationSon.FaitTypeDEcoute(
+                            typeDEcoute, enAnglais ? null : historique.TakeLast(MessagesPourExerciceDeSons).Select(m => m.Contenu),
+                            contexte.Eleve.NiveauCode);
+                    }
+
+                    // LE MOT EN COURS, COMPARÉ ET COMPTÉ PAR LE CODE — voir DicteeDeMots.
+                    etatDuMot = Services.Voix.DicteeDeMots.Lire(contenu, historique.Select(m => (m.Role, m.Contenu)).ToList());
+                    if (etatDuMot is not null) declencheur += "\n\n" + Services.Voix.DicteeDeMots.Fait(etatDuMot, langueDuSon);
+                }
+
+                // CE QUE LA VOIX A DIT, quand elle a été vérifiée juste avant ce tour :
+                // voir RegleVerificationSon. Rien dans tous les autres cas.
+                if (_verificationSon.PrendreFait(contexte.Conversation.Id) is { } faitSon)
+                {
+                    declencheur += "\n\n" + faitSon;
+                }
+            }
+
+            if (PromptsPedagogiques.AnglaisInterdit(contexte.Conversation.ProfAvatar))
+            {
+                declencheur += "\n\n" + PromptsPedagogiques.MarqueurFrancaisSeul;
+            }
+
             // LE GENRE DU PROFESSEUR, À CHAQUE TOUR — voir MarqueurGenre : un
             // professeur qui « redevenait » une femme au fil d'une longue
             // conversation, malgré la règle du bloc d'identité.
@@ -3339,12 +3519,31 @@ namespace SchoolWebApp.Api.Builders.impl
             var filtreAccord = new CorrectionsDuFlux(
                 PromptsPedagogiques.EstUneProfesseure(contexte.Conversation.ProfAvatar));
 
+            // IL PIOCHE DANS LA LISTE BLANCHE — voir FiltreMotsVerifies. Le français et l'anglais au
+            // primaire, l'interrupteur allumé, et seulement dans un exercice de sons ou de syllabes :
+            // ailleurs, pas de filtre, donc pas le moindre retard sur la voix.
+            var filtreMots = !enExerciceDeSons || langueDuSon is null
+                ? null
+                : await _verificationSon.FiltrePourAsync(
+                    langueDuSon,
+                    historique.TakeLast(MessagesPourExerciceDeSons).Select(m => m.Contenu ?? string.Empty).ToList(),
+                    conversationId + historique.Count,
+                    ct,
+                    supportConnu: Services.Voix.RegleVerificationSon.SupportSonConnu(contenu, historique.Select(m => m.Contenu)),
+                    photoAttendue: contenu?.Contains(Services.Voix.RegleVerificationSon.MarqueurSonAuCahier, StringComparison.Ordinal) ?? false,
+                    etat: etatDuMot,
+                    retenirTout: contenu?.Contains(Services.Voix.RegleVerificationSon.MarqueurSonAuCahier, StringComparison.Ordinal) == true
+                        || contenu?.Contains(Services.Voix.RegleVerificationSon.MarqueurSonAuClavier, StringComparison.Ordinal) == true,
+                    niveau: contexte.Eleve.NiveauCode,
+                    messageDeLEleve: contenu);
+
             await foreach (var fragment in _agent.RepondreAsync(
                 contexte.Eleve, contexte.Conversation, historique, declencheur, bilan,
                 TypeTache.Dialogue, typeAccueil, depuis, secondesRestantes,
-                parMessage, piecesDuTour, ct))
+                parMessage, piecesDuTour, enExerciceDeSons, ct))
             {
                 var accorde = filtreAccord.Passer(fragment.Texte);
+                if (filtreMots is not null) accorde = filtreMots.Passer(accorde);
                 if (accorde.Length == 0) continue;
 
                 if (filtreEcoute is null)
@@ -3357,7 +3556,18 @@ namespace SchoolWebApp.Api.Builders.impl
                 if (passe.Length > 0) yield return passe;
             }
 
-            if (filtreAccord.Terminer() is { Length: > 0 } finAccordee)
+            var finAccordee = filtreAccord.Terminer() ?? string.Empty;
+            if (filtreMots is not null)
+            {
+                finAccordee = filtreMots.Passer(finAccordee) + filtreMots.Terminer();
+
+                if (filtreMots.ARemplace)
+                {
+                    _logger.LogInformation("Mot hors liste remplace (conversation {ConversationId}).", conversationId);
+                }
+            }
+
+            if (finAccordee.Length > 0)
             {
                 var passe = filtreEcoute is null ? finAccordee : filtreEcoute.Passer(finAccordee);
                 if (passe.Length > 0) yield return passe;
@@ -3525,8 +3735,17 @@ namespace SchoolWebApp.Api.Builders.impl
                 // la reprendrait à la séance suivante — voir TournuresFautives.
                 contenuPersiste = TournuresFautives.Corriger(contenuPersiste);
 
+                // L'historique dit ce que l'élève a vu et entendu : le mot remplacé n'y revient pas.
+                if (filtreMots is not null) contenuPersiste = filtreMots.Corriger(contenuPersiste);
+
                 // Ses accords aussi — déjà faits dans le flux, refaits ici pour
                 // ce qui n'y passe pas (un bloc écrit par l'application).
+                // UN REPÈRE DANS LE JOURNAL, SANS CONTENU : c'est ainsi qu'on retrouvera un cas comme celui de la maman.
+                if (PromptsPedagogiques.AnglaisInterdit(contexte.Conversation.ProfAvatar) && PromptsPedagogiques.SembleEnAnglais(contenuPersiste))
+                {
+                    _logger.LogWarning("Reponse en anglais d'un professeur sans droit a l'anglais (conversation {ConversationId}).", conversationId);
+                }
+
                 contenuPersiste = AccordDuProfesseur.Corriger(
                     contenuPersiste, PromptsPedagogiques.EstUneProfesseure(contexte.Conversation.ProfAvatar));
 
@@ -3607,7 +3826,7 @@ namespace SchoolWebApp.Api.Builders.impl
 
                 await EnregistrerComprehensionOraleAsync(
                     conversationId, contexte.Eleve.Id, contexte.Conversation.MatiereId,
-                    contexte.Eleve.Age, resultat.TexteComplet, ct);
+                    contexte.Eleve.Age, filtreMots?.Corriger(resultat.TexteComplet) ?? resultat.TexteComplet, ct);
 
                 await SupprimerComprehensionOraleAsync(
                     conversationId, contexte.Eleve.Id, resultat.TexteComplet, ct);
@@ -3699,7 +3918,7 @@ namespace SchoolWebApp.Api.Builders.impl
 
             await _conversationService.TouchConversationAsync(conversationId, contexte.Eleve.Id);
 
-            await ImputerQuotaAsync(contexte.Eleve.Id, historique.LastOrDefault()?.DateCreation, ct);
+            await ImputerQuotaAsync(contexte.Eleve.Id, conversationId, historique.LastOrDefault()?.DateCreation, ct);
         }
 
         /// <summary>
@@ -5120,7 +5339,9 @@ namespace SchoolWebApp.Api.Builders.impl
             var enCours = 0;
             if (dernier is { } date)
             {
-                var ecoule = DateTime.UtcNow - date;
+                // La pause n'est pas du temps de cours : elle ne rapproche pas la coupure.
+                var pause = await _conversationService.LirePauseAsync(conversationId, ct);
+                var ecoule = DateTime.UtcNow - date - TimeSpan.FromSeconds(pause);
                 if (ecoule <= PlafondInactivite) enCours = Math.Max(0, (int)ecoule.TotalSeconds);
             }
 
@@ -5146,20 +5367,26 @@ namespace SchoolWebApp.Api.Builders.impl
         /// On mesure le temps RÉEL passé en séance plutôt que de facturer un
         /// forfait par tour : c'est ce que l'élève voit sur son chronomètre, et
         /// c'est ce qui correspond au coût — la voix se facture à la durée.
+        ///
+        /// LA PAUSE N'EN FAIT PAS PARTIE — Camara, le 03/11/2026 : « le timer s'arrête ».
+        /// Sans ce retrait, deux minutes de pause se payaient au tour suivant, alors
+        /// que le chronomètre de l'élève était resté figé.
         /// </summary>
         private async Task ImputerQuotaAsync(
-            int eleveId, DateTime? tourPrecedent, CancellationToken ct)
+            int eleveId, int conversationId, DateTime? tourPrecedent, CancellationToken ct)
         {
-            var ecoule = tourPrecedent is { } precedent
-                ? DateTime.UtcNow - precedent
-                : TimeSpan.MaxValue;
-
-            var secondes = ecoule > PlafondInactivite
-                ? SecondesTourNominal
-                : Math.Max(SecondesTourNominal, (int)ecoule.TotalSeconds);
-
             try
             {
+                var pause = await _conversationService.SolderPauseAsync(conversationId, ct);
+
+                var ecoule = tourPrecedent is { } precedent
+                    ? DateTime.UtcNow - precedent - TimeSpan.FromSeconds(pause)
+                    : TimeSpan.MaxValue;
+
+                var secondes = ecoule > PlafondInactivite
+                    ? SecondesTourNominal
+                    : Math.Max(SecondesTourNominal, (int)ecoule.TotalSeconds);
+
                 var alerte = await _abonnements.ImputerAsync(eleveId, secondes, SeuilAlerteQuota, ct);
                 if (alerte) _fileAlertes.Demander(eleveId);
             }

@@ -43,6 +43,13 @@ namespace SchoolWebApp.Dal.Entities
         /// </summary>
         public string? ModeleVoix { get; set; }
 
+        /// <summary>
+        /// Le verdict de la voix quand ce tour de l'élève était un son demandé par le
+        /// professeur (04/11/2026) : la bulle écrit « Bonne prononciation » ou « On réessaie »
+        /// au lieu du texte. NULL pour tout autre tour.
+        /// </summary>
+        public bool? SonJuste { get; set; }
+
         public DateTime DateCreation { get; set; }
 
         public virtual Conversation? Conversation { get; set; }

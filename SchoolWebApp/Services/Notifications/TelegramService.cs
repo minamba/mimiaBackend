@@ -113,6 +113,20 @@ namespace SchoolWebApp.Api.Services.Notifications
         /// </summary>
         /// <param name="libelleStatut">L'état en toutes lettres (« Crédit épuisé »).</param>
         /// <param name="retabli">Vrai pour annoncer le retour à la normale.</param>
+        /// <summary>
+        /// UN COURRIEL ARRIVÉ dans une boîte surveillée (19/10/2026), vers le
+        /// groupe Telegram des emails (`TelegramEmails`).
+        /// </summary>
+        Task NotifierMailRecuAsync(string boite, string? deNom, string? deAdresse, string? sujet, string? extrait);
+
+        /// <summary>
+        /// UN SIGNALEMENT ADMIN vient d'être créé (bouton à côté du bouclier) — Camara, le 06/11/2026 : « quand il y a
+        /// un nouveau signalement admin, envoie un message dans le groupe Telegram des mails ».
+        /// </summary>
+        /// <param name="jeu">« Tests CP › Test CP », ou null s'il n'est relié à aucun jeu de test.</param>
+        Task NotifierSignalementAdminAsync(
+            string categorie, string? auteur, string? description, string? competence, string? jeu);
+
         Task NotifierFournisseurAsync(
             SchoolWebApp.Api.Services.Fournisseurs.EtatFournisseur etat, string libelleStatut, bool retabli);
 
@@ -148,6 +162,8 @@ namespace SchoolWebApp.Api.Services.Notifications
         private readonly string? _contactChatId;
         private readonly string? _exploitationToken;
         private readonly string? _exploitationChatId;
+        private readonly string? _emailsToken;
+        private readonly string? _emailsChatId;
 
         public TelegramService(
             IHttpClientFactory fabrique, IConfiguration config, ILogger<TelegramService> logger)
@@ -184,6 +200,30 @@ namespace SchoolWebApp.Api.Services.Notifications
                 _exploitationToken = _abonnementToken;
                 _exploitationChatId = _abonnementChatId;
             }
+
+            // LE GROUPE DES EMAILS (19/10/2026) : C'EST CELUI DU SALON CONTACT —
+            // Camara : « c'est le même groupe » que les demandes de contact et
+            // les alertes des fournisseurs. Vide, `TelegramEmails` reprend donc
+            // le bot et le salon de `TelegramContact` ; renseigné, il les remplace.
+            _emailsToken = config["TelegramEmails:BotToken"];
+            _emailsChatId = config["TelegramEmails:ChatId"];
+            if (string.IsNullOrWhiteSpace(_emailsToken)) _emailsToken = _contactToken;
+            if (string.IsNullOrWhiteSpace(_emailsChatId)) _emailsChatId = _contactChatId;
+        }
+
+        public Task NotifierMailRecuAsync(string boite, string? deNom, string? deAdresse, string? sujet, string? extrait)
+        {
+            var de = string.IsNullOrWhiteSpace(deNom) ? deAdresse : $"{deNom} <{deAdresse}>";
+
+            var sb = new StringBuilder();
+            sb.AppendLine("📬 *Nouveau mail*");
+            sb.AppendLine($"— Boîte : {Echapper(boite)}");
+            sb.AppendLine($"— De : {Echapper(de ?? "inconnu")}");
+            sb.AppendLine($"— Objet : {Echapper(string.IsNullOrWhiteSpace(sujet) ? "(sans objet)" : sujet)}");
+            if (!string.IsNullOrWhiteSpace(extrait)) sb.AppendLine($"— Début : {Echapper(extrait)}");
+            sb.AppendLine($"— Le : {Horodatage()}");
+
+            return EnvoyerAsync(_emailsToken, _emailsChatId, sb.ToString());
         }
 
         public Task NotifierNouveauParentAsync(string? prenom, string? nom, string? mail)
@@ -373,6 +413,42 @@ namespace SchoolWebApp.Api.Services.Notifications
             return EnvoyerAsync(_contactToken, _contactChatId, sb.ToString());
         }
 
+        public async Task NotifierSignalementAdminAsync(
+            string categorie, string? auteur, string? description, string? competence, string? jeu)
+        {
+            // TRACÉ, À LA DIFFÉRENCE DES AUTRES ALERTES (06/11/2026) : le premier essai de Camara n'a rien donné, et
+            // l'envoi se tait quand le groupe n'est pas configuré. La console dit désormais ce qui s'est passé.
+            if (string.IsNullOrWhiteSpace(_emailsToken) || string.IsNullOrWhiteSpace(_emailsChatId))
+            {
+                _logger.LogWarning("Telegram signalement admin : AUCUN groupe configure (TelegramEmails / TelegramContact vides), rien n'est envoye.");
+                return;
+            }
+
+            var sb = new StringBuilder();
+            sb.AppendLine("🛠️ *Nouveau signalement admin*");
+            sb.AppendLine($"— Thème : {Echapper(LibellesCategorie.GetValueOrDefault(categorie, categorie))}");
+            sb.AppendLine($"— Par : {Echapper(auteur)}");
+
+            if (!string.IsNullOrWhiteSpace(jeu))
+            {
+                sb.AppendLine($"— Jeu de test : {Echapper(jeu)}");
+                sb.AppendLine($"— Compétence : {Echapper(competence)}");
+                sb.AppendLine("— Ligne posée en KO");
+            }
+            else
+            {
+                sb.AppendLine("— Non relié à un jeu de test");
+            }
+
+            sb.AppendLine($"— Le : {Echapper(ALHeureDeParis(DateTime.UtcNow))} \\(Paris\\)");
+            sb.AppendLine("———————————————");
+            sb.AppendLine(Echapper(Borner(description)));
+
+            var envoye = await EnvoyerAsync(_emailsToken, _emailsChatId, sb.ToString());
+            if (envoye) _logger.LogInformation("Telegram signalement admin : envoye au groupe des mails.");
+            else _logger.LogWarning("Telegram signalement admin : NON envoye (voir la ligne « Telegram : » juste au-dessus).");
+        }
+
         public Task NotifierIdeeAsync(
             string titre, string urgence, string? description, string? auteur)
         {
@@ -557,12 +633,13 @@ namespace SchoolWebApp.Api.Services.Notifications
                     .Replace("!", "\\!");
         }
 
-        private async Task EnvoyerAsync(string? jeton, string? salon, string texte)
+        /// <returns>Vrai si Telegram a accepté le message.</returns>
+        private async Task<bool> EnvoyerAsync(string? jeton, string? salon, string texte)
         {
             // Non configuré : on se tait. C'est l'état normal en développement,
             // et ce n'est pas une panne — journaliser à chaque événement
             // remplirait les traces locales d'avertissements sans objet.
-            if (string.IsNullOrWhiteSpace(jeton) || string.IsNullOrWhiteSpace(salon)) return;
+            if (string.IsNullOrWhiteSpace(jeton) || string.IsNullOrWhiteSpace(salon)) return false;
 
             try
             {
@@ -591,11 +668,15 @@ namespace SchoolWebApp.Api.Services.Notifications
                     _logger.LogError(
                         "Telegram : envoi refuse ({Statut}) — {Corps}",
                         (int)reponse.StatusCode, corps);
+                    return false;
                 }
+
+                return true;
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Telegram : envoi impossible vers le salon {Salon}.", salon);
+                return false;
             }
         }
     }

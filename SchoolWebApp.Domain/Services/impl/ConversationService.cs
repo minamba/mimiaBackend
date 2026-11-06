@@ -54,6 +54,18 @@ namespace SchoolWebApp.Domain.Services.impl
         public Task MarquerSortieAsync(int conversationId, int eleveId) =>
             _conversationRepository.MarquerSortieAsync(conversationId, eleveId);
 
+        public Task PoserPauseAsync(int conversationId, int eleveId) =>
+            _conversationRepository.PoserPauseAsync(conversationId, eleveId);
+
+        public Task LeverPauseAsync(int conversationId, int eleveId) =>
+            _conversationRepository.LeverPauseAsync(conversationId, eleveId);
+
+        public Task<int> LirePauseAsync(int conversationId, CancellationToken ct = default) =>
+            _conversationRepository.LirePauseAsync(conversationId, ct);
+
+        public Task<int> SolderPauseAsync(int conversationId, CancellationToken ct = default) =>
+            _conversationRepository.SolderPauseAsync(conversationId, ct);
+
         public Task MarquerFermetureAsync(int conversationId) =>
             _conversationRepository.MarquerFermetureAsync(conversationId);
 

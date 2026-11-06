@@ -132,6 +132,19 @@ namespace SchoolWebApp.Dal.Entities
         /// <summary>Les problèmes et suggestions déposés depuis le bouton « Signaler ».</summary>
         public virtual DbSet<Signalement> Signalements { get; set; }
 
+        public virtual DbSet<SignalementCommentaire> SignalementCommentaires { get; set; }
+
+        public virtual DbSet<SignalementPiece> SignalementPieces { get; set; }
+
+        /// <summary>Les carnets de test de l'administration, leurs tests et leurs lignes.</summary>
+        public virtual DbSet<MotVerifie> MotsVerifies { get; set; }
+
+        public virtual DbSet<JeuDeTest> JeuxDeTests { get; set; }
+
+        public virtual DbSet<TestDuJeu> TestsDesJeux { get; set; }
+
+        public virtual DbSet<LigneDeTest> LignesDeTest { get; set; }
+
         /// <summary>Les appels au modèle qui ne sont pas des tours de dialogue.</summary>
         public virtual DbSet<AppelClaude> AppelsClaude { get; set; }
 
@@ -250,6 +263,9 @@ namespace SchoolWebApp.Dal.Entities
                 // L'espace parent et ses fiches (16/10/2026) : faux par défaut,
                 // accordé un par un dans Admin › Parents.
                 entity.Property(e => e.PeutCreerFiches).HasColumnName("peut_creer_fiches");
+
+                // Le tutoriel, une fois par compte parent (02/11/2026).
+                entity.Property(e => e.TutorielVuLe).HasColumnName("tutoriel_vu_le");
 
                 // Le rôle (17/10/2026) : supprimer un rôle rend ses comptes
                 // « Utilisateur » (la suppression recalcule aussi leur accès).
@@ -584,6 +600,8 @@ namespace SchoolWebApp.Dal.Entities
                 entity.Property(e => e.DatePurge).HasColumnName("date_purge");
                 entity.Property(e => e.DateDerniereObservation).HasColumnName("date_derniere_observation");
                 entity.Property(e => e.DateSortie).HasColumnName("date_sortie");
+                entity.Property(e => e.PauseDepuis).HasColumnName("pause_depuis");
+                entity.Property(e => e.PauseSecondes).HasColumnName("pause_secondes");
                 entity.Property(e => e.DureeChoisieMinutes).HasColumnName("duree_choisie_minutes");
                 entity.Property(e => e.ModeSeance).HasMaxLength(20).HasColumnName("mode_seance");
                 entity.Property(e => e.ModeControleId).HasColumnName("mode_controle_id");
@@ -656,6 +674,7 @@ namespace SchoolWebApp.Dal.Entities
                 entity.Property(e => e.TokensCacheEcriture).HasColumnName("tokens_cache_ecriture");
                 entity.Property(e => e.TokensCacheEcriture1h).HasColumnName("tokens_cache_ecriture_1h");
                 entity.Property(e => e.ModeleVoix).HasMaxLength(50).HasColumnName("modele_voix");
+                entity.Property(e => e.SonJuste).HasColumnName("son_juste");
                 entity.Property(e => e.DateCreation).HasColumnName("date_creation");
 
                 entity.HasOne(e => e.Conversation)
@@ -1348,6 +1367,8 @@ namespace SchoolWebApp.Dal.Entities
                 entity.Property(e => e.Donnees).HasColumnName("donnees");
                 entity.Property(e => e.Transcription).HasColumnName("transcription");
                 entity.Property(e => e.DonneesEffaceesLe).HasColumnName("donnees_effacees_le");
+                entity.Property(e => e.Chemin).HasMaxLength(300).HasColumnName("chemin");
+                entity.Property(e => e.FichierEffaceLe).HasColumnName("fichier_efface_le");
                 entity.Property(e => e.Tentatives).HasColumnName("tentatives");
                 entity.Property(e => e.DateCreation).HasColumnName("date_creation");
 
@@ -1421,6 +1442,9 @@ namespace SchoolWebApp.Dal.Entities
                       .HasDefaultValue("nouveau").HasColumnName("etat");
                 entity.Property(e => e.DateCreation).HasColumnName("date_creation");
                 entity.Property(e => e.DateMiseAJour).HasColumnName("date_mise_a_jour");
+                entity.Property(e => e.EstAdmin).HasDefaultValue(false).HasColumnName("est_admin");
+                entity.Property(e => e.Competence).HasMaxLength(1000).HasColumnName("competence");
+                entity.Property(e => e.LigneDeTestId).HasColumnName("ligne_de_test_id");
 
                 entity.HasOne(e => e.Parent)
                       .WithMany(p => p.Signalements)
@@ -1438,6 +1462,121 @@ namespace SchoolWebApp.Dal.Entities
 
                 entity.HasIndex(e => e.Etat);
                 entity.HasIndex(e => e.ParentId);
+            });
+
+            modelBuilder.Entity<SignalementCommentaire>(entity =>
+            {
+                entity.ToTable("SignalementCommentaire");
+                entity.HasKey(e => e.Id);
+
+                entity.Property(e => e.Id).HasColumnName("id");
+                entity.Property(e => e.SignalementId).HasColumnName("signalement_id");
+                entity.Property(e => e.AuteurMail).HasMaxLength(255).HasColumnName("auteur_mail");
+                entity.Property(e => e.Texte).HasMaxLength(2000).IsRequired().HasColumnName("texte");
+                entity.Property(e => e.DateCreation).HasColumnName("date_creation");
+                entity.Property(e => e.DateMiseAJour).HasColumnName("date_mise_a_jour");
+
+                entity.HasOne(e => e.Signalement)
+                      .WithMany(s => s.Commentaires)
+                      .HasForeignKey(e => e.SignalementId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasIndex(e => e.SignalementId);
+            });
+
+            modelBuilder.Entity<SignalementPiece>(entity =>
+            {
+                entity.ToTable("SignalementPiece");
+                entity.HasKey(e => e.Id);
+
+                entity.Property(e => e.Id).HasColumnName("id");
+                entity.Property(e => e.SignalementId).HasColumnName("signalement_id");
+                entity.Property(e => e.Nom).HasMaxLength(255).IsRequired().HasColumnName("nom");
+                entity.Property(e => e.TypeMime).HasMaxLength(120).IsRequired().HasColumnName("type_mime");
+                entity.Property(e => e.Taille).HasColumnName("taille");
+                entity.Property(e => e.EstImage).HasColumnName("est_image");
+                entity.Property(e => e.Fichier).HasMaxLength(300).IsRequired().HasColumnName("fichier");
+                entity.Property(e => e.AjoutePar).HasMaxLength(255).HasColumnName("ajoute_par");
+                entity.Property(e => e.DateCreation).HasColumnName("date_creation");
+
+                entity.HasOne(e => e.Signalement)
+                      .WithMany(s => s.Pieces)
+                      .HasForeignKey(e => e.SignalementId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasIndex(e => e.SignalementId);
+            });
+
+            // ---------------------------------------------------------------
+            // Les mots et syllabes passés au banc des voix de synthèse
+            // ---------------------------------------------------------------
+            modelBuilder.Entity<MotVerifie>(entity =>
+            {
+                entity.ToTable("MotVerifie");
+                entity.HasKey(e => new { e.Mot, e.Langue });
+
+                entity.Property(e => e.Mot).HasMaxLength(20).HasColumnName("mot");
+                entity.Property(e => e.Langue).HasMaxLength(2).HasColumnName("langue");
+                entity.Property(e => e.Justes).HasColumnName("justes");
+                entity.Property(e => e.Total).HasColumnName("total");
+                entity.Property(e => e.DateTest).HasColumnName("date_test");
+            });
+
+            // ---------------------------------------------------------------
+            // Jeux de tests — les carnets de test de l'administration
+            // ---------------------------------------------------------------
+            modelBuilder.Entity<JeuDeTest>(entity =>
+            {
+                entity.ToTable("JeuDeTest");
+                entity.HasKey(e => e.Id);
+
+                entity.Property(e => e.Id).HasColumnName("id");
+                entity.Property(e => e.Titre).HasMaxLength(200).IsRequired().HasDefaultValue(string.Empty).HasColumnName("titre");
+                entity.Property(e => e.Section).HasMaxLength(20).IsRequired().HasColumnName("section");
+                entity.Property(e => e.NiveauCode).HasMaxLength(50).IsRequired().HasColumnName("niveau_code");
+                entity.Property(e => e.Classe).HasMaxLength(100).IsRequired().HasColumnName("classe");
+                entity.Property(e => e.Auteur).HasMaxLength(255).IsRequired().HasColumnName("auteur");
+                entity.Property(e => e.DateCreation).HasColumnName("date_creation");
+            });
+
+            modelBuilder.Entity<TestDuJeu>(entity =>
+            {
+                entity.ToTable("TestDuJeu");
+                entity.HasKey(e => e.Id);
+
+                entity.Property(e => e.Id).HasColumnName("id");
+                entity.Property(e => e.JeuId).HasColumnName("jeu_id");
+                entity.Property(e => e.Titre).HasMaxLength(200).IsRequired().HasColumnName("titre");
+                entity.Property(e => e.MatiereCode).HasMaxLength(50).IsRequired().HasColumnName("matiere_code");
+                entity.Property(e => e.Matiere).HasMaxLength(200).IsRequired().HasColumnName("matiere");
+
+                entity.HasOne(e => e.Jeu)
+                      .WithMany(j => j.Tests)
+                      .HasForeignKey(e => e.JeuId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasIndex(e => e.JeuId);
+            });
+
+            modelBuilder.Entity<LigneDeTest>(entity =>
+            {
+                entity.ToTable("LigneDeTest");
+                entity.HasKey(e => e.Id);
+
+                entity.Property(e => e.Id).HasColumnName("id");
+                entity.Property(e => e.TestId).HasColumnName("test_id");
+                entity.Property(e => e.Competence).HasMaxLength(1000).IsRequired().HasColumnName("competence");
+                entity.Property(e => e.Statut).HasMaxLength(20).IsRequired().HasColumnName("statut");
+                entity.Property(e => e.DateCreation).HasColumnName("date_creation");
+                entity.Property(e => e.DateEffectuee).HasColumnType("date").HasColumnName("date_effectuee");
+                entity.Property(e => e.Commentaire).HasMaxLength(2000).HasColumnName("commentaire");
+
+                entity.HasOne(e => e.Test)
+                      .WithMany(t => t.Lignes)
+                      .HasForeignKey(e => e.TestId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasIndex(e => e.TestId);
             });
 
             // ---------------------------------------------------------------
@@ -2409,6 +2548,8 @@ namespace SchoolWebApp.Dal.Entities
                 entity.Property(e => e.Boite).IsRequired().HasMaxLength(16).HasColumnName("boite");
                 entity.Property(e => e.MessageOrigine).HasColumnName("message_origine");
                 entity.Property(e => e.Destinataire).HasMaxLength(255).HasColumnName("destinataire");
+                entity.Property(e => e.Copies).HasMaxLength(2000).HasColumnName("copies");
+                entity.Property(e => e.CopiesCachees).HasMaxLength(2000).HasColumnName("copies_cachees");
                 entity.Property(e => e.Sujet).HasMaxLength(500).HasColumnName("sujet");
                 entity.Property(e => e.Titre).HasMaxLength(150).HasColumnName("titre");
                 entity.Property(e => e.Texte).IsRequired().HasColumnName("texte");
@@ -2480,6 +2621,7 @@ namespace SchoolWebApp.Dal.Entities
                 entity.Property(e => e.Nom).IsRequired().HasMaxLength(60).HasColumnName("nom");
                 entity.Property(e => e.Code).HasMaxLength(30).HasColumnName("code");
                 entity.Property(e => e.Onglets).HasMaxLength(500).HasColumnName("onglets");
+                entity.Property(e => e.Courriels).HasMaxLength(500).HasColumnName("courriels");
                 entity.Property(e => e.Ordre).HasColumnName("ordre");
                 entity.Property(e => e.DateCreation).HasColumnName("date_creation");
 

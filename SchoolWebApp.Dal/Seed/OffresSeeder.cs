@@ -85,7 +85,15 @@ namespace SchoolWebApp.Dal.Seed
                     // largement à juger d'un professeur.
                     MinutesPotMensuel = 30,
                     MinutesPlafondEnfant = 30,
-                    JoursValidite = 7,
+
+                    // SANS DÉLAI — Camara, le 18/10/2026 : « il faut supprimer
+                    // le délai, sinon je risque de faire fuir les utilisateurs
+                    // s'ils n'ont pas eu le temps de tester ». Les trente
+                    // minutes restent valables jusqu'à ce qu'elles soient
+                    // utilisées. (Sept jours avant ; les bases existantes sont
+                    // passées à 0 par la migration EssaiSansDelai.) L'essai ne
+                    // se reconduit pas pour autant : voir `RafraichirAsync`.
+                    JoursValidite = 0,
                     Ordre = 0,
                     Active = true,
                     EstEssai = true,

@@ -64,6 +64,31 @@ services:
       #   mkdir -p ./donnees/modeles-mail
       #   echo "Dossier des templates de courriel de Mimia" > ./donnees/modeles-mail/STOCKAGE-MIMIA
       - ./donnees/modeles-mail:/donnees/modeles-mail
+      # LES PIECES JOINTES DES SIGNALEMENTS (03/11/2026) : captures d'ecran et documents
+      # envoyes par les parents. Sans la marque, l'envoi de fichiers est refuse, jamais
+      # mis en base. Sauvegarde CHIFFREE : etape 7 de exploitation/sauvegarde-base.sh.
+      # A creer AVANT le demarrage, puis docker compose up -d mimia :
+      #   mkdir -p ./donnees/signalements
+      #   echo "Pieces jointes des signalements de Mimia" > ./donnees/signalements/STOCKAGE-MIMIA
+      - ./donnees/signalements:/donnees/signalements
+      # LE COURS IMPORTE AVEC UN CONTROLE (04/11/2026) : photos, PDF, Word, Excel, PowerPoint
+      # de l'eleve, qu'il peut revoir depuis sa fiche. Sans la marque, l'envoi est refuse,
+      # jamais mis en base. PAS SAUVEGARDE, et c'est voulu : chaque fichier est efface une
+      # semaine apres le controle (PurgeCoursControlesWorker), et le professeur garde sa
+      # transcription, qui est en base. A creer AVANT le demarrage, puis docker compose up -d mimia :
+      #   mkdir -p ./donnees/cours-controles
+      #   echo "Cours importes avec les controles de Mimia" > ./donnees/cours-controles/STOCKAGE-MIMIA
+      - ./donnees/cours-controles:/donnees/cours-controles
+      # LES IMAGES DES MOTS (06/11/2026) : une image WebP par mot de CP (chat.webp...), montree a
+      # l'enfant qui vient de trouver le mot. Deposees a la main (FileZilla) dans ./donnees/images-mots ;
+      # lecture seule pour l'application. Pas de sauvegarde : les originaux sont chez Camara.
+      # A creer AVANT le demarrage, puis docker compose up -d mimia :
+      #   mkdir -p ./donnees/images-mots
+      - ./donnees/images-mots:/donnees/images-mots:ro
+      # LES IMAGES DES SYLLABES (06/11/2026), meme systeme : une image WebP par syllabe (la.webp ;
+      # « je » → je.webp, « jé » → je-aigu.webp). Peut rester vide : la carte ne s'affiche alors pas.
+      #   mkdir -p ./donnees/images-syllabes
+      - ./donnees/images-syllabes:/donnees/images-syllabes:ro
     networks:
       - web
       - geekai_internal

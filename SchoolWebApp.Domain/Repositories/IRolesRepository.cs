@@ -11,10 +11,16 @@ namespace SchoolWebApp.Domain.Repositories
         /// <summary>Tous les rôles, dans l'ordre d'affichage, avec le nombre de comptes qui les portent.</summary>
         Task<IReadOnlyList<RoleCompte>> ListerAsync(CancellationToken ct = default);
 
-        Task<ResultatRole> CreerAsync(string nom, IEnumerable<string>? onglets, CancellationToken ct = default);
+        Task<ResultatRole> CreerAsync(string nom, IEnumerable<string>? onglets, IEnumerable<string>? courriels = null, CancellationToken ct = default);
 
-        /// <summary>Renomme et redéfinit les droits ; recalcule l'accès des comptes qui le portent.</summary>
-        Task<ResultatRole> ModifierAsync(int id, string nom, IEnumerable<string>? onglets, CancellationToken ct = default);
+        /// <summary>Renomme et redéfinit les droits et les courriels ; recalcule l'accès des comptes qui le portent.</summary>
+        Task<ResultatRole> ModifierAsync(int id, string nom, IEnumerable<string>? onglets, IEnumerable<string>? courriels = null, CancellationToken ct = default);
+
+        /// <summary>
+        /// Les adresses des comptes dont le rôle reçoit ce courriel (code de <see cref="CourrielsDeRole"/>),
+        /// sans doublon. L'adresse de Camara n'y est pas : elle a son interrupteur à part.
+        /// </summary>
+        Task<IReadOnlyList<string>> AdressesPourCourrielAsync(string courriel, CancellationToken ct = default);
 
         /// <summary>Supprime un rôle CRÉÉ ; ses comptes redeviennent « Utilisateur ».</summary>
         Task<ResultatRole> SupprimerAsync(int id, CancellationToken ct = default);

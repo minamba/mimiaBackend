@@ -264,12 +264,36 @@ namespace SchoolWebApp.Domain.Repositories
         Task<IReadOnlyList<DocumentControle>> GetDocumentsAsync(
             int eleveId, int controleId, CancellationToken ct = default);
 
-        Task<bool> SupprimerDocumentAsync(
+        /// <summary>Un document du contrôle, avec son chemin sur le disque ; null s'il n'est pas à cet élève.</summary>
+        Task<DocumentControle?> GetDocumentAsync(
             int eleveId, int controleId, int documentId, CancellationToken ct = default);
 
-        /// <summary>Les documents encore à lire, AVEC leurs octets, les plus anciens d'abord.</summary>
+        /// <summary>
+        /// Retire le document. Rend le document retiré (avec le chemin de son fichier, que
+        /// l'appelant efface du disque), ou null s'il n'existe pas ou n'est pas à cet élève.
+        /// </summary>
+        Task<DocumentControle?> SupprimerDocumentAsync(
+            int eleveId, int controleId, int documentId, CancellationToken ct = default);
+
+        /// <summary>
+        /// Les documents encore à lire, les plus anciens d'abord : avec leurs octets pour ceux
+        /// d'avant le disque, avec leur chemin pour les autres.
+        /// </summary>
         Task<IReadOnlyList<DocumentControle>> GetDocumentsATranscrireAsync(
             int taille, CancellationToken ct = default);
+
+        /// <summary>
+        /// LES FICHIERS À PURGER (Camara, le 04/11/2026) : encore sur le disque, et dont le
+        /// contrôle ET l'ajout datent de plus d'une semaine. Au plus `lot`, les plus anciens d'abord.
+        /// </summary>
+        Task<IReadOnlyList<DocumentControle>> GetFichiersAPurgerAsync(
+            DateTime limite, int lot, CancellationToken ct = default);
+
+        /// <summary>Note que les fichiers de ces documents ont été effacés du disque.</summary>
+        Task MarquerFichiersEffacesAsync(IReadOnlyCollection<int> documentIds, DateTime maintenant, CancellationToken ct = default);
+
+        /// <summary>Parmi ces contrôles, ceux qui ont encore au moins un fichier sur le disque.</summary>
+        Task<IReadOnlyList<int>> ControlesAvecFichiersAsync(IReadOnlyCollection<int> controleIds, CancellationToken ct = default);
 
         /// <summary>
         /// Écrit la transcription et efface les octets : une fois lu, le

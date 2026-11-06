@@ -43,7 +43,9 @@ builder.Services.AddCors(options =>
         policy.WithOrigins(originesAutorisees)
               .AllowAnyHeader()
               .AllowAnyMethod()
-              .AllowCredentials()));
+              .AllowCredentials()
+              // Sans ça, le navigateur cache l'en-tête au front servi depuis une autre origine (le poste de dev).
+              .WithExposedHeaders("X-Son-Banque")));
 
 // ---------------------------------------------------------------------------
 // Controllers + Swagger
@@ -310,6 +312,8 @@ builder.Services.AddScoped<IEvaluationPrevueRepository, EvaluationPrevueReposito
 builder.Services.AddScoped<IControleScolaireRepository, ControleScolaireRepository>();
 builder.Services.AddScoped<IExamenRepository, ExamenRepository>();
 builder.Services.AddScoped<ISignalementRepository, SignalementRepository>();
+builder.Services.AddScoped<IJeuxDeTestsRepository, JeuxDeTestsRepository>();
+builder.Services.AddScoped<IMotsVerifiesRepository, MotsVerifiesRepository>();
 // LES IMAGES DES PLANCHES SUR LE DISQUE (15/10/2026) : un singleton, il ne
 // porte qu une racine de chemin.
 builder.Services.AddSingleton<SchoolWebApp.Domain.Services.IStockagePlanches,
@@ -365,8 +369,13 @@ builder.Services.AddScoped<IPromoRepository, PromoRepository>();
 builder.Services.AddScoped<IIdeeRepository, IdeeRepository>();
 builder.Services.AddScoped<IModeleMailRepository, ModeleMailRepository>();
 // LES PIÈCES DES TEMPLATES SUR LE DISQUE (18/10/2026) : une racine de chemin, un singleton.
+builder.Services.AddSingleton<SchoolWebApp.Domain.Services.IStockageSignalements,
+    SchoolWebApp.Dal.Stockage.StockageSignalementsDisque>();
 builder.Services.AddSingleton<SchoolWebApp.Domain.Services.IStockageModelesMail,
     SchoolWebApp.Dal.Stockage.StockageModelesMailDisque>();
+// LE COURS DES CONTRÔLES SUR LE DISQUE (04/11/2026) : consultable par l'élève, purgé une semaine après.
+builder.Services.AddSingleton<SchoolWebApp.Domain.Services.IStockageCoursControles,
+    SchoolWebApp.Dal.Stockage.StockageCoursControlesDisque>();
 // Sans état, et appuyé sur le service de diffusion qui est lui-même un
 // singleton : un template se compose comme un message tapé à la main.
 builder.Services.AddSingleton<SchoolWebApp.Api.Services.Notifications.IComposeurModeleMail,
@@ -458,6 +467,21 @@ builder.Services.Configure<OptionsVoix>(options =>
 // La transcription tient une liaison WebSocket sortante : pas de client HTTP à
 // injecter, mais une durée de vie par requête comme le reste.
 builder.Services.AddScoped<ITranscriptionTempsReelService, TranscriptionTempsReelService>();
+
+// Les syllabes du CP : voir RegleVerificationSon.
+// Un son n'est jugé que s'il a été testé : voir ReglesSonsVerifies.
+builder.Services.AddSingleton<FiabiliteDesSons>();
+builder.Services.AddSingleton<IFiabiliteDesSons>(services => services.GetRequiredService<FiabiliteDesSons>());
+builder.Services.AddHostedService<SchoolWebApp.Api.Workers.TestDesSonsWorker>();
+builder.Services.AddHttpClient(nameof(SchoolWebApp.Api.Workers.TestDesSonsWorker), client =>
+{
+    // La synthèse dépasse parfois vingt secondes, mesuré le 04/11/2026 ; aucun enfant n'attend ce test.
+    client.Timeout = TimeSpan.FromSeconds(60);
+});
+builder.Services.AddHttpClient<IVerificationSonService, VerificationSonService>(client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(10);
+});
 
 // Le façonnage des passages d'écoute lents : un cache mémoire par passage,
 // donc un singleton — le même texte n'est découpé qu'une fois par processus.
@@ -659,6 +683,8 @@ builder.Services.AddScoped<SchoolWebApp.Api.Services.MesFiches.ImportCoursServic
 builder.Services.AddHostedService<SchoolWebApp.Api.Workers.FichesDeCoursWorker>();
 builder.Services.AddHostedService<SchoolWebApp.Api.Workers.DeplacementPlanchesWorker>();
 builder.Services.AddHostedService<SchoolWebApp.Api.Workers.DeplacementPiecesModelesWorker>();
+builder.Services.AddHostedService<SchoolWebApp.Api.Workers.PurgePiecesSignalementsWorker>();
+builder.Services.AddHostedService<SchoolWebApp.Api.Workers.PurgeCoursControlesWorker>();
 
 // Décrire les planches importées : sans ça, le professeur affiche une figure
 // qu'il n'a jamais vue et interroge dessus au hasard de ce qu'il croit y être.
@@ -687,6 +713,10 @@ builder.Services.AddHttpClient<SchoolWebApp.Api.Services.Fournisseurs.Surveillan
     client.Timeout = TimeSpan.FromSeconds(20);
 });
 builder.Services.AddHostedService<SchoolWebApp.Api.Workers.SurveillanceFournisseursWorker>();
+
+// LES COURRIELS QUI ARRIVENT (19/10/2026) : notification à l'administrateur
+// connecté, et groupe Telegram des emails pour les boîtes de TelegramEmails.
+builder.Services.AddHostedService<SchoolWebApp.Api.Workers.SurveillanceBoitesWorker>();
 
 var app = builder.Build();
 
@@ -775,6 +805,7 @@ using (var scope = app.Services.CreateScope())
             await ReferentielSeeder.SeedAsync(db);
             await EcheanceReferentielSeeder.SeedAsync(db);
             await ExamenSeeder.SeedAsync(db);
+            await MotsVerifiesSeeder.SeedAsync(db);
             await OffresSeeder.SeedAsync(db);
 
             // Les six courriels automatiques du menu. N'écrase jamais une ligne
@@ -1067,6 +1098,49 @@ var optionsFichiers = new StaticFileOptions
     }
 };
 
+// ---------------------------------------------------------------------------
+// LES IMAGES DES MOTS (06/11/2026) — Camara : « sur le VPS, il faudra que ce soit dans le dossier données, dans un
+// dossier spécifique ». Une image WebP par mot de CP (chat.webp…), montrée à l'enfant qui vient de trouver le mot.
+// Dossier de données comme l'audio ou les planches : /donnees/images-mots dans le conteneur (monté depuis
+// /var/www/mimia/donnees/images-mots), donnees\images-mots du dépôt en local (ignoré par git). Réglage
+// `Stockage:ImagesMots` ; sans lui, le dossier « donnees » voisin de l'application. Anonyme : ce sont des dessins,
+// et la session d'un enfant doit pouvoir les lire. Gardés une semaine en cache : un dessin change rarement.
+// ---------------------------------------------------------------------------
+//
+// LES IMAGES DES SYLLABES (06/11/2026), même système — Camara : « le jeu des syllabes, quand l'enfant donnera une
+// bonne réponse, on affichera une image ; le dossier est en cours de création, on peut le prévoir ». Dossier
+// /donnees/images-syllabes, réglage `Stockage:ImagesSyllabes`, adresse /images-syllabes/<syllabe>.webp. Un « é » ne
+// s'écrit pas dans un nom de fichier : « jé » → je-aigu.webp (« je » → je.webp).
+void ServirImages(string reglage, string nomDossier, string libelle)
+{
+    var dossier = builder.Configuration[reglage];
+    if (string.IsNullOrWhiteSpace(dossier))
+    {
+        dossier = Path.GetFullPath(Path.Combine(app.Environment.ContentRootPath, "..", "donnees", nomDossier));
+    }
+    try
+    {
+        Directory.CreateDirectory(dossier);
+        app.UseStaticFiles(new StaticFileOptions
+        {
+            FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(dossier),
+            RequestPath = "/" + nomDossier,
+            OnPrepareResponse = contexte =>
+                contexte.Context.Response.Headers.CacheControl = "public, max-age=604800",
+        });
+        app.Logger.LogInformation("Images {Libelle} servies depuis {Dossier} ({Nombre} fichiers).",
+            libelle, dossier, Directory.GetFiles(dossier, "*.webp").Length);
+    }
+    catch (Exception ex)
+    {
+        // Un dossier illisible ne doit pas empêcher l'API de démarrer : l'enfant n'aura simplement pas d'image.
+        app.Logger.LogError(ex, "Images {Libelle} INDISPONIBLES : dossier {Dossier} illisible.", libelle, dossier);
+    }
+}
+
+ServirImages("Stockage:ImagesMots", "images-mots", "des mots");
+ServirImages("Stockage:ImagesSyllabes", "images-syllabes", "des syllabes");
+
 app.UseDefaultFiles();
 app.UseStaticFiles(optionsFichiers);
 app.MapControllers();
@@ -1113,6 +1187,20 @@ app.MapControllers();
 // d'origine — un écran affichant « 0 compte parent » parce qu'une route
 // n'était pas encore déployée — reste donc couvert. Ce qui change, c'est que
 // l'inconnu reçoit désormais la page plutôt qu'un refus.
+// LES PAGES PRIVÉES DISENT « NOINDEX » DANS L'EN-TÊTE — 26/10/2026. La Search
+// Console a signalé une page « indexée malgré le blocage par robots.txt » :
+// Google trouvait le lien /code dans la barre de navigation, mais robots.txt
+// lui interdisait de lire la page, et donc d'y voir le noindex. Ces chemins
+// sont désormais lisibles (robots.txt), et la réponse elle-même interdit
+// l'index — valable aussi pour un robot qui n'exécute pas le JavaScript, et
+// donc ne voit pas la balise posée par React. MÊME LISTE que NON_INDEXEES dans
+// src/lib/seo/pages.js du front.
+string[] cheminsPrives =
+[
+    "/eleves", "/profil", "/admin", "/code", "/scan",
+    "/callback", "/silent-renew", "/desabonnement", "/donner-mon-avis",
+];
+
 app.Use(async (contexte, suivant) =>
 {
     var versLeSpa = contexte.GetEndpoint()?.Metadata.GetMetadata<ReplieVersLeSpa>() is not null;
@@ -1129,6 +1217,16 @@ app.Use(async (contexte, suivant) =>
         });
 
         return;
+    }
+
+    if (versLeSpa)
+    {
+        var chemin = contexte.Request.Path.Value ?? "/";
+        if (cheminsPrives.Any(p => chemin.Equals(p, StringComparison.OrdinalIgnoreCase)
+                || chemin.StartsWith(p + "/", StringComparison.OrdinalIgnoreCase)))
+        {
+            contexte.Response.Headers["X-Robots-Tag"] = "noindex, nofollow";
+        }
     }
 
     await suivant();

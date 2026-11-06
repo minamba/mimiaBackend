@@ -27,6 +27,12 @@ namespace SchoolWebApp.Domain.Models
         /// <summary>Le modèle qui a dit cette réponse. Voir l'entité.</summary>
         public string? ModeleVoix { get; set; }
 
+        /// <summary>
+        /// Le verdict de la voix sur un tour de l'élève qui était un son demandé
+        /// (vrai : bonne prononciation ; faux : mauvaise) ; null pour tout autre tour.
+        /// </summary>
+        public bool? SonJuste { get; set; }
+
         public DateTime DateCreation { get; set; }
     }
 }

@@ -58,17 +58,20 @@ namespace SchoolWebApp.Api.Workers
 
         private readonly IServiceProvider _services;
         private readonly IFileObservation _file;
+        private readonly IFileConclusion _conclusions;
         private readonly IConfiguration _configuration;
         private readonly ILogger<ObservationWorker> _logger;
 
         public ObservationWorker(
             IServiceProvider services,
             IFileObservation file,
+            IFileConclusion conclusions,
             IConfiguration configuration,
             ILogger<ObservationWorker> logger)
         {
             _services = services;
             _file = file;
+            _conclusions = conclusions;
             _configuration = configuration;
             _logger = logger;
         }
@@ -226,6 +229,22 @@ namespace SchoolWebApp.Api.Workers
 
             var seances = (await conversations.GetSeancesAObserverAsync(Inactivite, ParPassage, ct)).ToList();
             if (seances.Count == 0) return 0;
+
+            // UNE SÉANCE QUE PERSONNE N'A QUITTÉE A AUSSI DROIT À SON COMPTE RENDU
+            // — remonté par un parent le 01/11/2026 : un cours de maths de Nour
+            // avec Nora, 34 messages, sans rapport ni fiche ; pour le parent,
+            // comme si l'enfant n'avait jamais fait de maths.
+            //
+            // La conclusion ne partait que sur « Quitter le cours » ou sur la
+            // fermeture de l'onglet (pagehide). Un enfant qui revient aux
+            // matières par le menu, qui pose la tablette ou qui change
+            // d'application ne déclenche ni l'un ni l'autre — et le balayage,
+            // lui, n'observait que les compétences. Ici, une séance muette
+            // depuis 25 minutes est une séance finie : on demande sa
+            // conclusion. Sans risque de doublon — `ADuTravailNonConcluAsync`
+            // refuse dès qu'un rapport a suivi le dernier mot de l'élève, et
+            // une séance sans un mot ne coûte aucun appel.
+            foreach (var seance in seances) _conclusions.Demander(seance.ConversationId);
 
             var total = 0;
 

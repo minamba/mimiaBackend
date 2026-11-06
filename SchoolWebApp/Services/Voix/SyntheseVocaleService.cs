@@ -360,11 +360,45 @@ namespace SchoolWebApp.Api.Services.Voix
             return flux.ToArray();
         }
 
+        /// <summary>
+        /// LES ANNONCES D'UN EXERCICE DE SONS, DITES UNE FOIS PAR VOIX ET GARDÉES — Camara, le 05/11/2026 : « il répète
+        /// toujours deux fois "Voici la prochaine syllabe" ». Une phrase fixe n'a aucune raison d'être resynthétisée :
+        /// la première prise jugée normale (voir GardeRedite.DureeNormaleMax) sert ensuite à chaque fois, à l'identique.
+        /// </summary>
+        private static readonly HashSet<string> AnnoncesFixes = new(StringComparer.Ordinal)
+        {
+            "Voici la première syllabe.", "Voici la prochaine syllabe.", "Voici le premier mot.", "Voici le prochain mot.",
+            "Je te la redis.", "Je te le redis.", "Qu'as-tu entendu ?",
+        };
+
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, byte[]> AnnoncesGardees = new(StringComparer.Ordinal);
+
+        /// <summary>Huit dixièmes de seconde de silence, en PCM 16 bits mono à 24 kHz.</summary>
+        private static readonly byte[] SilenceAvantLeSon = new byte[(int)(24000 * 2 * 0.8)];
+
         public async Task CopierAudioAsync(
             string texte, string? avatar, int age, Stream destination,
             bool dictee = false, string? langue = null, string? vitesse = null,
             string? reference = null, CancellationToken ct = default)
         {
+            // UN PASSAGE MARQUÉ ANGLAIS CHEZ UN PROFESSEUR QUI N'A PAS LE DROIT : il se lit en français. Le code tient
+            // là où le rappel n'a pas suffi — voir PromptsPedagogiques.AnglaisInterdit.
+            if (langue == "en" && Prompts.PromptsPedagogiques.AnglaisInterdit(avatar))
+            {
+                _logger.LogWarning("Passage en anglais lu en francais : ce professeur n'a pas le droit a l'anglais.");
+                langue = null;
+            }
+
+            // LE SON CHOISI À L'OREILLE PAR CAMARA : rejoué tel quel, sans appel, après le silence demandé — voir BanqueDeSons.
+            if (BanqueDeSons.Cherche(texte, avatar, age, langue, dictee) is { } sonChoisi)
+            {
+                _logger.LogInformation("Son joue depuis la banque : {Son}.", texte.Trim());
+                await destination.WriteAsync(SilenceAvantLeSon, ct);
+                await destination.WriteAsync(sonChoisi, ct);
+                await destination.FlushAsync(ct);
+                return;
+            }
+
             // LA VOIX DE GOOGLE, À L'ESSAI — voir SyntheseGemini. Le mode de
             // secours garde la main : il existe pour les jours où la voix
             // principale déraille, quelle qu'elle soit.
@@ -378,14 +412,86 @@ namespace SchoolWebApp.Api.Services.Voix
                     propre = await _faconneur.FaconnerAsync(propre, langue, vitesse, ct);
                 }
 
+                var avantSupport = propre;
+                propre = SyntheseGemini.AvecPhraseSupport(propre, age, dictee, langue, vitesse);
+
+                // UN SILENCE AVANT LE SON DICTÉ — Camara, le 05/11/2026 : « après "Voici la prochaine syllabe", une petite
+                // pause, puis la syllabe ». Mesuré : la voix tient ~400 ms après « Écoute bien », pas plus ; des points de
+                // suspension la font relire deux fois (3 prises sur 5), et sans ancre elle improvise (1 sur 6, 44 s). Le
+                // silence est donc posé ici, dans le son, avant « Écoute bien : gu » : sûr, gratuit, immédiat.
+                if (!ReferenceEquals(avantSupport, propre))
+                {
+                    await destination.WriteAsync(SilenceAvantLeSon, ct);
+                }
+
                 // LA GARDE DE REDITE, quand elle a un sens pour ce passage —
                 // voir GardeRedite. La transcription passe par la clé OpenAI.
                 var garde = new GardeRedite(_http, _options.ApiKey, _logger);
 
-                var usage = await SyntheseGemini.CopierAsync(
-                    _http, _options.GeminiApiKey!, _options.GeminiModele, propre, avatar, age,
-                    dictee, langue, vitesse, destination, _logger, ct, _compteurGemini,
-                    garde.Surveille(propre, dictee, langue) ? garde : null);
+                var annonceFixe = !dictee && langue is null && AnnoncesFixes.Contains(propre);
+                var cleAnnonce = $"{avatar}|{propre}";
+
+                if (annonceFixe && AnnoncesGardees.TryGetValue(cleAnnonce, out var dejaDite))
+                {
+                    await destination.WriteAsync(dejaDite, ct);
+                    await destination.FlushAsync(ct);
+                    return;
+                }
+
+                SyntheseGemini.UsageSynthese usage;
+
+                if (annonceFixe)
+                {
+                    // UNE PRISE PROPRE, JUSQU'À QUATRE ESSAIS : mesuré le 05/11/2026, la voix relit cette phrase deux fois
+                    // dans 4 prises sur 6. Une prise coupée n'est pas gardée : on ne sait pas où la coupe est tombée.
+                    // UNE PRISE AU MAUVAIS TIMBRE NON PLUS (06/11/2026) : « Qu'as-tu entendu ? » est sorti à 185 Hz sur une
+                    // prise sur trois, une voix de femme pour Adrien, puis rejoué à chaque tour — voir HauteurDeVoix.
+                    byte[] son = [];
+                    byte[]? meilleure = null;
+                    usage = SyntheseGemini.UsageSynthese.Rien;
+                    for (var essai = 0; essai < 4; essai++)
+                    {
+                        using var tamponAnnonce = new MemoryStream();
+                        var tentative = await SyntheseGemini.CopierAsync(
+                            _http, _options.GeminiApiKey!, _options.GeminiModele, propre, avatar, age,
+                            dictee, langue, vitesse, tamponAnnonce, _logger, ct, _compteurGemini, null);
+                        usage = tentative;
+                        son = tamponAnnonce.ToArray();
+                        if (!tentative.Ecrit || son.Length == 0) break;
+
+                        var bonTimbre = HauteurDeVoix.ConvientA(avatar, son);
+                        if (bonTimbre) meilleure ??= son;
+
+                        if (tentative.Coupe is false && bonTimbre)
+                        {
+                            AnnoncesGardees.TryAdd(cleAnnonce, son);
+                            break;
+                        }
+
+                        if (!bonTimbre)
+                        {
+                            _logger.LogWarning(
+                                "Annonce « {Annonce} » ecartee : {Hauteur:0} Hz, pas le timbre de {Avatar}.",
+                                propre, HauteurDeVoix.Mediane(son), avatar);
+                        }
+                    }
+
+                    // Aucune prise propre au bon timbre : mieux vaut une prise coupée de la bonne voix qu'une autre voix.
+                    if (meilleure is not null && !HauteurDeVoix.ConvientA(avatar, son)) son = meilleure;
+
+                    if (son.Length > 0)
+                    {
+                        await destination.WriteAsync(son, ct);
+                        await destination.FlushAsync(ct);
+                    }
+                }
+                else
+                {
+                    usage = await SyntheseGemini.CopierAsync(
+                        _http, _options.GeminiApiKey!, _options.GeminiModele, propre, avatar, age,
+                        dictee, langue, vitesse, destination, _logger, ct, _compteurGemini,
+                        garde.Surveille(propre, dictee, langue) ? garde : null);
+                }
 
                 if (usage.Ecrit)
                 {
@@ -535,7 +641,7 @@ namespace SchoolWebApp.Api.Services.Voix
                 model = _options.Modele,
                 input = propre,
                 voice = ChoisirVoix(avatar, false),
-                instructions = Jeu(age, dictee, langue) + Specialite(avatar) + ConsigneVitesse(vitesse),
+                instructions = (Prompts.PromptsPedagogiques.AnglaisInterdit(avatar) ? SansAnglais(Jeu(age, dictee, langue)) : Jeu(age, dictee, langue)) + Specialite(avatar) + ConsigneVitesse(vitesse),
                 // TROIS ESSAIS EN UNE JOURNÉE, LE 16/09/2026, ET CHACUN A
                 // APPRIS QUELQUE CHOSE :
                 //
@@ -762,6 +868,14 @@ namespace SchoolWebApp.Api.Services.Voix
 
             _ => "",
         };
+
+        private static readonly System.Text.RegularExpressions.Regex BlocMotsAnglais = new(
+            "SAUF SUR UN MOT ANGLAIS.*?(?=UN SIGLE SE LIT)",
+            System.Text.RegularExpressions.RegexOptions.Singleline | System.Text.RegularExpressions.RegexOptions.Compiled);
+
+        /// <summary>La voix de secours aussi : voir PromptsPedagogiques.AnglaisInterdit.</summary>
+        private static string SansAnglais(string jeu) =>
+            BlocMotsAnglais.Replace(jeu, "AUCUN MOT NE SE DIT À L'ANGLAISE : les mots qui existent aussi en anglais (chat, shop, sport, test) sont dits à la française.\n\n");
 
         private static string Jeu(int age, bool dictee, string? langue) =>
             dictee ? Dictee

@@ -768,6 +768,68 @@ namespace SchoolWebApp.Api.Controllers
         }
 
         /// <summary>
+        /// L'ÉTABLISSEMENT D'UN ENFANT, POSÉ PAR L'ADMINISTRATION — Camara, le
+        /// 20/10/2026 : « comme de l'autre côté, en deux temps ». La route du
+        /// parent (`PUT eleves/{id}/etablissement`) n'ouvre que ses propres
+        /// enfants ; celle-ci fait la même chose pour n'importe quel enfant, avec
+        /// le droit « Création d'enfant ». Le code seul vient du navigateur, le
+        /// nom et la position sont relus dans l'Annuaire ; un code vide efface.
+        /// </summary>
+        [HttpPut("eleves/{id:int}/etablissement")]
+        [SwaggerResponse(200, "Établissement enregistré (ou effacé).")]
+        [SwaggerResponse(400, "Code inconnu de l'Annuaire.")]
+        [SwaggerResponse(403, "Pas le droit « Création d'enfant ».")]
+        [SwaggerResponse(404, "Enfant inexistant.")]
+        [SwaggerResponse(502, "L'Annuaire ne répond pas.")]
+        public async Task<IActionResult> DefinirEtablissementEnfant(
+            int id,
+            [FromBody] EtablissementRequest requete,
+            [FromServices] IEleveRepository eleves,
+            [FromServices] Services.Orientation.IAnnuaireEtablissementsService annuaire,
+            [FromServices] Api.Utils.ICurrentUserAccessor utilisateur,
+            CancellationToken ct)
+        {
+            if (!User.IsInRole("SuperAdmin"))
+            {
+                var droits = await _adminService.GetOngletsAdminParMailAsync(utilisateur?.Mail);
+                if (!droits.Contains(OngletsAdmin.CreationEnfant))
+                {
+                    return StatusCode(403, new { message = "Vous n'avez pas le droit de modifier un enfant." });
+                }
+            }
+
+            if (string.IsNullOrWhiteSpace(requete?.Uai))
+            {
+                return await eleves.DefinirEtablissementAsync(id, null, null, null, null, null, ct)
+                    ? Ok(new { etablissement = (object?)null })
+                    : NotFound();
+            }
+
+            Services.Orientation.EtablissementTrouve? trouve;
+            try
+            {
+                trouve = await annuaire.GetParUaiAsync(requete.Uai.Trim(), ct);
+            }
+            catch (HttpRequestException ex)
+            {
+                _logger.LogWarning(ex, "Annuaire de l'education injoignable (administration).");
+                return StatusCode(502, new { message = "L'annuaire officiel ne répond pas. Réessayez dans un instant." });
+            }
+
+            if (trouve is null) return BadRequest(new { message = "Cet établissement est inconnu de l'annuaire officiel." });
+
+            var enregistre = await eleves.DefinirEtablissementAsync(
+                id, trouve.Uai, trouve.Nom, trouve.Commune, trouve.Latitude, trouve.Longitude, ct);
+            if (!enregistre) return NotFound();
+
+            _logger.LogWarning(
+                "Etablissement {Uai} pose sur l'enfant {EleveId} par l'administration ({Admin}).",
+                trouve.Uai, id, utilisateur?.Mail);
+
+            return Ok(new { etablissement = trouve });
+        }
+
+        /// <summary>
         /// L'ESPACE PARENT ET SES FICHES (16/10/2026) — Camara : « dans les droits,
         /// il faut cette option à cocher pour donner l'autorisation ». Pour TOUT
         /// parent, comme l'ajout d'enfant : un administrateur coché n'a ni limite
@@ -1788,6 +1850,36 @@ namespace SchoolWebApp.Api.Controllers
         }
 
         /// <summary>
+        /// L'ÉQUIPE, POUR LES COPIES — Camara, le 19/10/2026 : « l'autocomplétion
+        /// des adresses des admins pour les personnes à mettre en copie ». Chaque
+        /// administrateur (super-administrateurs compris) avec l'adresse de sa
+        /// boîte Mimia quand il l'a connectée, et son adresse de connexion.
+        /// </summary>
+        [HttpGet("messagerie/contacts")]
+        [SwaggerResponse(200, "[{ nom, mail, boite }] — `boite` vrai pour l'adresse de sa boîte mail.")]
+        public async Task<IActionResult> ContactsEquipe(
+            [FromServices] SchoolWebApp.Domain.Repositories.IMessagerieAdminRepository depot,
+            [FromServices] IConfiguration configuration,
+            CancellationToken ct)
+        {
+            var superAdmins = configuration.GetSection("Admin:Emails").Get<string[]>() ?? [];
+            var vues = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var contacts = new List<object>();
+
+            foreach (var s in await depot.SignatairesAsync(superAdmins, ct))
+            {
+                var nom = string.Join(' ', new[] { s.Prenom, s.Nom }.Where(p => !string.IsNullOrWhiteSpace(p))).Trim();
+                foreach (var (mail, boite) in new[] { (s.AdresseBoite, true), (s.Mail, false) })
+                {
+                    if (string.IsNullOrWhiteSpace(mail) || !vues.Add(mail)) continue;
+                    contacts.Add(new { nom = nom.Length == 0 ? null : nom, mail, boite });
+                }
+            }
+
+            return Ok(contacts);
+        }
+
+        /// <summary>
         /// LES PASTILLES DES ONGLETS (Camara, le 17/10/2026) : reçus et non lus,
         /// envoyés, brouillons — en une requête.
         /// </summary>
@@ -1913,7 +2005,9 @@ namespace SchoolWebApp.Api.Controllers
                 // Un brouillon qui ne porte que des pièces n'est pas vide (18/10/2026).
                 var vide = string.IsNullOrWhiteSpace(texte) && string.IsNullOrWhiteSpace(model.Sujet)
                     && string.IsNullOrWhiteSpace(model.Titre) && string.IsNullOrWhiteSpace(model.Destinataire)
-                    && !model.AvecPieces;
+                    && !model.AvecPieces
+                    && SchoolWebApp.Domain.Emails.ListeAdresses.EnLigne(model.Cc) is null
+                    && SchoolWebApp.Domain.Emails.ListeAdresses.EnLigne(model.Cci) is null;
                 if (vide)
                 {
                     if (model.Id is int id) await depot.SupprimerBrouillonsAsync(a, CleBoite(boite), [id], ct);
@@ -1921,7 +2015,9 @@ namespace SchoolWebApp.Api.Controllers
                 }
 
                 var libre = await depot.EnregistrerBrouillonLibreAsync(
-                    a, CleBoite(boite), model.Id, model.Destinataire, model.Sujet, model.Titre, texte, ct);
+                    a, CleBoite(boite), model.Id, model.Destinataire, model.Sujet, model.Titre, texte, ct,
+                    SchoolWebApp.Domain.Emails.ListeAdresses.EnLigne(model.Cc),
+                    SchoolWebApp.Domain.Emails.ListeAdresses.EnLigne(model.Cci));
                 return Ok(libre);
             }
 
@@ -1932,7 +2028,9 @@ namespace SchoolWebApp.Api.Controllers
             }
 
             var brouillon = await depot.EnregistrerBrouillonAsync(
-                a, CleBoite(boite), origine, model.Destinataire, model.Sujet, texte, ct);
+                a, CleBoite(boite), origine, model.Destinataire, model.Sujet, texte, ct,
+                SchoolWebApp.Domain.Emails.ListeAdresses.EnLigne(model.Cc),
+                SchoolWebApp.Domain.Emails.ListeAdresses.EnLigne(model.Cci));
             return Ok(brouillon);
         }
 
@@ -1940,7 +2038,9 @@ namespace SchoolWebApp.Api.Controllers
         /// <param name="Id">Un brouillon libre déjà enregistré, à mettre à jour.</param>
         /// <param name="Titre">Le titre affiché dans le message (« Écrire à un parent »).</param>
         /// <param name="AvecPieces">Vrai si le brouillon porte des images ou documents : il n'est alors jamais « vide ».</param>
-        public record BrouillonRequest(long? MessageOrigine, string? Destinataire, string? Sujet, string? Texte, int? Id = null, string? Titre = null, bool AvecPieces = false);
+        /// <param name="Cc">Les copies (19/10/2026), gardées telles quelles : elles ne sont vérifiées qu'à l'envoi.</param>
+        /// <param name="Cci">Les copies cachées.</param>
+        public record BrouillonRequest(long? MessageOrigine, string? Destinataire, string? Sujet, string? Texte, int? Id = null, string? Titre = null, bool AvecPieces = false, List<string>? Cc = null, List<string>? Cci = null);
 
         /// <summary>Un de ses brouillons, par son identifiant (« Écrire à un parent » le rouvre).</summary>
         [HttpGet("messagerie/brouillons/libre/{id:int}")]
@@ -2153,6 +2253,15 @@ namespace SchoolWebApp.Api.Controllers
                 return BadRequest(new { message = "La réponse est vide." });
             }
 
+            // LES COPIES (19/10/2026) : lues, vérifiées, et refusées si bannies.
+            var (copies, fauteCopies) = SchoolWebApp.Domain.Emails.ListeAdresses.Lire(model.Cc);
+            var (cachees, fauteCachees) = SchoolWebApp.Domain.Emails.ListeAdresses.Lire(model.Cci, copies);
+            if ((fauteCopies ?? fauteCachees) is string faute) return BadRequest(new { message = faute });
+            if (await PremiereBannieAsync(bannis, copies.Concat(cachees), ct) is string bannie)
+            {
+                return BadRequest(new { message = $"L'adresse {bannie} est bannie : elle ne reçoit plus aucun courriel." });
+            }
+
             // Le texte saisi devient des paragraphes, échappé comme celui d'une
             // diffusion : le même service, donc la même règle, et aucun HTML de
             // l'administrateur ne part tel quel.
@@ -2218,7 +2327,7 @@ namespace SchoolWebApp.Api.Controllers
                         Tronquer(origine.Texte ?? origine.Extrait ?? string.Empty, 600))
                         .Replace("\n", "<br>"),
                 });
-            }, ct);
+            }, ct, copies, cachees);
 
             if (expediteurBanni)
             {
@@ -2253,9 +2362,22 @@ namespace SchoolWebApp.Api.Controllers
             {
                 message = "Réponse envoyée.",
                 destinataire = envoye.Destinataire,
+                copies,
+                copiesCachees = cachees,
                 accuse = envoye.Accuse,
                 copieDeposee = envoye.CopieDeposee,
             });
+        }
+
+        /// <summary>La première adresse bannie de la liste, ou null.</summary>
+        private static async Task<string?> PremiereBannieAsync(
+            SchoolWebApp.Domain.Repositories.IBannissementRepository bannis, IEnumerable<string> adresses, CancellationToken ct)
+        {
+            foreach (var adresse in adresses)
+            {
+                if (await bannis.EstBanniAsync(adresse, ct)) return adresse;
+            }
+            return null;
         }
 
         /// <summary>« Bonjour Marie Dupont, » ou « Bonjour, » — jamais « Bonjour , ».</summary>
@@ -2447,6 +2569,8 @@ namespace SchoolWebApp.Api.Controllers
             [FromForm] List<IFormFile>? images = null,
             [FromForm] List<IFormFile>? documents = null,
             [FromQuery] string? boite = null,
+            [FromForm] List<string>? cc = null,
+            [FromForm] List<string>? cci = null,
             CancellationToken ct = default)
         {
             if (string.IsNullOrWhiteSpace(sujet) || string.IsNullOrWhiteSpace(texte))
@@ -2480,6 +2604,15 @@ namespace SchoolWebApp.Api.Controllers
                 return BadRequest(new { message = "Cette adresse est bannie : elle ne reçoit plus aucun courriel." });
             }
 
+            // LES COPIES ET COPIES CACHÉES (19/10/2026), comme sur Gmail.
+            var (copies, fauteCopies) = SchoolWebApp.Domain.Emails.ListeAdresses.Lire(cc, [adresse]);
+            var (cachees, fauteCachees) = SchoolWebApp.Domain.Emails.ListeAdresses.Lire(cci, copies.Append(adresse));
+            if ((fauteCopies ?? fauteCachees) is string faute) return BadRequest(new { message = faute });
+            if (await PremiereBannieAsync(bannis, copies.Concat(cachees), ct) is string bannie)
+            {
+                return BadRequest(new { message = $"L'adresse {bannie} est bannie : elle ne reçoit plus aucun courriel." });
+            }
+
             var lues = await LirePiecesAsync(images, "diffusion");
             var jointes = await LirePiecesAsync(documents, null);
 
@@ -2495,7 +2628,8 @@ namespace SchoolWebApp.Api.Controllers
             };
 
             var resultat = await email.DiffuserAsync(
-                new[] { adresse }, sujet, "diffusion", valeurs, lues, jointes, ct: ct, expediteur: b.Expediteur);
+                new[] { adresse }, sujet, "diffusion", valeurs, lues, jointes, ct: ct, expediteur: b.Expediteur,
+                copies: copies, copiesCachees: cachees);
 
             if (resultat.Envoyes == 0)
             {
@@ -2509,7 +2643,7 @@ namespace SchoolWebApp.Api.Controllers
             // UNE COPIE DANS « MESSAGES ENVOYÉS » (17/10/2026) : parti par le
             // service d'envoi, le message n'apparaîtrait sinon nulle part dans sa boîte.
             var copieDeposee = await b.Boite.DeposerCopieAsync(
-                adresse, sujet, await email.ComposerAsync(sujet, "diffusion", valeurs), lues, jointes, ct);
+                adresse, sujet, await email.ComposerAsync(sujet, "diffusion", valeurs), lues, jointes, ct, copies, cachees);
 
             // EN DÉVELOPPEMENT, LE DÉTOUR SE DIT : le message est parti vers
             // l'adresse de redirection, pas vers ce parent.
@@ -2690,8 +2824,15 @@ namespace SchoolWebApp.Api.Controllers
         [HttpGet("evenements")]
         [SwaggerResponse(200, "Flux SSE des événements d'administration.")]
         public async Task Evenements(
-            [FromServices] IEvenementsAdminHub hub, CancellationToken ct)
+            [FromServices] IEvenementsAdminHub hub,
+            [FromServices] SchoolWebApp.Domain.Repositories.IMessagerieAdminRepository depot,
+            [FromServices] Api.Utils.ICurrentUserAccessor utilisateur,
+            CancellationToken ct)
         {
+            // QUI ÉCOUTE (19/10/2026) : les courriels arrivés dans sa boîte ne
+            // sont annoncés qu'à lui. Inconnu, il reçoit le reste comme avant.
+            var parentId = (await depot.SignataireAsync(utilisateur.Mail, ct))?.ParentId;
+
             Response.Headers.ContentType = "text/event-stream";
             Response.Headers.CacheControl = "no-cache";
             Response.Headers.Connection = "keep-alive";
@@ -2721,7 +2862,7 @@ namespace SchoolWebApp.Api.Controllers
                 // (« : … »), que le navigateur lit et jette, suffit à trancher.
                 await EcrireAsync(": connecté\n\n");
 
-                await using var evenements = hub.SAbonnerAsync(ct).GetAsyncEnumerator(ct);
+                await using var evenements = hub.SAbonnerAsync(parentId, ct).GetAsyncEnumerator(ct);
 
                 // L'événement suivant n'est demandé QU'UNE FOIS, et attendu
                 // d'un tour à l'autre : le redemander à chaque battement
@@ -2744,8 +2885,8 @@ namespace SchoolWebApp.Api.Controllers
 
                     if (!await suivant) break;
 
-                    var json = JsonSerializer.Serialize(new { type = evenements.Current });
-                    await EcrireAsync($"data: {json}\n\n");
+                    // La charge arrive déjà en JSON, avec son `type`.
+                    await EcrireAsync($"data: {evenements.Current}\n\n");
 
                     suivant = evenements.MoveNextAsync().AsTask();
                 }
@@ -2805,7 +2946,7 @@ namespace SchoolWebApp.Api.Controllers
                 {
                     signalement = await signalements.ModifierAsync(
                         signalement.Id, signalement.Categorie!, signalement.Description!,
-                        etatDemande, ct) ?? signalement;
+                        etatDemande, ct: ct) ?? signalement;
                 }
 
                 return StatusCode(201, signalement);
@@ -2825,6 +2966,9 @@ namespace SchoolWebApp.Api.Controllers
             int id, [FromBody] SignalementAdminRequest model,
             [FromServices] ISignalementService signalements,
             [FromServices] Domain.Emails.IServiceEmail email,
+            [FromServices] IJeuxDeTestsRepository jeux,
+            [FromServices] IRolesRepository roles,
+            [FromServices] IReglageRepository reglages,
             CancellationToken ct)
         {
             var faute = ValiderSignalement(model, exigerParentMail: false);
@@ -2839,16 +2983,36 @@ namespace SchoolWebApp.Api.Controllers
             try
             {
                 var apres = await signalements.ModifierAsync(
-                    id, categorie, model.Description!.Trim(), etat, ct);
+                    id, categorie, model.Description!.Trim(), etat, model.Competence, ct);
 
                 if (apres is null) return NotFound();
+
+                // LA LIGNE DU JEU DE TEST SUIT LA MODIFICATION — Camara, le 06/11/2026 : « quand je modifie, ça ne
+                // modifie pas le ticket dans les jeux de test ». Compétence et description y redescendent, avant
+                // un éventuel courriel « prêt à être testé » qui les cite.
+                if (avant.EstAdmin && apres.LigneDeTestId is int ligneModifiee && !string.IsNullOrWhiteSpace(apres.Competence))
+                {
+                    if (!await jeux.MettreAJourLigneDeSignalementAsync(ligneModifiee, apres.Competence, apres.Description, ct))
+                    {
+                        _logger.LogWarning("Signalement {Id} modifie : sa ligne de test {Ligne} n'existe plus.", id, ligneModifiee);
+                    }
+                }
 
                 // UN MAIL SEULEMENT SI L'ÉTAT A VRAIMENT CHANGÉ.
                 //
                 // Corriger une faute de frappe dans la description ne doit
                 // pas relancer un message au parent — seule une vraie
                 // progression du traitement le justifie.
-                if (etat != avant.Etat && !string.IsNullOrWhiteSpace(apres.ParentMail))
+                // LE SIGNALEMENT D'UN ADMINISTRATEUR (05/11/2026) : pas de mail à son auteur. Passé à « Traité »,
+                // sa ligne de jeu de test repasse « à tester », et la personne qui teste est prévenue.
+                if (avant.EstAdmin)
+                {
+                    if (etat == "traite" && avant.Etat != "traite" && apres.LigneDeTestId is int ligneId)
+                    {
+                        await PreparerLeTestAsync(jeux, email, roles, reglages, apres, ligneId, ct);
+                    }
+                }
+                else if (etat != avant.Etat && !string.IsNullOrWhiteSpace(apres.ParentMail))
                 {
                     await EnvoyerMailEtatSignalementAsync(email, apres, etat, ct);
                 }
@@ -2866,8 +3030,128 @@ namespace SchoolWebApp.Api.Controllers
         [SwaggerResponse(204, "Signalement supprime.")]
         [SwaggerResponse(404, "Signalement inexistant.")]
         public async Task<IActionResult> SupprimerSignalement(
+            int id, [FromServices] ISignalementService signalements, [FromServices] IJeuxDeTestsRepository jeux,
+            CancellationToken ct)
+        {
+            var signalement = await signalements.GetByIdAsync(id, ct);
+            if (signalement is null || !await signalements.SupprimerAsync(id, ct)) return NotFound();
+
+            // LA LIGNE DU JEU DE TEST PART AVEC LE SIGNALEMENT ADMIN — Camara, le 06/11/2026 : « si je supprime un
+            // signalement admin, je veux qu'il soit également supprimé dans les jeux de test ». Le bloc reste.
+            if (signalement.EstAdmin && signalement.LigneDeTestId is int ligneId)
+            {
+                var ligne = (await jeux.LignesDeSignalementAsync([ligneId], ct)).FirstOrDefault();
+                if (ligne is not null && await jeux.SupprimerLigneAsync(ligne.JeuId, ligneId, ct) is not null)
+                {
+                    _logger.LogInformation("Signalement admin {Id} supprime, avec sa ligne de test {Ligne}.", id, ligneId);
+                }
+            }
+
+            return NoContent();
+        }
+
+        // LES PIÈCES JOINTES — Camara, le 03/11/2026 : captures d'écran et documents. Le
+        // chemin sur le disque ne sort jamais de l'API.
+        private static object DecrirePieceSignalement(Domain.Models.SignalementPiece p) => new
+        {
+            p.Id, p.SignalementId, p.Nom, p.TypeMime, p.Taille, p.EstImage, p.AjoutePar, p.DateCreation,
+        };
+
+        [HttpGet("signalements/{id:int}/pieces")]
+        [SwaggerResponse(200, "Les pièces jointes du signalement.")]
+        public async Task<IActionResult> GetPiecesSignalement(
             int id, [FromServices] ISignalementService signalements, CancellationToken ct) =>
-            await signalements.SupprimerAsync(id, ct) ? NoContent() : NotFound();
+            Ok((await signalements.GetPiecesAsync(id, ct)).Select(DecrirePieceSignalement));
+
+        [HttpGet("signalements/{id:int}/pieces/{pieceId:int}/fichier")]
+        [SwaggerResponse(200, "Le fichier.")]
+        [SwaggerResponse(404, "Pièce ou fichier absent.")]
+        public async Task<IActionResult> LirePieceSignalement(
+            int id, int pieceId, [FromServices] ISignalementService signalements, CancellationToken ct)
+        {
+            if (await signalements.LirePieceAsync(id, pieceId, ct) is not { } lue) return NotFound();
+
+            // Toujours en téléchargement, et jamais deviné : un fichier envoyé par un
+            // compte ne s'exécute pas dans la session d'un administrateur.
+            Response.Headers["X-Content-Type-Options"] = "nosniff";
+            return File(lue.Octets, lue.Piece.TypeMime, lue.Piece.Nom);
+        }
+
+        [HttpPost("signalements/{id:int}/pieces")]
+        [RequestSizeLimit(ReglesPieceSignalement.TailleRequeteMax)]
+        [SwaggerResponse(201, "La pièce ajoutée.")]
+        [SwaggerResponse(400, "Fichier refusé.")]
+        [SwaggerResponse(404, "Signalement inexistant.")]
+        [SwaggerResponse(503, "Stockage indisponible.")]
+        public async Task<IActionResult> AjouterPieceSignalement(
+            int id, IFormFile? fichier, [FromServices] ISignalementService signalements, CancellationToken ct)
+        {
+            if (fichier is null) return BadRequest(new { message = "Aucun fichier reçu." });
+            if (fichier.Length > ReglesPieceSignalement.TailleMax) return BadRequest(new { message = "Ce fichier dépasse 10 Mo." });
+
+            using var memoire = new MemoryStream();
+            await fichier.CopyToAsync(memoire, ct);
+
+            var ajout = await signalements.AjouterPieceAsync(id, fichier.FileName, memoire.ToArray(), MailAppelant(), ct);
+
+            if (ajout.Introuvable) return NotFound();
+            if (ajout.StockageIndisponible) return StatusCode(503, new { message = ajout.Refus });
+            if (ajout.Piece is null) return BadRequest(new { message = ajout.Refus });
+
+            return StatusCode(201, DecrirePieceSignalement(ajout.Piece));
+        }
+
+        [HttpDelete("signalements/{id:int}/pieces/{pieceId:int}")]
+        [SwaggerResponse(204, "Pièce supprimée.")]
+        [SwaggerResponse(404, "Pièce inexistante.")]
+        public async Task<IActionResult> SupprimerPieceSignalement(
+            int id, int pieceId, [FromServices] ISignalementService signalements, CancellationToken ct) =>
+            await signalements.SupprimerPieceAsync(id, pieceId, ct) ? NoContent() : NotFound();
+
+        // LES COMMENTAIRES — Camara, le 03/11/2026 : des notes de l'administration,
+        // sous le signalement. Le parent ne les voit pas, et aucun mail ne part.
+        [HttpGet("signalements/{id:int}/commentaires")]
+        [SwaggerResponse(200, "Les commentaires, du plus ancien au plus récent.", typeof(IEnumerable<Domain.Models.SignalementCommentaire>))]
+        public async Task<IActionResult> GetCommentairesSignalement(
+            int id, [FromServices] ISignalementService signalements, CancellationToken ct) =>
+            Ok(await signalements.GetCommentairesAsync(id, ct));
+
+        [HttpPost("signalements/{id:int}/commentaires")]
+        [SwaggerResponse(201, "Le commentaire ajouté.", typeof(Domain.Models.SignalementCommentaire))]
+        [SwaggerResponse(400, "Commentaire vide.")]
+        [SwaggerResponse(404, "Signalement inexistant.")]
+        public async Task<IActionResult> AjouterCommentaireSignalement(
+            int id, [FromBody] SignalementCommentaireRequest model,
+            [FromServices] ISignalementService signalements, CancellationToken ct)
+        {
+            if (string.IsNullOrWhiteSpace(model.Texte))
+                return BadRequest(new { message = "Le commentaire est vide." });
+
+            var commentaire = await signalements.AjouterCommentaireAsync(id, MailAppelant(), model.Texte.Trim(), ct);
+            return commentaire is null ? NotFound() : StatusCode(201, commentaire);
+        }
+
+        [HttpPut("signalements/{id:int}/commentaires/{commentaireId:int}")]
+        [SwaggerResponse(200, "Le commentaire modifié.", typeof(Domain.Models.SignalementCommentaire))]
+        [SwaggerResponse(400, "Commentaire vide.")]
+        [SwaggerResponse(404, "Commentaire inexistant.")]
+        public async Task<IActionResult> ModifierCommentaireSignalement(
+            int id, int commentaireId, [FromBody] SignalementCommentaireRequest model,
+            [FromServices] ISignalementService signalements, CancellationToken ct)
+        {
+            if (string.IsNullOrWhiteSpace(model.Texte))
+                return BadRequest(new { message = "Le commentaire est vide." });
+
+            var commentaire = await signalements.ModifierCommentaireAsync(id, commentaireId, model.Texte.Trim(), ct);
+            return commentaire is null ? NotFound() : Ok(commentaire);
+        }
+
+        [HttpDelete("signalements/{id:int}/commentaires/{commentaireId:int}")]
+        [SwaggerResponse(204, "Commentaire supprimé.")]
+        [SwaggerResponse(404, "Commentaire inexistant.")]
+        public async Task<IActionResult> SupprimerCommentaireSignalement(
+            int id, int commentaireId, [FromServices] ISignalementService signalements, CancellationToken ct) =>
+            await signalements.SupprimerCommentaireAsync(id, commentaireId, ct) ? NoContent() : NotFound();
 
         private static readonly Dictionary<string, string> LibellesCategorieSignalement =
             new(StringComparer.OrdinalIgnoreCase)
@@ -2920,6 +3204,67 @@ namespace SchoolWebApp.Api.Controllers
                     signalement.ParentMail!, "Votre signalement a été traité",
                     "signalement-traite", valeurs, ct);
             }
+        }
+
+        /// <summary>
+        /// UN BUG CORRIGÉ, PRÊT À ÊTRE TESTÉ — Camara, le 05/11/2026 : la ligne repasse « à tester » et un mail part,
+        /// objet « Le bug « … » vient d'être corrigé - Prêt à être testé », avec tout ce qu'il faut pour retester.
+        ///
+        /// LES DESTINATAIRES SUIVENT LES RÔLES (06/11/2026) : chaque compte dont le rôle a la case « Signalement admin
+        /// traité » cochée (onglet « Rôles »), plus minamba.camara@mimia.fr si son interrupteur est allumé. Un mail par
+        /// adresse : personne ne voit les autres destinataires.
+        /// </summary>
+        private async Task PreparerLeTestAsync(
+            IJeuxDeTestsRepository jeux, Domain.Emails.IServiceEmail email,
+            IRolesRepository roles, IReglageRepository reglages,
+            Signalement signalement, int ligneId, CancellationToken ct)
+        {
+            var ligne = (await jeux.LignesDeSignalementAsync([ligneId], ct)).FirstOrDefault();
+            if (ligne is null || !await jeux.RemettreATesterAsync(ligneId, ct))
+            {
+                _logger.LogWarning("Signalement {Id} traite : sa ligne de test {Ligne} n'existe plus.", signalement.Id, ligneId);
+                return;
+            }
+
+            var destinataires = (await roles.AdressesPourCourrielAsync(CourrielsDeRole.TestPret, ct)).ToList();
+            if (await reglages.EstActifAsync(CourrielsDeRole.ReglageCopieMinamba, false, ct)
+                && !destinataires.Contains(CourrielsDeRole.AdresseMinamba, StringComparer.OrdinalIgnoreCase))
+            {
+                destinataires.Add(CourrielsDeRole.AdresseMinamba);
+            }
+
+            if (destinataires.Count == 0)
+            {
+                _logger.LogWarning(
+                    "Signalement {Id} traite : ligne {Ligne} remise a tester, mais AUCUN destinataire (aucun role coche, copie Minamba eteinte).",
+                    signalement.Id, ligneId);
+                return;
+            }
+
+            static string Html(string? texte) => System.Net.WebUtility.HtmlEncode(texte ?? string.Empty);
+            var nom = ligne.Competence.Length > 90 ? ligne.Competence[..90].TrimEnd() + "…" : ligne.Competence;
+            var section = ligne.Section switch { "elementaire" => "Élémentaire", "college" => "Collège", "lycee" => "Lycée", _ => ligne.Section };
+
+            var valeurs = new Dictionary<string, string>
+            {
+                ["competence"] = Html(ligne.Competence),
+                ["jeu"] = Html(string.IsNullOrWhiteSpace(ligne.JeuTitre) ? $"{section} · {ligne.Classe}" : ligne.JeuTitre),
+                ["classe"] = Html($"{section} · {ligne.Classe}"),
+                ["bloc"] = Html($"{ligne.TestTitre} · {ligne.Matiere}"),
+                ["description"] = Html(ligne.Commentaire ?? signalement.Description),
+                ["auteur"] = Html(signalement.ParentMail),
+            };
+
+            foreach (var destinataire in destinataires)
+            {
+                var envoye = await email.EnvoyerAsync(
+                    destinataire, $"Le bug « {nom} » vient d'être corrigé - Prêt à être testé", "test-pret", valeurs, ct);
+
+                if (!envoye) _logger.LogError("Mail « pret a etre teste » NON ENVOYE a {Adresse} (signalement {Id}).", destinataire, signalement.Id);
+            }
+
+            _logger.LogInformation("Signalement {Id} traite : ligne {Ligne} remise a tester, {Nombre} destinataire(s).",
+                signalement.Id, ligneId, destinataires.Count);
         }
 
         private static string? ValiderSignalement(SignalementAdminRequest model, bool exigerParentMail)

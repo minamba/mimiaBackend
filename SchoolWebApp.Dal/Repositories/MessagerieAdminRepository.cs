@@ -29,6 +29,13 @@ namespace SchoolWebApp.Dal.Repositories
             return b is null ? null : (b.Adresse, b.MotDePasseChiffre);
         }
 
+        public async Task<IReadOnlyList<(int ParentId, string Adresse, string MotDePasseChiffre)>> BoitesAsync(CancellationToken ct = default) =>
+            (await _context.BoitesMailAdmins.AsNoTracking()
+                .Select(x => new { x.ParentId, x.Adresse, x.MotDePasseChiffre })
+                .ToListAsync(ct))
+            .Select(x => (x.ParentId, x.Adresse, x.MotDePasseChiffre))
+            .ToList();
+
         public async Task EnregistrerBoiteAsync(int parentId, string adresse, string motDePasseChiffre, CancellationToken ct = default)
         {
             var maintenant = DateTime.UtcNow;
@@ -204,7 +211,7 @@ namespace SchoolWebApp.Dal.Repositories
             var liste = await requete
                 .OrderByDescending(b => b.DateModification).ThenByDescending(b => b.Id)
                 .Skip((Math.Max(1, page) - 1) * taille).Take(taille)
-                .Select(b => new BrouillonMessagerie(b.Id, b.MessageOrigine, b.Destinataire, b.Sujet, b.Texte, b.DateModification, b.Titre))
+                .Select(b => new BrouillonMessagerie(b.Id, b.MessageOrigine, b.Destinataire, b.Sujet, b.Texte, b.DateModification, b.Titre, b.Copies, b.CopiesCachees))
                 .ToListAsync(ct);
 
             return (liste, total);
@@ -213,7 +220,7 @@ namespace SchoolWebApp.Dal.Repositories
         public Task<BrouillonMessagerie?> BrouillonPourAsync(int parentId, string boite, long messageOrigine, CancellationToken ct = default) =>
             _context.BrouillonsMail.AsNoTracking()
                 .Where(b => b.ParentId == parentId && b.Boite == boite && b.MessageOrigine == messageOrigine)
-                .Select(b => new BrouillonMessagerie(b.Id, b.MessageOrigine, b.Destinataire, b.Sujet, b.Texte, b.DateModification, b.Titre))
+                .Select(b => new BrouillonMessagerie(b.Id, b.MessageOrigine, b.Destinataire, b.Sujet, b.Texte, b.DateModification, b.Titre, b.Copies, b.CopiesCachees))
                 .FirstOrDefaultAsync(ct);
 
         public async Task<IReadOnlySet<long>> MessagesAvecBrouillonAsync(
@@ -233,7 +240,7 @@ namespace SchoolWebApp.Dal.Repositories
 
         public async Task<BrouillonMessagerie> EnregistrerBrouillonAsync(
             int parentId, string boite, long messageOrigine, string? destinataire, string? sujet, string texte,
-            CancellationToken ct = default)
+            CancellationToken ct = default, string? copies = null, string? copiesCachees = null)
         {
             var b = await _context.BrouillonsMail
                 .FirstOrDefaultAsync(x => x.ParentId == parentId && x.Boite == boite && x.MessageOrigine == messageOrigine, ct);
@@ -245,23 +252,25 @@ namespace SchoolWebApp.Dal.Repositories
             }
 
             b.Destinataire = Court(destinataire, 255);
+            b.Copies = Court(copies, 2000);
+            b.CopiesCachees = Court(copiesCachees, 2000);
             b.Sujet = Court(sujet, 500);
             b.Texte = texte;
             b.DateModification = DateTime.UtcNow;
 
             await _context.SaveChangesAsync(ct);
-            return new BrouillonMessagerie(b.Id, b.MessageOrigine, b.Destinataire, b.Sujet, b.Texte, b.DateModification, b.Titre);
+            return new BrouillonMessagerie(b.Id, b.MessageOrigine, b.Destinataire, b.Sujet, b.Texte, b.DateModification, b.Titre, b.Copies, b.CopiesCachees);
         }
 
         public Task<BrouillonMessagerie?> BrouillonAsync(int parentId, string boite, int id, CancellationToken ct = default) =>
             _context.BrouillonsMail.AsNoTracking()
                 .Where(b => b.Id == id && b.ParentId == parentId && b.Boite == boite)
-                .Select(b => new BrouillonMessagerie(b.Id, b.MessageOrigine, b.Destinataire, b.Sujet, b.Texte, b.DateModification, b.Titre))
+                .Select(b => new BrouillonMessagerie(b.Id, b.MessageOrigine, b.Destinataire, b.Sujet, b.Texte, b.DateModification, b.Titre, b.Copies, b.CopiesCachees))
                 .FirstOrDefaultAsync(ct);
 
         public async Task<BrouillonMessagerie> EnregistrerBrouillonLibreAsync(
             int parentId, string boite, int? id, string? destinataire, string? sujet, string? titre, string texte,
-            CancellationToken ct = default)
+            CancellationToken ct = default, string? copies = null, string? copiesCachees = null)
         {
             // Le sien, sur cette boîte, et sans message d'origine : un identifiant
             // d'un autre brouillon ne s'écrase jamais, on en crée un nouveau.
@@ -277,13 +286,15 @@ namespace SchoolWebApp.Dal.Repositories
             }
 
             b.Destinataire = Court(destinataire, 255);
+            b.Copies = Court(copies, 2000);
+            b.CopiesCachees = Court(copiesCachees, 2000);
             b.Sujet = Court(sujet, 500);
             b.Titre = Court(titre, 150);
             b.Texte = texte;
             b.DateModification = DateTime.UtcNow;
 
             await _context.SaveChangesAsync(ct);
-            return new BrouillonMessagerie(b.Id, b.MessageOrigine, b.Destinataire, b.Sujet, b.Texte, b.DateModification, b.Titre);
+            return new BrouillonMessagerie(b.Id, b.MessageOrigine, b.Destinataire, b.Sujet, b.Texte, b.DateModification, b.Titre, b.Copies, b.CopiesCachees);
         }
 
         public async Task<int> SupprimerBrouillonsAsync(int parentId, string boite, IEnumerable<int> ids, CancellationToken ct = default)

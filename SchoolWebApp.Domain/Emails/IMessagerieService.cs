@@ -74,9 +74,21 @@ namespace SchoolWebApp.Domain.Emails
         public long Taille { get; set; }
     }
 
+    /// <summary>Une adresse, avec son nom quand le message en donne un.</summary>
+    public record AdresseMail(string? Nom, string Adresse);
+
     /// <summary>Le message ouvert, avec son corps.</summary>
     public class MessageDetail : MessageRecu
     {
+        /// <summary>
+        /// TOUS LES DESTINATAIRES (« À ») ET TOUTES LES COPIES (« Cc ») — pour
+        /// « Répondre à tous » (19/10/2026). Les copies cachées n'arrivent
+        /// jamais chez qui les reçoit : il n'y a rien à lire.
+        /// </summary>
+        public List<AdresseMail> Destinataires { get; set; } = [];
+
+        public List<AdresseMail> Copies { get; set; } = [];
+
         /// <summary>
         /// Le corps en HTML, NETTOYÉ.
         ///
@@ -222,10 +234,14 @@ namespace SchoolWebApp.Domain.Emails
         /// Le compte rendu de l'envoi. `Envoye` faux si le message d'origine
         /// est introuvable ou si le serveur a refusé.
         /// </returns>
+        /// <param name="copies">Les copies (Cc) de la réponse — « Répondre à tous », ou ajoutées (19/10/2026).</param>
+        /// <param name="copiesCachees">Les copies cachées (Cci).</param>
         Task<ResultatEnvoi> RepondreAsync(
             uint identifiant,
             Func<MessageDetail, Task<string>> composer,
-            CancellationToken ct = default);
+            CancellationToken ct = default,
+            IReadOnlyList<string>? copies = null,
+            IReadOnlyList<string>? copiesCachees = null);
 
         /// <summary>Marque un message lu ou non lu.</summary>
         Task MarquerLuAsync(uint identifiant, bool lu, CancellationToken ct = default, string? dossier = null);
@@ -253,6 +269,8 @@ namespace SchoolWebApp.Domain.Emails
             string html,
             IReadOnlyList<PieceMail>? imagesIntegrees = null,
             IReadOnlyList<PieceMail>? piecesJointes = null,
-            CancellationToken ct = default);
+            CancellationToken ct = default,
+            IReadOnlyList<string>? copies = null,
+            IReadOnlyList<string>? copiesCachees = null);
     }
 }

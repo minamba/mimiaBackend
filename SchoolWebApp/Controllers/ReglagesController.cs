@@ -384,7 +384,8 @@ namespace SchoolWebApp.Api.Controllers
         private static readonly string[] ClesConnues =
             [ModeTest, CompteTest, EssaisOuverts, TachesDeFond, Maintenance, VoixDeSecours,
              VoixGemini, OffreLancement, OffreLancementBandeau, BlueSky, ModeDeveloppeur, FluxSse,
-             JeuxPrimaire, JeuxCollege, JeuxLycee, Affluence];
+             JeuxPrimaire, JeuxCollege, JeuxLycee, Affluence,
+             SchoolWebApp.Api.Services.Voix.RegleVerificationSon.Reglage];
 
         private readonly IReglageRepository _reglages;
         private readonly ILogger<ReglagesController> _logger;
@@ -699,6 +700,12 @@ namespace SchoolWebApp.Api.Controllers
                     ct),
                 voixGeminiDisponible = !string.IsNullOrWhiteSpace(_voix.GeminiApiKey),
                 voixGeminiModele = _voix.GeminiModele,
+
+                // Éteint par défaut : voir RegleVerificationSon.
+                verificationSyllabes = await _reglages.EstActifAsync(
+                    SchoolWebApp.Api.Services.Voix.RegleVerificationSon.Reglage,
+                    SchoolWebApp.Api.Services.Voix.RegleVerificationSon.ActifParDefaut,
+                    ct),
 
                 blueSky = await _reglages.EstActifAsync(BlueSky, false, ct),
                 styleSaison = await SaisonAsync(ct),

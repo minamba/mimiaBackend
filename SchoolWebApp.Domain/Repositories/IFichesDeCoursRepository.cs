@@ -84,6 +84,13 @@ namespace SchoolWebApp.Domain.Repositories
         /// <summary>Les cours de ce parent encore en route (poids compris) : ils réservent leurs crédits.</summary>
         Task<int> CompterEnRouteDuParentAsync(int parentId, CancellationToken ct = default);
 
+        /// <summary>
+        /// L'essai des fiches de la famille de cet élève (18/10/2026) :
+        /// `FichesRevisionEleve.EssaiLibre`, `EssaiEnRoute` ou `EssaiUtilise`.
+        /// Toute la famille partage UN cours d'essai.
+        /// </summary>
+        Task<string> EssaiFichesAsync(int eleveId, CancellationToken ct = default);
+
         // ---- Tâche de fond ----
 
         /// <summary>Les cours à lire ou à rédiger, les plus anciens d'abord.</summary>

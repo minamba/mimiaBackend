@@ -126,6 +126,11 @@ namespace SchoolWebApp.Domain.Emails
         /// progression : une diffusion de plusieurs minutes sans retour se
         /// termine toujours par un second clic, donc un double envoi.
         /// </param>
+        /// <param name="copies">
+        /// LES COPIES (Cc) ET COPIES CACHÉES (Cci) d'un courriel personnel
+        /// (19/10/2026) : ajoutées à CHAQUE message — à n'utiliser qu'avec un
+        /// seul destinataire. Jamais en développement quand l'envoi est détourné.
+        /// </param>
         Task<ResultatDiffusion> DiffuserAsync(
             IReadOnlyList<string> destinataires,
             string sujet,
@@ -135,7 +140,9 @@ namespace SchoolWebApp.Domain.Emails
             IReadOnlyList<PieceMail>? piecesJointes = null,
             IProgress<int>? avancement = null,
             CancellationToken ct = default,
-            Expediteur? expediteur = null);
+            Expediteur? expediteur = null,
+            IReadOnlyList<string>? copies = null,
+            IReadOnlyList<string>? copiesCachees = null);
 
         /// <summary>
         /// Compose le corps mis en page, SANS l.envoyer et SANS toucher au logo.

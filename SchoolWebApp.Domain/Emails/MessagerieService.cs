@@ -237,6 +237,8 @@ namespace SchoolWebApp.Domain.Emails
                     RepondreA = AutreAdresse(message.ReplyTo.Mailboxes.FirstOrDefault(), message.From.Mailboxes.FirstOrDefault()),
                     ANom = message.To.Mailboxes.FirstOrDefault()?.Name,
                     AAdresse = message.To.Mailboxes.FirstOrDefault()?.Address,
+                    Destinataires = message.To.Mailboxes.Select(m => new AdresseMail(m.Name, m.Address)).ToList(),
+                    Copies = message.Cc.Mailboxes.Select(m => new AdresseMail(m.Name, m.Address)).ToList(),
                     Sujet = message.Subject,
                     Date = message.Date.UtcDateTime,
                     Lu = true,
@@ -310,7 +312,9 @@ namespace SchoolWebApp.Domain.Emails
         public async Task<ResultatEnvoi> RepondreAsync(
             uint identifiant,
             Func<MessageDetail, Task<string>> composer,
-            CancellationToken ct = default)
+            CancellationToken ct = default,
+            IReadOnlyList<string>? copies = null,
+            IReadOnlyList<string>? copiesCachees = null)
         {
             if (!Disponible) return new ResultatEnvoi(false, Detail: "Boite non configuree.");
 
@@ -384,6 +388,16 @@ namespace SchoolWebApp.Domain.Emails
                 reponse.From.Add(new MailboxAddress(
                     _options.Nom ?? "Support Mimia", _options.Adresse!));
                 reponse.To.Add(destinataire);
+
+                // LES COPIES (19/10/2026) — « Répondre à tous » ou ajoutées à la
+                // main. Jamais le destinataire principal, ni la boîte elle-même,
+                // ni une adresse qui ne reçoit pas.
+                bool EnCopie(string adresse) =>
+                    !string.Equals(adresse, destinataire.Address, StringComparison.OrdinalIgnoreCase)
+                    && !string.Equals(adresse, _options.Adresse, StringComparison.OrdinalIgnoreCase)
+                    && !NeRecoitPas(adresse);
+                foreach (var enCopie in (copies ?? []).Where(EnCopie)) reponse.Cc.Add(MailboxAddress.Parse(enCopie));
+                foreach (var cachee in (copiesCachees ?? []).Where(EnCopie)) reponse.Bcc.Add(MailboxAddress.Parse(cachee));
 
                 reponse.Subject = origine.Subject?.StartsWith("Re", StringComparison.OrdinalIgnoreCase) == true
                     ? origine.Subject
@@ -617,7 +631,9 @@ namespace SchoolWebApp.Domain.Emails
             string html,
             IReadOnlyList<PieceMail>? imagesIntegrees = null,
             IReadOnlyList<PieceMail>? piecesJointes = null,
-            CancellationToken ct = default)
+            CancellationToken ct = default,
+            IReadOnlyList<string>? copies = null,
+            IReadOnlyList<string>? copiesCachees = null)
         {
             if (!Disponible) return false;
 
@@ -626,6 +642,10 @@ namespace SchoolWebApp.Domain.Emails
                 var copie = new MimeMessage();
                 copie.From.Add(new MailboxAddress(_options.Nom ?? "Mimia", _options.Adresse!));
                 copie.To.Add(MailboxAddress.Parse(destinataire));
+                // Comme dans tout client : la copie d'« Envoyés » montre aussi
+                // les copies et les copies cachées (19/10/2026).
+                foreach (var c in copies ?? []) copie.Cc.Add(MailboxAddress.Parse(c));
+                foreach (var c in copiesCachees ?? []) copie.Bcc.Add(MailboxAddress.Parse(c));
                 copie.Subject = sujet;
                 copie.Date = DateTimeOffset.Now;
 

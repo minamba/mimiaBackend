@@ -28,6 +28,9 @@ namespace SchoolWebApp.Dal.Entities
         /// <summary>Les onglets ouverts, séparés par des virgules (comme `Parent.OngletsAdmin`).</summary>
         public string? Onglets { get; set; }
 
+        /// <summary>Les courriels que reçoivent ses comptes (codes de `CourrielsDeRole`, séparés par des virgules) — 06/11/2026.</summary>
+        public string? Courriels { get; set; }
+
         public int Ordre { get; set; }
 
         public DateTime DateCreation { get; set; }

@@ -27,9 +27,13 @@ namespace SchoolWebApp.Api.Builders
         /// la tient. Sans elle, le professeur ne peut ni descendre d'un cran,
         /// ni dire qu'il lit déjà au plus lent.
         /// </param>
+        /// <param name="sonJuste">
+        /// Le verdict de la voix quand ce tour est un son jugé (vrai ou faux), absent
+        /// sinon. Gardé avec le message pour que la bulle le réaffiche telle quelle.
+        /// </param>
         IAsyncEnumerable<string> StreamReponseAsync(
             int conversationId, string contenu, IReadOnlyList<int> pieceJointeIds,
-            int? secondesRestantes, string? vitesseEcoute, CancellationToken ct);
+            int? secondesRestantes, string? vitesseEcoute, bool? sonJuste, CancellationToken ct);
 
         /// <summary>
         /// Fait parler l'agent en premier, à l'ouverture de la conversation.
@@ -90,6 +94,22 @@ namespace SchoolWebApp.Api.Builders
         /// </summary>
         Task<string?> GetMatiereCodeAsync(int conversationId);
 
+        /// <summary>Cette séance est-elle du français au primaire ? Voir <c>RegleVerificationSon</c>.</summary>
+        /// <summary>La langue du son à vérifier dans ce cours ; null s'il n'est pas concerné.</summary>
+        Task<string?> LangueDuSonAsync(int conversationId);
+
+        /// <summary>Le cours est-il en plein exercice de sons ou de syllabes ? Voir RegleVerificationSon.EnExerciceDeSons.</summary>
+        Task<bool> EnExerciceDeSonsAsync(int conversationId);
+
+        /// <summary>Le fil est-il dans un exercice d'écoute de mots ou de syllabes ? Voir RegleVerificationSon.ContexteDEcoute.</summary>
+        Task<bool> EnEcouteDeMotsAsync(int conversationId);
+
+        /// <summary>Syllabes ou mots, selon le choix de l'enfant ; null si rien n'est choisi. Voir RegleVerificationSon.TypeDEcoute.</summary>
+        Task<string?> TypeDEcouteAsync(int conversationId);
+
+        /// <summary>Le dernier message du professeur dans cette conversation, ou null.</summary>
+        Task<string?> DerniereParoleDuProfesseurAsync(int conversationId);
+
         Task<Domain.Models.VerdictQuota> VerifierQuotaAsync(
             int conversationId, CancellationToken ct = default);
 
@@ -111,6 +131,15 @@ namespace SchoolWebApp.Api.Builders
         /// retour sans qu'on ait à le déduire d'un délai de silence.
         /// </summary>
         Task MarquerSortieAsync(int conversationId);
+
+        /// <summary>
+        /// Le cours passe en pause : ce temps n'est pas décompté du forfait, et le
+        /// balayage ne conclut pas la séance.
+        /// </summary>
+        Task PoserPauseAsync(int conversationId);
+
+        /// <summary>Le cours reprend.</summary>
+        Task LeverPauseAsync(int conversationId);
 
         /// <summary>Sortie signalee par une page qui se ferme, sans identite.</summary>
         Task MarquerFermetureAsync(int conversationId);

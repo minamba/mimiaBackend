@@ -28,6 +28,48 @@ namespace SchoolWebApp.Domain.Models
         };
     }
 
+    /// <summary>
+    /// LES COURRIELS QU'UN RÔLE REÇOIT — Camara, le 06/11/2026 : « dans les droits, j'affecte les mails à un type
+    /// d'utilisateur et tous ces utilisateurs recevront le mail ». Chaque compte qui porte un rôle coché reçoit le
+    /// courriel. Stockés comme les onglets : des codes séparés par des virgules (<c>RoleUtilisateur.Courriels</c>).
+    ///
+    /// L'ADRESSE DE CAMARA À PART : minamba.camara@mimia.fr est une boîte, pas un compte parent ; un interrupteur
+    /// de l'onglet « Rôles » (<see cref="ReglageCopieMinamba"/>) décide si elle reçoit les courriels de signalement.
+    /// </summary>
+    public static class CourrielsDeRole
+    {
+        /// <summary>Un signalement admin passé à « Traité » : « Le bug « … » vient d'être corrigé - Prêt à être testé ».</summary>
+        public const string TestPret = "test_pret";
+
+        public static readonly IReadOnlyList<CourrielConnu> Toutes =
+        [
+            new(TestPret, "Signalement admin traité : prêt à être testé"),
+        ];
+
+        /// <summary>L'interrupteur de minamba.camara@mimia.fr (table des réglages), éteint par défaut.</summary>
+        public const string ReglageCopieMinamba = "COURRIEL_SIGNALEMENTS_MINAMBA";
+
+        public const string AdresseMinamba = "minamba.camara@mimia.fr";
+
+        /// <summary>Les codes connus, dans l'ordre du catalogue ; un code inconnu est ignoré.</summary>
+        public static string[] Lire(string? valeur)
+        {
+            if (string.IsNullOrWhiteSpace(valeur)) return [];
+            var lus = valeur.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            return Toutes.Select(c => c.Code).Where(c => lus.Contains(c, StringComparer.OrdinalIgnoreCase)).ToArray();
+        }
+
+        /// <summary>La valeur à stocker : null quand rien n'est coché.</summary>
+        public static string? Ecrire(IEnumerable<string>? codes)
+        {
+            var valeur = string.Join(",", Lire(string.Join(",", codes ?? [])));
+            return valeur.Length == 0 ? null : valeur;
+        }
+    }
+
+    /// <summary>Un courriel qu'un rôle peut recevoir, tel que l'onglet « Rôles » le propose.</summary>
+    public record CourrielConnu(string Code, string Libelle);
+
     /// <summary>Un rôle, tel que l'onglet « Rôles » l'affiche.</summary>
     public record RoleCompte(
         int Id,
@@ -35,7 +77,8 @@ namespace SchoolWebApp.Domain.Models
         string? Code,
         string[] Onglets,
         int NombreComptes,
-        bool OuvreAdministration);
+        bool OuvreAdministration,
+        string[] Courriels);
 
     /// <summary>Le résultat d'une écriture de rôle : le rôle, ou la raison du refus.</summary>
     public record ResultatRole(RoleCompte? Role, string? Erreur, bool Introuvable = false);

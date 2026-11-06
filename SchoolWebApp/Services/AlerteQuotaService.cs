@@ -53,6 +53,12 @@ namespace SchoolWebApp.Api.Services
             var etat = await _abonnements.GetEtatQuotaAsync(eleve.ParentId, ct);
             if (etat is null) return false;
 
+            // PAS POUR UN ESSAI (18/10/2026) : ce courriel annonce « vos heures
+            // repartent au complet le… », et un essai ne repart jamais — sans
+            // délai depuis ce jour, il n'a même plus de date. La carte du
+            // forfait dit déjà ce qu'il reste des trente minutes.
+            if (etat.EstEssai) return false;
+
             var parent = await _parents.GetParentByIdAsync(eleve.ParentId);
             if (string.IsNullOrWhiteSpace(parent?.Mail)) return false;
 

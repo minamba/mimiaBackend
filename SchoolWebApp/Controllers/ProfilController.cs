@@ -54,7 +54,19 @@ namespace SchoolWebApp.Api.Controllers
                 parent.Mail,
                 parent.DateCreation,
                 NombreEleves = eleves.Count(),
+
+                // Lu par la page d'un enfant : faux, le tutoriel se lance (02/11/2026).
+                TutorielVu = parent.TutorielVuLe != null,
             });
+        }
+
+        [HttpPost("tutoriel-vu")]
+        [SwaggerOperation(Summary = "Note que le parent a vu le tutoriel : il ne se relancera plus tout seul")]
+        public async Task<IActionResult> TutorielVu(CancellationToken ct)
+        {
+            var parent = await ResoudreAsync();
+            await _parentService.MarquerTutorielVuAsync(parent.Id, ct);
+            return NoContent();
         }
 
         [HttpPut]

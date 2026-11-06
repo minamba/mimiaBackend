@@ -122,7 +122,9 @@ namespace SchoolWebApp.Domain.Emails
             IReadOnlyList<PieceMail>? piecesJointes = null,
             IProgress<int>? avancement = null,
             CancellationToken ct = default,
-            Expediteur? expediteur = null)
+            Expediteur? expediteur = null,
+            IReadOnlyList<string>? copies = null,
+            IReadOnlyList<string>? copiesCachees = null)
         {
             if (!Disponible)
             {
@@ -176,6 +178,21 @@ namespace SchoolWebApp.Domain.Emails
                         message.To.Add(MailboxAddress.Parse(cible));
                         message.Subject = sujet;
 
+                        // LES COPIES D'UN COURRIEL PERSONNEL (19/10/2026). Pas en
+                        // développement quand l'envoi est détourné : elles
+                        // partiraient à de vraies personnes.
+                        if (string.IsNullOrWhiteSpace(_options.RedirectionDev))
+                        {
+                            foreach (var copie in copies ?? []) message.Cc.Add(MailboxAddress.Parse(copie));
+                            foreach (var cachee in copiesCachees ?? []) message.Bcc.Add(MailboxAddress.Parse(cachee));
+                        }
+                        else if ((copies?.Count ?? 0) + (copiesCachees?.Count ?? 0) > 0)
+                        {
+                            _logger.LogWarning(
+                                "Envoi detourne en developpement : {Copies} copie(s) non envoyee(s).",
+                                (copies?.Count ?? 0) + (copiesCachees?.Count ?? 0));
+                        }
+
                         // RECONSTRUIT À CHAQUE TOUR, ET C'EST OBLIGATOIRE.
                         // MimeKit consomme les flux des pièces au moment de
                         // composer le corps ; réutiliser le même constructeur
@@ -188,7 +205,6 @@ namespace SchoolWebApp.Domain.Emails
                         };
 
                         AttacherLogo(constructeur);
-                    ImagesSignature.Attacher(constructeur);
                         ImagesSignature.Attacher(constructeur);
 
                         foreach (var image in imagesIntegrees ?? [])

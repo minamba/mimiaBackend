@@ -1,5 +1,6 @@
 using Anthropic;
 using SchoolWebApp.Domain.Repositories;
+using SchoolWebApp.Domain.Models;
 using Anthropic.Models.Messages;
 using Microsoft.Extensions.Options;
 using SchoolWebApp.Api.Services;
@@ -43,6 +44,7 @@ namespace SchoolWebApp.Api.Workers
         private readonly IServiceScopeFactory _scopes;
         private readonly Services.PiecesJointes.TranscripteurDocuments _transcripteur;
         private readonly ReveilDocuments _reveil;
+        private readonly IStockageCoursControles _stockage;
         private readonly ILogger<TranscriptionDocumentsWorker> _logger;
 
         /// <summary>
@@ -55,11 +57,13 @@ namespace SchoolWebApp.Api.Workers
             IServiceScopeFactory scopes,
             Services.PiecesJointes.TranscripteurDocuments transcripteur,
             ReveilDocuments reveil,
+            IStockageCoursControles stockage,
             ILogger<TranscriptionDocumentsWorker> logger)
         {
             _scopes = scopes ?? throw new ArgumentNullException(nameof(scopes));
             _transcripteur = transcripteur ?? throw new ArgumentNullException(nameof(transcripteur));
             _reveil = reveil ?? throw new ArgumentNullException(nameof(reveil));
+            _stockage = stockage ?? throw new ArgumentNullException(nameof(stockage));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
@@ -194,7 +198,7 @@ namespace SchoolWebApp.Api.Workers
                             + "a reprendre a la main avant la purge des octets.", piece.Id);
 
                         await conversations.EnregistrerTranscriptionAsync(
-                            piece.Id, "(document illisible : transcription automatique vide)", ct);
+                            piece.Id, DocumentControle.MentionVide, ct);
 
                         // COMPTÉ COMME MARQUÉ, et c'est voulu : le document est
                         // sorti de la file pour de bon. Ne pas le compter
@@ -246,12 +250,20 @@ namespace SchoolWebApp.Api.Workers
             foreach (var document in aFaire)
             {
                 if (ct.IsCancellationRequested) return marques;
-                if (document.Donnees is not { Length: > 0 }) continue;
+
+                // D'avant le disque : les octets sont en base. Depuis le 04/11/2026 : sur le disque.
+                var octets = document.Donnees;
+                if (octets is not { Length: > 0 } && document.Chemin is not null)
+                {
+                    octets = await _stockage.LireAsync(document.Chemin, ct);
+                }
+
+                if (octets is not { Length: > 0 }) continue;
 
                 try
                 {
                     var texte = await _transcripteur.TranscrireAsync(
-                        document.Donnees, document.TypeMime, document.NomFichier,
+                        octets, document.TypeMime, document.NomFichier,
                         "transcription-cours-controle", ct);
 
                     if (string.IsNullOrWhiteSpace(texte))
@@ -259,7 +271,7 @@ namespace SchoolWebApp.Api.Workers
                         _logger.LogWarning(
                             "Cours du controle {ControleId}, document {Id} : transcription VIDE.",
                             document.ControleId, document.Id);
-                        texte = "(document illisible : transcription automatique vide)";
+                        texte = DocumentControle.MentionVide;
                     }
 
                     await controles.EnregistrerTranscriptionDocumentAsync(

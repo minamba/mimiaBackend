@@ -1309,6 +1309,10 @@ namespace SchoolWebApp.Dal.Repositories
                 Taille = document.Taille,
                 NombrePages = document.NombrePages,
                 Donnees = document.Donnees,
+                Chemin = document.Chemin,
+                // Un document Word, Excel ou PowerPoint arrive déjà transcrit (texte extrait
+                // à l'envoi, sans modèle) : il est « lu » tout de suite.
+                Transcription = document.Transcription,
                 DateCreation = document.DateCreation,
             };
 
@@ -1318,6 +1322,29 @@ namespace SchoolWebApp.Dal.Repositories
             document.Id = ligne.Id;
             document.ControleId = controleId;
             return document;
+        }
+
+        public async Task<DocumentControle?> GetDocumentAsync(
+            int eleveId, int controleId, int documentId, CancellationToken ct = default)
+        {
+            return await _context.ControlesDocuments
+                .AsNoTracking()
+                .Where(d => d.Id == documentId && d.ControleId == controleId && d.Controle!.EleveId == eleveId)
+                .Select(d => new DocumentControle
+                {
+                    Id = d.Id,
+                    ControleId = d.ControleId,
+                    NomFichier = d.NomFichier,
+                    TypeMime = d.TypeMime,
+                    Taille = d.Taille,
+                    NombrePages = d.NombrePages,
+                    Chemin = d.Chemin,
+                    FichierEffaceLe = d.FichierEffaceLe,
+                    Transcription = d.Transcription,
+                    Illisible = d.Transcription != null && d.Transcription.StartsWith(DocumentControle.PrefixeIllisible),
+                    DateCreation = d.DateCreation,
+                })
+                .FirstOrDefaultAsync(ct);
         }
 
         public async Task<IReadOnlyList<DocumentControle>> GetDocumentsAsync(
@@ -1338,23 +1365,35 @@ namespace SchoolWebApp.Dal.Repositories
                     Taille = d.Taille,
                     NombrePages = d.NombrePages,
                     Transcription = d.Transcription == null ? null : string.Empty,
+                    Illisible = d.Transcription != null && d.Transcription.StartsWith(DocumentControle.PrefixeIllisible),
+                    Chemin = d.Chemin,
+                    FichierEffaceLe = d.FichierEffaceLe,
                     DateCreation = d.DateCreation,
                 })
                 .ToListAsync(ct);
         }
 
-        public async Task<bool> SupprimerDocumentAsync(
+        public async Task<DocumentControle?> SupprimerDocumentAsync(
             int eleveId, int controleId, int documentId, CancellationToken ct = default)
         {
             var ligne = await _context.ControlesDocuments
                 .Where(d => d.Id == documentId && d.ControleId == controleId && d.Controle!.EleveId == eleveId)
                 .FirstOrDefaultAsync(ct);
 
-            if (ligne is null) return false;
+            if (ligne is null) return null;
 
             _context.ControlesDocuments.Remove(ligne);
             await _context.SaveChangesAsync(ct);
-            return true;
+
+            return new DocumentControle
+            {
+                Id = ligne.Id,
+                ControleId = ligne.ControleId,
+                NomFichier = ligne.NomFichier,
+                TypeMime = ligne.TypeMime,
+                Chemin = ligne.Chemin,
+                DateCreation = ligne.DateCreation,
+            };
         }
 
         public async Task<IReadOnlyList<DocumentControle>> GetDocumentsATranscrireAsync(
@@ -1362,7 +1401,7 @@ namespace SchoolWebApp.Dal.Repositories
         {
             return await _context.ControlesDocuments
                 .AsNoTracking()
-                .Where(d => d.Transcription == null && d.Donnees != null)
+                .Where(d => d.Transcription == null && (d.Donnees != null || d.Chemin != null))
                 .OrderBy(d => d.DateCreation)
                 .Take(taille)
                 .Select(d => new DocumentControle
@@ -1374,8 +1413,56 @@ namespace SchoolWebApp.Dal.Repositories
                     Taille = d.Taille,
                     NombrePages = d.NombrePages,
                     Donnees = d.Donnees,
+                    Chemin = d.Chemin,
                     DateCreation = d.DateCreation,
                 })
+                .ToListAsync(ct);
+        }
+
+        public async Task<IReadOnlyList<DocumentControle>> GetFichiersAPurgerAsync(
+            DateTime limite, int lot, CancellationToken ct = default)
+        {
+            // UNE SEMAINE APRÈS LE CONTRÔLE, ET UNE SEMAINE APRÈS L'AJOUT : un document
+            // déposé après coup, pour la correction, ne part pas le lendemain.
+            return await _context.ControlesDocuments
+                .AsNoTracking()
+                .Where(d => d.Chemin != null && d.DateCreation < limite && d.Controle!.DateControle < limite)
+                .OrderBy(d => d.DateCreation)
+                .Take(lot)
+                .Select(d => new DocumentControle
+                {
+                    Id = d.Id,
+                    ControleId = d.ControleId,
+                    NomFichier = d.NomFichier,
+                    TypeMime = d.TypeMime,
+                    Chemin = d.Chemin,
+                    DateCreation = d.DateCreation,
+                })
+                .ToListAsync(ct);
+        }
+
+        public async Task MarquerFichiersEffacesAsync(
+            IReadOnlyCollection<int> documentIds, DateTime maintenant, CancellationToken ct = default)
+        {
+            if (documentIds.Count == 0) return;
+
+            await _context.ControlesDocuments
+                .Where(d => documentIds.Contains(d.Id) && d.Chemin != null)
+                .ExecuteUpdateAsync(s => s
+                    .SetProperty(d => d.Chemin, (string?)null)
+                    .SetProperty(d => d.FichierEffaceLe, maintenant), ct);
+        }
+
+        public async Task<IReadOnlyList<int>> ControlesAvecFichiersAsync(
+            IReadOnlyCollection<int> controleIds, CancellationToken ct = default)
+        {
+            if (controleIds.Count == 0) return Array.Empty<int>();
+
+            return await _context.ControlesDocuments
+                .AsNoTracking()
+                .Where(d => controleIds.Contains(d.ControleId) && d.Chemin != null)
+                .Select(d => d.ControleId)
+                .Distinct()
                 .ToListAsync(ct);
         }
 
@@ -1430,6 +1517,7 @@ namespace SchoolWebApp.Dal.Repositories
                     NombrePages = d.NombrePages,
                     // Les octets ne voyagent que pour un document pas encore lu.
                     Donnees = d.Transcription == null ? d.Donnees : null,
+                    Chemin = d.Chemin,
                     Transcription = d.Transcription,
                     DateCreation = d.DateCreation,
                 })

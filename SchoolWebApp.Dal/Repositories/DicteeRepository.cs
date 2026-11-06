@@ -909,12 +909,44 @@ namespace SchoolWebApp.Dal.Repositories
         /// </summary>
         internal static string? TexteDicte(IReadOnlyList<(string Role, string Contenu)> messages)
         {
+            // LA CLÔTURE QUI COMPTE EST CELLE D'AVANT LA DERNIÈRE DICTÉE — 01/11/2026.
+            //
+            // On cherchait la dernière clôture du fil, tout court. Or le message
+            // du professeur qui porte [DICTEE_CORRIGEE] est ENREGISTRÉ AVANT
+            // d'être lu : sa propre clôture était donc la dernière, rien n'était
+            // dicté après elle, et le texte rendu était vide. Avec « dicte: »
+            // laissé vide — ce que la consigne autorise depuis le 19/09/2026 —
+            // l'archive « corrigée » n'était jamais écrite, et la dictée restait
+            // « en attente de correction ». Relevé en local sur deux dictées de
+            // mots de Zakariya, corrigées en séance, toutes deux restées en
+            // attente.
+            //
+            // On part donc du dernier passage dicté, et on ne retient que les
+            // clôtures qui le PRÉCÈDENT : celle qui le suit est l'archive en
+            // train d'être écrite, pas la fin d'une dictée précédente.
+            var dernierPassageMessage = -1;
+            var dernierPassagePosition = 0;
+
+            for (var i = messages.Count - 1; i >= 0 && dernierPassageMessage < 0; i--)
+            {
+                if (messages[i].Role != "assistant") continue;
+
+                var passage = Passages().Matches(messages[i].Contenu).LastOrDefault();
+                if (passage is null) continue;
+
+                dernierPassageMessage = i;
+                dernierPassagePosition = passage.Index;
+            }
+
+            if (dernierPassageMessage < 0) return null;
+
             var depuis = -1;
             var apres = 0;
 
-            for (var i = messages.Count - 1; i >= 0 && depuis < 0; i--)
+            for (var i = dernierPassageMessage; i >= 0 && depuis < 0; i--)
             {
-                var fin = Clotures().Matches(messages[i].Contenu).LastOrDefault();
+                var fin = Clotures().Matches(messages[i].Contenu)
+                    .LastOrDefault(m => i < dernierPassageMessage || m.Index < dernierPassagePosition);
                 if (fin is null) continue;
 
                 depuis = i;
@@ -941,6 +973,19 @@ namespace SchoolWebApp.Dal.Repositories
                         vues.Clear();
                     }
 
+                    // UN PASSAGE SANS AUCUNE PHRASE CONNUE EST UNE AUTRE DICTÉE —
+                    // 01/11/2026. Trois dictées de la même séance (six…dix,
+                    // chat…lune, bleu…noir) sont sorties COLLÉES dans une seule
+                    // archive, avec la copie d'une autre. Même règle que l'écran
+                    // (`ouvreUneNouvelleDictee`) : une seule phrase déjà entendue
+                    // dit qu'on est dans la même dictée (le professeur relit) ;
+                    // aucune, et il recommence autre chose.
+                    if (phrases.Count > 0 && !dictees.Any(d => vues.Contains(CleDictee(d))))
+                    {
+                        phrases.Clear();
+                        vues.Clear();
+                    }
+
                     foreach (var phrase in dictees)
                     {
                         if (vues.Add(CleDictee(phrase))) phrases.Add(phrase);
@@ -952,7 +997,14 @@ namespace SchoolWebApp.Dal.Repositories
         }
 
         /// <summary>Ce qui ferme une dictée : sa correction archivée, ou son abandon.</summary>
-        [GeneratedRegex(@"\[/?DICTEE_CORRIGEE\]|\[/?DICTEE_SUPPRIMEE\]", RegexOptions.IgnoreCase)]
+        /// <summary>
+        /// Ce qui REFERME une dictée dans le fil : son archive, sa suppression,
+        /// son abandon par le serveur (l'élève est parti — 01/11/2026), et la
+        /// question « mots ou phrases ? » qui n'ouvre jamais que la SUIVANTE.
+        /// </summary>
+        [GeneratedRegex(
+            @"\[/?DICTEE_CORRIGEE\]|\[/?DICTEE_SUPPRIMEE\]|\[DICTEE_ABANDONNEE\]|\[TYPE_DICTEE\]",
+            RegexOptions.IgnoreCase)]
         private static partial Regex Clotures();
 
         [GeneratedRegex(@"\[DICTEE\](?<texte>.*?)\[/DICTEE\]",
@@ -1013,18 +1065,57 @@ namespace SchoolWebApp.Dal.Repositories
 
             var depuisQuand = DateTime.UtcNow - FenetreDictee;
 
-            var messages = await _context.Messages
+            var tous = await _context.Messages
                 .AsNoTracking()
                 .Where(m => m.ConversationId == conversationId
                             && m.Conversation!.EleveId == eleveId
-                            && m.DateCreation >= depuisQuand
-                            && m.Role != "assistant")
+                            && m.DateCreation >= depuisQuand)
                 .OrderBy(m => m.DateCreation)
-                .Select(m => m.Contenu)
+                .Select(m => new MessageLu(m.Id, m.Role, m.Contenu))
                 .ToListAsync(ct);
+
+            // APRÈS LA DERNIÈRE DICTÉE SEULEMENT — 01/11/2026. La copie d'une
+            // dictée précédente de la séance (« six sept huit neuf dix », rendue
+            // au clavier une heure plus tôt) a été archivée comme copie d'une
+            // dictée de couleurs faite au cahier. Une copie suit toujours sa
+            // dictée : rien d'antérieur au dernier passage dicté ne la concerne.
+            var dernierPassage = tous.FindLastIndex(
+                m => EstDuProfesseur(m.Role) && Passages().IsMatch(m.Contenu ?? string.Empty));
+            var apres = tous.Skip(dernierPassage + 1).ToList();
+
+            var messages = apres
+                .Where(m => !EstDuProfesseur(m.Role))
+                .Select(m => m.Contenu)
+                .ToList();
 
             var attendus = Mots(texteDicte);
             if (attendus.Count == 0) return null;
+
+            // LA COPIE RENDUE AU CLAVIER SE RECONNAÎT À SON MARQUEUR — 01/11/2026.
+            //
+            // Le seuil de douze mots plus bas protège d'une réplique de l'élève
+            // prise pour une copie. Mais il rejetait aussi toute copie COURTE :
+            // une dictée de mots de CP (« six sept huit neuf dix ») n'était
+            // jamais retrouvée, et son archive « corrigée » n'était jamais
+            // écrite — elle restait « en attente de correction » dans « Mes
+            // dictées » alors que le professeur l'avait corrigée. Le message
+            // qui porte « [DICTÉE AU CLAVIER » EST la copie : on le prend en
+            // premier, le plus récent, à condition qu'il parle bien de CETTE
+            // dictée (mêmes mots, même règle d'un tiers) — une copie d'une
+            // dictée précédente de la séance ne doit pas passer pour celle-ci.
+            for (var i = messages.Count - 1; i >= 0; i--)
+            {
+                if (!EstCopieClavier(messages[i])) continue;
+
+                var rendue = SansMarqueurs(messages[i]);
+                var siens = Mots(rendue);
+                if (siens.Count == 0) continue;
+
+                if (siens.Count(attendus.Contains) * 100 >= siens.Count * PourcentMotsCommuns)
+                {
+                    return rendue;
+                }
+            }
 
             string? meilleure = null;
 
@@ -1058,7 +1149,12 @@ namespace SchoolWebApp.Dal.Repositories
                 if (meilleure is null || texte.Length > meilleure.Length) meilleure = texte;
             }
 
-            return meilleure;
+            // AU CAHIER, LA COPIE EST AU TABLEAU — 01/11/2026. La photo n'est
+            // pas un texte ; ce que le professeur en a retranscrit sous « Ta
+            // copie » l'est. Sans ce repli, une dictée corrigée au cahier dont
+            // le professeur laissait `copie:` vide n'était PAS archivée (« aucune
+            // copie »), et le filet du départ la laissait « en attente ».
+            return meilleure ?? CopieDuTableau(apres);
         }
 
         /// <summary>Les mots normalises d un texte, pour comparer sans l orthographe.</summary>

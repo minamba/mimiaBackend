@@ -13,7 +13,7 @@ namespace SchoolWebApp.Domain.Repositories
 
     /// <summary>Un brouillon de la messagerie (17/10/2026), à son auteur.</summary>
     /// <remarks>`MessageOrigine` nul : un message écrit depuis « Écrire à un parent ».</remarks>
-    public record BrouillonMessagerie(int Id, long? MessageOrigine, string? Destinataire, string? Sujet, string Texte, DateTime DateModification, string? Titre = null);
+    public record BrouillonMessagerie(int Id, long? MessageOrigine, string? Destinataire, string? Sujet, string Texte, DateTime DateModification, string? Titre = null, string? Copies = null, string? CopiesCachees = null);
 
     /// <summary>
     /// Les boîtes mail des administrateurs et leurs signatures (17/10/2026).
@@ -23,6 +23,12 @@ namespace SchoolWebApp.Domain.Repositories
     {
         /// <summary>L'adresse et le mot de passe chiffré de la boîte de ce parent, ou null.</summary>
         Task<(string Adresse, string MotDePasseChiffre)?> BoiteAsync(int parentId, CancellationToken ct = default);
+
+        /// <summary>
+        /// Toutes les boîtes enregistrées, mot de passe CHIFFRÉ — pour la
+        /// surveillance des courriels qui arrivent (19/10/2026).
+        /// </summary>
+        Task<IReadOnlyList<(int ParentId, string Adresse, string MotDePasseChiffre)>> BoitesAsync(CancellationToken ct = default);
 
         Task EnregistrerBoiteAsync(int parentId, string adresse, string motDePasseChiffre, CancellationToken ct = default);
 
@@ -64,7 +70,7 @@ namespace SchoolWebApp.Domain.Repositories
         /// <summary>Crée ou met à jour son brouillon de réponse à ce message.</summary>
         Task<BrouillonMessagerie> EnregistrerBrouillonAsync(
             int parentId, string boite, long messageOrigine, string? destinataire, string? sujet, string texte,
-            CancellationToken ct = default);
+            CancellationToken ct = default, string? copies = null, string? copiesCachees = null);
 
         /// <summary>Un de ses brouillons, par son identifiant ; null s'il n'est pas à lui.</summary>
         Task<BrouillonMessagerie?> BrouillonAsync(int parentId, string boite, int id, CancellationToken ct = default);
@@ -75,7 +81,7 @@ namespace SchoolWebApp.Domain.Repositories
         /// </summary>
         Task<BrouillonMessagerie> EnregistrerBrouillonLibreAsync(
             int parentId, string boite, int? id, string? destinataire, string? sujet, string? titre, string texte,
-            CancellationToken ct = default);
+            CancellationToken ct = default, string? copies = null, string? copiesCachees = null);
 
         /// <summary>Les pièces d'un de ses brouillons ; null s'il n'est pas à lui.</summary>
         Task<IReadOnlyList<PieceBrouillon>?> PiecesBrouillonAsync(int parentId, string boite, int brouillonId, CancellationToken ct = default);

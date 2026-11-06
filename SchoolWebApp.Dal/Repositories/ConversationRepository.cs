@@ -131,6 +131,7 @@ namespace SchoolWebApp.Dal.Repositories
                 TokensCacheEcriture = model.TokensCacheEcriture,
                 TokensCacheEcriture1h = model.TokensCacheEcriture1h,
                 ModeleVoix = model.ModeleVoix,
+                SonJuste = model.SonJuste,
                 DateCreation = model.DateCreation == default ? DateTime.UtcNow : model.DateCreation
             };
 
@@ -269,9 +270,16 @@ namespace SchoolWebApp.Dal.Repositories
         {
             var limiteTemps = DateTime.UtcNow - inactivite;
 
+            // UN COURS EN PAUSE N'EST PAS FINI — Camara, le 03/11/2026 : un enfant qui
+            // goûte une demi-heure aurait reçu un compte rendu de la moitié de son
+            // cours, puis un second. La borne couvre le navigateur qui a planté sans
+            // lever sa pause : la même que celle du chronomètre (departSeance.js).
+            var limitePause = DateTime.UtcNow - PauseAbandonnee;
+
             return await ChargerAsync(
                 c => c.DateDernierMessage != null
                      && c.DateDernierMessage < limiteTemps
+                     && (c.PauseDepuis == null || c.PauseDepuis < limitePause)
                      && (c.DateDerniereObservation == null
                          || c.DateDerniereObservation < c.DateDernierMessage),
                 limite, ct);
@@ -438,6 +446,7 @@ namespace SchoolWebApp.Dal.Repositories
             if (conversation is null) return;
 
             conversation.DateSortie = DateTime.UtcNow;
+            ClorePause(conversation, conversation.DateSortie.Value);
             await _context.SaveChangesAsync();
         }
 
@@ -449,7 +458,75 @@ namespace SchoolWebApp.Dal.Repositories
             if (conversation is null) return;
 
             conversation.DateSortie = DateTime.UtcNow;
+            ClorePause(conversation, conversation.DateSortie.Value);
             await _context.SaveChangesAsync();
+        }
+
+        /// <summary>Au-delà, une pause est un navigateur disparu, plus une pause.</summary>
+        private static readonly TimeSpan PauseAbandonnee = TimeSpan.FromHours(6);
+
+        /// <summary>Partir met fin à la pause : le compte rendu est dû.</summary>
+        private static void ClorePause(Conversation conversation, DateTime maintenant)
+        {
+            conversation.PauseSecondes = SecondesDePause(conversation, maintenant);
+            conversation.PauseDepuis = null;
+        }
+
+        private static int SecondesDePause(Conversation conversation, DateTime maintenant) =>
+            conversation.PauseSecondes + (conversation.PauseDepuis is { } debut
+                ? Math.Max(0, (int)(maintenant - debut).TotalSeconds)
+                : 0);
+
+        public async Task PoserPauseAsync(int conversationId, int eleveId)
+        {
+            var conversation = await _context.Conversations
+                .FirstOrDefaultAsync(c => c.Id == conversationId && c.EleveId == eleveId);
+
+            if (conversation is null || conversation.PauseDepuis is not null) return;
+
+            conversation.PauseDepuis = DateTime.UtcNow;
+            await _context.SaveChangesAsync();
+        }
+
+        public async Task LeverPauseAsync(int conversationId, int eleveId)
+        {
+            var conversation = await _context.Conversations
+                .FirstOrDefaultAsync(c => c.Id == conversationId && c.EleveId == eleveId);
+
+            if (conversation is null || conversation.PauseDepuis is null) return;
+
+            ClorePause(conversation, DateTime.UtcNow);
+            await _context.SaveChangesAsync();
+        }
+
+        public async Task<int> LirePauseAsync(int conversationId, CancellationToken ct = default)
+        {
+            var conversation = await _context.Conversations
+                .AsNoTracking()
+                .FirstOrDefaultAsync(c => c.Id == conversationId, ct);
+
+            return conversation is null ? 0 : SecondesDePause(conversation, DateTime.UtcNow);
+        }
+
+        public async Task<int> SolderPauseAsync(int conversationId, CancellationToken ct = default)
+        {
+            var conversation = await _context.Conversations
+                .FirstOrDefaultAsync(c => c.Id == conversationId, ct);
+
+            if (conversation is null) return 0;
+
+            var maintenant = DateTime.UtcNow;
+            var secondes = SecondesDePause(conversation, maintenant);
+            if (secondes == 0 && conversation.PauseDepuis is null) return 0;
+
+            conversation.PauseSecondes = 0;
+
+            // UNE PAUSE POSÉE PENDANT QUE LE PROFESSEUR RÉPONDAIT continue : ce qui en
+            // est passé est retiré de ce tour, le reste le sera du suivant.
+            if (conversation.PauseDepuis is not null) conversation.PauseDepuis = maintenant;
+
+            await _context.SaveChangesAsync(ct);
+            return secondes;
         }
 
         /// <summary>
@@ -732,6 +809,7 @@ namespace SchoolWebApp.Dal.Repositories
             TokensCacheEcriture = entity.TokensCacheEcriture,
             TokensCacheEcriture1h = entity.TokensCacheEcriture1h,
             ModeleVoix = entity.ModeleVoix,
+            SonJuste = entity.SonJuste,
             DateCreation = entity.DateCreation
         };
     }

@@ -131,6 +131,25 @@ namespace SchoolWebApp.Domain.Models
         public const int CoursParMois = 10;
 
         /// <summary>
+        /// L'ESSAI DES FICHES — Camara, le 18/10/2026 : « les personnes en essai
+        /// ont le droit de créer une seule fiche ; après tu bloques ». UN COURS
+        /// PAR FAMILLE pendant l'essai (une seule rédaction : un cours ne se
+        /// rédige qu'une fois). Compté sur les décomptes, qui ne s'effacent
+        /// jamais : supprimer le cours ne rend pas l'essai. Un cours en échec
+        /// ne coûte rien et ne compte pas.
+        /// </summary>
+        public const string EssaiLibre = "libre";
+
+        /// <summary>Le cours de l'essai est parti à la lecture : on le finit, on n'en commence pas d'autre.</summary>
+        public const string EssaiEnRoute = "en-route";
+
+        /// <summary>Le cours de l'essai a ses fiches : la suite demande un abonnement.</summary>
+        public const string EssaiUtilise = "utilise";
+
+        public const string MessageEssaiUtilise =
+            "Il faut être abonné pour continuer à générer des fiches de révision.";
+
+        /// <summary>
         /// UN GROS COURS COMPTE DOUBLE — Camara, le 16/10/2026. Au-delà de ce
         /// nombre de pages, le cours compte pour 2 dans le quota (et prend 2
         /// crédits). Mesuré le même jour : un PDF de 20 pages coûte 0,27 $ de

@@ -2,7 +2,6 @@ using SchoolWebApp.Domain.Models;
 
 namespace SchoolWebApp.Api.ViewModels
 {
-    /// <summary>Une page du cours importé avec un contrôle, telle que l'écran la liste.</summary>
     public class DocumentControleViewModel
     {
         public int Id { get; set; }
@@ -18,6 +17,15 @@ namespace SchoolWebApp.Api.ViewModels
         /// <summary>Le professeur l'a-t-il déjà lu ? Faux pendant les quelques secondes de transcription.</summary>
         public bool Lu { get; set; }
 
+        /// <summary>L'élève peut-il encore l'ouvrir ? Faux une semaine après le contrôle (fichier purgé).</summary>
+        public bool Consultable { get; set; }
+
+        /// <summary>Le fichier a été effacé par la purge : l'écran dit pourquoi l'aperçu n'est plus là.</summary>
+        public bool Purge { get; set; }
+
+        /// <summary>image, pdf, word, excel, powerpoint ou autre : l'écran choisit son aperçu.</summary>
+        public string Genre { get; set; } = "autre";
+
         public DateTime DateCreation { get; set; }
 
         public static DocumentControleViewModel Depuis(DocumentControle d) => new()
@@ -28,6 +36,9 @@ namespace SchoolWebApp.Api.ViewModels
             Taille = d.Taille,
             NombrePages = d.NombrePages,
             Lu = d.Lu,
+            Consultable = d.Consultable,
+            Purge = d.Purge,
+            Genre = d.Genre,
             DateCreation = d.DateCreation,
         };
     }

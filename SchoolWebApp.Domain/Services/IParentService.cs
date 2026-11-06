@@ -31,5 +31,8 @@ namespace SchoolWebApp.Domain.Services
         Task<Parent?> UpdateParentAsync(Parent model);
 
         Task<bool> DeleteParentAsync(int id);
+
+        /// <summary>Note que ce parent a vu le tutoriel. La première date reste.</summary>
+        Task MarquerTutorielVuAsync(int parentId, CancellationToken ct = default);
     }
 }

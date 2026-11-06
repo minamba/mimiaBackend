@@ -87,6 +87,33 @@ namespace SchoolWebApp.Api.Services.Voix
         public string ModeleTranscription { get; set; } = "gpt-transcribe";
 
         /// <summary>
+        /// Le modèle qui écoute les syllabes du CP : voir <see cref="RegleVerificationSon"/>.
+        /// Préféré à gpt-audio-mini au banc du 04/11/2026 (20/24 mauvaises syllabes refusées contre 17/24).
+        /// </summary>
+        public string ModeleVerificationSon { get; set; } = "gpt-audio-1.5";
+
+        /// <summary>
+        /// Le modèle TEXTE qui lit quel son le professeur a demandé, quand ses mots ne le
+        /// disent pas assez nettement pour une expression régulière. Les modèles audio
+        /// refusent une entrée sans audio ; gpt-4.1-mini répond en 0,5 s et a lu 10 phrases
+        /// sur 10 au banc du 04/11/2026, là où gpt-5-nano mettait 4 à 7 s.
+        /// </summary>
+        public string ModeleLectureDemande { get; set; } = "gpt-4.1-mini";
+
+        /// <summary>
+        /// Le second modèle TEXTE qui donne la prononciation de référence d'un mot à lire, avec
+        /// <see cref="ModeleLectureDemande"/> : chacun se trompe sur un mot sur trente-six au banc
+        /// du 04/11/2026 (« parapluie » pour l'un, « champignon » pour l'autre), on garde l'union.
+        /// </summary>
+        public string ModeleIpaReference { get; set; } = "gpt-4.1";
+
+        /// <summary>
+        /// Où garder le son des tours jugés, pour mesurer sur de vraies voix. Ignoré hors de
+        /// l'environnement de développement : aucune voix d'enfant n'est gardée en production.
+        /// </summary>
+        public string? DossierPrisesDeTest { get; set; }
+
+        /// <summary>
         /// Modèle de transcription des COURS DE LANGUE, et d'eux seuls.
         ///
         /// POURQUOI UN SECOND MODÈLE PLUTÔT QU'UN SEUL POUR TOUT.

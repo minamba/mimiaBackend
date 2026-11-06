@@ -42,6 +42,16 @@ namespace SchoolWebApp.Dal.Entities
         public DateTime? DonneesEffaceesLe { get; set; }
 
         /// <summary>
+        /// LE FICHIER SUR LE DISQUE (04/11/2026) : chemin relatif sous le dossier des cours de
+        /// contrôle, pour que l'élève puisse le revoir. Null avant cette date (octets en base),
+        /// et une fois le fichier purgé, une semaine après le contrôle.
+        /// </summary>
+        public string? Chemin { get; set; }
+
+        /// <summary>Quand la purge a effacé le fichier du disque.</summary>
+        public DateTime? FichierEffaceLe { get; set; }
+
+        /// <summary>
         /// Les lectures qui ont PLANTÉ (pas celles qui ont rendu un texte vide).
         /// Au bout de trois, le document est déclaré illisible et ses octets
         /// partent (Camara, le 16/10/2026) : sans cette limite, un fichier qui

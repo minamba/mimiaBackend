@@ -226,6 +226,22 @@ namespace SchoolWebApp.Api.Controllers
             return Ok(new { examinees, liberees });
         }
 
+        /// <summary>
+        /// RELANCER LES DESCRIPTIONS — Camara, le 20/10/2026 : après un crédit
+        /// épuisé ou un redémarrage, la tâche de fond attend un import pour
+        /// repartir. Ce bouton la réveille sans fichier : elle reprend les
+        /// planches qui n'ont pas encore de description, et rien d'autre.
+        /// </summary>
+        [HttpPost("relancer")]
+        [Authorize(Policy = "EstAdmin")]
+        [SwaggerResponse(202, "Tâche de fond réveillée.")]
+        public IActionResult RelancerLesDescriptions()
+        {
+            _reveil.Sonner();
+            _logger.LogWarning("Descriptions des planches relancées à la main.");
+            return Accepted(new { message = "Les descriptions reprennent en tâche de fond." });
+        }
+
         [HttpPost("files/vider")]
         [Authorize(Policy = "EstAdmin")]
         [SwaggerResponse(200, "Nombre de marquages effectués.")]
@@ -271,7 +287,10 @@ namespace SchoolWebApp.Api.Controllers
             // `legende` (le défaut, celle de toujours) ou `muette` : la même
             // figure sans ses mots, déposée SOUS sa légendée dans l'écran
             // d'import. Voir la migration 20261013000000_PlancheVariante.
-            [FromForm] string? variante = null)
+            [FromForm] string? variante = null,
+            // L'IMPORT EN MASSE (20/10/2026) : la description est laissée à la
+            // tâche de fond au lieu d'être attendue ici.
+            [FromForm] bool differer = false)
         {
             if (string.IsNullOrWhiteSpace(cle) || string.IsNullOrWhiteSpace(matiereCode))
             {
@@ -383,11 +402,17 @@ namespace SchoolWebApp.Api.Controllers
                 // une lecture de vision pour s'entendre répondre « aucun mot »,
                 // et surtout ÉCRASERAIT la description de sa légendée, puisque
                 // le worker travaille par clé.
-                if (!muette)
+                // L'IMPORT EN MASSE NE L'ATTEND PAS (Camara, le 20/10/2026 : 863
+                // schémas d'un dossier). Lire la planche avant de rendre la main
+                // prend plusieurs secondes : la file de la tâche de fond s'en
+                // charge, réveillée tout de suite. Le formulaire d'une seule
+                // planche, lui, attend toujours sa description.
+                if (!muette && !differer)
                 {
                     await _worker.DecrireMaintenantAsync(planche.Cle, CancellationToken.None);
-                    _reveil.Sonner();
                 }
+
+                if (!muette) _reveil.Sonner();
 
                 // RELUE APRÈS LA LECTURE, ET C EST TOUT L INTÉRÊT.
                 //

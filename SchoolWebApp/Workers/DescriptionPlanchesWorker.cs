@@ -38,6 +38,26 @@ namespace SchoolWebApp.Api.Workers
 
         private const int TailleLot = 5;
 
+        /// <summary>Les tours d'un vidage au plus : 400 lots de cinq (voir ExecuteAsync).</summary>
+        private const int PlafondDeTours = 400;
+
+        /// <summary>
+        /// LES PLANCHES QUI ONT ÉCHOUÉ PENDANT CE VIDAGE (20/10/2026) : sautées
+        /// jusqu'à la fin du vidage, pour que la file avance au lieu de s'arrêter
+        /// sur elles. Vidées au réveil suivant : une relance les retente une fois.
+        /// </summary>
+        private readonly HashSet<string> _echecsDescription = new(StringComparer.Ordinal);
+        private readonly HashSet<string> _echecsReperes = new(StringComparer.Ordinal);
+
+        /// <summary>
+        /// Les lots ENTIÈREMENT ratés d'affilée. Au troisième, ce n'est plus une
+        /// planche difficile mais le fournisseur (crédit épuisé, limite de débit) :
+        /// on s'arrête au lieu de parcourir toute la file pour rien.
+        /// </summary>
+        private int _lotsRatesDescription;
+        private int _lotsRatesReperes;
+        private const int LotsRatesAvantArret = 3;
+
         /// <summary>
         /// Le plafond de la DESCRIPTION.
         ///
@@ -129,10 +149,19 @@ namespace SchoolWebApp.Api.Workers
                         //
                         // Le plafond de tours est une ceinture par-dessus la
                         // bretelle : si un chemin oublié rendait un compte
-                        // faussement positif, on s'arrêterait quand même. Cent
-                        // tours, c'est cinq cents planches — bien au-delà de
-                        // tout import réel.
-                        for (var tour = 0; tour < 100; tour++)
+                        // faussement positif, on s'arrêterait quand même.
+                        //
+                        // QUATRE CENTS TOURS, SOIT DEUX MILLE PLANCHES (20/10/2026).
+                        // Cent tours — cinq cents planches — passaient pour
+                        // « bien au-delà de tout import réel » : l'import du
+                        // dossier de Camara en a apporté 863 d'un coup, et le
+                        // vidage s'arrêtait à 500, le reste attendant un réveil.
+                        lock (_echecsDescription) _echecsDescription.Clear();
+                        lock (_echecsReperes) _echecsReperes.Clear();
+                        _lotsRatesDescription = 0;
+                        _lotsRatesReperes = 0;
+
+                        for (var tour = 0; tour < PlafondDeTours; tour++)
                         {
                             ct.ThrowIfCancellationRequested();
 
@@ -158,10 +187,10 @@ namespace SchoolWebApp.Api.Workers
 
                             if (faites == 0) break;
 
-                            if (tour == 99)
+                            if (tour == PlafondDeTours - 1)
                             {
                                 _logger.LogError(
-                                    "Vidage des planches ARRETE au plafond de 100 tours : "
+                                    $"Vidage des planches ARRETE au plafond de {PlafondDeTours} tours : "
                                     + "quelque chose n'avance pas. Verifier la file a la main.");
                             }
                         }
@@ -202,7 +231,9 @@ namespace SchoolWebApp.Api.Workers
             using var scope = _scopes.CreateScope();
             var planches = scope.ServiceProvider.GetRequiredService<IPlancheRepository>();
 
-            var aFaire = (await planches.GetADecrireAsync(TailleLot, ct)).ToList();
+            string[] exclues;
+            lock (_echecsDescription) exclues = [.. _echecsDescription];
+            var aFaire = (await planches.GetADecrireAsync(TailleLot, ct, exclues)).ToList();
             if (aFaire.Count == 0) return 0;
 
             // ON COMPTE CE QUI A ETE MARQUE, PAS CE QUI A ETE LU.
@@ -217,6 +248,7 @@ namespace SchoolWebApp.Api.Workers
             {
                 if (ct.IsCancellationRequested) return marquees;
                 if (await DecrireUneAsync(planche, planches, ct)) marquees++;
+                else lock (_echecsDescription) _echecsDescription.Add(planche.Cle);
             }
 
             // Résolu depuis le scope du tour : ce service est *scoped*, et le
@@ -233,7 +265,27 @@ namespace SchoolWebApp.Api.Workers
             _logger.LogInformation(
                 "{Marquees}/{Lues} planche(s) decrite(s).", marquees, aFaire.Count);
 
-            return marquees;
+            // UN LOT ENTIÈREMENT EN ÉCHEC NE TERMINE PLUS LE VIDAGE (20/10/2026) :
+            // ses planches sont écartées, le lot suivant est essayé. Le vidage ne
+            // s'arrête que quand la file — échecs mis à part — est vide, ou après
+            // trois lots ratés de suite (le fournisseur, pas les planches).
+            if (marquees > 0)
+            {
+                _lotsRatesDescription = 0;
+                return marquees;
+            }
+
+            _lotsRatesDescription++;
+            if (_lotsRatesDescription >= LotsRatesAvantArret)
+            {
+                _logger.LogError(
+                    "Descriptions des planches ARRETEES : {Lots} lots de suite sans aucune reussite "
+                    + "(credit epuise ou limite de debit ?). Voir les avertissements « Description impossible ».",
+                    _lotsRatesDescription);
+                return 0;
+            }
+
+            return 1;
         }
 
         /// <summary>
@@ -247,7 +299,16 @@ namespace SchoolWebApp.Api.Workers
             Domain.Models.Planche planche, IPlancheRepository planches, CancellationToken ct)
         {
             {
-                if (planche.Donnees is not { Length: > 0 }) return true;   // rien a decrire, mais rien a reprendre non plus
+                // UNE IMAGE INTROUVABLE EST UN ÉCHEC (20/10/2026). Elle rendait
+                // « vrai » sans rien écrire : la planche restait en tête de file,
+                // comptée comme faite, et le vidage tournait à vide jusqu'à son
+                // plafond. Elle est maintenant écartée et signalée.
+                if (planche.Donnees is not { Length: > 0 })
+                {
+                    _logger.LogWarning(
+                        "Planche {Cle} : image introuvable (disque ou base), description impossible.", planche.Cle);
+                    return false;
+                }
 
                 // Un SVG n'est pas une image pour le modèle de vision, et n'a
                 // pas besoin de l'être : ses légendes sont du texte, en clair,
@@ -351,6 +412,13 @@ namespace SchoolWebApp.Api.Workers
 
                     await planches.EnregistrerContenuAsync(
                         planche.Id, await QualifierAsync(contenu.Trim(), planche.MatiereCode, ct), ct);
+
+                    // ÉCRITE, DONC MARQUÉE (20/10/2026). Sans ce retour, une
+                    // description réussie tombait sur le « échec » du bas : chaque
+                    // lot comptait 0/5 alors que ses cinq planches étaient en
+                    // base, et le vidage s'arrêtait après UN lot. Il fallait
+                    // relancer à la main, cinq planches à la fois.
+                    return true;
                 }
                 catch (OperationCanceledException) when (ct.IsCancellationRequested)
                 {
@@ -420,7 +488,9 @@ namespace SchoolWebApp.Api.Workers
             using var scope = _scopes.CreateScope();
             var planches = scope.ServiceProvider.GetRequiredService<IPlancheRepository>();
 
-            var aFaire = (await planches.GetSansReperesAsync(TailleLot, ct)).ToList();
+            string[] exclues;
+            lock (_echecsReperes) exclues = [.. _echecsReperes];
+            var aFaire = (await planches.GetSansReperesAsync(TailleLot, ct, exclues)).ToList();
             if (aFaire.Count == 0) return 0;
 
             var marquees = 0;
@@ -429,9 +499,26 @@ namespace SchoolWebApp.Api.Workers
             {
                 if (ct.IsCancellationRequested) return marquees;
                 if (await ReperUneAsync(planche, planches, ct)) marquees++;
+                else lock (_echecsReperes) _echecsReperes.Add(planche.Cle);
             }
 
-            return marquees;
+            // Comme pour la description : un lot raté laisse passer le suivant,
+            // jusqu'à trois lots ratés de suite.
+            if (marquees > 0)
+            {
+                _lotsRatesReperes = 0;
+                return marquees;
+            }
+
+            _lotsRatesReperes++;
+            if (_lotsRatesReperes >= LotsRatesAvantArret)
+            {
+                _logger.LogError(
+                    "Cartes des reperes ARRETEES : {Lots} lots de suite sans aucune reussite.", _lotsRatesReperes);
+                return 0;
+            }
+
+            return 1;
         }
 
         /// <summary>
@@ -447,7 +534,12 @@ namespace SchoolWebApp.Api.Workers
             Domain.Models.Planche planche, IPlancheRepository planches, CancellationToken ct)
         {
             {
-                if (planche.Donnees is not { Length: > 0 }) return true;   // rien a cartographier, rien a reprendre
+                if (planche.Donnees is not { Length: > 0 })
+                {
+                    _logger.LogWarning(
+                        "Planche {Cle} : image introuvable (disque ou base), carte des reperes impossible.", planche.Cle);
+                    return false;
+                }
 
                 // UN SEUL ENDROIT DÉCIDE DE CE QU'UN MODÈLE DE VISION PEUT LIRE.
                 //
@@ -510,6 +602,9 @@ namespace SchoolWebApp.Api.Workers
                         "Planche {Cle} : {Nombre} repere(s) cartographie(s).",
                         planche.Cle,
                         Domain.Services.CarteReperes.Lire(carte).Count);
+
+                    // Même retour manquant que pour la description (20/10/2026).
+                    return true;
                 }
                 catch (OperationCanceledException) when (ct.IsCancellationRequested)
                 {

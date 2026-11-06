@@ -31,4 +31,17 @@ namespace SchoolWebApp.Domain.Models
     /// administrateur ou super-administrateur — ni plafond d'import, ni quota.
     /// </summary>
     public sealed record DroitsEspaceParent(bool Fiches, bool SansLimite);
+
+    /// <summary>
+    /// CE QUE L'ON DEMANDE À LA PORTE DES FICHES (18/10/2026) : un abonné
+    /// passe partout ; une famille en essai CONSULTE toujours ses fiches,
+    /// COMMENCE un cours tant que son essai est libre, et fait RÉDIGER le
+    /// cours de son essai tant qu'il n'a pas ses fiches.
+    /// </summary>
+    public enum UsageFiches
+    {
+        Consulter,
+        NouveauCours,
+        Rediger,
+    }
 }

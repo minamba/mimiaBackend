@@ -91,6 +91,15 @@ namespace SchoolWebApp.Api.Request
         /// </summary>
         [StringLength(20)]
         public string? VitesseEcoute { get; set; }
+
+        /// <summary>
+        /// LE VERDICT DE LA VOIX — Camara, le 04/11/2026 : pendant un exercice de
+        /// syllabes, la bulle de l'élève n'écrit pas ce qu'il a dit mais « Bonne prononciation »
+        /// ou « On réessaie ». Vrai ou faux quand ce tour est un son jugé
+        /// par le serveur (voir <c>RegleVerificationSon</c>), absent sinon. Le
+        /// contenu reste le son jugé : c'est lui que lit le professeur.
+        /// </summary>
+        public bool? SonJuste { get; set; }
     }
 
     /// <summary>

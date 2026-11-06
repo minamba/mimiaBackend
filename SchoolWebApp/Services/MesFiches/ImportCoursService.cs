@@ -66,10 +66,15 @@ namespace SchoolWebApp.Api.Services.MesFiches
 
         /// <summary>
         /// LES FICHES DEMANDENT UN VRAI FORFAIT (Camara, le 16/10/2026) : ni
-        /// essai, ni pause, ni plus d'abonnement. Null quand la porte est
-        /// ouverte, sinon la phrase pour l'enfant.
+        /// pause, ni plus d'abonnement. Null quand la porte est ouverte, sinon
+        /// la phrase pour l'enfant.
+        ///
+        /// SAUF UN COURS D'ESSAI PAR FAMILLE (Camara, le 18/10/2026) : en essai,
+        /// on consulte toujours ses fiches, on commence un cours tant que
+        /// l'essai est libre, et on fait rédiger le cours de l'essai tant qu'il
+        /// n'a pas ses fiches. Ensuite : « il faut être abonné ».
         /// </summary>
-        public async Task<Refus?> PorteDuForfaitAsync(Proprietaire proprietaire, CancellationToken ct)
+        public async Task<Refus?> PorteDuForfaitAsync(Proprietaire proprietaire, UsageFiches usage, CancellationToken ct)
         {
             // L'ESPACE PARENT : c'est le droit coché dans Admin › Parents qui ouvre
             // la porte, pas le forfait (les crédits suffisent à un parent).
@@ -80,10 +85,32 @@ namespace SchoolWebApp.Api.Services.MesFiches
                     : new Refus("Les fiches de révision ne sont pas ouvertes sur votre compte.");
             }
 
-            return (await _acces.LirePourEleveAsync(proprietaire.EleveId ?? 0, ct)).Ouvert
-                ? null
-                : new Refus("Il faut un forfait pour accéder aux fiches de révision. Demande à tes parents d’en choisir un.");
+            var eleveId = proprietaire.EleveId ?? 0;
+            var acces = await _acces.LirePourEleveAsync(eleveId, ct);
+            if (acces.Ouvert) return null;
+
+            if (acces.Motif == AccesForfaitService.MotifEssai)
+            {
+                if (usage == UsageFiches.Consulter) return null;
+
+                var essai = await _depot.EssaiFichesAsync(eleveId, ct);
+                var passe = usage == UsageFiches.NouveauCours
+                    ? essai == Regles.EssaiLibre
+                    : essai != Regles.EssaiUtilise;
+                return passe ? null : new Refus(Regles.MessageEssaiUtilise);
+            }
+
+            return new Refus("Il faut un forfait pour accéder aux fiches de révision. Demande à tes parents d’en choisir un.");
         }
+
+        /// <summary>
+        /// L'essai des fiches de cet élève, pour les pages : null hors essai
+        /// (abonné ou porte fermée), sinon libre, en route ou utilisé.
+        /// </summary>
+        public async Task<string?> EssaiFichesAsync(int eleveId, CancellationToken ct) =>
+            (await _acces.LirePourEleveAsync(eleveId, ct)) is { Ouvert: false, Motif: AccesForfaitService.MotifEssai }
+                ? await _depot.EssaiFichesAsync(eleveId, ct)
+                : null;
 
         private static Refus QuotaEpuise(QuotaFiches quota, bool parent) => parent
             ? new("Vous n’avez plus de crédits de fiches. Vous pouvez en acheter dans Mon forfait.")
@@ -96,7 +123,7 @@ namespace SchoolWebApp.Api.Services.MesFiches
             Proprietaire proprietaire, int coursId, string? nomFichier, string? typeAnnonce, byte[] donnees, CancellationToken ct)
         {
             if (!await ModuleActifAsync(ct)) return (null, new Refus("Les fiches de révision ne sont pas ouvertes."));
-            if (await PorteDuForfaitAsync(proprietaire, ct) is Refus fermee) return (null, fermee);
+            if (await PorteDuForfaitAsync(proprietaire, UsageFiches.NouveauCours, ct) is Refus fermee) return (null, fermee);
 
             var cours = await _depot.GetAsync(proprietaire, coursId, ct);
             if (cours is null || cours.Etat != Regles.EtatBrouillon)
@@ -147,7 +174,7 @@ namespace SchoolWebApp.Api.Services.MesFiches
         public async Task<Refus?> EnvoyerAsync(Proprietaire proprietaire, int coursId, CancellationToken ct)
         {
             if (!await ModuleActifAsync(ct)) return new Refus("Les fiches de révision ne sont pas ouvertes.");
-            if (await PorteDuForfaitAsync(proprietaire, ct) is Refus fermee) return fermee;
+            if (await PorteDuForfaitAsync(proprietaire, UsageFiches.NouveauCours, ct) is Refus fermee) return fermee;
 
             var maintenant = DateTime.UtcNow;
 
@@ -189,7 +216,7 @@ namespace SchoolWebApp.Api.Services.MesFiches
         public async Task<Refus?> DemanderAsync(Proprietaire proprietaire, int coursId, string type, IReadOnlyList<int>? notions, CancellationToken ct)
         {
             if (!await ModuleActifAsync(ct)) return new Refus("Les fiches de révision ne sont pas ouvertes.");
-            if (await PorteDuForfaitAsync(proprietaire, ct) is Refus fermee) return fermee;
+            if (await PorteDuForfaitAsync(proprietaire, UsageFiches.Rediger, ct) is Refus fermee) return fermee;
 
             var regle = Regles.Type(type);
             if (regle is null) return new Refus("Ce type de fiche n’existe pas.");

@@ -569,6 +569,18 @@ namespace SchoolWebApp.Api.Controllers
                 return BadRequest(new { message = "Cette adresse est bannie : elle ne reçoit plus aucun courriel." });
             }
 
+            // LES COPIES ET COPIES CACHÉES (19/10/2026).
+            var (copies, fauteCopies) = ListeAdresses.Lire(requete?.Cc, [adresse]);
+            var (cachees, fauteCachees) = ListeAdresses.Lire(requete?.Cci, copies.Append(adresse));
+            if ((fauteCopies ?? fauteCachees) is string fauteAdresse) return BadRequest(new { message = fauteAdresse });
+            foreach (var autre in copies.Concat(cachees))
+            {
+                if (await bannis.EstBanniAsync(autre, ct))
+                {
+                    return BadRequest(new { message = $"L'adresse {autre} est bannie : elle ne reçoit plus aucun courriel." });
+                }
+            }
+
             var detail = await _modeles.GetDetailAsync(id, ct);
             if (detail is null) return NotFound();
 
@@ -589,7 +601,8 @@ namespace SchoolWebApp.Api.Controllers
 
             var resultat = await email.DiffuserAsync(
                 new[] { adresse }, courriel.Sujet, "diffusion", valeurs,
-                courriel.Images, courriel.Documents, ct: ct, expediteur: boite.Expediteur);
+                courriel.Images, courriel.Documents, ct: ct, expediteur: boite.Expediteur,
+                copies: copies, copiesCachees: cachees);
 
             if (resultat.Envoyes == 0)
             {
@@ -603,7 +616,7 @@ namespace SchoolWebApp.Api.Controllers
             // Une copie dans « Messages envoyés » de sa boîte (17/10/2026).
             var copieDeposee = await boite.Boite.DeposerCopieAsync(
                 adresse, courriel.Sujet, await email.ComposerAsync(courriel.Sujet, "diffusion", valeurs),
-                courriel.Images, courriel.Documents, ct);
+                courriel.Images, courriel.Documents, ct, copies, cachees);
 
             _logger.LogInformation(
                 "Template {Id} envoye a un parent : « {Sujet} ».", id, courriel.Sujet);
@@ -854,6 +867,11 @@ namespace SchoolWebApp.Api.Controllers
         public class EnvoiParentRequest
         {
             public string? Destinataire { get; set; }
+
+            /// <summary>Les copies et copies cachées (19/10/2026).</summary>
+            public List<string>? Cc { get; set; }
+
+            public List<string>? Cci { get; set; }
         }
 
         public class PlanificationRequest

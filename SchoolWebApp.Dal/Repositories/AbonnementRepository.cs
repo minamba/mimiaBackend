@@ -1338,9 +1338,17 @@ namespace SchoolWebApp.Dal.Repositories
             // suivante ; un prélèvement refusé suspend les séances jusqu'au
             // règlement. Les abonnements sans Stripe (comptes exemptés, offres
             // gratuites) gardent leur reconduction locale.
+            //
+            // JAMAIS UN ESSAI (18/10/2026) : sans date de fin depuis que son
+            // délai est supprimé, il se reconduisait chaque mois, et ses trente
+            // minutes repartaient avec la période. Il garde sa première période
+            // pour toujours : sa consommation s'y additionne jusqu'aux trente
+            // minutes, et une période passée ne coupe pas un essai (seuls
+            // l'impayé et Stripe le font, et l'essai n'a ni l'un ni l'autre).
             else if (abonnement.Statut == StatutAbonnement.Actif
                      && abonnement.PeriodeFin <= maintenant
-                     && string.IsNullOrEmpty(abonnement.StripeAbonnementId))
+                     && string.IsNullOrEmpty(abonnement.StripeAbonnementId)
+                     && abonnement.Offre?.EstEssai != true)
             {
                 // LA DESCENTE DE GAMME PREND EFFET ICI (ou à la facture payée,
                 // pour un abonnement Stripe).

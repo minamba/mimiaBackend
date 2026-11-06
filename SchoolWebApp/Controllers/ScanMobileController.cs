@@ -128,7 +128,9 @@ namespace SchoolWebApp.Api.Controllers
                     if (ajout.Document is null)
                     {
                         _jetons.Liberer(jeton);
-                        return BadRequest(new { message = ajout.Motif });
+                        return ajout.StockageIndisponible
+                            ? StatusCode(503, new { message = ajout.Motif })
+                            : BadRequest(new { message = ajout.Motif });
                     }
 
                     _jetons.Livrer(jeton, ajout.Document.Id);

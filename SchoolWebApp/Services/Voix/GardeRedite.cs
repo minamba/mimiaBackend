@@ -54,6 +54,9 @@ namespace SchoolWebApp.Api.Services.Voix
     /// JAMAIS À L'AVEUGLE : transcription en panne ou critères non remplis, la
     /// fin part entière.
     ///
+    /// DEPUIS LE 05/11/2026, ELLE COUPE AUSSI CE QUE LA VOIX AJOUTE APRÈS LE TEXTE : voir
+    /// <see cref="DebutDeLaSuite"/>. Même retenue, même transcription, donc rien de plus à payer.
+    ///
     /// CE QU'ELLE NE COUVRE PAS : les dictées et les écoutes lentes (le son
     /// retenu y est trop long pour arriver à temps) et les textes de moins de
     /// cinq mots.
@@ -123,6 +126,82 @@ namespace SchoolWebApp.Api.Services.Voix
             return MotsDe(texte).Count >= MotsMinimum;
         }
 
+        /// <summary>
+        /// LES PASSAGES COURTS — Camara, le 05/11/2026 : « il répète toujours deux fois "Voici la prochaine syllabe", il
+        /// parle derrière les mots, il m'a demandé si j'avais pris mon petit déjeuner ». Dans un exercice de sons, TOUT
+        /// fait moins de cinq mots : rien n'était surveillé. Pas de transcription ici, elle invente sur deux secondes de
+        /// son ; une règle de DURÉE. Mesuré sur « Écoute bien : gu. » : 2,1 à 3,4 s normalement, 4,9 à 5,5 s relu deux
+        /// fois, 7 à 44 s inventé. Au-delà du normal, on coupe au premier silence franc après la durée minimale.
+        /// </summary>
+        public static bool PassageCourt(string texte) => MotsDe(texte).Count is > 0 and < MotsMinimum;
+
+        /// <summary>La lecture la plus lente qu'on accepte : au-delà, c'est une relecture ou une invention.</summary>
+        public static double DureeNormaleMax(string texte) => CaracteresPrononces(texte) / 8d + 1.1;
+
+        /// <summary>La lecture la plus rapide : avant, le texte ne peut pas être fini.</summary>
+        internal static double DureeMinimum(string texte) => CaracteresPrononces(texte) / 13d + 0.5;
+
+        /// <summary>On arrête la génération peu après le normal : il faut juste assez de son pour trouver le silence.</summary>
+        public static long PlafondPassageCourt(string texte) => (long)((DureeNormaleMax(texte) + 1.0) * OctetsParSeconde) & ~1L;
+
+        public static ReadOnlyMemory<byte> CouperPassageCourt(string texte, byte[] pcm, ILogger logger)
+        {
+            var duree = pcm.Length / (double)OctetsParSeconde;
+            if (duree <= DureeNormaleMax(texte)) return pcm;
+
+            // Une relecture commence vers le milieu du son : on ne cherche pas le silence avant. Et JAMAIS AVANT LE MOT
+            // DICTÉ : mesuré le 05/11/2026, « Écoute bien : riz. » en 3,7 s coupé à 1,7 s, le mot perdu ; la pause après
+            // « Écoute bien » tombait à 1,7 s. Le mot n'est jamais fini avant 2,2 s.
+            var minimum = Math.Max(DureeMinimum(texte), Math.Max(EstPhraseSupport(texte) ? 2.2 : 0, 0.5 * DureeNormaleMax(texte)));
+            var apres = Math.Min(Math.Max(minimum, 0.4 * duree), Math.Max(minimum, DureeNormaleMax(texte)));
+            var coupe = PremierSilenceApres(pcm, apres) ?? DureeNormaleMax(texte);
+            var octets = (long)(coupe * OctetsParSeconde) & ~1L;
+
+            // AUCUN CONTENU DANS LE JOURNAL : des mesures seulement.
+            logger.LogWarning(
+                "Passage court coupe : {Duree:F1} s de son pour {Mots} mots, {Garde:F1} s gardees.",
+                duree, MotsDe(texte).Count, coupe);
+
+            return new ReadOnlyMemory<byte>(pcm, 0, (int)Math.Min(octets, pcm.Length));
+        }
+
+        /// <summary>« Écoute bien : X. » ou « Listen carefully: X. » : voir SyntheseGemini.AvecPhraseSupport.</summary>
+        private static bool EstPhraseSupport(string texte) =>
+            texte.TrimStart().StartsWith("Écoute bien :", StringComparison.Ordinal) || texte.TrimStart().StartsWith("Listen carefully:", StringComparison.Ordinal);
+
+        /// <summary>Le début du premier silence franc (180 ms au moins) qui commence après <paramref name="apres"/> secondes.</summary>
+        private static double? PremierSilenceApres(byte[] pcm, double apres)
+        {
+            const int trame = 24000 / 50; // 20 ms
+            const double seuil = 300;
+            const int tramesDeSilence = 9; // 180 ms
+
+            var trames = pcm.Length / 2 / trame;
+            var debut = -1;
+
+            for (var t = (int)(apres * 50); t < trames; t++)
+            {
+                double energie = 0;
+                for (var i = 0; i < trame; i++)
+                {
+                    var e = BitConverter.ToInt16(pcm, (t * trame + i) * 2);
+                    energie += (double)e * e;
+                }
+
+                if (Math.Sqrt(energie / trame) < seuil)
+                {
+                    if (debut < 0) debut = t;
+                    if (t - debut + 1 >= tramesDeSilence) return debut / 50d;
+                }
+                else
+                {
+                    debut = -1;
+                }
+            }
+
+            return null;
+        }
+
         /// <summary>Les octets qu'on transmet sans attendre : une lecture n'a pas pu finir avant.</summary>
         public static long OctetsTransmisDAvance(string texte) =>
             (long)(CaracteresPrononces(texte) / CaracteresParSecondeMaximum * OctetsParSeconde) & ~1L;
@@ -186,6 +265,22 @@ namespace SchoolWebApp.Api.Services.Voix
 
                 if (coupe is not int position)
                 {
+                    // PAS DE REDITE, MAIS PEUT-ÊTRE UNE SUITE INVENTÉE : voir DebutDeLaSuite.
+                    if (DebutDeLaSuite(attendus, entendus) is int suite)
+                    {
+                        var coupeSuite = (long)(DebutDuSilenceAvant(fin, entendus[suite].Debut) * OctetsParSeconde) & ~1L;
+
+                        // AUCUN CONTENU DANS LE JOURNAL : des mesures seulement.
+                        _logger.LogWarning(
+                            "Suite inventee par Gemini coupee : {Mots} mots apres la fin du texte, {Retire:F1} s de son retirees sur {Total:F1}.",
+                            entendus.Count - suite,
+                            (fin.Length - coupeSuite) / (double)OctetsParSeconde,
+                            fin.Length / (double)OctetsParSeconde);
+
+                        CentiemesRetires = (int)((fin.Length - Math.Max(0, coupeSuite)) * 100L / OctetsParSeconde);
+                        return new ReadOnlyMemory<byte>(fin, 0, (int)Math.Max(0, coupeSuite));
+                    }
+
                     _logger.LogInformation(
                         "Garde de redite : rien a couper ({Entendus} mots retenus pour un texte de {Attendus}).",
                         entendus.Count, attendus.Count);
@@ -193,8 +288,12 @@ namespace SchoolWebApp.Api.Services.Voix
                 }
 
                 var retenues = fin.Length / (double)OctetsParSeconde;
-                var coupeSecondes = DebutDuSilenceAvant(
-                    fin, OuCouper(entendus[position].Debut, secondesDejaTransmises, retenues));
+
+                // LA PREMIÈRE LECTURE PEUT AVOIR INVENTÉ AVANT D'ÊTRE RELUE : dans ce cas, c'est là qu'on coupe.
+                var suiteAvant = DebutDeLaSuite(attendus, entendus.Take(position).ToList());
+                var coupeSecondes = suiteAvant is int rangSuite
+                    ? DebutDuSilenceAvant(fin, entendus[rangSuite].Debut)
+                    : DebutDuSilenceAvant(fin, OuCouper(entendus[position].Debut, secondesDejaTransmises, retenues));
                 var coupeOctets = (long)(coupeSecondes * OctetsParSeconde) & ~1L;
 
                 _logger.LogWarning(
@@ -294,6 +393,75 @@ namespace SchoolWebApp.Api.Services.Voix
                     meilleurScore = score;
                     meilleur = k;
                     meilleurSurUnMot = surUnMot;
+                }
+            }
+
+            return meilleur;
+        }
+
+        /// <summary>En dessous, ce peut être la transcription qui ajoute un mot : on ne coupe pas pour ça.</summary>
+        private const int MotsDeSuiteMinimum = 3;
+
+        /// <summary>Les derniers mots du texte, à retrouver dans la retenue pour savoir où il finit.</summary>
+        private const int MotsDeFin = 6;
+
+        /// <summary>
+        /// LA SUITE INVENTÉE — Camara, le 05/11/2026, après « on a vu en anglais shop », jamais écrit par le professeur.
+        /// Flash-Lite lit parfois son texte, puis continue seul : « ...le son cha. Et pour aller chercher une bonne
+        /// réponse, il suffit de bien écouter chaque son du mot. » Mesuré : 2 prises sur 16 sur une phrase de cours.
+        ///
+        /// Le rang du premier mot après la fin du texte, ou null. LA FIN DU TEXTE EST LA PREMIÈRE PLACE où son dernier mot
+        /// arrive après les mots qui le précèdent : plus loin, l'invention redit volontiers les mêmes mots. Si le dernier
+        /// mot est mal transcrit, l'avant-dernier sert de repère. JAMAIS À L'AVEUGLE : sans repère sûr, rien n'est coupé.
+        ///
+        /// CE QU'ELLE NE COUVRE PAS : un mot remplacé au milieu de la phrase. Elle n'en connaît pas le son.
+        /// </summary>
+        public static int? DebutDeLaSuite(IReadOnlyList<string> attendus, IReadOnlyList<MotTranscrit> entendus)
+        {
+            if (attendus.Count < MotsMinimum || entendus.Count < MotsDeSuiteMinimum) return null;
+
+            var mots = entendus.Select(m => m.Mot).ToList();
+            var fin = attendus.TakeLast(MotsDeFin).ToList();
+
+            var finDuTexte = RangDeFin(fin, mots);
+
+            // Le dernier mot mal transcrit : il tient la place juste après l'avant-dernier.
+            if (finDuTexte is null && RangDeFin(fin.SkipLast(1).ToList(), mots) is int avantDernier) finDuTexte = avantDernier + 1;
+
+            if (finDuTexte is not int rang) return null;
+
+            var suite = rang + 1;
+            if (mots.Count - suite < MotsDeSuiteMinimum) return null;
+
+            // Tout le reste redit le texte : c'est l'affaire de la redite, pas d'une invention.
+            var reste = mots.Skip(suite).ToList();
+            return DansLOrdre(attendus, reste) >= reste.Count * PartRetrouvee ? null : suite;
+        }
+
+        /// <summary>
+        /// LA PLACE OÙ LES DERNIERS MOTS DU TEXTE SE RETROUVENT LE MIEUX, et la première à égalité. Pas la première
+        /// ressemblance : relevé à l'essai, « cha » ressemble à « chat », et « tu avais bien trouvé chat avec le son cha »
+        /// était coupé dès le premier « chat », en plein texte. Ce score veut d'autant plus de mots qu'il y en a devant :
+        /// une lecture rapide en laisse peu dans la retenue.
+        /// </summary>
+        private static int? RangDeFin(IReadOnlyList<string> fin, IReadOnlyList<string> mots)
+        {
+            if (fin.Count < 2) return null;
+
+            int? meilleur = null;
+            var meilleurScore = 0;
+
+            for (var i = 0; i < mots.Count; i++)
+            {
+                if (!Proches(fin[^1], mots[i])) continue;
+
+                var score = DansLOrdre(fin, mots.Take(i + 1).ToList());
+                var possibles = Math.Min(fin.Count, i + 1);
+
+                if (score >= Math.Ceiling(possibles * 0.6) && score > meilleurScore)
+                {
+                    meilleur = i;
+                    meilleurScore = score;
                 }
             }
 

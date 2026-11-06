@@ -10,7 +10,7 @@
     <!-- MailKit et non System.Net.Mail : la boîte d'envoi écoute sur le port
          465, en SSL implicite. SmtpClient ne sait faire que du STARTTLS (587)
          et échouerait à la négociation. -->
-    <PackageReference Include="MailKit" Version="4.*" />
+    <PackageReference Include="MailKit" Version="4.18.1" />
     <PackageReference Include="Microsoft.Extensions.Options" Version="8.*" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="8.*" />
   </ItemGroup>

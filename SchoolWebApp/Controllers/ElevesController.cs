@@ -631,10 +631,11 @@ namespace SchoolWebApp.Api.Controllers
 
         [HttpPost("{id:int}/controles/{controleId:int}/cours")]
         [SchoolWebApp.Api.Auth.AutoriseEleve]
-        [RequestSizeLimit(SchoolWebApp.Api.Services.PiecesJointes.ValidationPieceJointe.TailleMax + 4096)]
+        [RequestSizeLimit(SchoolWebApp.Api.Services.PiecesJointes.ValidationDocumentCours.TailleMax + 4096)]
         [SwaggerResponse(200, "Le document ajouté.", typeof(DocumentControleViewModel))]
         [SwaggerResponse(400, "Fichier refusé — le motif est destiné à l'élève.")]
         [SwaggerResponse(404, "Contrôle inexistant ou n'appartenant pas à cet élève.")]
+        [SwaggerResponse(503, "Le dossier des documents n'est pas prêt sur le serveur.")]
         public async Task<IActionResult> AjouterCoursDuControle(
             int id, int controleId, IFormFile fichier,
             [FromServices] IControleScolaireRepository controles,
@@ -646,9 +647,9 @@ namespace SchoolWebApp.Api.Controllers
                 return BadRequest(new { message = "Aucun fichier reçu." });
             }
 
-            if (fichier.Length > SchoolWebApp.Api.Services.PiecesJointes.ValidationPieceJointe.TailleMax)
+            if (fichier.Length > SchoolWebApp.Api.Services.PiecesJointes.ValidationDocumentCours.TailleMax)
             {
-                return BadRequest(new { message = "Ce fichier est trop lourd (5 Mo au plus)." });
+                return BadRequest(new { message = "Ce fichier est trop lourd (10 Mo au plus)." });
             }
 
             try
@@ -660,6 +661,8 @@ namespace SchoolWebApp.Api.Controllers
 
                 var resultat = await cours.AjouterAsync(
                     id, controleId, fichier.FileName, fichier.ContentType, flux.ToArray(), ct);
+
+                if (resultat.StockageIndisponible) return StatusCode(503, new { message = resultat.Motif });
 
                 return resultat.Document is null
                     ? BadRequest(new { message = resultat.Motif })
@@ -674,22 +677,88 @@ namespace SchoolWebApp.Api.Controllers
 
         [HttpDelete("{id:int}/controles/{controleId:int}/cours/{documentId:int}")]
         [SchoolWebApp.Api.Auth.AutoriseEleve]
-        [SwaggerResponse(204, "Document retiré.")]
+        [SwaggerResponse(204, "Document retiré, et son fichier effacé du disque.")]
         [SwaggerResponse(404, "Document inexistant ou n'appartenant pas à cet élève.")]
         public async Task<IActionResult> SupprimerCoursDuControle(
             int id, int controleId, int documentId,
-            [FromServices] IControleScolaireRepository controles,
+            [FromServices] CoursDuControleService cours,
             CancellationToken ct)
         {
             try
             {
-                return await controles.SupprimerDocumentAsync(id, controleId, documentId, ct)
+                return await cours.RetirerAsync(id, controleId, documentId, ct)
                     ? NoContent()
                     : NotFound();
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Erreur lors du retrait d'un document du controle {ControleId}.", controleId);
+                return StatusCode(500, new { message = "Une erreur est survenue, veuillez réessayer." });
+            }
+        }
+
+        /// <summary>
+        /// L'APERÇU DU COURS PAR L'ÉLÈVE — Camara, le 04/11/2026 : le fichier tel qu'il l'a
+        /// envoyé, tant qu'il est sur le disque. Une semaine après le contrôle, la purge l'a
+        /// effacé : 410, et l'écran le dit.
+        /// </summary>
+        [HttpGet("{id:int}/controles/{controleId:int}/cours/{documentId:int}/fichier")]
+        [SchoolWebApp.Api.Auth.AutoriseEleve]
+        [SwaggerResponse(200, "Le fichier, avec son type.")]
+        [SwaggerResponse(404, "Document inexistant ou n'appartenant pas à cet élève.")]
+        [SwaggerResponse(410, "Le fichier n'est plus sur le serveur (purgé une semaine après le contrôle).")]
+        public async Task<IActionResult> GetFichierCoursDuControle(
+            int id, int controleId, int documentId,
+            [FromServices] IControleScolaireRepository controles,
+            [FromServices] CoursDuControleService cours,
+            CancellationToken ct)
+        {
+            try
+            {
+                var document = await controles.GetDocumentAsync(id, controleId, documentId, ct);
+                if (document is null) return NotFound();
+
+                var lu = await cours.LireAsync(id, controleId, documentId, ct);
+                if (lu is null)
+                {
+                    return StatusCode(410, new { message = "Ce document n'est plus sur nos serveurs : il est effacé une semaine après le contrôle." });
+                }
+
+                // Affiché dans la page (image, PDF), jamais exécuté : le type vient des octets.
+                Response.Headers["X-Content-Type-Options"] = "nosniff";
+                Response.Headers["Content-Disposition"] = $"inline; filename*=UTF-8''{Uri.EscapeDataString(document.NomFichier)}";
+                return File(lu.Value.Octets, document.TypeMime);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Erreur lors de la lecture d'un document du controle {ControleId}.", controleId);
+                return StatusCode(500, new { message = "Une erreur est survenue, veuillez réessayer." });
+            }
+        }
+
+        /// <summary>
+        /// Le texte d'un document, pour l'aperçu d'un Word, Excel ou PowerPoint que le
+        /// navigateur ne sait pas afficher : c'est ce que le professeur lit.
+        /// </summary>
+        [HttpGet("{id:int}/controles/{controleId:int}/cours/{documentId:int}/texte")]
+        [SchoolWebApp.Api.Auth.AutoriseEleve]
+        [SwaggerResponse(200, "{ texte } — vide tant que le document n'est pas lu.")]
+        [SwaggerResponse(404, "Document inexistant ou n'appartenant pas à cet élève.")]
+        public async Task<IActionResult> GetTexteCoursDuControle(
+            int id, int controleId, int documentId,
+            [FromServices] IControleScolaireRepository controles,
+            CancellationToken ct)
+        {
+            try
+            {
+                var document = await controles.GetDocumentAsync(id, controleId, documentId, ct);
+                if (document is null) return NotFound();
+
+                return Ok(new { texte = document.Illisible ? string.Empty : document.Transcription ?? string.Empty, lu = document.Lu, illisible = document.Illisible });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Erreur lors de la lecture du texte d'un document du controle {ControleId}.", controleId);
                 return StatusCode(500, new { message = "Une erreur est survenue, veuillez réessayer." });
             }
         }

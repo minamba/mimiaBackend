@@ -24,5 +24,48 @@ namespace SchoolWebApp.Domain.Models
 
         /// <summary>Dénormalisé — null si le signalement vient du parent lui-même.</summary>
         public string? ElevePrenom { get; set; }
+
+        /// <summary>Affiché dans la liste, sans charger les commentaires eux-mêmes.</summary>
+        public int NombreCommentaires { get; set; }
+
+        /// <summary>Le nombre de captures et de documents joints.</summary>
+        public int NombrePieces { get; set; }
+
+        /// <summary>Fait par un administrateur, depuis le bouton à côté du bouclier (05/11/2026).</summary>
+        public bool EstAdmin { get; set; }
+
+        /// <summary>« Compétence / test à réaliser », s'il est relié à un jeu de test.</summary>
+        public string? Competence { get; set; }
+
+        public int? LigneDeTestId { get; set; }
+
+        /// <summary>Où se trouve la ligne : rempli pour l'onglet « Signalements Admin » seulement.</summary>
+        public LigneDeSignalement? Test { get; set; }
+    }
+
+    /// <summary>La ligne de jeu de test d'un signalement d'administrateur, avec son jeu et son bloc.</summary>
+    public class LigneDeSignalement
+    {
+        public int LigneId { get; set; }
+
+        public int JeuId { get; set; }
+
+        public string JeuTitre { get; set; } = string.Empty;
+
+        public string Section { get; set; } = string.Empty;
+
+        public string Classe { get; set; } = string.Empty;
+
+        public int TestId { get; set; }
+
+        public string TestTitre { get; set; } = string.Empty;
+
+        public string Matiere { get; set; } = string.Empty;
+
+        public string Competence { get; set; } = string.Empty;
+
+        public string? Commentaire { get; set; }
+
+        public string Statut { get; set; } = StatutsDeTest.ATester;
     }
 }

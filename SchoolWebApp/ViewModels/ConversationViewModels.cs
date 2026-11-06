@@ -23,6 +23,13 @@ namespace SchoolWebApp.Api.ViewModels
         public DateTime DateCreation { get; set; }
 
         public DateTime? DateDernierMessage { get; set; }
+
+        /// <summary>
+        /// La carte « dictée de mots ou de phrases » peut-elle s'afficher ?
+        /// Faux au lycée, où une dictée est toujours faite de phrases
+        /// (01/11/2026, voir <c>TypeDeDictee</c>).
+        /// </summary>
+        public bool DicteeAuChoix { get; set; } = true;
     }
 
     public class MessageViewModel
@@ -50,6 +57,13 @@ namespace SchoolWebApp.Api.ViewModels
         /// sur la version précédente.
         /// </summary>
         public List<PieceJointeViewModel>? PiecesJointes { get; set; }
+
+        /// <summary>
+        /// Le verdict de la voix (04/11/2026) : vrai ou faux quand ce tour de l'élève
+        /// était un son demandé, et la bulle écrit alors « Bonne prononciation » ou « On réessaie »
+        /// à la place du contenu ; absent pour tout autre tour.
+        /// </summary>
+        public bool? SonJuste { get; set; }
 
         // Les compteurs de tokens ne sont pas exposés : ils servent au suivi
         // de coût côté opérateur, pas à l'élève.

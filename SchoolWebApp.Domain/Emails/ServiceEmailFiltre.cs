@@ -51,7 +51,9 @@ namespace SchoolWebApp.Domain.Emails
             IReadOnlyList<PieceMail>? piecesJointes = null,
             IProgress<int>? avancement = null,
             CancellationToken ct = default,
-            Expediteur? expediteur = null)
+            Expediteur? expediteur = null,
+            IReadOnlyList<string>? copies = null,
+            IReadOnlyList<string>? copiesCachees = null)
         {
             var autorises = new List<string>(destinataires.Count);
 
@@ -60,8 +62,21 @@ namespace SchoolWebApp.Domain.Emails
                 if (!await BloqueAsync(destinataire, sujet, ct)) autorises.Add(destinataire);
             }
 
+            // Les copies passent par le même filtre (19/10/2026).
+            async Task<IReadOnlyList<string>?> FiltrerAsync(IReadOnlyList<string>? liste)
+            {
+                if (liste is null || liste.Count == 0) return liste;
+                var gardees = new List<string>(liste.Count);
+                foreach (var adresse in liste)
+                {
+                    if (!await BloqueAsync(adresse, sujet, ct)) gardees.Add(adresse);
+                }
+                return gardees;
+            }
+
             return await _service.DiffuserAsync(
-                autorises, sujet, gabarit, valeurs, imagesIntegrees, piecesJointes, avancement, ct, expediteur);
+                autorises, sujet, gabarit, valeurs, imagesIntegrees, piecesJointes, avancement, ct, expediteur,
+                await FiltrerAsync(copies), await FiltrerAsync(copiesCachees));
         }
 
         public Task<string> ComposerAsync(string sujet, string gabarit, IDictionary<string, string> valeurs) =>

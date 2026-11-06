@@ -62,7 +62,9 @@ namespace SchoolWebApp.Api.Controllers
             {
                 actif = await _import.ModuleActifAsync(ct),
                 // Sans vrai forfait, la page dit pourquoi au lieu de proposer de créer.
-                forfait = await _import.PorteDuForfaitAsync(eleveId, ct) is null,
+                forfait = await _import.PorteDuForfaitAsync(eleveId, UsageFiches.Consulter, ct) is null,
+                // EN ESSAI (18/10/2026) : libre, en route ou utilisé — null hors essai.
+                essai = await _import.EssaiFichesAsync(eleveId, ct),
                 quota = await QuotaEtPacks(eleveId, ct),
                 cours = cours.Select(c => Projeter(c, false)),
             });
@@ -109,7 +111,7 @@ namespace SchoolWebApp.Api.Controllers
             if (await _resolveur.ResoudreEleveAsync(eleveId) is null) return NotFound();
             if (!await _import.ModuleActifAsync(ct)) return BadRequest(new { message = "Les fiches de révision ne sont pas ouvertes." });
 
-            if (await _import.PorteDuForfaitAsync(eleveId, ct) is Refus fermee) return BadRequest(new { message = fermee.Message });
+            if (await _import.PorteDuForfaitAsync(eleveId, UsageFiches.NouveauCours, ct) is Refus fermee) return BadRequest(new { message = fermee.Message });
 
             // COMPLÉTER UN COURS (16/10/2026) : un cours de l'enfant, prêt, qui
             // n'est pas lui-même un complément ; sa matière s'impose.
@@ -321,7 +323,7 @@ namespace SchoolWebApp.Api.Controllers
         {
             if (await _resolveur.ResoudreEleveAsync(eleveId) is null) return NotFound();
             if (!await _import.ModuleActifAsync(ct)) return BadRequest(new { message = "Les fiches de révision ne sont pas ouvertes." });
-            if (await _import.PorteDuForfaitAsync(eleveId, ct) is Refus fermee) return BadRequest(new { message = fermee.Message });
+            if (await _import.PorteDuForfaitAsync(eleveId, UsageFiches.Consulter, ct) is Refus fermee) return BadRequest(new { message = fermee.Message });
 
             if (await _depot.GetPourEntrainementAsync(eleveId, ficheId, ct) is null) return NotFound();
 
@@ -350,7 +352,7 @@ namespace SchoolWebApp.Api.Controllers
         {
             if (await _resolveur.ResoudreEleveAsync(eleveId) is null) return NotFound();
             if (!await _import.ModuleActifAsync(ct)) return BadRequest(new { message = "Les fiches de révision ne sont pas ouvertes." });
-            if (await _import.PorteDuForfaitAsync(eleveId, ct) is Refus fermee) return BadRequest(new { message = fermee.Message });
+            if (await _import.PorteDuForfaitAsync(eleveId, UsageFiches.Consulter, ct) is Refus fermee) return BadRequest(new { message = fermee.Message });
 
             var quiz = await entrainement.LireOuCreerCoursAsync(portees, eleveId, coursId, ct);
             return quiz is null

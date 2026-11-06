@@ -26,6 +26,12 @@ namespace SchoolWebApp.Dal.Entities
 
         public string? Destinataire { get; set; }
 
+        /// <summary>Les copies (Cc), en une ligne « a@x.fr, b@y.fr » (19/10/2026).</summary>
+        public string? Copies { get; set; }
+
+        /// <summary>Les copies cachées (Cci), même forme.</summary>
+        public string? CopiesCachees { get; set; }
+
         public string? Sujet { get; set; }
 
         /// <summary>Le titre affiché dans le message (« Écrire à un parent ») ; vide = l'objet.</summary>

@@ -40,6 +40,7 @@ namespace SchoolWebApp.Api.Services
             int? secondesRestantes = null,
             IReadOnlyDictionary<int, IReadOnlyList<PieceJointe>>? piecesHistorique = null,
             IReadOnlyList<PieceJointe>? piecesDuTour = null,
+            bool enExerciceDeSons = false,
             CancellationToken ct = default);
     }
 
@@ -76,12 +77,14 @@ namespace SchoolWebApp.Api.Services
         private readonly IBibliothequePlanchesService _bibliotheque;
         private readonly IPlancheRepository _planches;
         private readonly IReglageRepository _reglages;
+        private readonly IMotsVerifiesRepository _motsVerifies;
         private readonly Jeux.IJeuxService _jeux;
         private readonly IMemoryCache _memoire;
         private readonly OptionsClaude _options;
         private readonly ILogger<AgentPedagogiqueService> _logger;
         private readonly IControleScolaireRepository _controles;
         private readonly PiecesJointes.TranscripteurDocuments _transcripteur;
+        private readonly IStockageCoursControles _stockageCours;
 
         /// <summary>L'offre des lycées, pour la seule conseillère d'orientation (11/10/2026).</summary>
         private readonly IOrientationRepository _offresLycees;
@@ -108,8 +111,12 @@ namespace SchoolWebApp.Api.Services
             PiecesJointes.TranscripteurDocuments transcripteur,
             IOrientationRepository offresLycees,
             IAdminRepository fichesEleves,
-            IEvaluationRepository evaluations)
+            IEvaluationRepository evaluations,
+            IStockageCoursControles stockageCours,
+            IMotsVerifiesRepository motsVerifies)
         {
+            _motsVerifies = motsVerifies ?? throw new ArgumentNullException(nameof(motsVerifies));
+            _stockageCours = stockageCours ?? throw new ArgumentNullException(nameof(stockageCours));
             _offresLycees = offresLycees ?? throw new ArgumentNullException(nameof(offresLycees));
             _fichesEleves = fichesEleves ?? throw new ArgumentNullException(nameof(fichesEleves));
             _evaluations = evaluations ?? throw new ArgumentNullException(nameof(evaluations));
@@ -139,6 +146,7 @@ namespace SchoolWebApp.Api.Services
             int? secondesRestantes = null,
             IReadOnlyDictionary<int, IReadOnlyList<PieceJointe>>? piecesHistorique = null,
             IReadOnlyList<PieceJointe>? piecesDuTour = null,
+            bool enExerciceDeSons = false,
             [EnumeratorCancellation] CancellationToken ct = default)
         {
             // LES EXERCICES DE LANGUE QUI CONCERNENT CE TOUR — leurs consignes
@@ -147,7 +155,7 @@ namespace SchoolWebApp.Api.Services
             var exercices = DetecteurExercicesLangue.Concernes(historique, messageEleve);
 
             var system = await ConstruireSystemAsync(
-                eleve, conversation, accueil, depuisDerniereSeance, exercices, ct);
+                eleve, conversation, accueil, depuisDerniereSeance, exercices, enExerciceDeSons, ct);
             // Quand l'élève montre du doigt, la planche part avec son geste.
             // Sans document joint, la planche montrée du doigt tient ce rôle.
             var pointage = piecesDuTour is { Count: > 0 }
@@ -160,7 +168,17 @@ namespace SchoolWebApp.Api.Services
                 historique,
                 messageEleve
                     + await NommerLEndroitMontreAsync(messageEleve, ct)
-                    + await RappelDeLaFigureAsync(historique, ct),
+                    + await RappelDeLaFigureAsync(historique, ct)
+                    // DES MOTS OU DES PHRASES (01/11/2026) — voir TypeDeDictee.
+                    // Seulement chez un professeur de langue : les consignes de
+                    // dictée ne partent qu'à eux. Une « dictée de nombres » dite
+                    // en maths ne doit pas recevoir une règle sans ses consignes.
+                    + TypeDeDictee.Rappel(
+                        eleve,
+                        exercices.Contains(PromptsPedagogiques.ExerciceLangue.Dictee)
+                            && PromptsPedagogiques.LangueDe(conversation.AgentSlug) is not null,
+                        historique,
+                        messageEleve),
                 piecesHistorique,
                 pointage);
 
@@ -299,6 +317,7 @@ namespace SchoolWebApp.Api.Services
             Eleve eleve, Conversation conversation, TypeAccueil accueil,
             TimeSpan? depuisDerniereSeance,
             IReadOnlyCollection<PromptsPedagogiques.ExerciceLangue> exercices,
+            bool enExerciceDeSons,
             CancellationToken ct)
         {
             // L’ORDRE DES BLOCS EST DICTÉ PAR LE CACHE, ET IL A CHANGÉ LE 19/09/2026.
@@ -378,7 +397,10 @@ namespace SchoolWebApp.Api.Services
             // PAS DANS LE MESSAGE DE L’ÉLÈVE : ce qui est dans le message n’est pas
             // mis en cache, et pendant une dictée ses 11 000 jetons auraient été
             // payés plein tarif à chaque tour — dix fois le prix.
-            var consignesExercices = PromptsPedagogiques.ExercicesLangue(conversation.AgentSlug, exercices);
+            // LA LISTE DES MOTS VÉRIFIÉS, SEULEMENT PENDANT UN EXERCICE DE SONS OU DE SYLLABES : dans ce
+            // bloc à la demande, et non dans le profil, le prompt des autres cours ne change pas d'un mot.
+            var consignesExercices = PromptsPedagogiques.ExercicesLangue(conversation.AgentSlug, exercices)
+                + (enExerciceDeSons ? await MotsVerifiesAsync(eleve, conversation, ct) : string.Empty);
             var avecExercices = consignesExercices.Length > 0;
 
             // LE TROISIÈME POINT DE CÉSURE SE POSE SUR LE DERNIER BLOC PROPRE À
@@ -789,8 +811,30 @@ namespace SchoolWebApp.Api.Services
             // LE MODE ET LE CONTRÔLE ENTRENT DANS LA CLÉ depuis le 26/09/2026 : le
             // contexte d'une préparation porte le cours de l'élève, celui d'un
             // cours ordinaire non. Passer de l'un à l'autre recalcule.
+            // LE NOMBRE DE DOCUMENTS DU COURS ENTRE AUSSI DANS LA CLÉ (26/10/2026) :
+            // un cours importé APRÈS l'ouverture de la séance n'apparaissait qu'à la
+            // séance suivante, le contexte étant figé. Une requête légère par tour,
+            // et le contexte se recalcule dès que le cours change.
+            var nbCours = 0;
+            var modeNormalise = ModesSeance.Normaliser(conversation.ModeSeance);
+            if ((modeNormalise == ModesSeance.Controle || modeNormalise == ModesSeance.Bilan)
+                && conversation.ModeControleId is int controleDuCours)
+            {
+                try
+                {
+                    // Lisibles ET illisibles comptés à part : un document qui bascule
+                    // en échec change le contexte autant qu'un import.
+                    var documents = await _controles.GetDocumentsAsync(eleve.Id, controleDuCours, ct);
+                    nbCours = documents.Count(d => d.Exploitable) * 100 + documents.Count(d => d.Illisible);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    _logger.LogWarning(ex, "Documents du controle {ControleId} illisibles pour la cle du contexte.", controleDuCours);
+                }
+            }
+
             var cle = $"contexte-seance:{conversation.Id}:{eleve.Id}:{eleve.NiveauScolaireId}:{conversation.MatiereId}"
-                + $":{conversation.ModeSeance}:{conversation.ModeControleId}";
+                + $":{conversation.ModeSeance}:{conversation.ModeControleId}:{nbCours}";
 
             var debutDeSeance = accueil is TypeAccueil.PremiereSeance
                 or TypeAccueil.Retour
@@ -819,6 +863,44 @@ namespace SchoolWebApp.Api.Services
         /// Les besoins de l'élève, si le module est allumé ; sinon aucun. Une
         /// panne de lecture du réglage n'ajoute rien.
         /// </summary>
+        /// <summary>
+        /// Le français au primaire, l'interrupteur allumé : éteint, rien n'est jugé et la liste ne
+        /// servirait à rien. Une panne ne prive jamais le cours : il continue sans la liste.
+        /// </summary>
+        private async Task<string> MotsVerifiesAsync(Eleve eleve, Conversation conversation, CancellationToken ct)
+        {
+            var langue = Voix.RegleVerificationSon.LangueDe(eleve.NiveauCycle, conversation.MatiereCode);
+            if (langue is null) return string.Empty;
+
+            try
+            {
+                if (!await _reglages.EstActifAsync(
+                        Voix.RegleVerificationSon.Reglage, Voix.RegleVerificationSon.ActifParDefaut, ct))
+                {
+                    return string.Empty;
+                }
+
+                var mots = await _memoire.GetOrCreateAsync($"mots-verifies:{langue}", async entree =>
+                {
+                    entree.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(10);
+                    var fiables = await _motsVerifies.FiablesAsync(langue, ct);
+                    return langue == LanguesDesSons.Francais
+                        ? (IReadOnlyList<string>)fiables.Where(m => !Voix.BanqueDeSons.EstRefuse(m)).ToList()
+                        : fiables;
+                });
+
+                var enAnglais = langue == LanguesDesSons.Anglais;
+                return PromptsPedagogiques.MotsVerifies(
+                    (mots ?? []).Where(m => enAnglais || !Voix.RegleVerificationSon.Inreconnaissable(m)),
+                    enAnglais);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogWarning(ex, "Lecture des mots verifies impossible : ignore.");
+                return string.Empty;
+            }
+        }
+
         private async Task<IReadOnlyCollection<string>> BesoinsActifsAsync(Eleve eleve, CancellationToken ct)
         {
             if (eleve.BesoinsParticuliers is not { Count: > 0 } besoins) return [];
@@ -1007,7 +1089,14 @@ namespace SchoolWebApp.Api.Services
             {
                 var texte = document.Transcription;
 
-                if (texte is null && document.Donnees is { Length: > 0 } octets)
+                // D'avant le disque : les octets sont en base. Depuis le 04/11/2026 : sur le disque.
+                var octets = document.Donnees;
+                if (texte is null && octets is not { Length: > 0 } && document.Chemin is not null)
+                {
+                    octets = await _stockageCours.LireAsync(document.Chemin, ct);
+                }
+
+                if (texte is null && octets is { Length: > 0 })
                 {
                     try
                     {
@@ -1017,7 +1106,7 @@ namespace SchoolWebApp.Api.Services
 
                         if (string.IsNullOrWhiteSpace(texte))
                         {
-                            texte = "(document illisible : transcription automatique vide)";
+                            texte = DocumentControle.MentionVide;
                         }
 
                         texte = texte.Trim();

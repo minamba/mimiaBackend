@@ -81,6 +81,9 @@ namespace SchoolWebApp.Domain.Services.impl
         public Task<Parent> AddParentAsync(Parent model) =>
             _parentRepository.AddParentAsync(model);
 
+        public Task MarquerTutorielVuAsync(int parentId, CancellationToken ct = default) =>
+            _parentRepository.MarquerTutorielVuAsync(parentId, ct);
+
         public Task<Parent?> UpdateParentAsync(Parent model) =>
             _parentRepository.UpdateParentAsync(model);
 

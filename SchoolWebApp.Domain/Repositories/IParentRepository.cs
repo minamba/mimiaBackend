@@ -47,6 +47,9 @@ namespace SchoolWebApp.Domain.Repositories
         /// </summary>
         Task<bool> SupprimerCompteAsync(int parentId, CancellationToken ct = default);
 
+        /// <summary>Note que ce parent a vu le tutoriel. La première date reste.</summary>
+        Task MarquerTutorielVuAsync(int parentId, CancellationToken ct = default);
+
         /// <summary>
         /// Retient le client Stripe créé pour ce parent, à sa première visite
         /// de la caisse.

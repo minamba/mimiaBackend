@@ -607,8 +607,13 @@ namespace SchoolWebApp.Dal.Repositories
 
             // Pour le stock, on ramène les bornes des abonnements qui touchent
             // la fenêtre — pas tous, seulement ceux qui la chevauchent.
+            //
+            // SANS LES ESSAIS (18/10/2026) : ils n'ont plus de date de fin, et un
+            // essai jamais converti serait resté « actif » pour toujours. Ils
+            // sont déjà comptés à part, à leur arrivée.
             var bornesUtc = await source
-                .Where(a => a.DateDebut < finUtc && (a.DateFin == null || a.DateFin >= debutUtc))
+                .Where(a => !a.Offre!.EstEssai
+                            && a.DateDebut < finUtc && (a.DateFin == null || a.DateFin >= debutUtc))
                 .Select(a => new { a.DateDebut, a.DateFin })
                 .ToListAsync();
 

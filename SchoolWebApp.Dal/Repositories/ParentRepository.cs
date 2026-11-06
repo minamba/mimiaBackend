@@ -294,6 +294,16 @@ namespace SchoolWebApp.Dal.Repositories
             DateCreation = entity.DateCreation,
             EstAdministrateur = entity.EstAdministrateur,
             PeutAjouterEnfant = entity.PeutAjouterEnfant,
+            TutorielVuLe = entity.TutorielVuLe,
         };
+
+        /// <summary>
+        /// La première date reste : le tutoriel n'est dû qu'une fois. Écriture
+        /// directe et ciblée, pour ne rien réécrire d'autre du compte.
+        /// </summary>
+        public Task MarquerTutorielVuAsync(int parentId, CancellationToken ct = default) =>
+            _context.Parents
+                .Where(p => p.Id == parentId && p.TutorielVuLe == null)
+                .ExecuteUpdateAsync(s => s.SetProperty(p => p.TutorielVuLe, DateTime.UtcNow), ct);
     }
 }

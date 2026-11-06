@@ -51,6 +51,11 @@ namespace SchoolWebApp.Domain.Services
         /// <summary>Note la sortie explicite de l'élève du cours.</summary>
         Task MarquerSortieAsync(int conversationId, int eleveId);
 
+        Task PoserPauseAsync(int conversationId, int eleveId);
+        Task LeverPauseAsync(int conversationId, int eleveId);
+        Task<int> LirePauseAsync(int conversationId, CancellationToken ct = default);
+        Task<int> SolderPauseAsync(int conversationId, CancellationToken ct = default);
+
         /// <summary>Sortie signalee par une page qui se ferme, sans identite.</summary>
         Task MarquerFermetureAsync(int conversationId);
 

@@ -41,5 +41,8 @@ namespace SchoolWebApp.Domain.Models
 
         /// <summary>Ce parent peut-il enregistrer un enfant de plus ?</summary>
         public bool PeutAjouterEnfant { get; set; } = true;
+
+        /// <summary>Vide tant que ce parent n'a pas vu le tutoriel (02/11/2026).</summary>
+        public DateTime? TutorielVuLe { get; set; }
     }
 }

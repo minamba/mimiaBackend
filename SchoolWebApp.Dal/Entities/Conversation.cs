@@ -45,6 +45,19 @@ namespace SchoolWebApp.Dal.Entities
         public DateTime? DateSortie { get; set; }
 
         /// <summary>
+        /// LE COURS EN PAUSE — Camara, le 03/11/2026. Le début de la pause en cours,
+        /// vide sinon. Tant qu'elle court, le balayage ne conclut pas la séance : un
+        /// enfant parti goûter n'a pas fini son cours.
+        /// </summary>
+        public DateTime? PauseDepuis { get; set; }
+
+        /// <summary>
+        /// Les secondes de pause depuis le dernier tour décompté : le forfait se
+        /// décompte sur le temps écoulé entre deux tours, moins celles-ci.
+        /// </summary>
+        public int PauseSecondes { get; set; }
+
+        /// <summary>
         /// La durée choisie par l'élève (15/25/35/45 min) au moment où il vient
         /// d'ouvrir SA SÉANCE EN COURS — pas la conversation, qui vit des mois.
         ///

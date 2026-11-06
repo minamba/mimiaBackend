@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using SchoolWebApp.Api.Services.Fournisseurs;
+using SchoolWebApp.Api.Services.Prompts;
 
 namespace SchoolWebApp.Api.Services.Voix
 {
@@ -169,6 +170,14 @@ namespace SchoolWebApp.Api.Services.Voix
 
                 var plafond = PlafondOctets(texte, lectureLente: dictee || langue is not null);
 
+                // UN PASSAGE COURT EST RETENU EN ENTIER, PLAFONNÉ, PUIS COUPÉ S'IL DÉPASSE — voir GardeRedite.PassageCourt.
+                // TOUS LES PASSAGES COURTS, DANS TOUS LES COURS — Camara, le 05/11/2026 : « il me parle d'autre chose au
+                // lieu de faire l'exercice ». « Salut Zakariya ! », « On repart sur les syllabes. » partaient seuls, sans
+                // garde, et la voix brodait derrière. Au pire, une phrase lente perd sa fin de silence.
+                var court = !dictee && vitesse is not ("lent" or "tres_lent") && GardeRedite.PassageCourt(texte);
+                bool? coupe = null;
+                if (court) plafond = Math.Min(plafond, GardeRedite.PlafondPassageCourt(texte));
+
                 // Depuis combien de temps l'élève a-t-il du son ? C'est ce qui
                 // dit combien de temps la garde peut retenir la fin.
                 System.Diagnostics.Stopwatch? depuisLePremierSon = null;
@@ -178,7 +187,7 @@ namespace SchoolWebApp.Api.Services.Voix
                 // suite ; au-delà de `avance`, le son est RETENU, relu par la
                 // transcription une fois le flux fini, et transmis entier ou
                 // coupé au début de la redite.
-                var avance = garde is null ? long.MaxValue : GardeRedite.OctetsTransmisDAvance(texte);
+                var avance = court ? 0L : garde is null ? long.MaxValue : GardeRedite.OctetsTransmisDAvance(texte);
                 using var retenu = new MemoryStream();
 
                 try
@@ -242,10 +251,15 @@ namespace SchoolWebApp.Api.Services.Voix
                         var reste = octetsEcrits / 48000d - (depuisLePremierSon?.Elapsed.TotalSeconds ?? 0);
                         var marge = TimeSpan.FromSeconds(Math.Max(DelaiMinimumGarde, reste));
 
-                        var fin = garde is null
+                        var retenuEntier = retenu.ToArray();
+                        var fin = court
+                            ? GardeRedite.CouperPassageCourt(texte, retenuEntier, logger)
+                            : garde is null
                             ? new ReadOnlyMemory<byte>(retenu.ToArray())
                             : await garde.FiltrerAsync(
                                 texte, retenu.ToArray(), langue, marge, ct, octetsEcrits / 48000d);
+
+                        if (court) coupe = fin.Length < retenuEntier.Length;
 
                         if (fin.Length > 0)
                         {
@@ -289,7 +303,7 @@ namespace SchoolWebApp.Api.Services.Voix
                     jetonsSortie = (int)Math.Round(octetsEcrits / 48000d * JetonsAudioParSeconde);
                 }
 
-                return new UsageSynthese(true, jetonsEntree, jetonsSortie, octetsEcrits, interrompu);
+                return new UsageSynthese(true, jetonsEntree, jetonsSortie, octetsEcrits, interrompu) { Coupe = coupe };
             }
         }
 
@@ -345,6 +359,9 @@ namespace SchoolWebApp.Api.Services.Voix
             bool Ecrit, int JetonsEntree, int JetonsSortie, long Octets, bool Interrompu = false)
         {
             public static readonly UsageSynthese Rien = new(false, 0, 0, 0);
+
+            /// <summary>Vrai si un passage court a été coupé ; null quand la règle ne s'appliquait pas.</summary>
+            public bool? Coupe { get; init; }
         }
 
         /// <summary>
@@ -366,6 +383,33 @@ namespace SchoolWebApp.Api.Services.Voix
         /// tirets, symboles — est déjà réglé dans le texte par le front
         /// (`prononcable`), avant même d'arriver ici.
         /// </summary>
+        /// <summary>
+        /// UN SON SEUL FAIT IMPROVISER LA VOIX — Camara, le 05/11/2026 : « il a commencé à dire des choses
+        /// que je ne comprends pas ». Mesuré sur Flash-Lite : donné seul, « ch » fait lire la consigne à
+        /// voix haute (« Audio profile, Adrien... »), « in » invente 57 secondes de phrases, et même
+        /// « chat » et « table » déraillent 2 fois sur 8. Avec « Écoute bien : ch. » : 15 prises sur 15
+        /// sans dérapage, 2 à 3 secondes. Au primaire seulement, français et anglais, à vitesse normale.
+        /// </summary>
+        internal static string AvecPhraseSupport(string texte, int age, bool dictee, string? langue, string? vitesse)
+        {
+            if (dictee || age > 11 || vitesse is "lent" or "tres_lent" or "rapide") return texte;
+
+            var support = langue switch
+            {
+                "fr" => "Écoute bien :",
+                "en" => "Listen carefully:",
+                _ => null,
+            };
+            if (support is null) return texte;
+
+            var propre = texte.Trim().TrimEnd('.', '!', '?', '…', ',', ';', ':').Trim();
+            var mots = propre.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).Length;
+
+            return mots is >= 1 and <= 2 && propre.Length <= LettresPhraseSupport ? $"{support} {propre}." : texte;
+        }
+
+        private const int LettresPhraseSupport = 16;
+
         internal static string Habiller(
             string texte, string? avatar, int age, bool dictee, string? langue, string? vitesse)
         {
@@ -374,9 +418,21 @@ namespace SchoolWebApp.Api.Services.Voix
                 : char.ToUpperInvariant(avatar[0]) + avatar[1..];
             var eleve = age <= 11 ? "a child" : "a teenager";
 
+            // LE GENRE DU PROFESSEUR, ÉCRIT DANS LE PROFIL — décision de Camara, le
+            // 03/11/2026, sur un signalement de production : Adrien commençait sa phrase
+            // en homme et la finissait en femme. Mesuré : Flash-Lite change parfois de
+            // timbre dans un même appel, quelle que soit la voix demandée (4 prises sur
+            // 90 sans cette ligne, 1 sur 70 avec). Elle ne supprime pas le défaut : le
+            // taux restant est accepté. Flash n'en a montré aucun sur 40 prises, mais
+            // Camara garde Flash-Lite.
+            var femme = PromptsPedagogiques.EstUneProfesseure(avatar);
+            var profil = femme
+                ? $"{prenom}, a warm French female private tutor talking one-on-one with {eleve}. The same woman's voice from the first word to the last."
+                : $"{prenom}, a warm French male private tutor talking one-on-one with {eleve}. The same man's voice from the first word to the last.";
+
             var notes = new List<string>
             {
-                $"# AUDIO PROFILE: {prenom}, a warm French private tutor talking one-on-one with {eleve}.",
+                $"# AUDIO PROFILE: {profil}",
                 "### DIRECTOR'S NOTES",
             };
 
@@ -384,6 +440,8 @@ namespace SchoolWebApp.Api.Services.Voix
             {
                 // Un passage d'écoute : la langue étudiée, dite par un natif.
                 notes.Add($"Language: the transcript is in {nomLangue}; read it as a native {nomLangue} speaker would.");
+                if (langue == "fr" && age <= 11 && GuideLettresMuettes(texte) is { } muettes) notes.Add(muettes);
+                if (langue == "fr" && PromptsPedagogiques.AnglaisInterdit(avatar)) notes.Add(FrancaisSeul(avatar));
                 notes.Add(vitesse switch
                 {
                     "tres_lent" => "Pace: very slow, for a beginner listener; a clear silence between words. The dots between syllables and the ellipses are pauses, never read aloud.",
@@ -413,6 +471,17 @@ namespace SchoolWebApp.Api.Services.Voix
                 notes.Add("Voice quality: a clear, full speaking voice. Never breathy, whispery, husky, intimate, sultry or seductive — this is a lesson, not a confidence.");
                 notes.Add("Pace: lively, the speed of a real conversation; no dragging, no exaggerated articulation, no long pauses.");
                 notes.Add("Accent: native French from France.");
+
+                // PLUS AUCUN MOT À L'ANGLAISE, SAUF CHEZ MARINE ET MINAMBA — voir AnglaisInterdit. C'est cette ligne, et
+                // celle sur les mots anglais plus bas, qui faisaient dire « chat » à l'anglaise à tous les professeurs.
+                if (PromptsPedagogiques.AnglaisInterdit(avatar))
+                {
+                    notes.Add(FrancaisSeul(avatar));
+                    notes.Add("#### TRANSCRIPT");
+                    notes.Add(texte);
+                    return string.Join("\n", notes);
+                }
+
                 notes.Add("Foreign words inside a French sentence are said in their own language; the French that follows goes straight back to a plain French accent.");
 
                 // LES MOTS ANGLAIS, POUR TOUS LES PROFESSEURS — Camara, le
@@ -463,6 +532,55 @@ namespace SchoolWebApp.Api.Services.Voix
             ("popleft", "\"pop left\""),
             ("appendleft", "\"append left\""),
         ];
+
+        /// <summary>
+        /// LES LETTRES MUETTES D'UN MOT DIT SEUL — Camara, le 05/11/2026 : « "jus", "riz" : il prononce le z et le s ».
+        /// Écrire « ju » à la place fait dire « je » : mesuré, la piste est écartée. On nomme donc le mot et sa
+        /// lettre, seulement s'il est dans le texte. Sans oreille, l'effet n'est pas prouvé : à confirmer à l'écoute.
+        /// </summary>
+        private static readonly string[] MotsALettreMuette =
+        [
+            "riz", "jus", "lit", "nid", "nez", "pied", "chat", "rat", "loup", "bras", "gros", "dos", "mot", "pot", "lait", "souris", "tapis",
+            "bois", "noix", "voix", "doigt", "chaud", "froid", "trop", "coup", "sirop", "drap", "tabac", "petit", "clef", "robot", "escargot",
+            "chocolat", "radis", "nuit", "fruit", "dent", "vent", "lent", "blanc", "grand", "long", "rond", "pont", "banc", "gant",
+        ];
+
+        /// <summary>Les annonces d'un exercice de sons : voir SyntheseVocaleService.AnnoncesFixes. Elles aussi sont coupées si elles débordent.</summary>
+        internal static bool AnnonceFixe(string texte) =>
+            texte.Trim() is "Voici la première syllabe." or "Voici la prochaine syllabe." or "Voici le premier mot." or "Voici le prochain mot." or "Je te la redis." or "Je te le redis." or "Qu'as-tu entendu ?";
+
+        /// <summary>La langue que ce professeur enseigne : seule permise dans une phrase française.</summary>
+        private static readonly Dictionary<string, string> LangueEnseignee = new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["lucia"] = "Spanish",
+            ["jonas"] = "German",
+            ["giulia"] = "Italian",
+            ["lin"] = "Mandarin Chinese",
+            ["youssef"] = "Arabic",
+        };
+
+        internal static string FrancaisSeul(string? avatar)
+        {
+            var francais = "Speak French only, with a plain French accent on every single word from first to last. Never an English accent, never an English word, never switch to English. "
+                + "Words that also exist in English (chat, shop, sport, test, match, table, nature) are French words here and are said the French way: \"chat\" is \"sha\".";
+
+            return avatar is not null && LangueEnseignee.TryGetValue(avatar, out var langue)
+                ? francais + $" Only {langue} words, which you teach, are said in {langue}."
+                : francais + " Any other foreign word keeps a plain French accent.";
+        }
+
+        internal static string? GuideLettresMuettes(string texte)
+        {
+            var presents = MotsALettreMuette
+                .Where(m => System.Text.RegularExpressions.Regex.IsMatch(
+                    texte, $@"(?<![\p{{L}}]){m}(?![\p{{L}}])", System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+                .Select(m => $"\"{m}\": the final \"{m[^1]}\" is silent")
+                .ToList();
+
+            return presents.Count == 0
+                ? null
+                : "Pronunciation, standard French: " + string.Join("; ", presents) + ". Never pronounce a silent final letter.";
+        }
 
         internal static string? GuideDePrononciation(string texte)
         {

@@ -133,7 +133,19 @@ namespace SchoolWebApp.Api.Controllers
             // socle commun. Une pondération faible vaut mieux qu'un cours muet.
             var matiereCode = await _chatBuilder.GetMatiereCodeAsync(conversationId);
 
-            await RelayerAsync(matiereCode, $"conversation {conversationId}");
+            // LES SYLLABES DU CP (04/11/2026) : le son du tour est gardé en mémoire, jamais
+            // ailleurs, et seulement pour ces séances-là. Une panne ici ne ferme pas le micro.
+            SonDuTour? sonDuTour = null;
+            try
+            {
+                if (await _chatBuilder.LangueDuSonAsync(conversationId) is { } langueDuSon) sonDuTour = new SonDuTour(langueDuSon);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Verification de son indisponible (conversation {ConversationId}).", conversationId);
+            }
+
+            await RelayerAsync(matiereCode, $"conversation {conversationId}", conversationId, sonDuTour);
         }
 
         /// <summary>
@@ -216,7 +228,118 @@ namespace SchoolWebApp.Api.Controllers
             catch (OperationCanceledException) { }
         }
 
-        private async Task RelayerAsync(string? matiereCode, string origine)
+        /// <summary>
+        /// Avant de rendre son texte au navigateur : si ce tour est un son demandé par le
+        /// professeur, c'est la VOIX qui est jugée, et ce qu'elle a dit remplace ce que le
+        /// micro a écrit. Dans tous les autres cas, et à la moindre panne, le fragment passe
+        /// tel quel. Voir <see cref="RegleVerificationSon"/>.
+        /// </summary>
+        private async Task<FragmentTranscription?> AvecLaVoixAsync(
+            int conversationId, SonDuTour sonDuTour, FragmentTranscription fragment, CancellationToken ct)
+        {
+            if (fragment.Erreur is not null || fragment.Attente) return fragment;
+
+            // RIEN NE S'ÉCRIT PENDANT QU'IL DIT UN SON — Camara, le 04/11/2026 : « pendant
+            // un exercice de syllabes, rien n'est écrit quand l'enfant parle ». Le provisoire
+            // est retenu ici, et l'écran n'affiche que le verdict. Décidé une fois par tour,
+            // sur les mots du professeur ; à la moindre panne, le provisoire passe comme avant.
+            if (!fragment.Final)
+            {
+                try
+                {
+                    var retenu = await sonDuTour.EstUnTourDeSonAsync(() => DemandeDeSonAsync(conversationId, sonDuTour.Langue, ct));
+                    return retenu ? null : fragment;
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    _logger.LogWarning(ex, "Lecture de la demande de son impossible (conversation {ConversationId}).", conversationId);
+                    return fragment;
+                }
+            }
+
+            var pcm = sonDuTour.Prendre();
+
+            // L'ÉCOUTE DES MOTS — Camara, le 05/11/2026 : « le même système que les syllabes, sauf que ce sera Bonne
+            // écoute et Mauvaise écoute ». Ici, on compare ce qu'il dit avoir entendu : la voix n'a rien à juger.
+            try
+            {
+                var parole = await _chatBuilder.DerniereParoleDuProfesseurAsync(conversationId);
+                if (RegleVerificationSon.EstEcouteDeMot(parole, await _chatBuilder.EnEcouteDeMotsAsync(conversationId)))
+                {
+                    var reglagesEcoute = HttpContext.RequestServices.GetRequiredService<SchoolWebApp.Domain.Repositories.IReglageRepository>();
+                    if (!await reglagesEcoute.EstActifAsync(RegleVerificationSon.Reglage, RegleVerificationSon.ActifParDefaut, ct)) return fragment;
+                    if (!await _chatBuilder.EnExerciceDeSonsAsync(conversationId)) return fragment;
+
+                    var typeDEcoute = await _chatBuilder.TypeDEcouteAsync(conversationId);
+                    var ecoute = await HttpContext.RequestServices.GetRequiredService<IVerificationSonService>()
+                        .VerifierEcouteAsync(conversationId, parole!, fragment.Texte, ct, sonDuTour.Langue, typeDEcoute);
+
+                    return ecoute is null
+                        ? fragment
+                        : fragment with
+                        {
+                            Texte = typeDEcoute == RegleVerificationSon.Syllabe
+                                || (typeDEcoute is null && RegleVerificationSon.EstEcouteDeSyllabe(ecoute.Attendu, parole, fragment.Texte))
+                                ? $"J'ai entendu la syllabe {ecoute.Entendu}."
+                                : $"J'ai entendu le mot {ecoute.Entendu}.",
+                            Son = true,
+                            Juste = ecoute.Juste,
+                        };
+                }
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogWarning(ex, "Comparaison d'une ecoute impossible (conversation {ConversationId}).", conversationId);
+                return fragment;
+            }
+
+            if (pcm is null || !RegleVerificationSon.TourCourt(pcm.Length, fragment.Texte)) return fragment;
+
+            try
+            {
+                var reglages = HttpContext.RequestServices.GetRequiredService<SchoolWebApp.Domain.Repositories.IReglageRepository>();
+
+                if (!await reglages.EstActifAsync(RegleVerificationSon.Reglage, RegleVerificationSon.ActifParDefaut, ct)) return fragment;
+
+                var parole = await _chatBuilder.DerniereParoleDuProfesseurAsync(conversationId);
+                if (!RegleVerificationSon.ProfesseurDemandeUnSon(parole, sonDuTour.Langue)) return fragment;
+
+                var verification = HttpContext.RequestServices.GetRequiredService<IVerificationSonService>();
+                var enExercice = await _chatBuilder.EnExerciceDeSonsAsync(conversationId);
+                var verdict = await verification.VerifierAsync(conversationId, parole!, pcm, ct, sonDuTour.Langue, enExercice);
+                if (verdict is null) return fragment;
+
+                var texte = RegleVerificationSon.TexteDeLEleve(verdict);
+                return string.IsNullOrEmpty(texte) ? fragment : fragment with { Texte = texte, Son = true, Juste = verdict.SansJugement ? null : verdict.Juste };
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogWarning(ex, "Verification de son impossible (conversation {ConversationId}).", conversationId);
+                return fragment;
+            }
+        }
+
+        /// <summary>
+        /// Le professeur vient-il de demander un son vérifiable, la vérification étant
+        /// allumée ? La même lecture que <see cref="AvecLaVoixAsync"/> fera du tour clos.
+        /// </summary>
+        private async Task<bool> DemandeDeSonAsync(int conversationId, string langue, CancellationToken ct)
+        {
+            var reglages = HttpContext.RequestServices.GetRequiredService<SchoolWebApp.Domain.Repositories.IReglageRepository>();
+            if (!await reglages.EstActifAsync(RegleVerificationSon.Reglage, RegleVerificationSon.ActifParDefaut, ct)) return false;
+
+            var parole = await _chatBuilder.DerniereParoleDuProfesseurAsync(conversationId);
+            var enExercice = await _chatBuilder.EnExerciceDeSonsAsync(conversationId);
+
+            // RIEN NE S'ÉCRIT NON PLUS PENDANT QU'IL DIT CE QU'IL A ENTENDU : l'écran n'affichera que le verdict.
+            if (RegleVerificationSon.EstEcouteDeMot(parole, await _chatBuilder.EnEcouteDeMotsAsync(conversationId))) return enExercice;
+
+            var verification = HttpContext.RequestServices.GetRequiredService<IVerificationSonService>();
+            return await verification.DemandeDeSonAsync(parole, ct, langue, enExercice);
+        }
+
+        private async Task RelayerAsync(
+            string? matiereCode, string origine, int? conversationId = null, SonDuTour? sonDuTour = null)
         {
             using var navigateur = await HttpContext.WebSockets.AcceptWebSocketAsync();
             var ct = HttpContext.RequestAborted;
@@ -256,8 +379,16 @@ namespace SchoolWebApp.Api.Controllers
                 // Ce chiffre sert à comparer le coût réel au modèle — et c'est
                 // `MinutesAudioMax` qui borne les dérives, pas le quota.
                 await _transcription.RelayerAsync(
-                    file.Reader.ReadAllAsync(ct),
-                    fragment => emetteur.EmettreAsync(fragment, ct),
+                    sonDuTour is null ? file.Reader.ReadAllAsync(ct) : sonDuTour.Garder(file.Reader.ReadAllAsync(ct)),
+                    async fragment =>
+                    {
+                        // Null : un provisoire retenu pendant un son (voir AvecLaVoixAsync).
+                        var aEmettre = sonDuTour is null || conversationId is null
+                            ? fragment
+                            : await AvecLaVoixAsync(conversationId.Value, sonDuTour, fragment, ct);
+
+                        if (aEmettre is not null) await emetteur.EmettreAsync(aEmettre, ct);
+                    },
                     secondes =>
                     {
                         _logger.LogInformation(
@@ -402,6 +533,81 @@ namespace SchoolWebApp.Api.Controllers
         }
 
         /// <summary>
+        /// Le son du tour en cours, en mémoire seulement et jamais plus de huit secondes :
+        /// au-delà, le tour n'est pas une syllabe, et son son est oublié. La lecture et
+        /// la réponse du fournisseur vivent sur deux fils, d'où le verrou.
+        /// </summary>
+        private sealed class SonDuTour(string langue)
+        {
+            public string Langue { get; } = langue;
+
+            private readonly object _verrou = new();
+            private MemoryStream _son = new();
+            private bool _tropLong;
+            private bool? _tourDeSon;
+
+            /// <summary>
+            /// Ce tour est-il un son demandé ? Décidé au premier provisoire, gardé jusqu'à la
+            /// clôture du tour (<see cref="Prendre"/>) : les provisoires suivants n'interrogent
+            /// plus rien.
+            /// </summary>
+            public async Task<bool> EstUnTourDeSonAsync(Func<Task<bool>> decider)
+            {
+                lock (_verrou)
+                {
+                    if (_tourDeSon is bool connu) return connu;
+                }
+
+                var verdict = await decider();
+
+                lock (_verrou)
+                {
+                    _tourDeSon ??= verdict;
+                    return _tourDeSon.Value;
+                }
+            }
+
+            public async IAsyncEnumerable<BlocAudio> Garder(IAsyncEnumerable<BlocAudio> audio)
+            {
+                await foreach (var bloc in audio)
+                {
+                    if (!bloc.FinDeTour) Ajouter(bloc.Donnees.Span);
+                    yield return bloc;
+                }
+            }
+
+            /// <summary>Rend le son du tour qui vient de se clore et repart de zéro ; null s'il était trop long.</summary>
+            public byte[]? Prendre()
+            {
+                lock (_verrou)
+                {
+                    var pcm = _tropLong ? null : _son.ToArray();
+                    _son = new MemoryStream();
+                    _tropLong = false;
+                    _tourDeSon = null;
+                    return pcm;
+                }
+            }
+
+            private void Ajouter(ReadOnlySpan<byte> donnees)
+            {
+                lock (_verrou)
+                {
+                    if (_tropLong) return;
+
+                    if (_son.Length + donnees.Length > RegleVerificationSon.OctetsMax)
+                    {
+                        _tropLong = true;
+                        _son = new MemoryStream();
+                        return;
+                    }
+
+                    _son.Write(donnees);
+                }
+            }
+        }
+
+        /// <summary>
         /// Tout ce qui part vers le navigateur passe par ici, un envoi à la
         /// fois. Une liaison fermée avale l'envoi sans bruit : c'est la
         /// fermeture qui compte, pas la trame qui l'a ratée.
@@ -419,7 +625,9 @@ namespace SchoolWebApp.Api.Controllers
                     ? new { type = "erreur", message = fragment.Erreur }
                     : fragment.Attente
                         ? new { type = "attente" }
-                        : new { type = fragment.Final ? "final" : "partiel", texte = fragment.Texte };
+                        : fragment.Son
+                            ? new { type = "final", texte = fragment.Texte, son = true, juste = fragment.Juste }
+                            : new { type = fragment.Final ? "final" : "partiel", texte = fragment.Texte };
 
                 return EnvoyerAsync(charge, ct);
             }

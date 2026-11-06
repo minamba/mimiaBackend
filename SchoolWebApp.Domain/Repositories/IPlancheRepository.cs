@@ -89,7 +89,9 @@ namespace SchoolWebApp.Domain.Repositories
         /// Les planches dont la description reste à extraire : octets présents,
         /// contenu vide. Rendues avec leurs octets, pour être lues.
         /// </summary>
-        Task<IEnumerable<Planche>> GetADecrireAsync(int limite, CancellationToken ct = default);
+        /// <param name="exclues">Les clés à sauter : celles qui viennent d'échouer dans ce vidage (20/10/2026).</param>
+        Task<IEnumerable<Planche>> GetADecrireAsync(
+            int limite, CancellationToken ct = default, IReadOnlyCollection<string>? exclues = null);
 
         /// <summary>Enregistre la liste des légendes d'une planche.</summary>
         Task EnregistrerContenuAsync(int id, string contenu, CancellationToken ct = default);
@@ -116,7 +118,9 @@ namespace SchoolWebApp.Domain.Repositories
         /// étiquettes. Elles portent leurs octets : c'est une lecture par un
         /// modèle de vision qui les attend.
         /// </summary>
-        Task<IEnumerable<Planche>> GetSansReperesAsync(int limite, CancellationToken ct = default);
+        /// <param name="exclues">Les clés à sauter : celles qui viennent d'échouer dans ce vidage (20/10/2026).</param>
+        Task<IEnumerable<Planche>> GetSansReperesAsync(
+            int limite, CancellationToken ct = default, IReadOnlyCollection<string>? exclues = null);
 
         /// <summary>Enregistre la carte des étiquettes, en JSON.</summary>
         Task EnregistrerReperesAsync(int id, string reperes, CancellationToken ct = default);

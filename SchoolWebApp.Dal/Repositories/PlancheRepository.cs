@@ -409,11 +409,17 @@ namespace SchoolWebApp.Dal.Repositories
         }
 
         public async Task<IEnumerable<DomainPlanche>> GetADecrireAsync(
-            int limite, CancellationToken ct = default)
+            int limite, CancellationToken ct = default, IReadOnlyCollection<string>? exclues = null)
         {
-            var entities = await Legendees
-                .AsNoTracking()
-                .Where(p => p.Contenu == null)
+            var requete = Legendees.AsNoTracking().Where(p => p.Contenu == null);
+
+            // UNE PLANCHE QUI VIENT D'ÉCHOUER NE BOUCHE PLUS LA FILE (20/10/2026).
+            // La file prend toujours les plus récentes : une planche en échec
+            // restait en tête, le tour suivant la reprenait, ne faisait rien, et
+            // le vidage s'arrêtait — à chaque relance.
+            if (exclues is { Count: > 0 }) requete = requete.Where(p => !exclues.Contains(p.Cle));
+
+            var entities = await requete
                 // LA PLUS RÉCENTE D ABORD.
                 //
                 // On traitait du plus ancien au plus récent : la planche qu on
@@ -465,9 +471,9 @@ namespace SchoolWebApp.Dal.Repositories
         }
 
         public async Task<IEnumerable<DomainPlanche>> GetSansReperesAsync(
-            int limite, CancellationToken ct = default)
+            int limite, CancellationToken ct = default, IReadOnlyCollection<string>? exclues = null)
         {
-            var entities = await _context.PlanchesSchemas
+            var requete = _context.PlanchesSchemas
                 .AsNoTracking()
                 // DÉCRITE D'ABORD, REPÉRÉE ENSUITE. Une planche dont on ne sait
                 // pas encore ce qu'elle porte n'a pas de raison qu'on en cherche
@@ -490,7 +496,12 @@ namespace SchoolWebApp.Dal.Repositories
                          && p.Reperes == null
                          && !p.Contenu.StartsWith("SANS AUCUN NOM")
                          && !p.Contenu.StartsWith("aucune légende lisible")
-                         && !p.Contenu.StartsWith("LANGUE ÉTRANGÈRE"))
+                         && !p.Contenu.StartsWith("LANGUE ÉTRANGÈRE"));
+
+            // Même règle que la description : un échec ne bouche plus la file.
+            if (exclues is { Count: > 0 }) requete = requete.Where(p => !exclues.Contains(p.Cle));
+
+            var entities = await requete
                 // LA PLUS RÉCENTE D ABORD.
                 //
                 // On traitait du plus ancien au plus récent : la planche qu on

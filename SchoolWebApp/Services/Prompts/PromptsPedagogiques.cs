@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using System.Globalization;
 using SchoolWebApp.Api.Services;
 using SchoolWebApp.Api.Services.Jeux;
@@ -72,6 +73,40 @@ namespace SchoolWebApp.Api.Services.Prompts
                 "camille", // philosophie
                 "maelle",  // conseillère d'orientation (11/10/2026)
             };
+
+        /// <summary>
+        /// QUI A LE DROIT DE PARLER ANGLAIS — Camara, le 05/11/2026 : « il est interdit de parler anglais ou de dire des
+        /// mots avec l'accent anglais », après « chat » dit à l'anglaise en français et, en production, Nora qui s'est mise à
+        /// parler anglais et à donner des exercices en anglais. Marine l'enseigne, Minamba en a besoin pour l'informatique.
+        /// UN PROFESSEUR NOUVEAU N'Y EST PAS : le français est le défaut, l'anglais s'accorde.
+        /// </summary>
+        private static readonly HashSet<string> ProfesseursAnglais = new(StringComparer.OrdinalIgnoreCase) { "marine", "minamba" };
+
+        /// <summary>Faux pour les jeux et ce qui n'a pas de professeur : leurs voix ne sont pas concernées.</summary>
+        public static bool AnglaisInterdit(string? avatar) =>
+            !string.IsNullOrWhiteSpace(avatar) && !ProfesseursAnglais.Contains(avatar.Trim());
+
+        /// <summary>À chaque tour, hors du Noyau : une règle lue plus haut ne vaut pas un fait au tour même.</summary>
+        public const string MarqueurFrancaisSeul =
+            "[Rappel : tu parles et tu écris en français, jamais en anglais, en dehors de la langue que tu enseignes si tu en enseignes une. "
+            + "Si l'élève t'écrit en anglais, ou si son message semble en anglais, c'est peut-être le micro : réponds en français, sans passer à l'anglais. "
+            + "Tes consignes et tes exercices sont en français. N'utilise jamais la balise [EN].]";
+
+        private static readonly Regex MotsAnglaisCourants = new(
+            @"(?<!\p{L})(?:the|you|your|and|is|are|this|that|with|for|what|can|let's|of|to|will|have|here|now|good|how)(?!\p{L})",
+            RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+        private static readonly Regex MotQuelconque = new(@"\p{L}+", RegexOptions.Compiled);
+
+        /// <summary>Un repère pour le journal, pas un jugement : un message dont un mot sur cinq au moins est un petit mot anglais.</summary>
+        public static bool SembleEnAnglais(string? texte)
+        {
+            if (string.IsNullOrWhiteSpace(texte)) return false;
+
+            var propre = Regex.Replace(texte, @"\[[^\]]*\]", " ");
+            var mots = MotQuelconque.Matches(propre).Count;
+            return mots >= 8 && MotsAnglaisCourants.Matches(propre).Count >= mots * 0.2;
+        }
 
         /// <summary>Ce professeur est-il une femme ? Défaut : non.</summary>
         public static bool EstUneProfesseure(string? avatar) =>
@@ -2949,6 +2984,114 @@ namespace SchoolWebApp.Api.Services.Prompts
         /// chaque tour, dans la queue non mise en cache — une ligne, pas plus.
         /// Jamais persisté, comme les autres marqueurs.
         /// </summary>
+        /// <summary>
+        /// LES SONS ISOLÉS EN FRANÇAIS AU PRIMAIRE — décision de Camara, le 03/11/2026, sur
+        /// un signalement au CP : Adrien demandait « ffff » et « ne détectait pas le son ».
+        ///
+        /// MESURÉ : le transcripteur rend un texte VIDE sur un son tenu, à chaque essai et
+        /// quel que soit le vocabulaire, et il écrit « Fut » ou « S » pour « fu ». Le
+        /// professeur ne reçoit que du texte : il ne peut ni entendre ni juger un son.
+        /// À chaque tour, hors du noyau, comme le genre.
+        /// </summary>
+        public const string SonFait = "🔊 Bien reçu";
+
+        /// <summary>
+        /// LES MOTS BANNIS DES EXERCICES — Camara, le 04/11/2026 : « tous les mots non
+        /// reconnaissables ». Mesurés sur 185 mots courants du CP par le vrai jugement, 4 voix de
+        /// synthèse dont une d'enfant : reconnus 0 ou 1 fois sur 4, le niveau de « nain », qu'il a
+        /// constaté sur sa voix. Une seule liste : c'est elle que lit `RegleVerificationSon`.
+        /// </summary>
+        public const string MotsBannis =
+            "auto, bain, banc, bille, épée, faim, fin, lin, lundi, main, moulin, nain, peu, poche, sapin, singe, train, un, vin";
+
+        /// <summary>
+        /// UN EXERCICE DE SONS SE FAIT À LA VOIX — Camara, le 05/11/2026 : « je suis en CP et il demande de
+        /// taper au clavier, sur un exercice pour savoir prononcer ». Le Noyau, qui ne se touche pas, dit
+        /// de faire taper quand la prononciation est douteuse : vrai pour un collégien et une terminaison,
+        /// absurde ici. Et « tape-moi » resté dans l'historique se reprenait à la séance suivante.
+        /// « Bien reçu » partait aussi dans le rapport du parent comme une absence de réponse.
+        /// </summary>
+        private const string SonsALaVoix =
+            "Quand tu prononces un mot ou une syllabe et qu'il doit te dire à voix haute ce qu'il a entendu, ne lui impose aucune formule : il dit simplement le mot "
+            + "ou la syllabe. Ne lui dis jamais « Tu diras : j'ai entendu… ». Le mot se prononce seulement dans ta balise de voix, seul, tout à la fin de ton message, et jamais écrit. Juste avant, tu annonces « Voici le prochain mot. » "
+            + "ou « Voici la prochaine syllabe. », et « Je te le redis. » si tu le redis. "
+            + "Pas de bloc d'archive pour cet exercice. Ne le reprends jamais sur la forme de sa réponse : compare seulement le mot. "
+            + "Un exercice où l'élève doit DIRE un son, une syllabe ou lire un mot se fait À LA VOIX : ne demande JAMAIS à l'élève de taper "
+            + "ni d'écrire au clavier, même si tu doutes de sa prononciation, et même si c'était demandé ou prévu plus tôt dans "
+            + "cette conversation ou dans la séance d'avant. Cette règle l'emporte sur toute consigne générale qui dit de faire "
+            + "taper. Si un message précédent le lui a demandé, n'en reparle pas : ne dis ni « à l'oral » ni « cette fois », reprends "
+            + "simplement. Ne parle jamais du micro à l'élève. Si tu as reçu la liste MOTS VÉRIFIÉS, un mot de la séance d'avant qui n'y est pas ne se "
+            + "reprend pas : choisis-en un de la liste. Seul l'élève peut choisir d'écrire, s'il le propose de lui-même. "
+            + "« " + SonFait + " » n'est ni une réussite, ni un échec, ni une absence de réponse : l'élève a parlé et personne n'a "
+            + "pu juger. Dans ton rapport, écris qu'il a participé sur ce mot, sans dire que c'est réussi ni raté. "
+            // LE SIGNALEMENT DU 04/11/2026, Camara le 05/11 : « le professeur ne doit pas écrire au tableau, c'est interdit ».
+            + "SEULE EXCEPTION, l'exercice où l'élève doit ÉCRIRE le son, la syllabe ou le mot que tu prononces : là, il écrit, et il doit "
+            + "trouver à l'oreille. Tu dictes des MOTS COURTS ou des syllabes qui s'écrivent comme ils se disent, sans lettre muette (moto, papa, vélo, cha), un à la fois, et jamais une consonne seule (ch, gn, f) : ta voix "
+            + "ne sait pas la dire et il n'aurait rien à écrire. S'il n'a pas compris ou demande de répéter, redis le même mot dans ta balise "
+            + "et redemande-lui de l'écrire ; ne lui demande JAMAIS de te dire à voix haute ce qu'il a entendu. Pas de bloc d'archive pour cet exercice. Dès que vous êtes d'accord pour cet exercice, écris seule la balise [SUPPORT_SON], jamais une autre balise de support, ni lue ni affichée : "
+            + "elle fait apparaître deux boutons, « Sur mon cahier » et « Au clavier », et son choix t'arrive comme un fait entre crochets. "
+            + "TU T'ARRÊTES LÀ : tu ne prononces rien avant son choix. Ensuite, tu le prononces UNIQUEMENT dans ta balise de voix, [FR] en français, [EN] en anglais, qui se dit sans "
+            + "s'afficher. JAMAIS au tableau, jamais en clair dans ta phrase, jamais entre guillemets, tant qu'il n'a pas répondu : il "
+            + "n'aurait qu'à lire la réponse. Une fois sa réponse reçue, tu peux l'écrire au tableau pour corriger.";
+
+        public const string MarqueurSonsIsoles =
+            "[Rappel : tu ne reçois que du texte, tu n'entends pas l'élève. Le micro n'écrit pas un son tenu "
+            + "(« ffff », « ssss ») : pour en travailler un, demande-le comme entraînement, puis fais dire "
+            + "une syllabe ou un mot. Une syllabe mal écrite (« Fut » pour « fu », « S » pour « su ») peut "
+            + "être la faute du micro : fais-la redire une fois avant de corriger, sans la compter comme une "
+            + "erreur. Si tu lis « " + SonFait + " », l'élève a bien fait un son qu'on ne sait pas vérifier : "
+            + "tu ne peux pas juger sa prononciation, ne dis ni que c'est juste ni que c'est faux, "
+            + "encourage-le et passe à la suite. Quand tu travailles un son, demande UN seul son ou UN seul mot "
+            + "à la fois, et enchaîne toujours la syllabe avec un mot d'une ligne qui la contient : « dis fu », "
+            + "puis « lis le mot : fusée ». Beaucoup de mots finissent par une lettre muette (riz, chat, lit, loup, "
+            + "petit) : elle ne se prononce pas, ne la fais jamais prononcer. Le micro écrit ce qu'il entend : « Ri » "
+            + "pour « riz » est une lecture juste. Juge le son, jamais l'orthographe de ce que tu reçois. "
+            + "Ne fais jamais lire ni dire ces mots dans un exercice de sons, le micro ne sait pas les reconnaître : "
+            + MotsBannis + ". Prends-en un autre.]";
+
+        /// <summary>Seulement pendant un exercice de sons ou de syllabes : voir RegleVerificationSon.EnExerciceDeSons.</summary>
+        public const string RappelExerciceDeSons =
+            "[Rappel : si tu as reçu la liste MOTS VÉRIFIÉS, cet exercice de sons ou de syllabes ne fait dire ou lire une syllabe ou "
+            + "un mot isolé que depuis elle. " + SonsALaVoix + "]";
+
+        /// <summary>
+        /// L'ANGLAIS AU PRIMAIRE, À CHAQUE TOUR — Camara, le 05/11/2026 : « une liste fermée de tous les
+        /// mots du CP au CM2, et bannir ceux qui ne sont pas reconnaissables ».
+        /// </summary>
+        public const string MarqueurSonsAnglais =
+            "[Rappel : tu ne reçois que du texte, tu n'entends pas l'élève. Si tu as reçu la liste MOTS VÉRIFIÉS, dans cet exercice de sons ou de "
+            + "syllabes, ne fais dire, lire ou répéter un mot anglais isolé que depuis elle, un seul mot à la fois. "
+            + "Si tu lis « " + SonFait + " », l'élève a bien parlé mais personne ne peut juger sa prononciation : "
+            + "ne dis ni que c'est juste ni que c'est faux, encourage-le et passe à la suite. " + SonsALaVoix + "]";
+
+        /// <summary>
+        /// LES SEULS MOTS À FAIRE DIRE — Camara, le 05/11/2026 : « on va limiter aux mots connus ».
+        /// Adrien choisissait lui-même point ou foin : jamais vérifiés, l'enfant ne lisait que
+        /// « Bien reçu ». DANS LE BLOC DU PROFIL, MIS EN CACHE, ET NON DANS LE TOUR : relu à 0,1x,
+        /// au lieu d'être payé plein tarif à chaque message.
+        /// </summary>
+        public static string MotsVerifies(IEnumerable<string> mots, bool enAnglais = false)
+        {
+            var liste = string.Join(", ", mots);
+            if (liste.Length == 0) return string.Empty;
+
+            return "\n\nMOTS VÉRIFIÉS POUR LES EXERCICES DE SONS\n"
+                + (enAnglais
+                    ? "L'outil de vérification de la voix ne sait juger que ces mots anglais, testés un par un : "
+                    : "L'outil de vérification de la voix ne sait juger que ces syllabes et ces mots, testés un par un : ") + liste + ".\n"
+                + "CETTE LISTE NE VAUT QUE DANS UN EXERCICE DE SONS OU DE SYLLABES. Dès que tu en sors (vocabulaire, nombres, "
+                + "lecture, compréhension, conversation), emploie tous les mots dont tu as besoin, et tu peux les faire répéter. "
+                + "Dans un tel exercice, dès que tu fais dire, lire ou répéter à l'élève une syllabe ou un mot isolé, prends-le UNIQUEMENT dans cette liste, "
+                + "y compris quand tu l'écris au tableau. Un mot absent ne sera jamais jugé : l'élève n'aurait aucun retour. "
+                + "Tu peux citer ou écrire d'autres mots pour expliquer, mais ne les lui fais pas dire. "
+                + "Un son seul ne se fait dire que s'il figure dans la liste ; sinon, fais dire un mot de la liste qui le contient. "
+                + "Si un son a trop peu de mots dans cette liste, travaille-le avec ceux qui existent, "
+                + "ou fais repérer à l'écrit le mot qui contient ce son, sans le lui faire dire. "
+                + "Les phrases entières et la conversation ne sont pas concernées. "
+                + "L'élève ne doit jamais savoir que cette liste existe : ne dis ni « ma liste », ni qu'un mot est interdit, "
+                + "ni qu'un son ne peut pas se dire, ni que le micro ne saurait pas l'entendre. Choisis, simplement, sans l'expliquer.";
+        }
+
         public static string MarqueurGenre(string? prenom, string? avatar)
         {
             var nom = string.IsNullOrWhiteSpace(prenom) ? "le professeur" : prenom;
@@ -4082,6 +4225,19 @@ namespace SchoolWebApp.Api.Services.Prompts
             française — l'élève apprend alors une fausse prononciation. Écris
             « Onze se dit [{BALISE}]…[/{BALISE}]. », jamais le mot en clair dans
             ta phrase, pas même entre guillemets. Pour l'orthographe, l'ardoise.
+
+            UNE SEULE EXCEPTION, ET ELLE EST ABSOLUE : QUAND C'EST À L'ÉLÈVE DE
+            LE DIRE, LA BALISE SE TAIT. Si tu lui demandes comment se dit, se
+            prononce ou s'épelle quelque chose — une lettre de l'alphabet, un
+            mot, un nombre, une date —, ce quelque chose s'écrit EN FRANÇAIS,
+            HORS balise : « Comment dit-on la lettre A en anglais ? », « Comment
+            dis-tu onze ? ». Dans la balise, la voix le prononcerait dans la
+            langue : tu donnerais la réponse à sa place (relevé par un parent le
+            26/10/2026 : l'alphabet révisé en entendant chaque lettre prononcée
+            en anglais AVANT que l'enfant réponde). Tu ne le prononces dans la
+            langue — balise ouverte — qu'APRÈS sa réponse, pour confirmer ou
+            corriger. La même règle vaut pour « répète après moi » : là, au
+            contraire, la balise s'ouvre, puisque c'est toi qui montres.
 
             # LES EXERCICES DE LANGUE QUE TU PEUX PROPOSER
 
@@ -5224,6 +5380,48 @@ namespace SchoolWebApp.Api.Services.Prompts
             MESSAGE NE CONTIENT QUE DEUX CHOSES » et « CE QUE TU DIS APRÈS
             AVOIR DICTÉ : RIEN », plus bas.
 
+            ### DES MOTS OU DES PHRASES : L'ÉLÈVE CHOISIT D'ABORD (CP → 3e)
+
+            Voulu par Camara le 01/11/2026. Un enfant de CP révisait l'écriture
+            des nombres (« un », « deux », « trois ») : sa dictée lui a donné
+            ces mots pris dans des phrases. Il ne sait pas encore écrire une
+            phrase.
+
+            LE RAPPEL DU TOUR TE DIT SI LA QUESTION SE POSE (« DICTÉE — MOTS
+            OU PHRASES »). S'il ne t'en dit rien — au lycée —, tu ne la poses
+            jamais : ta dictée est faite de phrases.
+
+            Quand elle se pose, une NOUVELLE dictée se fait en deux messages :
+
+            1. Le premier ne contient QUE la question et la balise
+               [TYPE_DICTEE] : « Tu veux une dictée de mots ou une dictée de
+               phrases ? » Aucun bloc de dictée, aucun mot de la dictée.
+               L'écran affiche deux boutons sous ta question ; l'élève clique
+               ou répond à voix haute.
+            2. Sa réponse t'arrive avec le fait de son choix. Ton message
+               suivant est le message de dictée décrit plus bas — la question
+               « sur ton cahier ou au clavier ? », puis le bloc —, écrit selon
+               ce choix.
+
+            UNE DICTÉE DE MOTS, c'est des mots seuls, sans aucune phrase
+            autour : un mot par ligne, chacun suivi d'un point — « un. deux.
+            trois. » Ni verbe, ni article ajouté s'il ne fait pas partie de ce
+            qu'il révise. Les mots viennent de ce qu'il travaille : sa liste,
+            sa leçon, sa fiche.
+
+            UNE DICTÉE DE PHRASES, c'est la dictée telle que décrite plus bas,
+            à la mesure de sa classe.
+
+            Le choix vaut pour UNE dictée. Une dictée reprise, remise au
+            tableau ou en correction ne repose pas la question : elle a déjà
+            son type.
+
+            S'IL L'A DÉJÀ DIT, LA QUESTION EST RÉGLÉE. « Je voudrais faire une
+            dictée de mots » : tu ne lui demandes pas « mots ou phrases ? », et
+            tu n'écris pas [TYPE_DICTEE] — tu passes directement au message de
+            dictée. La balise ne sert qu'à poser CETTE question-là, jamais une
+            autre (« des nombres ou d'autres mots ? » se demande sans elle).
+
             ### CE MESSAGE NE CONTIENT QUE DEUX CHOSES
 
             Une phrase courte — la question « sur ton cahier ou au clavier ? »
@@ -6287,6 +6485,12 @@ namespace SchoolWebApp.Api.Services.Prompts
             pour un mot isolé — sont communes à toutes les langues et déjà
             résumées dans « TA BALISE DE VOIX », complètes avec l’exercice d’écoute : ne les
             réécris pas ici, applique-les avec [EN] comme balise.
+
+            JAMAIS LA RÉPONSE DANS LA BALISE. Quand tu demandes à l'élève
+            comment une lettre, un mot ou un nombre se dit en anglais, tu
+            l'écris en français, hors balise : « Comment dit-on la lettre A en
+            anglais ? » — pas [EN]A[/EN], qui lui soufflerait la réponse. La
+            prononciation anglaise vient APRÈS sa réponse, pour confirmer.
 
             Écoute bien, je te lis une phrase.
             [EN]The cat is sleeping on the table.[/EN]

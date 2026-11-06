@@ -40,7 +40,8 @@ namespace SchoolWebApp.Dal.Repositories
             return roles.Select(r => Projeter(r, Nombre(r))).ToList();
         }
 
-        public async Task<ResultatRole> CreerAsync(string nom, IEnumerable<string>? onglets, CancellationToken ct = default)
+        public async Task<ResultatRole> CreerAsync(
+            string nom, IEnumerable<string>? onglets, IEnumerable<string>? courriels = null, CancellationToken ct = default)
         {
             var propre = Nettoyer(nom);
             if (propre is null) return new ResultatRole(null, "Donnez un nom au rôle (60 caractères au plus).");
@@ -51,6 +52,7 @@ namespace SchoolWebApp.Dal.Repositories
             {
                 Nom = propre,
                 Onglets = Valeur(onglets),
+                Courriels = CourrielsDeRole.Ecrire(courriels),
                 Ordre = Math.Max(ordre, 10) + 1,
                 DateCreation = DateTime.UtcNow,
             };
@@ -60,7 +62,8 @@ namespace SchoolWebApp.Dal.Repositories
             return new ResultatRole(Projeter(role, 0), null);
         }
 
-        public async Task<ResultatRole> ModifierAsync(int id, string nom, IEnumerable<string>? onglets, CancellationToken ct = default)
+        public async Task<ResultatRole> ModifierAsync(
+            int id, string nom, IEnumerable<string>? onglets, IEnumerable<string>? courriels = null, CancellationToken ct = default)
         {
             var role = await _context.RolesUtilisateurs.FirstOrDefaultAsync(r => r.Id == id, ct);
             if (role is null) return new ResultatRole(null, null, Introuvable: true);
@@ -82,6 +85,7 @@ namespace SchoolWebApp.Dal.Repositories
             }
 
             role.Onglets = Valeur(onglets);
+            role.Courriels = CourrielsDeRole.Ecrire(courriels);
             await _context.SaveChangesAsync(ct);
 
             await RecalculerAccesAsync(role, ct);
@@ -128,6 +132,28 @@ namespace SchoolWebApp.Dal.Repositories
             return (true, null);
         }
 
+        public async Task<IReadOnlyList<string>> AdressesPourCourrielAsync(string courriel, CancellationToken ct = default)
+        {
+            // Peu de rôles : on lit leurs courriels et on choisit ici, plutôt qu'un LIKE sur une liste à virgules.
+            var roles = await _context.RolesUtilisateurs.AsNoTracking()
+                .Where(r => r.Courriels != null)
+                .Select(r => new { r.Id, r.Courriels })
+                .ToListAsync(ct);
+
+            var ids = roles
+                .Where(r => CourrielsDeRole.Lire(r.Courriels).Contains(courriel, StringComparer.OrdinalIgnoreCase))
+                .Select(r => r.Id)
+                .ToList();
+            if (ids.Count == 0) return [];
+
+            var mails = await _context.Parents.AsNoTracking()
+                .Where(p => p.RoleId != null && ids.Contains(p.RoleId.Value) && p.Mail != null && p.Mail != "")
+                .Select(p => p.Mail!)
+                .ToListAsync(ct);
+
+            return mails.Select(m => m.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        }
+
         // ------------------------------------------------------------------
 
         private async Task RecalculerAccesAsync(RoleUtilisateur role, CancellationToken ct)
@@ -157,6 +183,7 @@ namespace SchoolWebApp.Dal.Repositories
 
         internal static RoleCompte Projeter(RoleUtilisateur r, int nombre) => new(
             r.Id, r.Nom, r.Code, OngletsAdmin.Lire(r.Onglets), nombre,
-            RolesComptes.OuvreAdministration(r.Code, r.Onglets));
+            RolesComptes.OuvreAdministration(r.Code, r.Onglets),
+            CourrielsDeRole.Lire(r.Courriels));
     }
 }

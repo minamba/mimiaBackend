@@ -65,7 +65,14 @@ namespace SchoolWebApp.Domain.Models
             "programme",
             "periodes",
             "signalements",
+
+            // CEUX DES ADMINISTRATEURS, RELIÉS AUX JEUX DE TEST (05/11/2026).
+            "signalements_admin",
             "idees",
+
+            // LES CARNETS DE TEST (04/11/2026).
+            "jeux_tests",
+
             "fournisseurs",
         ];
 
