@@ -49,6 +49,27 @@ namespace SchoolWebApp.Domain.Models
         /// <summary>Notions au plus par import : au-delà, un manuel entier donnerait trente fiches.</summary>
         public const int NotionsMax = 8;
 
+        // UNE FICHE « LIBRE » — Camara, le 06/11/2026 : l'enfant n'importe pas son
+        // cours, il ÉCRIT ou DICTE ce qu'il veut réviser. Ce texte devient l'unique
+        // « page » du brouillon, en texte brut : il suit la vie d'un cours importé
+        // (lecture, notions, rédaction, quota, effacement à la fin), sans colonne
+        // ni table de plus.
+
+        /// <summary>Le type d'une page écrite ou dictée (fiche libre).</summary>
+        public const string TypeTexte = "text/plain";
+
+        /// <summary>Le nom affiché de cette page.</summary>
+        public const string NomTexte = "Mon texte";
+
+        /// <summary>Sous ce nombre de caractères, il n'y a pas de quoi faire une fiche.</summary>
+        public const int TexteMin = 3;
+
+        /// <summary>Au plus : une dizaine de pages de cahier, tapées ou dictées.</summary>
+        public const int TexteMax = 15000;
+
+        public static bool EstUnTexte(string? typeMime) =>
+            typeMime is not null && typeMime.StartsWith(TypeTexte, StringComparison.OrdinalIgnoreCase);
+
         // L'ESPACE PARENT (16/10/2026) : un parent révise pour lui-même. Il n'a
         // pas de classe ; ses fiches s'écrivent pour un adulte (`ConsignesFiches`).
 

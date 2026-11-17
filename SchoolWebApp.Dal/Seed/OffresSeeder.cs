@@ -1,3 +1,4 @@
+using SchoolWebApp.Domain.Models;
 using Microsoft.EntityFrameworkCore;
 using SchoolWebApp.Dal.Entities;
 
@@ -45,8 +46,13 @@ namespace SchoolWebApp.Dal.Seed
         {
             var packs = new[]
             {
-                new OffreFiches { Code = "FICHES10", Libelle = "10 crédits de fiches de révision", Fiches = 10, PrixCentimes = 599, Ordre = 1, Active = true },
-                new OffreFiches { Code = "FICHES20", Libelle = "20 crédits de fiches de révision", Fiches = 20, PrixCentimes = 999, Ordre = 2, Active = true },
+                new OffreFiches { Code = "FICHES10", Libelle = "10 crédits de fiches de révision", Fiches = 10, PrixCentimes = 599, Ordre = 1, Active = true, Nature = NaturesCours.Fiches },
+                new OffreFiches { Code = "FICHES20", Libelle = "20 crédits de fiches de révision", Fiches = 20, PrixCentimes = 999, Ordre = 2, Active = true, Nature = NaturesCours.Fiches },
+
+                // LES PACKS DE PODCASTS — Camara, le 15/11/2026 : « 5 pour 7,90 et 10 pour 12,90 ». Un crédit = un cours
+                // transformé en podcast (deux au-delà de dix pages), compteur à part des fiches.
+                new OffreFiches { Code = "PODCASTS5", Libelle = "5 crédits de podcasts", Fiches = 5, PrixCentimes = 790, Ordre = 1, Active = true, Nature = NaturesCours.Podcasts },
+                new OffreFiches { Code = "PODCASTS10", Libelle = "10 crédits de podcasts", Fiches = 10, PrixCentimes = 1290, Ordre = 2, Active = true, Nature = NaturesCours.Podcasts },
             };
 
             foreach (var pack in packs)
@@ -57,7 +63,9 @@ namespace SchoolWebApp.Dal.Seed
                     .ExecuteUpdateAsync(s => s.SetProperty(o => o.Libelle, pack.Libelle), ct);
             }
 
-            var codes = await context.OffresFiches.Select(o => o.Code).ToListAsync(ct);
+            // TOUTES LES NATURES (15/11/2026) : le filtre de la base ne montrerait que les fiches, et les packs de
+            // podcasts seraient réinsérés à chaque démarrage — refusés par l'index unique sur le code.
+            var codes = await context.OffresFiches.IgnoreQueryFilters().Select(o => o.Code).ToListAsync(ct);
             var manquants = packs.Where(o => !codes.Contains(o.Code)).ToList();
 
             if (manquants.Count == 0) return;
@@ -98,11 +106,32 @@ namespace SchoolWebApp.Dal.Seed
                     Active = true,
                     EstEssai = true,
                 },
+                // STARTER — Camara, le 14/11/2026 : « les mêmes avantages que Solo, mais à 19,90 € pour 4 h 30 de
+                // cours ». Un enfant, mêmes fiches, mêmes jeux, même mois de pause : tout se déduit des colonnes, rien
+                // n'est écrit en dur pour Solo. 4,42 €/h, le prix horaire de Solo (4,43 €) : c'est une demi-formule,
+                // pas une remise. Les recharges (4,69 et 4,97 €/h) restent plus chères à l'heure, la règle tient.
+                // Annuel : onze mois payés, comme les autres (choix de Camara le 14/11/2026).
+                // 4 H ET NON PLUS 4 H 30 (Camara, le 14/11/2026, migration HeuresDesFormules) : 4,98 €/h.
+                new Offre
+                {
+                    Code = "STARTER",
+                    Libelle = "Starter",
+                    Accroche = "Pour des révisions et des besoins ponctuels.",
+                    PrixMensuelCentimes = 1990,
+                    PrixAnnuelCentimes = 21890,
+                    NombreEnfantsMax = 1,
+                    MinutesPotMensuel = 4 * Heure,
+                    MinutesPlafondEnfant = 4 * Heure,
+                    JoursValidite = 0,
+                    Ordre = 1,
+                    Active = true,
+                    EstEssai = false,
+                },
                 new Offre
                 {
                     Code = "SOLO",
                     Libelle = "Solo",
-                    Accroche = "Un enfant, un professeur par matière.",
+                    Accroche = "Pour un accompagnement scolaire régulier.",
                     PrixMensuelCentimes = 3990,
 
                     // Onze mois payés, douze utilisés — et non dix. Sur un
@@ -115,7 +144,7 @@ namespace SchoolWebApp.Dal.Seed
                     MinutesPotMensuel = 9 * Heure,
                     MinutesPlafondEnfant = 9 * Heure,
                     JoursValidite = 0,
-                    Ordre = 1,
+                    Ordre = 2,
                     Active = true,
                     EstEssai = false,
                 },
@@ -123,18 +152,20 @@ namespace SchoolWebApp.Dal.Seed
                 {
                     Code = "DUO",
                     Libelle = "Duo",
-                    Accroche = "Deux enfants, un pot d'heures à se partager.",
+                    Accroche = "Pour accompagner deux enfants avec un seul abonnement.",
                     PrixMensuelCentimes = 6990,
                     PrixAnnuelCentimes = 76890, // onze mois payés, douze utilisés
                     NombreEnfantsMax = 2,
-                    MinutesPotMensuel = 16 * Heure,
+                    // 18 H ET UN PLAFOND DE 12 (Camara, le 14/11/2026, migration
+                    // HeuresDesFormules ; avant : 16 h et 10 h).
+                    MinutesPotMensuel = 18 * Heure,
 
-                    // Dix heures sur seize : le plafond garantit six heures au
-                    // second enfant. Sans lui, l'aîné vide le pot avant que le
+                    // Douze heures sur dix-huit : le plafond garantit six heures
+                    // au second enfant. Sans lui, l'aîné vide le pot avant que le
                     // cadet ait ouvert un cours.
-                    MinutesPlafondEnfant = 10 * Heure,
+                    MinutesPlafondEnfant = 12 * Heure,
                     JoursValidite = 0,
-                    Ordre = 2,
+                    Ordre = 3,
                     Active = true,
                     EstEssai = false,
                 },
@@ -142,29 +173,55 @@ namespace SchoolWebApp.Dal.Seed
                 {
                     Code = "FAMILLE",
                     Libelle = "Famille",
-                    Accroche = "Jusqu'à quatre enfants, chacun à son rythme.",
+                    Accroche = "Pour accompagner jusqu'à quatre enfants avec un seul abonnement.",
                     PrixMensuelCentimes = 9900,
                     PrixAnnuelCentimes = 108900, // onze mois payés, douze utilisés
                     NombreEnfantsMax = 4,
 
-                    // Vingt-quatre heures et non vingt-six : c'est la formule
-                    // qui a le moins de marge d'erreur — elle est déjà à 44 %
-                    // du prix en coût d'IA. Deux heures de moins tiennent la
-                    // règle des 50 % même si l'optimisation du cache ne rend
-                    // que les deux tiers de ce qu'on en attend.
-                    MinutesPotMensuel = 24 * Heure,
-                    MinutesPlafondEnfant = 10 * Heure,
+                    // 28 H ET UN PLAFOND DE 12 (Camara, le 14/11/2026, migration
+                    // HeuresDesFormules ; avant : 24 h et 10 h). 32 h demandées,
+                    // ramenées à 28 : à pleine consommation, 32 h coûtaient
+                    // ~92 % du prix en IA (3,3 $/h mesurés le 03/10), 28 h
+                    // ~81 %. C'est la formule qui a le moins de marge d'erreur.
+                    MinutesPotMensuel = 28 * Heure,
+                    MinutesPlafondEnfant = 12 * Heure,
                     JoursValidite = 0,
-                    Ordre = 3,
+                    Ordre = 4,
                     Active = true,
                     EstEssai = false,
                 },
             };
 
+            // LES SOUS-TITRES DU 14/11/2026 (Camara). Seule exception à « une offre existante n'est jamais modifiée » :
+            // un texte de présentation, ni prix ni quota. Remplacé seulement si l'ANCIEN texte est encore là.
+            var anciennesAccroches = new Dictionary<string, string>
+            {
+                ["STARTER"] = "Un enfant, quelques heures par mois pour reprendre pied.",
+                ["SOLO"] = "Un enfant, un professeur par matière.",
+                ["DUO"] = "Deux enfants, un pot d'heures à se partager.",
+                ["FAMILLE"] = "Jusqu'à quatre enfants, chacun à son rythme.",
+            };
+            foreach (var (code, ancienne) in anciennesAccroches)
+            {
+                var nouvelle = offres.First(o => o.Code == code).Accroche;
+                await context.Offres
+                    .Where(o => o.Code == code && o.Accroche == ancienne)
+                    .ExecuteUpdateAsync(x => x.SetProperty(o => o.Accroche, nouvelle), ct);
+            }
+
             var codes = await context.Offres.Select(o => o.Code).ToListAsync(ct);
             var manquantes = offres.Where(o => !codes.Contains(o.Code)).ToList();
 
             if (manquantes.Count == 0) return;
+
+            // STARTER PASSE EN TÊTE (14/11/2026), une seule fois : à son arrivée dans une base qui a déjà la grille, les
+            // formules payantes reculent d'un rang. Seul l'ordre d'affichage bouge — jamais un prix ni un quota.
+            if (manquantes.Any(o => o.Code == "STARTER") && codes.Count > 0)
+            {
+                await context.Offres
+                    .Where(o => !o.EstEssai && o.Ordre >= 1)
+                    .ExecuteUpdateAsync(x => x.SetProperty(o => o.Ordre, o => o.Ordre + 1), ct);
+            }
 
             context.Offres.AddRange(manquantes);
             await context.SaveChangesAsync(ct);

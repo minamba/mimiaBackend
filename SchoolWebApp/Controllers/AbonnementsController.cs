@@ -590,6 +590,93 @@ namespace SchoolWebApp.Api.Controllers
             });
 
         /// <summary>
+        /// L'encart « Podcasts » de « Mon forfait » (15/11/2026) : la même chose que les fiches, compteur à part — la
+        /// réserve de crédits de podcasts de la famille, les podcasts du mois de chaque enfant, les packs en vente.
+        /// </summary>
+        [HttpGet("podcasts")]
+        [Authorize]
+        [SwaggerResponse(200, "Réserve, podcasts du mois par enfant, packs.")]
+        public Task<IActionResult> Podcasts(
+            [FromServices] SchoolWebApp.Api.Services.MesFiches.QuotaFichesService quota,
+            [FromServices] ICreditsFichesRepository credits,
+            [FromServices] AccesForfaitService acces,
+            CancellationToken ct) =>
+            Executer(async parentId =>
+            {
+                // Toute la portée ne voit plus que les podcasts (même contexte que le quota).
+                credits.Nature = NaturesCours.Podcasts;
+
+                var (solde, maximum, remiseLe, enfants) = await quota.LireFamilleAsync(parentId, ct);
+                var porte = await acces.LireAsync(parentId, ct);
+                var packs = (await credits.GetOffresAsync(ct))
+                    .Select(p => new { p.Code, p.Libelle, p.Fiches, p.PrixCentimes })
+                    .ToList();
+
+                return Ok(new
+                {
+                    forfait = porte.Ouvert,
+                    motif = porte.Motif,
+                    // PAS DE PODCASTS AVEC STARTER (15/11/2026) : l'encadré se masque, rien à acheter.
+                    nonInclus = !await acces.PodcastsOuvertsAsync(parentId, ct),
+                    credits = solde,
+                    maximum,
+                    remiseLe,
+                    enfants = enfants.Select(e => new { e.Id, e.Prenom, e.Utilisees }),
+                    packs,
+                });
+            });
+
+        /// <summary>Achète un pack de crédits de podcasts pour la famille (15/11/2026) — le même chemin que les fiches.</summary>
+        [HttpPost("podcasts")]
+        [Authorize]
+        [SwaggerResponse(200, "L'URL de paiement, ou le nouveau solde pour un compte exempté.")]
+        [SwaggerResponse(404, "Pack inconnu.")]
+        public Task<IActionResult> AcheterPodcasts(
+            [FromQuery] string pack,
+            [FromServices] ICaisseStripeService caisse,
+            [FromServices] ICreditsFichesRepository credits,
+            [FromServices] AccesForfaitService acces,
+            [FromServices] IOptions<OptionsStripe> stripe,
+            CancellationToken ct) =>
+            Executer(async parentId =>
+            {
+                if (string.IsNullOrWhiteSpace(pack)) return BadRequest(new { message = "Pack absent." });
+
+                if (!(await acces.LireAsync(parentId, ct)).Ouvert)
+                {
+                    return Conflict(new
+                    {
+                        message = "Les podcasts sont réservés aux familles abonnées. Choisissez une formule pour acheter des crédits.",
+                    });
+                }
+
+                // PAS DE PODCASTS AVEC STARTER (15/11/2026) : pas de crédits à acheter pour ce qu'on ne peut pas ouvrir.
+                if (!await acces.PodcastsOuvertsAsync(parentId, ct))
+                {
+                    return Conflict(new { message = PodcastsEleve.MessageNonInclusParent });
+                }
+
+                credits.Nature = NaturesCours.Podcasts;
+
+                if (await DoitPayerAsync())
+                {
+                    if (!stripe.Value.EstConfigure)
+                    {
+                        _logger.LogError("Achat de podcasts demande sans configuration Stripe.");
+                        return StatusCode(503, new { message = "Le paiement est momentanément indisponible. Réessayez plus tard." });
+                    }
+
+                    var ouverture = await caisse.OuvrirAchatFichesAsync(parentId, pack, ct, NaturesCours.Podcasts);
+                    return ouverture is null
+                        ? NotFound(new { message = "Pack inconnu." })
+                        : Ok(new { urlPaiement = ouverture.Url });
+                }
+
+                var solde = await credits.CrediterAsync(parentId, pack, null, null, ct);
+                return solde is null ? NotFound(new { message = "Pack inconnu." }) : Ok(new { credits = solde });
+            });
+
+        /// <summary>
         /// Résout le parent du jeton puis délègue. Extrait parce que les cinq
         /// routes authentifiées partagent la même résolution et le même filet
         /// d'exceptions — cinq copies finiraient par diverger.

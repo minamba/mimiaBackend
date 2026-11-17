@@ -53,6 +53,17 @@ namespace SchoolWebApp.Api.Controllers
             if (!_reglage.Active)
                 return Ok(new { salle = false, admis = true });
 
+            // L'ADMINISTRATEUR N'ATTEND PAS AU GUICHET NON PLUS — Camara, le 06/11/2026 : « je me suis retrouvé
+            // dans la file d'attente sans aucune possibilité d'entrer, alors que je suis admin ». Le garde le
+            // laissait passer, mais ce guichet ne regardait pas qui demandait : une fois la file armée dans son
+            // navigateur (une requête partie sans jeton, un jeton expiré), il y restait. Il est admis sans
+            // prendre de place : personne n'a à sortir pour lui.
+            if (GardeAffluenceMiddleware.EstAdministrateur(User))
+            {
+                if (jeton is Guid ancien && ancien != Guid.Empty) _salle.Liberer(ancien);
+                return Ok(new { salle = true, admis = true, administrateur = true });
+            }
+
             var place = _salle.Demander(jeton ?? Guid.Empty, _reglage.Places);
 
             return Ok(new

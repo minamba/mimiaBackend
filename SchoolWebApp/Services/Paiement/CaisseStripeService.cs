@@ -37,7 +37,7 @@ namespace SchoolWebApp.Api.Services.Paiement
         /// Stripe.
         /// </summary>
         Task<OuvertureCaisse?> OuvrirAchatFichesAsync(
-            int parentId, string codePack, CancellationToken ct = default);
+            int parentId, string codePack, CancellationToken ct = default, string nature = NaturesCours.Fiches);
 
         /// <summary>
         /// Ouvre le portail client : changer de carte, lire ses factures,
@@ -254,8 +254,12 @@ namespace SchoolWebApp.Api.Services.Paiement
         }
 
         public async Task<OuvertureCaisse?> OuvrirAchatFichesAsync(
-            int parentId, string codePack, CancellationToken ct = default)
+            int parentId, string codePack, CancellationToken ct = default, string nature = NaturesCours.Fiches)
         {
+            // FICHES OU PODCASTS (15/11/2026) : les packs, puis le crédit du webhook, de cette nature.
+            _fiches.Nature = nature;
+            var podcasts = nature == NaturesCours.Podcasts;
+
             var reglages = _options.Value;
             if (!reglages.EstConfigure) throw new InvalidOperationException("Aucune clé Stripe configurée.");
 
@@ -279,7 +283,7 @@ namespace SchoolWebApp.Api.Services.Paiement
             {
                 [EtiquetteParent] = parentId.ToString(),
                 [EtiquetteOffre] = pack.Code,
-                [EtiquetteType] = CreditsFiches.TypeStripe,
+                [EtiquetteType] = podcasts ? CreditsFiches.TypeStripePodcasts : CreditsFiches.TypeStripe,
             };
 
             var session = await new SessionService(client).CreateAsync(
@@ -292,7 +296,7 @@ namespace SchoolWebApp.Api.Services.Paiement
                     // Le parent achète depuis « Mon forfait » (Camara, le
                     // 16/10/2026) et y revient : `paiement=ok` ouvre l'onglet,
                     // `achat=fiches` dit à l'encart des fiches de se relire.
-                    SuccessUrl = $"{reglages.UrlRetour}?paiement=ok&achat=fiches",
+                    SuccessUrl = $"{reglages.UrlRetour}?paiement=ok&achat={(podcasts ? "podcasts" : "fiches")}",
                     CancelUrl = $"{reglages.UrlAnnulation}?paiement=abandon",
 
                     Metadata = etiquettes,

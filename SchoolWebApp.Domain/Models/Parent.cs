@@ -44,5 +44,17 @@ namespace SchoolWebApp.Domain.Models
 
         /// <summary>Vide tant que ce parent n'a pas vu le tutoriel (02/11/2026).</summary>
         public DateTime? TutorielVuLe { get; set; }
+
+        /// <summary>Vide tant que ce parent n'a pas vu le tutoriel de la fiche (08/11/2026).</summary>
+        public DateTime? TutorielFicheVuLe { get; set; }
+
+        /// <summary>Vide tant que ce parent n'a pas vu le tutoriel de « Vos enfants » (17/11/2026).</summary>
+        public DateTime? TutorielEnfantsVuLe { get; set; }
+
+        /// <summary>La version des conditions générales qu'il a acceptée en dernier ; vide s'il n'en a accepté aucune.</summary>
+        public string? ConditionsVersion { get; set; }
+
+        /// <summary>Quand il l'a acceptée (UTC).</summary>
+        public DateTime? ConditionsAccepteesLe { get; set; }
     }
 }

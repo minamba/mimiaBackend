@@ -27,6 +27,13 @@ namespace SchoolWebApp.Dal.Repositories
             _comptesProteges = comptesProteges;
         }
 
+        /// <summary>FICHES OU PODCASTS (15/11/2026) : la nature que voit toute la portée — voir `NatureCours.cs`.</summary>
+        public string Nature
+        {
+            get => _context.NatureCours;
+            set => _context.NatureCours = SchoolWebApp.Domain.Models.NaturesCours.Connue(value) ? value : SchoolWebApp.Domain.Models.NaturesCours.Fiches;
+        }
+
         /// <summary>
         /// LE PROPRIÉTAIRE, EN UNE CONDITION : les cours de cet élève, ou ceux de
         /// ce parent (espace parent, 16/10/2026). Toutes les lectures et écritures
@@ -45,6 +52,39 @@ namespace SchoolWebApp.Dal.Repositories
             var eleveId = p.EleveId;
             return f => f.EleveId == eleveId;
         }
+
+        public async Task<IReadOnlySet<int>> CoursExistantsAsync(IReadOnlyCollection<int> ids, CancellationToken ct = default)
+        {
+            if (ids.Count == 0) return new HashSet<int>();
+            var trouves = await _context.CoursImportes.AsNoTracking().Where(c => ids.Contains(c.Id)).Select(c => c.Id).ToListAsync(ct);
+            return trouves.ToHashSet();
+        }
+
+        public async Task<IReadOnlyList<ProfesseurPodcast>> ProfesseursAsync(CancellationToken ct = default)
+        {
+            var lignes = await _context.Matieres
+                .AsNoTracking()
+                .Where(m => m.ProfAvatar != null && m.ProfAvatar != "" && m.ProfPrenom != null && m.ProfPrenom != "")
+                // La conseillère d'orientation n'est pas un professeur : pas de podcast avec elle (comme pour l'élève).
+                .Where(m => m.Code != "ORIENTATION")
+                .Select(m => new { m.ProfAvatar, m.ProfPrenom, m.Libelle })
+                .ToListAsync(ct);
+
+            return lignes
+                .GroupBy(l => l.ProfAvatar!, StringComparer.OrdinalIgnoreCase)
+                .Select(g => new ProfesseurPodcast(
+                    g.Key,
+                    g.First().ProfPrenom!,
+                    g.Select(l => l.Libelle).Where(l => !string.IsNullOrWhiteSpace(l)).Distinct().OrderBy(l => l).ToList()))
+                .OrderBy(p => p.Prenom)
+                .ToList();
+        }
+
+        public async Task<bool> DefinirProfAsync(Proprietaire proprietaire, int coursId, string? avatar, CancellationToken ct = default) =>
+            await _context.CoursImportes
+                .Where(DuCours(proprietaire))
+                .Where(c => c.Id == coursId && c.Etat == Regles.EtatBrouillon)
+                .ExecuteUpdateAsync(s => s.SetProperty(c => c.ProfAvatar, avatar), ct) > 0;
 
         public async Task<DroitsEspaceParent> DroitsEspaceParentAsync(int parentId, CancellationToken ct = default)
         {
@@ -350,6 +390,8 @@ namespace SchoolWebApp.Dal.Repositories
 
             _context.CoursImportesPages.Add(page);
             cours.DateModification = maintenant;
+            // Une page écrite ou dictée fait du cours une fiche libre ; une photo ou un PDF, un cours importé.
+            cours.Libre = Regles.EstUnTexte(typeMime);
             await _context.SaveChangesAsync(ct);
 
             return new PageDuCours(page.Id, page.Ordre, page.NomFichier, page.TypeMime, page.Taille, page.NombrePages);
@@ -486,6 +528,14 @@ namespace SchoolWebApp.Dal.Repositories
                         : c.Eleve != null && c.Eleve.NiveauScolaire != null ? c.Eleve.NiveauScolaire.Libelle : null,
                     Rang = c.ParentId != null ? Regles.RangAdulte
                         : c.Eleve != null && c.Eleve.NiveauScolaire != null ? c.Eleve.NiveauScolaire.Ordre : 0,
+                    // PODCASTS (15/11/2026) : la voix du professeur de la matière, et l'âge de l'élève. Le PARENT
+                    // n'a pas de matière : la voix qu'il a choisie, et le prénom de ce professeur.
+                    ProfAvatar = c.Matiere != null ? c.Matiere.ProfAvatar : c.ProfAvatar,
+                    ProfPrenom = c.Matiere != null
+                        ? c.Matiere.ProfPrenom
+                        : _context.Matieres.Where(m => c.ProfAvatar != null && m.ProfAvatar == c.ProfAvatar)
+                            .Select(m => m.ProfPrenom).FirstOrDefault(),
+                    Age = c.Eleve != null ? c.Eleve.Age : 0,
                 })
                 .FirstOrDefaultAsync(ct);
 
@@ -552,6 +602,9 @@ namespace SchoolWebApp.Dal.Repositories
                 NotionsExistantes = existantes,
                 Pages = pages.Select(p => (p.TypeMime, p.NomFichier, p.Donnees!)).ToList(),
                 DejaRediges = deja,
+                ProfAvatar = cours.ProfAvatar,
+                ProfPrenom = cours.ProfPrenom,
+                Age = cours.Age,
             };
         }
 
@@ -785,6 +838,7 @@ namespace SchoolWebApp.Dal.Repositories
                 NotionsDemandees = LireRangs(c.NotionsDemandees),
                 DemandeLe = c.DemandeLe,
                 PagesDisponibles = c.PagesEffaceesLe is null,
+                Libre = c.Libre,
                 DateCreation = c.DateCreation,
                 ComplementDe = c.ComplementDe,
                 ComplementDeTitre = titreComplete,

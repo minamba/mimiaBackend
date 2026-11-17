@@ -291,6 +291,12 @@ namespace SchoolWebApp.Domain.Models
         /// </summary>
         public string? Formule { get; set; }
 
+        /// <summary>L'abonnement en cours a été offert par l'administration (13/11/2026).</summary>
+        public bool AbonnementOffert { get; set; }
+
+        /// <summary>Jusqu'à quand il est offert ; null s'il l'est sans fin (ou s'il n'est pas offert).</summary>
+        public DateTime? OffertJusquau { get; set; }
+
         /// <summary>Pot de la période, recharges comprises. En minutes.</summary>
         public int? MinutesPot { get; set; }
 
@@ -432,6 +438,27 @@ namespace SchoolWebApp.Domain.Models
         /// <summary>Cours envoyés à la lecture sur la période.</summary>
         public int CoursLus { get; set; }
 
+        /// <summary>
+        /// LES PODCASTS (15/11/2026) — Camara : « une ligne podcasts avec le montant, même si c'est lié à Gemini ; ça ne
+        /// vient pas de la discussion avec les élèves ». Une dépense des familles : le texte (lecture du cours,
+        /// rédaction des épisodes) et la voix des épisodes, qui ne sont plus ni dans les frais de fond ni dans la
+        /// synthèse vocale des cours.
+        /// </summary>
+        public decimal PodcastsDollars { get; set; }
+
+        public decimal PodcastsTexteDollars { get; set; }
+
+        public decimal PodcastsVoixDollars { get; set; }
+
+        /// <summary>Appels au modèle pour les podcasts (texte et voix).</summary>
+        public int PodcastsAppels { get; set; }
+
+        /// <summary>Épisodes créés sur la période.</summary>
+        public int PodcastsEpisodes { get; set; }
+
+        /// <summary>Cours envoyés en podcast sur la période.</summary>
+        public int PodcastsCours { get; set; }
+
         public decimal TotalDollars { get; set; }
 
         /// <summary>Tours de parole du professeur sur la période.</summary>
@@ -521,6 +548,9 @@ namespace SchoolWebApp.Domain.Models
         public int Age { get; set; }
 
         public Sexe Sexe { get; set; }
+
+        /// <summary>L'avatar choisi (code du catalogue du front), null = celui par défaut.</summary>
+        public string? Avatar { get; set; }
 
         public string? NiveauLibelle { get; set; }
 
@@ -718,5 +748,33 @@ namespace SchoolWebApp.Domain.Models
 
             return Actif;
         }
+    }
+}
+
+namespace SchoolWebApp.Domain.Models
+{
+    /// <summary>
+    /// UN MOUVEMENT D'ABONNEMENT, AVEC SON PARENT — Camara, le 12/11/2026 : sous le graphique « Entrées et sorties » de
+    /// la fréquentation, la liste des parents qui ont pris un abonnement, demandé une résiliation, ou dont la résiliation
+    /// a pris effet. Mêmes règles que les barres du graphique (<see cref="PointAbonnements"/>) : la liste et les chiffres
+    /// se recoupent toujours.
+    /// </summary>
+    public class MouvementAbonnement
+    {
+        /// <summary>« abonnement », « demande » ou « resiliation ».</summary>
+        public string Type { get; set; } = string.Empty;
+
+        /// <summary>L'instant du mouvement, en UTC.</summary>
+        public DateTime Date { get; set; }
+
+        public int ParentId { get; set; }
+
+        public string? Prenom { get; set; }
+
+        public string? Nom { get; set; }
+
+        public string? Mail { get; set; }
+
+        public string? Offre { get; set; }
     }
 }

@@ -60,6 +60,9 @@ namespace SchoolWebApp.Domain.Models
 
         public bool PagesDisponibles { get; init; }
 
+        /// <summary>Une fiche libre (06/11/2026) : écrite ou dictée, sans cours importé.</summary>
+        public bool Libre { get; init; }
+
         public DateTime DateCreation { get; init; }
 
         /// <summary>Ce cours complète celui-ci (16/10/2026) ; null pour un cours.</summary>
@@ -126,5 +129,14 @@ namespace SchoolWebApp.Domain.Models
 
         /// <summary>Les rangs de notion déjà rédigés pour la demande en cours (0 = le cours entier).</summary>
         public IReadOnlyList<int> DejaRediges { get; init; } = [];
+
+        /// <summary>PODCASTS (15/11/2026) : le professeur de la matière, dont la voix lit l'épisode. Null pour un parent.</summary>
+        public string? ProfAvatar { get; init; }
+
+        /// <summary>Son prénom, pour qu'il se présente au début de l'épisode.</summary>
+        public string? ProfPrenom { get; init; }
+
+        /// <summary>L'âge de l'élève : la voix d'un professeur ne parle pas à un enfant de 7 ans comme à un lycéen.</summary>
+        public int Age { get; init; }
     }
 }

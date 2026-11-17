@@ -89,6 +89,15 @@ services:
       # « je » → je.webp, « jé » → je-aigu.webp). Peut rester vide : la carte ne s'affiche alors pas.
       #   mkdir -p ./donnees/images-syllabes
       - ./donnees/images-syllabes:/donnees/images-syllabes:ro
+      # LES IMAGES DES SONS DE L'ANGLAIS (06/11/2026), meme systeme : une image WebP par son (sh.webp,
+      # oo-long.webp), au tableau de Marine. Le reglage Stockage:ImagesSonsAnglais n'est pas ecrit :
+      # l'API retombe sur /app/../donnees/images-sons-en, soit ce montage.
+      #   mkdir -p ./donnees/images-sons-en
+      - ./donnees/images-sons-en:/donnees/images-sons-en:ro
+      # LES IMAGES DES MOTS DE L'ANGLAIS (07/11/2026), meme systeme : une image WebP par mot (apple.webp,
+      # santa.webp), pour l'ecoute et la lecture des mots de Marine. Reglage Stockage:ImagesMotsAnglais non ecrit.
+      #   mkdir -p ./donnees/images-mots-en
+      - ./donnees/images-mots-en:/donnees/images-mots-en:ro
     networks:
       - web
       - geekai_internal

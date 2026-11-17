@@ -177,8 +177,11 @@ namespace SchoolWebApp.Api.Services.Paiement
 
             // Un pack de fiches de révision : crédité à la FAMILLE, sans lien
             // avec l'abonnement ni sa période (les crédits n'expirent pas).
-            if (string.Equals(type, CreditsFiches.TypeStripe, StringComparison.OrdinalIgnoreCase))
+            var podcasts = string.Equals(type, CreditsFiches.TypeStripePodcasts, StringComparison.OrdinalIgnoreCase);
+            if (podcasts || string.Equals(type, CreditsFiches.TypeStripe, StringComparison.OrdinalIgnoreCase))
             {
+                // FICHES OU PODCASTS (15/11/2026) : le pack et le solde de cette nature.
+                _fiches.Nature = podcasts ? NaturesCours.Podcasts : NaturesCours.Fiches;
                 var solde = await _fiches.CrediterAsync(parentId, codeOffre, session.Id, session.PaymentIntentId, ct);
                 if (solde is null)
                 {
@@ -402,7 +405,17 @@ namespace SchoolWebApp.Api.Services.Paiement
             }
 
             // Un achat de fiches remboursé : ses crédits non utilisés repartent.
-            if (await _fiches.RembourserAsync(charge.PaymentIntentId, ct))
+            // FICHES PUIS PODCASTS (15/11/2026) : l'achat est cherché dans les deux natures.
+            _fiches.Nature = NaturesCours.Fiches;
+            var achatRembourse = await _fiches.RembourserAsync(charge.PaymentIntentId, ct);
+            if (!achatRembourse)
+            {
+                _fiches.Nature = NaturesCours.Podcasts;
+                achatRembourse = await _fiches.RembourserAsync(charge.PaymentIntentId, ct);
+                _fiches.Nature = NaturesCours.Fiches;
+            }
+
+            if (achatRembourse)
             {
                 _logger.LogWarning(
                     "Credits de fiches REPRIS apres remboursement total du paiement {Paiement}.",

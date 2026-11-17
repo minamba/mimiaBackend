@@ -244,7 +244,8 @@ namespace SchoolWebApp.Dal.Repositories
             // le parent est en NO ACTION (deux chemins de cascade sont refusés),
             // ils partent donc ici, avec leurs pages et leurs fiches (en cascade
             // depuis le cours). Ses catégories suivent le parent, en cascade.
-            await _context.CoursImportes.Where(c => c.ParentId == parentId).ExecuteDeleteAsync(ct);
+            // Fiches ET podcasts (15/11/2026) : le filtre de nature ne doit rien laisser derrière.
+            await _context.CoursImportes.IgnoreQueryFilters().Where(c => c.ParentId == parentId).ExecuteDeleteAsync(ct);
 
             await _context.Eleves.Where(e => e.ParentId == parentId).ExecuteDeleteAsync(ct);
             await _context.Abonnements.Where(a => a.ParentId == parentId).ExecuteDeleteAsync(ct);
@@ -295,7 +296,19 @@ namespace SchoolWebApp.Dal.Repositories
             EstAdministrateur = entity.EstAdministrateur,
             PeutAjouterEnfant = entity.PeutAjouterEnfant,
             TutorielVuLe = entity.TutorielVuLe,
+            TutorielFicheVuLe = entity.TutorielFicheVuLe,
+            TutorielEnfantsVuLe = entity.TutorielEnfantsVuLe,
+            ConditionsVersion = entity.ConditionsVersion,
+            ConditionsAccepteesLe = entity.ConditionsAccepteesLe,
         };
+
+        /// <summary>Écriture directe et ciblée, comme pour le tutoriel : rien d'autre du compte n'est réécrit.</summary>
+        public Task AccepterConditionsAsync(int parentId, string version, DateTime le, CancellationToken ct = default) =>
+            _context.Parents
+                .Where(p => p.Id == parentId)
+                .ExecuteUpdateAsync(s => s
+                    .SetProperty(p => p.ConditionsVersion, version)
+                    .SetProperty(p => p.ConditionsAccepteesLe, le), ct);
 
         /// <summary>
         /// La première date reste : le tutoriel n'est dû qu'une fois. Écriture
@@ -305,5 +318,16 @@ namespace SchoolWebApp.Dal.Repositories
             _context.Parents
                 .Where(p => p.Id == parentId && p.TutorielVuLe == null)
                 .ExecuteUpdateAsync(s => s.SetProperty(p => p.TutorielVuLe, DateTime.UtcNow), ct);
+
+        /// <summary>Comme le tutoriel de la page de l'enfant : la première date reste.</summary>
+        public Task MarquerTutorielEnfantsVuAsync(int parentId, CancellationToken ct = default) =>
+            _context.Parents
+                .Where(p => p.Id == parentId && p.TutorielEnfantsVuLe == null)
+                .ExecuteUpdateAsync(s => s.SetProperty(p => p.TutorielEnfantsVuLe, DateTime.UtcNow), ct);
+
+        public Task MarquerTutorielFicheVuAsync(int parentId, CancellationToken ct = default) =>
+            _context.Parents
+                .Where(p => p.Id == parentId && p.TutorielFicheVuLe == null)
+                .ExecuteUpdateAsync(s => s.SetProperty(p => p.TutorielFicheVuLe, DateTime.UtcNow), ct);
     }
 }

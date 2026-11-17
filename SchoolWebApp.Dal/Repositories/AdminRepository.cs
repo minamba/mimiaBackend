@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using SchoolWebApp.Dal.Entities;
 using SchoolWebApp.Domain.Models;
 using SchoolWebApp.Domain.Repositories;
@@ -339,7 +339,7 @@ namespace SchoolWebApp.Dal.Repositories
             // mais « a-t-il payé APRÈS son essai ».
             var payants = await _context.Abonnements
                 .AsNoTracking()
-                .Where(a => !a.Offre!.EstEssai && parents.Contains(a.ParentId))
+                .Where(a => !a.Offre!.EstEssai && a.OffertLe == null && parents.Contains(a.ParentId))
                 .Select(a => new { a.ParentId, a.DateDebut })
                 .ToListAsync();
 
@@ -581,7 +581,7 @@ namespace SchoolWebApp.Dal.Repositories
             // abonnement là où personne n'avait rien payé.
             var nouveaux = await Grouper(
                 source.Where(a => a.DateDebut >= debutUtc && a.DateDebut < finUtc
-                                  && !a.Offre!.EstEssai)
+                                  && !a.Offre!.EstEssai && a.OffertLe == null) // un abonnement offert n'est pas payant (13/11/2026)
                       .Select(a => a.DateDebut),
                 granularite, decalage);
 
@@ -659,6 +659,49 @@ namespace SchoolWebApp.Dal.Repositories
             }
 
             return points;
+        }
+
+        /// <summary>
+        /// LES MOUVEMENTS, UN PAR LIGNE, AVEC LE PARENT — Camara, le 12/11/2026. EXACTEMENT les filtres de la série
+        /// ci-dessus (`nouveaux`, `demandes`, `arrets`) : la liste sous le graphique recoupe toujours ses barres. Un
+        /// même abonnement peut y figurer deux ou trois fois, s'il a été pris, résilié puis arrêté dans la fenêtre.
+        /// </summary>
+        public async Task<IEnumerable<MouvementAbonnement>> GetMouvementsAbonnementsAsync(DateTime debut, DateTime fin)
+        {
+            var (debutUtc, finUtc, _) = EnUtc(debut, fin);
+            var source = _context.Abonnements.AsNoTracking();
+
+            var abonnements = await source
+                .Where(a => a.DateDebut >= debutUtc && a.DateDebut < finUtc && !a.Offre!.EstEssai)
+                .Select(a => new MouvementAbonnement
+                {
+                    // UN ABONNEMENT OFFERT SE VOIT, À PART (13/11/2026) : il n'est pas compté parmi les payants.
+                    Type = a.OffertLe == null ? "abonnement" : "offert", Date = a.DateDebut, ParentId = a.ParentId,
+                    Prenom = a.Parent!.Prenom, Nom = a.Parent.Nom, Mail = a.Parent.Mail, Offre = a.Offre!.Libelle,
+                })
+                .ToListAsync();
+
+            var demandes = await source
+                .Where(a => a.ResiliationDemandeeLe != null && a.ResiliationDemandeeLe >= debutUtc && a.ResiliationDemandeeLe < finUtc)
+                .Select(a => new MouvementAbonnement
+                {
+                    Type = "demande", Date = a.ResiliationDemandeeLe!.Value, ParentId = a.ParentId,
+                    Prenom = a.Parent!.Prenom, Nom = a.Parent.Nom, Mail = a.Parent.Mail, Offre = a.Offre!.Libelle,
+                })
+                .ToListAsync();
+
+            var resiliations = await source
+                .Where(a => a.DateFin != null && a.DateFin >= debutUtc && a.DateFin < finUtc)
+                .Select(a => new MouvementAbonnement
+                {
+                    Type = "resiliation", Date = a.DateFin!.Value, ParentId = a.ParentId,
+                    Prenom = a.Parent!.Prenom, Nom = a.Parent.Nom, Mail = a.Parent.Mail, Offre = a.Offre!.Libelle,
+                })
+                .ToListAsync();
+
+            return abonnements.Concat(demandes).Concat(resiliations)
+                .OrderByDescending(m => m.Date)
+                .ToList();
         }
 
         private static int IndexSeau(DateTime date, Granularite granularite) => granularite switch
@@ -791,7 +834,7 @@ FROM sys.database_files;";
 
             var abonnements = await _context.Abonnements
                 .AsNoTracking()
-                .Where(a => !a.Offre!.EstEssai
+                .Where(a => !a.Offre!.EstEssai && a.OffertLe == null // un abonnement offert ne rapporte rien (13/11/2026)
                             && a.DateDebut < finUtc
                             && (a.DateFin == null || a.DateFin > debutUtc))
                 .Select(a => new
@@ -894,7 +937,9 @@ FROM sys.database_files;";
 
             // Les packs de fiches : même règle, `PrixCentimes > 0` écarte les
             // crédits posés sans paiement (comptes exemptés).
+            // PODCASTS COMPRIS (15/11/2026) : leurs packs sont dans la même table, sous une autre nature.
             var packsFiches = await _context.AchatsFiches
+                .IgnoreQueryFilters()
                 .AsNoTracking()
                 .Where(a => a.DateAchat >= debutUtc && a.DateAchat < finUtc
                             && a.DateRemboursement == null && a.PrixCentimes > 0)
@@ -1022,8 +1067,8 @@ FROM sys.database_files;";
             var fond = await _context.AppelsClaude
                 .AsNoTracking()
                 // La voix a sa propre ligne plus haut : la compter ici la
-                // ferait payer deux fois.
-                .Where(a => a.Origine != OrigineVoix
+                // ferait payer deux fois. Celle des podcasts aussi (plus bas).
+                .Where(a => a.Origine != OrigineVoix && a.Origine != PodcastsEleve.OrigineVoix
                             && a.DateCreation >= debutUtc && a.DateCreation < finUtc)
                 .GroupBy(a => new { a.Origine, a.Modele, a.DateCreation.Year, a.DateCreation.Month })
                 .Select(g => new
@@ -1083,6 +1128,42 @@ FROM sys.database_files;";
                 .AsNoTracking()
                 .CountAsync(c => c.EnvoyeLe != null && c.EnvoyeLe >= debutUtc && c.EnvoyeLe < finUtc);
 
+            // LES PODCASTS À PART — Camara, le 15/11/2026 : « je veux une ligne podcasts avec le montant, même si c'est
+            // lié à Gemini ; c'est différent, ça ne vient pas de la discussion avec les élèves ». Comme les fiches :
+            // une dépense des familles, pas une tâche de fond. Le texte (lecture du cours, rédaction des épisodes) sort
+            // des frais de fond ; la voix est mesurée à part (origine `podcasts-voix`), au même tarif que celle des cours.
+            var postesPodcasts = postes
+                .Where(p => p.Origine.StartsWith(PodcastsEleve.PrefixeOrigine, StringComparison.Ordinal))
+                .ToList();
+            postes = postes.Except(postesPodcasts).ToList();
+
+            var appelsVoixPodcasts = await _context.AppelsClaude
+                .AsNoTracking()
+                .Where(a => a.Origine == PodcastsEleve.OrigineVoix
+                            && a.DateCreation >= debutUtc && a.DateCreation < finUtc)
+                .GroupBy(a => a.Modele)
+                .Select(g => new AppelsVoix(
+                    g.Key, g.Count(),
+                    g.Sum(a => (long)a.TokensEntree), g.Sum(a => (long)a.TokensSortie)))
+                .ToListAsync();
+
+            var podcastsTexte = postesPodcasts.Sum(p => p.Dollars);
+            var podcastsVoix = VoixParModele([], appelsVoixPodcasts, grille).Sum(v => v.Dollars);
+            var podcasts = podcastsTexte + podcastsVoix;
+
+            // Ce qu'ils ont produit : les épisodes créés, les cours envoyés (les deux tables filtrent la nature).
+            var episodesPodcasts = await _context.FichesDeCours
+                .IgnoreQueryFilters()
+                .AsNoTracking()
+                .CountAsync(f => f.Nature == NaturesCours.Podcasts && f.Type == PodcastsEleve.Type
+                                 && f.DateCreation >= debutUtc && f.DateCreation < finUtc);
+
+            var coursPodcasts = await _context.CoursImportes
+                .IgnoreQueryFilters()
+                .AsNoTracking()
+                .CountAsync(c => c.Nature == NaturesCours.Podcasts
+                                 && c.EnvoyeLe != null && c.EnvoyeLe >= debutUtc && c.EnvoyeLe < finUtc);
+
             var tachesDeFond = postes.Sum(p => p.Dollars);
 
             return new CoutPeriode
@@ -1099,7 +1180,13 @@ FROM sys.database_files;";
                 FichesAppels = postesFiches.Sum(p => p.Appels),
                 FichesCreees = fichesCreees,
                 CoursLus = coursLus,
-                TotalDollars = Math.Round(dialogue + voix + tachesDeFond + fiches, 4),
+                PodcastsDollars = Math.Round(podcasts, 4),
+                PodcastsTexteDollars = Math.Round(podcastsTexte, 4),
+                PodcastsVoixDollars = Math.Round(podcastsVoix, 4),
+                PodcastsAppels = postesPodcasts.Sum(p => p.Appels) + appelsVoixPodcasts.Sum(a => a.Appels),
+                PodcastsEpisodes = episodesPodcasts,
+                PodcastsCours = coursPodcasts,
+                TotalDollars = Math.Round(dialogue + voix + tachesDeFond + fiches + podcasts, 4),
                 MinutesTravaillees = await MinutesTravailleesAsync(debut, fin),
             };
         }
@@ -1278,6 +1365,13 @@ FROM sys.database_files;";
                         .Where(a => a.Statut == "Actif")
                         .OrderByDescending(a => a.PeriodeDebut)
                         .Select(a => a.Offre!.Code)
+                        .FirstOrDefault(),
+
+                    // L'ABONNEMENT OFFERT (13/11/2026) : le badge et le bouton « Arrêter l'offre » de l'onglet Parents.
+                    AbonnementOffert = p.Abonnements.Any(a => a.Statut == "Actif" && a.OffertLe != null),
+                    OffertJusquau = p.Abonnements
+                        .Where(a => a.Statut == "Actif" && a.OffertLe != null)
+                        .Select(a => a.DateFin)
                         .FirstOrDefault(),
 
                     // L'annuel ramené au mois : les coûts se lisent au mois, et
@@ -2041,6 +2135,7 @@ GROUP BY parent_id";
                     Nom = e.Nom,
                     Age = e.Age,
                     Sexe = e.Sexe,
+                    Avatar = e.Avatar,
                     NiveauLibelle = e.NiveauScolaire!.Libelle,
                     NiveauOrdre = e.NiveauScolaire.Ordre,
                     // La classe, la LVB et les spécialités : ce que le parent a
@@ -2099,6 +2194,7 @@ GROUP BY parent_id";
                     Nom = e.Nom,
                     Age = e.Age,
                     Sexe = e.Sexe,
+                    Avatar = e.Avatar,
                     NiveauCode = e.NiveauScolaire!.Code,
                     NiveauLibelle = e.NiveauScolaire.Libelle,
                     NiveauOrdre = e.NiveauScolaire.Ordre,
@@ -2523,7 +2619,8 @@ GROUP BY parent_id";
 
         public async Task<EleveAdmin?> ModifierEleveAsync(
             int id, string? prenom, string? nom, int? age, int? niveauScolaireId, Sexe? sexe,
-            int? academieId = null, bool? lv2Espagnol = null, IEnumerable<string>? specialites = null)
+            int? academieId = null, bool? lv2Espagnol = null, IEnumerable<string>? specialites = null,
+            string? avatar = null)
         {
             var entite = await _context.Eleves.FirstOrDefaultAsync(e => e.Id == id);
             if (entite is null) return null;
@@ -2542,6 +2639,9 @@ GROUP BY parent_id";
             }
 
             if (sexe is not null and not Sexe.NonPrecise) entite.Sexe = sexe.Value;
+
+            // L'AVATAR, comme côté parent : null = pas de changement, chaîne vide = retour à celui par défaut.
+            if (avatar is not null) entite.Avatar = AvatarEnfant.Retenu(avatar);
 
             // Facultative comme côté parent : null veut dire « pas de
             // changement », jamais « à effacer » — même raison que

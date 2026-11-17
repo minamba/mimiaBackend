@@ -1,3 +1,4 @@
+using SchoolWebApp.Api.Middleware;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SchoolWebApp.Domain.Repositories;
@@ -151,8 +152,12 @@ namespace SchoolWebApp.Api.Controllers
         /// Les octets d'un visuel.
         /// </summary>
         /// <param name="format">« mobile » pour la version téléphone.</param>
+        // HORS SALLE D'ATTENTE (14/11/2026) : une balise <img> (ou un fetch nu) ne peut pas porter l'en-tête X-Billet ;
+        // la garde la refusait donc toujours (503), et le visuel restait cassé dès que la salle était active. Une image
+        // lue en base, revalidée par étiquette, ne coûte rien aux places de cours : elle passe, comme les fichiers du site.
         [HttpGet("{id:int}/image")]
         [AllowAnonymous]
+        [HorsSalleDAttente]
         [SwaggerResponse(200, "Le visuel.")]
         [SwaggerResponse(404, "Aucun visuel pour ce bandeau.")]
         public async Task<IActionResult> Image(

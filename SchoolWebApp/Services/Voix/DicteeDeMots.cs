@@ -296,13 +296,17 @@ namespace SchoolWebApp.Api.Services.Voix
         }
 
         /// <summary>Seule la dernière balise reste une voix sans texte : les autres, en pleine phrase, se lisent.</summary>
-        public static string GarderSeulementLaDerniereVoix(string texte)
+        public static string GarderSeulementLaDerniereVoix(string texte, string? motGarde = null)
         {
             var balises = BaliseDeVoix().Matches(texte);
             if (balises.Count < 2) return texte;
 
+            // LE MOT DE L'IMAGE, EN ANGLAIS, GARDE SA BALISE (07/11/2026) : Marine le dit avec l'accent. Jamais le dernier :
+            // celui-là est le son à juger (voir ImageAuTableau).
             var derniere = balises[^1];
-            return BaliseDeVoix().Replace(texte, m => m.Index == derniere.Index ? m.Value : m.Groups[2].Value);
+            return BaliseDeVoix().Replace(texte, m => m.Index == derniere.Index
+                || (motGarde is not null && string.Equals(Propre(m.Groups[2].Value), motGarde, StringComparison.OrdinalIgnoreCase))
+                ? m.Value : m.Groups[2].Value);
         }
 
         private static string CourtOuGarde(Match bloc) =>

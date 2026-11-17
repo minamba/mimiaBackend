@@ -72,6 +72,18 @@ namespace SchoolWebApp.Dal.Entities
         /// </summary>
         public int? ComplementDe { get; set; }
 
+        /// <summary>
+        /// UNE FICHE LIBRE (06/11/2026) : l'élève a écrit ou dicté son texte au lieu d'importer son cours. Gardé sur
+        /// le cours parce que ses pages, elles, s'effacent une fois les fiches faites.
+        /// </summary>
+        public bool Libre { get; set; }
+
+        /// <summary>
+        /// LA VOIX D'UN PODCAST DU PARENT (15/11/2026) : ses catégories n'ont pas de professeur, il en choisit un (le
+        /// code de `Matiere.ProfAvatar`). Vide pour un élève : c'est le professeur de la matière qui lit.
+        /// </summary>
+        public string? ProfAvatar { get; set; }
+
         /// <summary>Quand les pages ont été supprimées : à la fin du traitement.</summary>
         public DateTime? PagesEffaceesLe { get; set; }
 

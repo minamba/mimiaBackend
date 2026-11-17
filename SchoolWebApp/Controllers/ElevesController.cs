@@ -100,6 +100,24 @@ namespace SchoolWebApp.Api.Controllers
         }
 
         /// <summary>
+        /// LE PORTRAIT DE L'ENFANT (16/11/2026) — Camara : « quand un enfant se connecte, au lieu de la première
+        /// lettre, je veux que l'avatar de l'enfant s'affiche ». La barre du haut le lit : l'avatar choisi par le
+        /// parent (son code), le sexe et la classe pour l'avatar par défaut. Lu à chaque ouverture de l'espace :
+        /// un avatar changé par le parent apparaît sans que l'enfant ait à se reconnecter.
+        /// </summary>
+        [HttpGet("{id:int}/portrait")]
+        [SchoolWebApp.Api.Auth.AutoriseEleve]
+        [SwaggerResponse(200, "Le portrait de l'enfant.")]
+        [SwaggerResponse(404, "Profil inexistant ou n appartenant pas à ce compte.")]
+        public async Task<IActionResult> Portrait(int id, [FromServices] IChatContexteResolver resolveur)
+        {
+            var eleve = await resolveur.ResoudreEleveAsync(id);
+            if (eleve is null) return NotFound();
+
+            return Ok(new { eleve.Avatar, eleve.Sexe, eleve.NiveauCode });
+        }
+
+        /// <summary>
         /// LES RAPPORTS D'ORIENTATION DE L'ÉLÈVE (11/10/2026), le plus récent
         /// d'abord : un par séance avec la conseillère. L'élève et son parent les
         /// lisent. Rien quand la conseillère est éteinte.

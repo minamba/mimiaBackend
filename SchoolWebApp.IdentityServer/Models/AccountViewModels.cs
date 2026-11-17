@@ -64,6 +64,13 @@ namespace SchoolWebApp.IdentityServer.Models
         [Range(typeof(bool), "true", "true", ErrorMessage = "Cette confirmation est obligatoire.")]
         public bool ConfirmeResponsabiliteParentale { get; set; }
 
+        /// <summary>
+        /// Camara, le 08/11/2026 : obligatoire pour que l'inscription soit valide. Le libellé est écrit dans la vue : il
+        /// porte un lien vers les conditions.
+        /// </summary>
+        [Range(typeof(bool), "true", "true", ErrorMessage = "Vous devez accepter les conditions générales pour créer un compte.")]
+        public bool AccepteConditions { get; set; }
+
         public string? ReturnUrl { get; set; }
 
         public IList<string> FournisseursExternes { get; set; } = new List<string>();

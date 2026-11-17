@@ -50,6 +50,13 @@ namespace SchoolWebApp.Domain.Repositories
         /// <summary>Note que ce parent a vu le tutoriel. La première date reste.</summary>
         Task MarquerTutorielVuAsync(int parentId, CancellationToken ct = default);
 
+        /// <summary>Note que ce parent a vu le tutoriel de la fiche. La première date reste.</summary>
+        Task MarquerTutorielFicheVuAsync(int parentId, CancellationToken ct = default);
+        Task MarquerTutorielEnfantsVuAsync(int parentId, CancellationToken ct = default);
+
+        /// <summary>Note la version des conditions générales que ce parent accepte, et quand.</summary>
+        Task AccepterConditionsAsync(int parentId, string version, DateTime le, CancellationToken ct = default);
+
         /// <summary>
         /// Retient le client Stripe créé pour ce parent, à sa première visite
         /// de la caisse.

@@ -115,10 +115,20 @@ namespace SchoolWebApp.Api.Services.Paiement
                     $"paiement unique {tarif.UnitAmount / 100.0:0.00} €"));
             }
 
-            foreach (var pack in await _fiches.GetOffresAsync(ct))
+            // LES PACKS DES DEUX NATURES (15/11/2026) : fiches, puis podcasts — le filtre de la base ne montre que celle
+            // qu'on pose.
+            var packsDesNatures = new List<(string Nature, OffreFichesTarif Pack)>();
+            foreach (var nature in new[] { NaturesCours.Fiches, NaturesCours.Podcasts })
             {
+                _fiches.Nature = nature;
+                packsDesNatures.AddRange((await _fiches.GetOffresAsync(ct)).Select(p => (nature, p)));
+            }
+
+            foreach (var (nature, pack) in packsDesNatures)
+            {
+                _fiches.Nature = nature;
                 var produit = await TrouverOuCreerProduitAsync(
-                    produits, $"fiches-{pack.Code.ToLowerInvariant()}", pack.Libelle ?? pack.Code, ct);
+                    produits, $"{nature}-{pack.Code.ToLowerInvariant()}", pack.Libelle ?? pack.Code, ct);
 
                 // LE NOM SUIT LA BASE : c'est lui que le parent lit sur la page de
                 // paiement. Les packs du 15/10 s'appelaient « 10 fiches » alors

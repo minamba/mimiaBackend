@@ -61,14 +61,17 @@ namespace SchoolWebApp.Api.Services.Voix
         /// <see cref="CompteurGemini"/>). Niveau 1 le 28/09/2026 : 10 requêtes par
         /// minute, 10 000 jetons d'entrée par minute, 100 requêtes par jour. Au
         /// Niveau 2 : 1 000, 100 000 et 10 000 — à reporter ici le jour du passage.
+        /// PASSÉ AU NIVEAU 2 — Camara, le 11/11/2026 : « le quota n'est plus de 100
+        /// mais de 10 000 » (la carte affichait 514 / 100). Les deux limites à la
+        /// minute suivent le même niveau, d'après la note ci-dessus.
         /// Elles ne freinent rien : c'est Google qui freine, elles ne font que
         /// mesurer.
         /// </summary>
-        public int GeminiLimiteRequetesMinute { get; set; } = 10;
+        public int GeminiLimiteRequetesMinute { get; set; } = 1_000;
 
-        public int GeminiLimiteJetonsMinute { get; set; } = 10_000;
+        public int GeminiLimiteJetonsMinute { get; set; } = 100_000;
 
-        public int GeminiLimiteRequetesJour { get; set; } = 100;
+        public int GeminiLimiteRequetesJour { get; set; } = 10_000;
 
         /// <summary>
         /// Longueur maximale d'une requête. Chaque appel est facturé : sans

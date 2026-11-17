@@ -23,7 +23,7 @@ namespace SchoolWebApp.Api.Services.ScanMobile
     /// Où va la photo : une séance (<see cref="ConversationId"/>), ou le cours
     /// d'un contrôle (<see cref="ControleId"/>, depuis le 26/09/2026).
     /// </summary>
-    public record DestinationScan(int ConversationId, int? ControleId, int EleveId, int? CoursImporteId = null);
+    public record DestinationScan(int ConversationId, int? ControleId, int EleveId, int? CoursImporteId = null, string? NatureCours = null);
 
     /// <summary>
     /// LES QR CODES DU SCANNER, LE TEMPS QU'ILS SERVENT.
@@ -74,6 +74,9 @@ namespace SchoolWebApp.Api.Services.ScanMobile
 
             /// <summary>Le cours importé pour des fiches de révision (14/10/2026), troisième destination.</summary>
             public int? CoursImporteId { get; init; }
+
+            /// <summary>Fiches ou podcasts (15/11/2026) : le cours importé appartient à l'un des deux.</summary>
+            public string? NatureCours { get; init; }
             public int EleveId { get; init; }
             public string? ProfPrenom { get; init; }
             public string? Matiere { get; init; }
@@ -151,7 +154,7 @@ namespace SchoolWebApp.Api.Services.ScanMobile
                 if (entree!.Termine || entree.EnCours || entree.PiecesJointes.Count >= PiecesMax) return false;
 
                 entree.EnCours = true;
-                destination = new DestinationScan(entree.ConversationId, entree.ControleId, entree.EleveId, entree.CoursImporteId);
+                destination = new DestinationScan(entree.ConversationId, entree.ControleId, entree.EleveId, entree.CoursImporteId, entree.NatureCours);
                 return true;
             }
         }
@@ -197,7 +200,7 @@ namespace SchoolWebApp.Api.Services.ScanMobile
         /// par cours, celui qui n'a rien reçu est remplacé.
         /// </summary>
         public (string Jeton, DateTime ExpireLe) CreerPourCoursImporte(
-            int eleveId, int coursId, string? matiere, DateTime maintenant)
+            int eleveId, int coursId, string? matiere, DateTime maintenant, string? nature = null)
         {
             Nettoyer(maintenant);
 
@@ -217,6 +220,7 @@ namespace SchoolWebApp.Api.Services.ScanMobile
                 _entrees[AuthentificationEleve.Hacher(jeton)] = new Entree
                 {
                     CoursImporteId = coursId,
+                    NatureCours = nature,
                     EleveId = eleveId,
                     Matiere = matiere,
                     ExpireLe = expireLe,

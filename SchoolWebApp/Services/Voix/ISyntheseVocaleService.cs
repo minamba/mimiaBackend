@@ -82,9 +82,13 @@ namespace SchoolWebApp.Api.Services.Voix
         /// l'enfant porte aussi dans son jeton. Null : la dépense est comptée
         /// sans famille.
         /// </param>
+        /// <param name="origine">
+        /// L'origine notée au journal des appels : `voix` par défaut (la parole des cours). Les podcasts passent la leur
+        /// (15/11/2026, Camara : « je veux une ligne podcasts… ça ne vient pas de la discussion avec les élèves »).
+        /// </param>
         Task CopierAudioAsync(
             string texte, string? avatar, int age, Stream destination,
             bool dictee = false, string? langue = null, string? vitesse = null,
-            string? reference = null, CancellationToken ct = default);
+            string? reference = null, CancellationToken ct = default, string? origine = null);
     }
 }

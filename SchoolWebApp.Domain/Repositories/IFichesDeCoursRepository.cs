@@ -11,6 +11,21 @@ namespace SchoolWebApp.Domain.Repositories
     /// </summary>
     public interface IFichesDeCoursRepository
     {
+        /// <summary>
+        /// FICHES OU PODCASTS (15/11/2026) — voir `NaturesCours`. Toute la portée (dépôts, quota, tâche de fond) ne voit
+        /// que les cours, épisodes, décomptes, crédits et packs de cette nature. « fiches » par défaut.
+        /// </summary>
+        string Nature { get; set; }
+
+        /// <summary>Parmi ces cours, ceux qui existent encore (de la nature courante) — le ménage du disque des podcasts.</summary>
+        Task<IReadOnlySet<int>> CoursExistantsAsync(IReadOnlyCollection<int> ids, CancellationToken ct = default);
+
+        /// <summary>PODCASTS DU PARENT (15/11/2026) : les professeurs qu'il peut choisir, un par voix.</summary>
+        Task<IReadOnlyList<ProfesseurPodcast>> ProfesseursAsync(CancellationToken ct = default);
+
+        /// <summary>PODCASTS DU PARENT (15/11/2026) : la voix choisie, posée sur un brouillon à lui.</summary>
+        Task<bool> DefinirProfAsync(Proprietaire proprietaire, int coursId, string? avatar, CancellationToken ct = default);
+
         /// <summary>Le rang de sa classe : 1 = CP … 12 = terminale ; 0 si inconnu.</summary>
         Task<int> RangDeLEleveAsync(int eleveId, CancellationToken ct = default);
 

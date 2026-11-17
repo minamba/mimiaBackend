@@ -14,6 +14,9 @@ namespace SchoolWebApp.Api.ViewModels
 
         public Sexe Sexe { get; set; }
 
+        /// <summary>L'avatar choisi par le parent (code du catalogue du front) ; null = celui par défaut.</summary>
+        public string? Avatar { get; set; }
+
         public int NiveauScolaireId { get; set; }
 
         public string? NiveauCode { get; set; }

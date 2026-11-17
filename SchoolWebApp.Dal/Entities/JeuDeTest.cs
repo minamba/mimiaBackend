@@ -62,10 +62,19 @@ namespace SchoolWebApp.Dal.Entities
 
         public DateTime DateCreation { get; set; }
 
-        /// <summary>Choisie à la main, sans heure.</summary>
+        /// <summary>
+        /// AVEC L'HEURE depuis le 06/11/2026 (Camara) : posée à l'heure de France dès qu'un élément de la ligne change.
+        /// Seules les dates choisies autrefois au calendrier n'ont pas d'heure.
+        /// </summary>
         public DateTime? DateEffectuee { get; set; }
 
         public string? Commentaire { get; set; }
+
+        /// <summary>
+        /// SA PLACE DANS LE TEST, une fois qu'on a déplacé une ligne du test (Camara, 08/11/2026). Vide : jamais déplacée,
+        /// la date de création décide, et elle passe avant les lignes placées. Voir JeuxDeTestsRepository.DansLOrdre.
+        /// </summary>
+        public int? Position { get; set; }
 
         public virtual TestDuJeu? Test { get; set; }
     }

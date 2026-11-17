@@ -26,7 +26,7 @@ namespace SchoolWebApp.Api.Services.Voix
     /// et 32 s. Flash (au-dessus) démarrait plus lentement (1,2 à 1,9 s) pour un coût
     /// supérieur d'environ 50 %.
     /// </summary>
-    internal static class SyntheseGemini
+    internal static partial class SyntheseGemini
     {
         private const string Base = "https://generativelanguage.googleapis.com/v1beta/models/";
 
@@ -410,9 +410,32 @@ namespace SchoolWebApp.Api.Services.Voix
 
         private const int LettresPhraseSupport = 16;
 
+        /// <summary>
+        /// « QUESTION 1 : » FAIT LIRE LA CONSIGNE EN ANGLAIS — Camara, le 11/11/2026, conversation 14 : Miyah demande à
+        /// Salim « Pourquoi vous parlez anglais ? » alors que son texte était tout en français. Mesuré sur la phrase exacte
+        /// (« Question 1 : qu'est-ce qui change… »), 20 prises : 6 fois Gemini lit à voix haute nos notes de mise en scène
+        /// (« Audio profile, Salim, a warm French male private tutor… »), 15 fois il dérape. Une étiquette suivie de deux
+        /// points ressemble aux en-têtes de la consigne (« AUDIO PROFILE: »), et le modèle se croit encore dedans.
+        ///
+        /// Mêmes 20 prises avec « Question 1, » : 19 propres, aucune consigne lue. Une ligne « ne lis que le texte » faisait
+        /// PIRE (8 propres sur 20, 4 lectures de la consigne) : on n'en met pas. La voix seule change ; l'écran garde ses
+        /// deux-points.
+        ///
+        /// ÉTROIT : une étiquette d'un à trois mots en TÊTE de phrase (« Question 1 : », « Exercice 2 : », « Indice : »).
+        /// Les deux-points au milieu d'une phrase ne sont pas touchés : ils n'ont pas été mesurés.
+        /// </summary>
+        internal static string SansEtiquetteADeuxPoints(string texte) =>
+            EtiquetteEnTete().Replace(texte, "$1$2, ");
+
+        [System.Text.RegularExpressions.GeneratedRegex(@"(^\s*|[.!?…]\s+)((?:\p{L}+[\s'’-]+){0,2}[\p{L}\d]+)\s*:\s+")]
+        private static partial System.Text.RegularExpressions.Regex EtiquetteEnTete();
+
         internal static string Habiller(
             string texte, string? avatar, int age, bool dictee, string? langue, string? vitesse)
         {
+            // Hors dictée et passage d'écoute : leurs textes se lisent tels quels.
+            if (!dictee && langue is null) texte = SansEtiquetteADeuxPoints(texte);
+
             var prenom = string.IsNullOrWhiteSpace(avatar)
                 ? "The tutor"
                 : char.ToUpperInvariant(avatar[0]) + avatar[1..];

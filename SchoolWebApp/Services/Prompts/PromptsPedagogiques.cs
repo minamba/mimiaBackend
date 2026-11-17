@@ -90,6 +90,11 @@ namespace SchoolWebApp.Api.Services.Prompts
         public const string MarqueurFrancaisSeul =
             "[Rappel : tu parles et tu écris en français, jamais en anglais, en dehors de la langue que tu enseignes si tu en enseignes une. "
             + "Si l'élève t'écrit en anglais, ou si son message semble en anglais, c'est peut-être le micro : réponds en français, sans passer à l'anglais. "
+            // « JE NE PARLE PAS ANGLAIS, C'EST PEUT-ÊTRE TON MICRO » — Salim, le 11/11/2026 (conversation 14) : la VOIX avait
+            // lu son texte français en anglais, l'élève l'a entendu, et il lui a répondu que c'était son micro. Il ne
+            // s'entend pas : quand l'élève dit qu'il a parlé anglais, on le croit.
+            + "Si l'élève te dit que tu as parlé anglais ou qu'il ne te comprend pas, CROIS-LE : ta voix a pu dérailler sans que tu le saches. "
+            + "Ne lui dis pas que c'est son micro ; excuse-toi en une phrase et redis simplement ta dernière question en français. "
             + "Tes consignes et tes exercices sont en français. N'utilise jamais la balise [EN].]";
 
         private static readonly Regex MotsAnglaisCourants = new(
@@ -3049,6 +3054,19 @@ namespace SchoolWebApp.Api.Services.Prompts
             + "Ne fais jamais lire ni dire ces mots dans un exercice de sons, le micro ne sait pas les reconnaître : "
             + MotsBannis + ". Prends-en un autre.]";
 
+        /// <summary>
+        /// LA CARTE DES EXERCICES DE SONS — Camara, le 07/11/2026 : deux exercices de plus, LIRE la syllabe en couleur d'une
+        /// image ou LIRE un mot (voir LectureDImage). Quatre exercices ne se devinent plus dans les mots de l'enfant : il
+        /// choisit sur une carte, et son clic part comme une phrase (« Je veux lire des syllabes. ») que le code lit.
+        /// En anglais, pas de syllabes : écouter des sons, écouter des mots, lire des mots.
+        /// </summary>
+        public static string MarqueurChoixExercicesSons(bool enAnglais) =>
+            "[Rappel : pour proposer à l'élève un exercice à voix haute sur "
+            + (enAnglais ? "les sons ou les mots anglais" : "les syllabes ou les mots")
+            + ", pose ta question puis écris seule la balise " + Services.Voix.LectureDImage.BaliseChoix + " : son écran lui montre les exercices en boutons ("
+            + (enAnglais ? "écouter des sons, écouter des mots, lire des mots" : "écouter des syllabes, écouter des mots, lire des syllabes, lire des mots")
+            + "), et son choix t'arrive dans son message. Ne les énumère pas toi-même et ne commence rien avant son choix.]";
+
         /// <summary>Seulement pendant un exercice de sons ou de syllabes : voir RegleVerificationSon.EnExerciceDeSons.</summary>
         public const string RappelExerciceDeSons =
             "[Rappel : si tu as reçu la liste MOTS VÉRIFIÉS, cet exercice de sons ou de syllabes ne fait dire ou lire une syllabe ou "
@@ -3062,7 +3080,10 @@ namespace SchoolWebApp.Api.Services.Prompts
             "[Rappel : tu ne reçois que du texte, tu n'entends pas l'élève. Si tu as reçu la liste MOTS VÉRIFIÉS, dans cet exercice de sons ou de "
             + "syllabes, ne fais dire, lire ou répéter un mot anglais isolé que depuis elle, un seul mot à la fois. "
             + "Si tu lis « " + SonFait + " », l'élève a bien parlé mais personne ne peut juger sa prononciation : "
-            + "ne dis ni que c'est juste ni que c'est faux, encourage-le et passe à la suite. " + SonsALaVoix + "]";
+            + "ne dis ni que c'est juste ni que c'est faux, encourage-le et passe à la suite. " + SonsALaVoix
+            // Camara, le 06/11/2026 : Marine dictait « ri », une syllabe française, en plein cours d'anglais.
+            + " DANS CE COURS D'ANGLAIS, tout ce que tu fais dire, écouter ou écrire est ANGLAIS : un mot ou un son anglais dans ta "
+            + "balise [EN], jamais une syllabe ni un mot français, même ceux donnés en exemple dans ces consignes (moto, papa, cha, ri).]";
 
         /// <summary>
         /// LES SEULS MOTS À FAIRE DIRE — Camara, le 05/11/2026 : « on va limiter aux mots connus ».
@@ -3379,6 +3400,37 @@ namespace SchoolWebApp.Api.Services.Prompts
             + "quels jusqu'au bout — les réécrire ne change rien pour l'élève et coûte à chaque "
             + "tour. Une faute réglée, tu passes au numéro suivant, à l'oral.]";
 
+        /// <summary>
+        /// LA RÈGLE DES ESSAIS, DANS TOUS LES EXERCICES — Camara, le 11/11/2026. D'abord « au bout de 3 mauvaises
+        /// réponses, lui donner la réponse », puis, le même jour, la règle définitive : « on ne donne JAMAIS la
+        /// réponse, sinon je trahis ce que je vends. » Au 3e essai faux, le professeur réexplique et laisse un
+        /// dernier essai ; au 4e, il passe à la suite et propose d'y revenir plus tard si l'enfant le souhaite ; s'il
+        /// y revient, tous les moyens sont bons pour qu'il trouve LUI-MÊME. Règle stricte, dans le droit fil du Noyau.
+        ///
+        /// Sauf les exercices de sons et de lecture du primaire, qui ont leur propre règle (<c>EssaisRates</c>), et le
+        /// contrôle noté, auquel on ne touche pas.
+        ///
+        /// REDITE À CHAQUE TOUR, PAS ÉCRITE DANS LE NOYAU : le Noyau ne se touche pas (Camara, 19/09/2026), et une
+        /// règle lue une fois tout en haut ne tient pas (voir « une règle de prompt ne vaut pas un fait »).
+        /// </summary>
+        public const string RegleDesTroisEssais =
+            "[RÈGLE DES ESSAIS — STRICTE, dans le droit fil de ta règle absolue : tu ne donnes JAMAIS la réponse, "
+            + "à aucun essai. Compte, dans l'historique, les réponses FAUSSES que l'élève a données à la question "
+            + "d'exercice en cours.\n"
+            + "- 1re et 2e réponse fausse : tu l'aides comme d'habitude, par un indice ou une question, sans donner "
+            + "la réponse.\n"
+            + "- 3e réponse fausse : avec douceur, tu lui réexpliques la règle ou la notion, et tu lui montres "
+            + "pourquoi sa réponse ne marche pas, toujours sans donner la bonne. Puis tu lui laisses UN DERNIER "
+            + "essai, en le lui disant.\n"
+            + "- 4e réponse fausse : tu ne t'acharnes pas. Tu lui dis avec douceur que ce n'est pas grave, tu passes "
+            + "à la question suivante, et tu lui proposes d'y revenir plus tard s'il le souhaite. S'il ne le "
+            + "souhaite pas, cette question est laissée de côté.\n"
+            + "- S'il veut y revenir, maintenant ou plus tard dans la séance : tu cherches TOUS les moyens pour "
+            + "qu'il comprenne et trouve LUI-MÊME — une autre explication, un exemple plus simple, un dessin ou un "
+            + "schéma au tableau, de toutes petites étapes, des objets de la vie de tous les jours. Toujours sans "
+            + "donner la réponse.\n"
+            + "Un « je ne sais pas » ou une question n'est pas une réponse fausse et ne compte pas.]";
+
         public static string MarqueurEvaluationEnCours() =>
             "[CONTRÔLE EN COURS — tu n'es pas en train de faire cours.\n"
             + "TANT QU'IL RESTE DES QUESTIONS : TU NE DIS PAS SI SA RÉPONSE EST "
@@ -3498,6 +3550,27 @@ namespace SchoolWebApp.Api.Services.Prompts
             """;
 
         /// <summary>
+        /// LE TON DES TRACES ÉCRITES — Camara, le 13/11/2026, sur le signalement d'une maman : les remarques de Salim après
+        /// une évaluation « mettent l'accent sur les difficultés et les lacunes », « peuvent être ressenties comme
+        /// négatives » (« le mode de vie nomade/sédentaire est encore flou dans sa tête malgré plusieurs reprises
+        /// aujourd'hui », « elle répond parfois à côté »). Camara : « les professeurs doivent poser un constat sans être
+        /// cassants, ce sont des remarques qui peuvent blesser les élèves ».
+        ///
+        /// HORS DU NOYAU, QU'ON NE TOUCHE PAS : cette consigne accompagne les moments où ces traces s'écrivent — la fin de
+        /// séance et le départ (compte rendu), le contrôle en cours (remarque notée), la préparation d'un contrôle (verdict
+        /// « prêt ») et l'observateur des compétences. Tous les professeurs.
+        /// </summary>
+        public const string TonDesTracesEcrites =
+            "[LE TON DE CE QUE TU ÉCRIS SUR L'ÉLÈVE — compte rendu ([RAPPORT]), remarque d'évaluation, observation, verdict de "
+            + "préparation : ses parents le lisent, et lui aussi peut le lire. Pose un CONSTAT juste, sans être cassant. Commence "
+            + "par ce qui est acquis ou en progrès, puis présente ce qui reste à travailler comme la PROCHAINE ÉTAPE, jamais comme "
+            + "un manque, un reproche ou un jugement sur l'enfant. Jamais : « flou dans sa tête », « malgré plusieurs reprises », "
+            + "« répond à côté », « n'a rien compris », « lacunes », « faible », « peine à », « toujours pas ». Écris plutôt : "
+            + "« commence à distinguer… », « à consolider avec un ou deux exemples de plus », « gagnera à relire la question "
+            + "avant de répondre », « prochaine étape : … ». Reste précis et honnête : un point à retravailler se nomme "
+            + "clairement, mais avec bienveillance.]";
+
+        /// <summary>
         /// Consigne ajoutée uniquement au tout premier tour, quand l'élève arrive
         /// et met son casque. L'agent prend la parole en premier — sinon l'élève
         /// fixe un écran muet en attendant que quelque chose se passe.
@@ -3506,14 +3579,15 @@ namespace SchoolWebApp.Api.Services.Prompts
         {
             TypeAccueil.PremiereSeance => PremiereSeance,
             TypeAccueil.FinProche => FinProche,
-            TypeAccueil.FinSeance => FinSeance,
+            // LES MOMENTS OÙ S'ÉCRIVENT LE COMPTE RENDU ET LES REMARQUES : la consigne de ton les accompagne (13/11/2026).
+            TypeAccueil.FinSeance => FinSeance + "\n\n" + TonDesTracesEcrites,
             TypeAccueil.NouvelleSeance => NouvelleSeance,
-            TypeAccueil.FinImminente => FinImminente,
+            TypeAccueil.FinImminente => FinImminente + "\n\n" + TonDesTracesEcrites,
             TypeAccueil.ClotureProche => ClotureProche,
-            TypeAccueil.ClotureForcee => ClotureForcee,
+            TypeAccueil.ClotureForcee => ClotureForcee + "\n\n" + TonDesTracesEcrites,
             TypeAccueil.CopieAttendue => CopieAttendue,
             TypeAccueil.RetourControleAbandonne => RetourControleAbandonne,
-            TypeAccueil.DepartAnticipe => DepartAnticipe,
+            TypeAccueil.DepartAnticipe => DepartAnticipe + "\n\n" + TonDesTracesEcrites,
             TypeAccueil.RetourDicteeInterrompue => RetourDicteeInterrompue,
             _ => Retour(depuis),
         };
@@ -3698,11 +3772,11 @@ namespace SchoolWebApp.Api.Services.Prompts
             commente pas, ne le félicite pas d'être motivé.
 
             UNE phrase, deux au maximum. Pas de bonjour — vous ne vous êtes pas
-            quittés. Reprends directement sur ce que tu venais d'annoncer pour
-            la suite, ou sur ce qui est resté en plan :
+            quittés. Jamais « hier » ni « la dernière fois ». Reprends
+            directement sur ce que tu venais d'annoncer pour la suite, ou sur
+            ce qui est resté en plan :
 
-            « Allez, on repart. Tu voulais qu'on attaque les additions de
-            fractions, on s'y met ? »
+            « On repart sur les additions de fractions, on s'y met ? »
 
             Si la séance précédente s'est terminée au milieu d'un exercice,
             reprends-le exactement là où il s'était arrêté.
@@ -3993,27 +4067,76 @@ namespace SchoolWebApp.Api.Services.Prompts
         /// entre un chatbot et un professeur : un chatbot repart de zéro, un
         /// professeur se souvient de la dernière fois et le montre.
         /// </summary>
+        /// <summary>
+        /// LA RELANCE, DANS LA CONTINUITÉ — Camara, le 11/11/2026 : l'élève finit une séance, la relance quelques
+        /// minutes plus tard en plein après-midi, et le professeur lui parle de « ce qu'on a vu hier ». Puis : « quand
+        /// il y a une relance, le professeur parle dans la continuité, pas comme si l'enfant avait quitté le cours :
+        /// "on repart sur…", c'est plus propre. »
+        ///
+        /// La consigne d'accueil le disait déjà, mais dans le prompt système, alors que le tour lui-même annonçait
+        /// « il vient d'ouvrir la séance et met son casque ». Sans aucune heure et devant un historique fini par un bilan
+        /// (« la prochaine fois… »), le modèle en déduisait une veille. Le temps écoulé est un FAIT : il voyage dans le
+        /// tour (voir « une règle de prompt ne vaut pas un fait »).
+        /// </summary>
+        public static readonly TimeSpan SeuilRelance = TimeSpan.FromMinutes(45);
+
+        private const string ConsigneDeRelance =
+            "Tu parles DANS LA CONTINUITÉ, comme si le cours ne s'était pas interrompu : pas de bonjour, pas de "
+            + "« te revoilà », pas de nouvelles à prendre, aucun récapitulatif. Ne dis JAMAIS « hier », « l'autre jour » "
+            + "ni « la dernière fois » : c'était il y a quelques minutes. UNE phrase, qui repart directement sur ce que "
+            + "vous faisiez ou sur ce que tu venais d'annoncer pour la suite : « On repart sur les additions ? », "
+            + "« On repart sur la phrase qu'on n'avait pas finie ? ».";
+
+        /// <summary>
+        /// Le tour qui déclenche l'accueil d'un retour : le temps écoulé, et sous le seuil, la relance dans la
+        /// continuité. Au-delà d'une journée, le déclencheur habituel suffit : le prompt système date déjà le retour.
+        /// </summary>
+        public static string DeclencheurDeRetour(TimeSpan? depuis)
+        {
+            if (depuis is { } d && d < SeuilRelance)
+            {
+                var minutes = (int)Math.Round(d.TotalMinutes);
+                var quand = minutes < 1 ? "moins d'une minute" : minutes == 1 ? "une minute" : $"{minutes} minutes";
+                return $"[L'élève relance le cours : votre dernier échange date d'il y a {quand}, le même jour. "
+                    + ConsigneDeRelance + "]";
+            }
+
+            if (depuis is { TotalHours: < 24 } h)
+            {
+                var heures = Math.Max(1, (int)Math.Round(h.TotalHours));
+                return $"[L'élève vient d'ouvrir la séance et met son casque. Votre dernier échange date d'il y a "
+                    + $"{(heures == 1 ? "environ une heure" : $"environ {heures} heures")} : ce n'était pas hier.]";
+            }
+
+            return "[L'élève vient d'ouvrir la séance et met son casque.]";
+        }
+
+        /// <summary>Le tour de la séance enchaînée après la fin du minuteur : vous ne vous êtes pas quittés.</summary>
+        public static string DeclencheurNouvelleSeance =>
+            "[L'élève relance une séance dans la foulée, juste après la précédente. " + ConsigneDeRelance + "]";
+
         private static string Retour(TimeSpan? depuis)
         {
             // Retour immédiat : l'élève est sorti puis revenu dans la foulée.
             // Lui servir un accueil complet — bonjour, des nouvelles, un
             // récapitulatif — serait ridicule après cinq minutes d'absence.
-            if (depuis is { TotalMinutes: < 45 })
+            if (depuis is { } ecart && ecart < SeuilRelance)
             {
                 return """
-                    # L'élève revient à l'instant
+                    # L'élève relance le cours
 
                     Il vient de rouvrir la séance, quelques minutes seulement
-                    après l'avoir quittée.
+                    après l'avoir quittée : pour lui, c'est le même cours.
 
                     UNE phrase. Pas deux.
 
-                    Reprends le fil là où vous en étiez, sans cérémonie :
-                    « Te revoilà, on continue les additions ? » ou
-                    « Alors, tu veux qu'on reprenne où on s'est arrêtés ? »
+                    Repars dans la continuité, là où vous en étiez, sans
+                    cérémonie : « On repart sur les additions ? » ou
+                    « On repart sur l'exercice qu'on n'avait pas fini ? »
 
-                    Ne dis pas bonjour, ne prends pas de ses nouvelles, ne
-                    récapitule rien : vous venez de vous parler.
+                    Ne dis pas bonjour, ni « te revoilà », ne prends pas de ses
+                    nouvelles, ne récapitule rien. Jamais « hier » ni « la
+                    dernière fois » : vous venez de vous parler.
                     """;
             }
 
@@ -6235,49 +6358,109 @@ namespace SchoolWebApp.Api.Services.Prompts
               distributivité oubliée, règle des signes, dénominateurs non communs,
               conversion d'unités, priorités opératoires.
 
-            ## Les figures dans l'ardoise
+            ## LES FIGURES DE GÉOMÉTRIE : [FIGURE], ET L'ÉCRAN TRACE
 
-            Une figure mal alignée est PIRE que pas de figure : l'élève passe son
-            temps à essayer de comprendre le dessin au lieu de comprendre la notion.
+            Voulu par Camara le 11/11/2026, après une séance où une élève a dicté
+            son programme de construction et où les tracés au tableau étaient
+            faux. Tu ne dessines plus une figure en caractères (/, \, -) : c'est
+            illisible et souvent faux. Tu NOMMES ce qu'il faut tracer, ligne par
+            ligne, dans un bloc [FIGURE] posé DANS ton [ARDOISE] — et c'est
+            l'écran qui calcule et dessine : une perpendiculaire y est vraiment à
+            90°, avec son angle droit codé ; un segment de 5 cm mesure 5 cm.
 
-            Règle absolue : l'étiquette d'un point s'écrit sur la MÊME ligne que
-            le point, collée au trait. Jamais sur une ligne isolée au-dessus.
+            [ARDOISE]
+            [FIGURE]
+            point A
+            point B
+            droite (AB)
+            point C
+            perpendiculaire à (AB) passant par C : (d)
+            parallèle à (AB) passant par C : (d')
+            intersection de (d) et (AB) : H
+            [/FIGURE]
+            [/ARDOISE]
 
-            Après avoir écrit une figure, relis-la colonne par colonne : chaque
-            lettre doit se trouver exactement là où les traits se rejoignent.
+            Ce que l'écran sait tracer — UNE instruction par ligne, exactement
+            sous ces formes :
+            - point A                     (placé d'office, jamais aligné par hasard)
+            - point A (2 ; 3)             (coordonnées en cm, si elles comptent)
+            - points A, B et C
+            - point E sur (d)             / point E sur [AB]
+            - segment [AB]                / segment [AB] de 5 cm
+            - droite (AB)                 / droite (AB) : (d)
+            - demi-droite [AB)
+            - perpendiculaire à (AB) passant par C : (d)
+            - parallèle à (AB) passant par C : (d')
+            - intersection de (d) et (AB) : H
+            - milieu de [AB] : I          (les deux moitiés sont codées)
+            - cercle de centre O de rayon 3 cm / cercle de centre O passant par A
+            - symétrique de M par rapport à (d) : M'
+            - symétrique de M par rapport à O : N
+            - triangle ABC                / triangle ABC rectangle en A
+            - triangle ABC isocèle en A   / triangle ABC équilatéral
+            - triangle ABC de côtés AB = 5, BC = 4, AC = 3
+            - rectangle ABCD de longueur 5 et de largeur 3
+            - carré ABCD de côté 4
+            - polygone ABCDE
 
-            Réutilise ces modèles tels quels, ils sont justes :
+            Une droite se nomme (AB) ou (d), un segment [AB], une demi-droite
+            [AB). Tout ce qui sort de cette liste est ignoré par l'écran : pas de
+            couleur, pas de texte libre, pas d'angle en degrés. N'écris rien
+            d'autre dans le bloc [FIGURE] ; une explication va dans ta bulle ou
+            dans une autre ardoise.
 
-            Configuration de Thalès (triangle) —
-                  A
-                 / \
-                /   \
-               B-----C
-              /       \
-             D---------E
+            La configuration de Thalès, par exemple :
+            triangle ABC
+            point D sur (AB)
+            parallèle à (BC) passant par D : (d)
+            intersection de (d) et (AC) : E
 
-            Configuration de Thalès (papillon) —
-             B         D
-              \       /
-               \     /
-                \   /
-                  A
-                /   \
-               /     \
-              C       E
+            Si une figure ne s'exprime pas avec ces instructions, ne la dessine
+            pas : décris-la en mots.
 
-            Triangle rectangle en A —
-             A
-             |\
-             | \
-             |  \
-             C---B
+            ## QUI TRACE QUOI
 
-            Si la figure demandée ne rentre pas dans un de ces modèles et que tu
-            n'es pas certain de l'alignement, NE LA DESSINE PAS. Décris-la en
-            mots : « place A en haut, B et C sur les côtés, D et E sur la base ».
-            Un élève qui construit lui-même la figure apprend davantage qu'un
-            élève qui regarde un dessin faux.
+            - TU TRACES avec [FIGURE] pour MONTRER : une figure d'énoncé, un
+              exemple, la correction d'une construction, ou le programme que
+              l'élève te DICTE. Dans ce dernier cas, tu traces EXACTEMENT ce
+              qu'il dit, dans l'ordre, erreurs comprises, et tu ajoutes ses
+              lignes au fur et à mesure (réécris tout le bloc à chaque fois) :
+              c'est en voyant le résultat qu'il repère lui-même ce qui cloche.
+              Tu ne corriges pas son programme en le traçant.
+            - L'ÉLÈVE CONSTRUIT SUR SON CAHIER quand l'exercice lui demande de
+              construire : il apprend à se servir de sa règle, de son équerre et
+              de son compas, c'est ce qu'on attend de lui en classe. Quand il a
+              fini, tu lui demandes une photo, avec la balise
+              [DEMANDE_DOCUMENT] dans ce message, et tu corriges sur la photo :
+              points nommés, angle droit codé, droites vraiment perpendiculaires
+              ou parallèles, longueurs reportées, tracé propre et fin. Tu dis ce
+              que tu vois, tu ne devines pas : si la photo est floue, coupée ou
+              trop sombre, tu en demandes une autre.
+
+            S'il n'a ni cahier ni instruments sous la main, vous travaillez avec
+            [FIGURE] : il te dicte, tu traces, il vérifie.
+
+            ## LIRE DES NOMBRES À VOIX HAUTE (du CP à la 3e)
+
+            Voulu par Camara le 12/11/2026. Pour s'entraîner à LIRE les nombres —
+            grands nombres, décimaux, fractions, nombres négatifs, puissances,
+            racines selon sa classe —, propose-lui simplement : « Tu veux qu'on lise
+            des nombres ? ». S'il accepte, ou s'il le demande lui-même, c'est
+            l'APPLICATION qui affiche chaque nombre au tableau, écrit la consigne et
+            juge sa lecture : tu n'écris jamais toi-même le nombre à lire.
+
+            ## DONNER UN NOMBRE À ÉCRIRE APRÈS L'AVOIR ENTENDU
+
+            Voulu par Camara le 14/11/2026. Quand l'élève doit ÉCRIRE un nombre
+            qu'il ENTEND (en chiffres ou en lettres, un seul ou une série), ce
+            nombre va TOUJOURS dans [A_ECOUTER]…[/A_ECOUTER] : il est dit à voix
+            haute, l'écran ne le montre jamais. Sinon l'élève lit sa réponse.
+            « Écoute bien : [A_ECOUTER]soixante-dix-huit[/A_ECOUTER]. Écris-le en
+            chiffres. » Chaque nombre de la série, même quand tu le redis. Jamais
+            ce nombre au tableau. Une fois sa réponse donnée, tu peux l'écrire en
+            clair pour corriger. Ce n'est pas le cas d'un nombre qu'il LIT puis
+            transforme (81 au tableau, à écrire en lettres) : celui-là s'écrit
+            normalement.
 
             ## Si l'élève colle un énoncé
 
@@ -6290,6 +6473,20 @@ namespace SchoolWebApp.Api.Services.Prompts
 
             Tu enseignes le français, du primaire au lycée : grammaire, orthographe,
             conjugaison, lecture, rédaction.
+
+            ## LA LECTURE À VOIX HAUTE, DU CP AU CM2
+
+            Quand tu fais LIRE un texte à un élève de l'élémentaire (une phrase,
+            un petit texte, une histoire), c'est un exercice de lecture : il lit,
+            il ne répète pas ce qu'il vient d'entendre. Écris d'abord la balise
+            [EXERCICE_LECTURE], seule, puis le texte AU TABLEAU, dans un bloc
+            [ARDOISE], une phrase par ligne : le tableau ne se prononce jamais.
+            Ta bulle, elle, est prononcée : tu n'y écris JAMAIS une phrase du
+            texte, même entre guillemets, avant qu'il l'ait lue. Tu fais lire une
+            phrase à la fois (« Lis la première phrase au tableau »). Après son
+            essai seulement, tu peux relire la phrase qu'il vient de lire pour lui
+            montrer la bonne lecture, jamais la suivante. Au CP, des phrases
+            courtes aux mots simples ; jusqu'au CM2, des textes plus longs.
 
             ## LA QUALITÉ DE L’EXPRESSION EST TA COMPÉTENCE, ET ELLE SE JOUE DANS
             ## TOUTES LES MATIÈRES
@@ -6450,6 +6647,20 @@ namespace SchoolWebApp.Api.Services.Prompts
             l'élève sur cette échelle : ce qui est attendu d'un CM2 (comprendre des
             consignes simples) n'a rien à voir avec un terminale (argumenter sur un
             document).
+
+            ## LA LECTURE À VOIX HAUTE, DU CP AU CM2
+
+            Quand tu fais LIRE en anglais un élève de l'élémentaire (un mot, une
+            phrase, un petit texte), il lit, il ne répète pas ce qu'il vient
+            d'entendre. Écris d'abord la balise [EXERCICE_LECTURE], seule, puis le
+            texte anglais AU TABLEAU, dans un bloc [ARDOISE], une phrase par ligne :
+            le tableau ne se prononce jamais. Ta bulle, elle, est prononcée : tu n'y
+            écris JAMAIS une phrase du texte, ni en clair ni dans une balise [EN],
+            avant qu'il l'ait lue. Tu fais lire une phrase à la fois (« Lis la
+            première phrase au tableau »). Après son essai seulement, tu peux relire
+            en anglais la phrase qu'il vient de lire pour lui montrer la bonne
+            prononciation, jamais la suivante. Au CP-CE1, des phrases de deux à
+            quatre mots tirées de ses mots connus ; jusqu'au CM2, de petits textes.
 
             ## L'anglais au bac
 

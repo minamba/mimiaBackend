@@ -197,6 +197,9 @@ namespace SchoolWebApp.Dal.Repositories
         /// <summary>Un échange qui suit le rapport de si près n'est qu'un au revoir.</summary>
         private static readonly TimeSpan AuRevoirApresRapport = TimeSpan.FromMinutes(10);
 
+        /// <summary>Un [FIN_SEANCE] écrit au-delà de ce délai après le dernier mot de l'élève est une conclusion, pas un au revoir.</summary>
+        private static readonly TimeSpan ConclusionDejaTentee = TimeSpan.FromMinutes(2);
+
         public async Task<bool> ADuTravailNonConcluAsync(int conversationId, CancellationToken ct = default)
         {
             var dernierRapport = await _context.RapportsSeance
@@ -216,6 +219,29 @@ namespace SchoolWebApp.Dal.Repositories
                 .FirstOrDefaultAsync(ct);
 
             if (dernierMessageEleve is null) return false;
+
+            // UNE CONCLUSION DÉJÀ TENTÉE NE SE RETENTE PAS — Camara, le 12/11/2026, en production : Aimeline ouvre
+            // sciences et anglais, dit « au revoir », repart. Pas de rapport : il n'y avait rien à résumer. Le
+            // balayage (séance muette depuis 25 min) demandait alors une conclusion, le professeur ne rendait que
+            // [FIN_SEANCE], toujours sans rapport… et ce message, plus récent que l'observation, refaisait de la
+            // séance une séance à balayer. Un appel au modèle toutes les 30 minutes, par conversation, toute la nuit.
+            //
+            // Après le dernier mot de l'élève, un [FIN_SEANCE] du professeur écrit plus de deux minutes après (une
+            // conclusion du balayage ou du départ, pas l'au revoir du tac au tac), ou DEUX [FIN_SEANCE] (l'au revoir,
+            // puis la conclusion forcée), c'est que la conclusion a eu sa chance. On n'en redemande pas.
+            var finsApres = await _context.Messages
+                .Where(m => m.ConversationId == conversationId
+                    && m.Role == "assistant"
+                    && m.DateCreation > dernierMessageEleve
+                    && m.Contenu != null
+                    && m.Contenu.Contains("[FIN_SEANCE]"))
+                .Select(m => m.DateCreation)
+                .ToListAsync(ct);
+
+            if (finsApres.Count >= 2 || finsApres.Any(d => d - dernierMessageEleve.Value > ConclusionDejaTentee))
+            {
+                return false;
+            }
 
             // UN AU REVOIR APRÈS LE RAPPORT N'EST PAS DU TRAVAIL — relevé le
             // 11/10/2026 : rapport écrit, puis « Merci, bon dimanche » — « À très

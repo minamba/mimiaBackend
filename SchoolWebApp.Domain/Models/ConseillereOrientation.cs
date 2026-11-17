@@ -43,5 +43,24 @@ namespace SchoolWebApp.Domain.Models
         /// <summary>Ce code de matière est-il celui de la conseillère ?</summary>
         public static bool Est(string? matiereCode) =>
             string.Equals(matiereCode, MatiereCode, StringComparison.OrdinalIgnoreCase);
+
+        /// <summary>
+        /// LES FORMULES SANS CONSEILLÈRE — Camara, le 14/11/2026 : « ceux qui prennent le Starter n'ont pas accès à la
+        /// conseillère ». La liste vit ICI et nulle part ailleurs : le serveur refuse la séance
+        /// (<c>MotifRefus.ConseillereNonIncluse</c>), la grille la grise (route <c>acces</c>), la page des tarifs ne
+        /// l'annonce pas (<c>OffreTarif.AvecConseillere</c>).
+        /// LA CARTE RESTE VISIBLE (Camara, le 15/11/2026) : avec Starter, le clic ouvre une fenêtre « il faut au minimum
+        /// l'abonnement Solo ». L'ESSAI LA GARDE (même jour, après réflexion) : c'est l'argument de Solo face à Starter ;
+        /// sa carte, l'ouverture de la séance et les tarifs disent qu'elle n'est incluse qu'à partir de Solo.
+        /// </summary>
+        public static readonly IReadOnlySet<string> FormulesSansConseillere =
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "STARTER" };
+
+        /// <summary>La formule de ce code donne-t-elle accès à la conseillère ? Sans formule connue : oui, d'autres gardes jugent.</summary>
+        public static bool IncluseDans(string? codeOffre) =>
+            codeOffre is null || !FormulesSansConseillere.Contains(codeOffre);
+
+        public const string MessageNonIncluseEnfant =
+            "Il faut au minimum l'abonnement Solo pour parler avec la conseillère d'orientation. Demande à tes parents.";
     }
 }

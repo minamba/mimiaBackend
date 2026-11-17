@@ -59,6 +59,81 @@ namespace SchoolWebApp.Api.Services.MesFiches
             """;
 
         /// <summary>
+        /// UNE FICHE LIBRE — Camara, le 06/11/2026 : pas de pages, l'élève a écrit ou
+        /// dicté ce qu'il veut réviser. Ajouté à la fin de la consigne de lecture.
+        /// </summary>
+        public const string LectureLibre = """
+
+
+            # Ici, pas de pages : un texte écrit ou dicté par l'élève
+
+            L'élève n'a pas importé son cours : il a écrit ou dicté lui-même ce qu'il
+            veut réviser (le texte est joint). Ce peut être son cours recopié, des
+            notes, ou seulement un sujet (« le théorème de Pythagore », « les
+            accords du participe passé »).
+            - C'est LISIBLE dès qu'on comprend de quoi il veut parler. Un texte dicté
+              contient des mots mal entendus : lis le sens, pas l'orthographe.
+            - Ce n'est qu'un sujet ou quelques notes : donne les notions que le
+              programme de sa classe met sous ce sujet, dans l'ordre où on les
+              apprend.
+            - `lisible: false` seulement si on ne comprend pas ce qu'il veut réviser,
+              ou si ce n'est pas un sujet scolaire ; la remarque lui dit alors, en
+              une phrase, de préciser le sujet ou de recopier sa leçon.
+            """;
+
+        /// <summary>
+        /// LE RÉSUMÉ DE LIVRE — Camara, le 15/11/2026 (podcasts). Remplace la règle du libre à la fin de la consigne de
+        /// lecture : les notions deviennent les épisodes du résumé, et un livre mal connu est REFUSÉ plutôt qu'inventé.
+        /// </summary>
+        public const string LectureLivre = """
+
+
+            # Ici, pas de pages : le titre d'un livre
+
+            L'élève veut le RÉSUMÉ D'UN LIVRE, en podcast. Le texte joint donne le
+            titre du livre, et parfois son auteur. Il est écrit ou dicté : des mots
+            peuvent être mal entendus ou mal orthographiés, lis le sens.
+
+            - Tu ne résumes QU'UN LIVRE QUE TU CONNAIS AVEC CERTITUDE : son histoire,
+              ses personnages, son auteur. Un résumé inventé, raconté avec assurance
+              par son professeur, tromperait l'élève : mieux vaut refuser.
+            - `titreCours` : le titre exact du livre et son auteur, par exemple
+              « Le Petit Prince, d'Antoine de Saint-Exupéry ».
+            - Les notions sont les ÉPISODES du résumé, dans cet ordre : l'histoire,
+              partie par partie, du début à la fin (les grandes étapes du récit, ou
+              ses grandes parties) ; puis les personnages principaux ; puis les
+              thèmes et ce que le livre veut dire. Un épisode sur l'auteur et son
+              époque seulement s'il aide à comprendre le livre. De quatre à dix
+              notions selon la longueur du livre. Le `resume` de chaque notion dit
+              ce que l'épisode raconte.
+            - Un livre qui n'est pas un récit (un documentaire, un recueil de
+              poèmes, une pièce de théâtre) : ses grandes parties, ses idées, ses
+              personnages s'il en a, de la même façon.
+            - `lisible: false` si tu ne connais pas ce livre avec certitude, si le
+              titre peut désigner plusieurs livres sans que l'auteur tranche, si ce
+              n'est pas un livre, ou si ce livre ne convient pas à un élève de son
+              âge. La remarque le lui dit en une phrase, sans rien inventer sur le
+              livre : vérifier le titre, ajouter l'auteur, ou importer ses pages
+              dans un podcast « À partir d'un cours ».
+            """;
+
+        /// <summary>Une fiche libre (06/11/2026), à la fin de la consigne de rédaction.</summary>
+        public const string RedactionLibre = """
+
+
+            # Ici, pas de pages : un texte écrit ou dicté par l'élève
+
+            Le « cours » est le texte que l'élève a écrit ou dicté. Cette règle
+            remplace « Fidèle au cours » :
+            - Ce que dit son texte passe en premier, avec ses mots quand ils sont justes.
+            - S'il ne donne qu'un sujet ou des notes, tu complètes avec le cours de sa
+              classe tel que le programme officiel l'enseigne : juste, à son niveau,
+              rien au-delà. Ces compléments ne sont pas marqués `"ajoute"`.
+            - S'il a écrit une erreur, la fiche donne la version juste.
+            - Un texte dicté contient des mots mal entendus : tu écris le mot juste.
+            """;
+
+        /// <summary>
         /// La rédaction d'une fiche. `notion` est null pour un type qui couvre le
         /// cours entier (express, spéciale contrôle).
         /// </summary>

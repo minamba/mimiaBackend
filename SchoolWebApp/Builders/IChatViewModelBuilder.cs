@@ -31,9 +31,13 @@ namespace SchoolWebApp.Api.Builders
         /// Le verdict de la voix quand ce tour est un son jugé (vrai ou faux), absent
         /// sinon. Gardé avec le message pour que la bulle le réaffiche telle quelle.
         /// </param>
+        /// <param name="figureIncomprise">
+        /// Les lignes du dernier [FIGURE] du professeur que l'écran n'a pas su dessiner (11/11/2026) — voir LecteurFigure.
+        /// </param>
         IAsyncEnumerable<string> StreamReponseAsync(
             int conversationId, string contenu, IReadOnlyList<int> pieceJointeIds,
-            int? secondesRestantes, string? vitesseEcoute, bool? sonJuste, CancellationToken ct);
+            int? secondesRestantes, string? vitesseEcoute, bool? sonJuste, CancellationToken ct,
+            IReadOnlyList<string>? figureIncomprise = null);
 
         /// <summary>
         /// Fait parler l'agent en premier, à l'ouverture de la conversation.

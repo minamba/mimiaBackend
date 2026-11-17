@@ -8,6 +8,12 @@ namespace SchoolWebApp.Domain.Repositories
     /// </summary>
     public interface ICreditsFichesRepository
     {
+        /// <summary>
+        /// FICHES OU PODCASTS (15/11/2026) — voir `NaturesCours`. Toute la portée (dépôts, quota, tâche de fond) ne voit
+        /// que les cours, épisodes, décomptes, crédits et packs de cette nature. « fiches » par défaut.
+        /// </summary>
+        string Nature { get; set; }
+
         Task<int?> ParentDeLEleveAsync(int eleveId, CancellationToken ct = default);
 
         /// <summary>Les cours de l'enfant décomptés sur son mois depuis `depuis`.</summary>

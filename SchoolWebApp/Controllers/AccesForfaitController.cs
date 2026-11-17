@@ -48,7 +48,13 @@ namespace SchoolWebApp.Api.Controllers
                 ? await fiches.EssaiFichesAsync(eleveId, ct)
                 : null;
 
-            return Ok(new { ouvert = acces.Ouvert, motif = acces.Motif, essaiFiches });
+            // LA CONSEILLÈRE SELON LA FORMULE (14/11/2026) : la grille grise sa carte quand c'est non.
+            var conseillere = await _acces.ConseillerePourEleveAsync(eleveId, ct);
+
+            // LES PODCASTS SELON LA FORMULE (15/11/2026) : la carte reste, le clic dit qu'ils ne sont pas inclus.
+            var podcasts = await _acces.PodcastsPourEleveAsync(eleveId, ct);
+
+            return Ok(new { ouvert = acces.Ouvert, motif = acces.Motif, essaiFiches, conseillere, podcasts });
         }
     }
 }

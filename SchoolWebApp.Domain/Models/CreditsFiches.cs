@@ -15,6 +15,9 @@ namespace SchoolWebApp.Domain.Models
         /// <summary>La valeur de l'étiquette `type` d'une session Stripe qui vend des fiches.</summary>
         public const string TypeStripe = "fiches";
 
+        /// <summary>Le drapeau d'une session Stripe qui crédite des PODCASTS à la famille (15/11/2026).</summary>
+        public const string TypeStripePodcasts = "podcasts";
+
         /// <summary>Le code d'un mouvement fait à la main par l'administration (16/10/2026).</summary>
         public const string CodeAjustement = "AJUSTEMENT";
     }

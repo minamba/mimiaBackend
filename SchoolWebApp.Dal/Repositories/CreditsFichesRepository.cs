@@ -18,6 +18,13 @@ namespace SchoolWebApp.Dal.Repositories
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
+        /// <summary>FICHES OU PODCASTS (15/11/2026) : la nature que voit toute la portée — voir `NatureCours.cs`.</summary>
+        public string Nature
+        {
+            get => _context.NatureCours;
+            set => _context.NatureCours = SchoolWebApp.Domain.Models.NaturesCours.Connue(value) ? value : SchoolWebApp.Domain.Models.NaturesCours.Fiches;
+        }
+
         private static string Code(ImputationFiche imputation) => imputation switch
         {
             ImputationFiche.Credit => "credit",
@@ -218,6 +225,8 @@ namespace SchoolWebApp.Dal.Repositories
                     _context.CreditsFichesFamilles.Add(new CreditFichesFamille
                     {
                         ParentId = parentId,
+                        // Dans la clé : posée tout de suite, EF ne suit pas une ligne à clé vide (15/11/2026).
+                        Nature = _context.NatureCours,
                         Solde = pack.Fiches,
                         DateModification = maintenant,
                     });
@@ -280,6 +289,8 @@ namespace SchoolWebApp.Dal.Repositories
                     _context.CreditsFichesFamilles.Add(new CreditFichesFamille
                     {
                         ParentId = parentId,
+                        // Dans la clé : posée tout de suite, EF ne suit pas une ligne à clé vide (15/11/2026).
+                        Nature = _context.NatureCours,
                         Solde = credits,
                         DateModification = maintenant,
                     });

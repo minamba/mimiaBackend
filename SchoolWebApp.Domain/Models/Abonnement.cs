@@ -1,6 +1,11 @@
 namespace SchoolWebApp.Domain.Models
 {
     /// <summary>Une formule, telle qu'elle s'affiche sur la page de tarifs.</summary>
+    /// <summary>
+    /// Ce que rend l'offre d'un abonnement par l'administration (13/11/2026) : l'état du forfait, ou la raison du refus.
+    /// </summary>
+    public sealed record ResultatAbonnementOffert(EtatQuota? Etat, string? Refus, string? OffreLibelle = null, DateTime? Jusquau = null);
+
     public class OffreTarif
     {
         public int Id { get; set; }
@@ -33,6 +38,18 @@ namespace SchoolWebApp.Domain.Models
         public double HeuresPot => Math.Round(MinutesPotMensuel / 60.0, 1);
 
         public double HeuresPlafondEnfant => Math.Round(MinutesPlafondEnfant / 60.0, 1);
+
+        /// <summary>
+        /// La conseillère d'orientation fait-elle partie de la formule ? (Starter : non, 14/11/2026.) L'essai : oui, à
+        /// découvrir — la page des tarifs précise « incluse à partir de Solo » (15/11/2026).
+        /// </summary>
+        public bool AvecConseillere => ConseillereOrientation.IncluseDans(Code);
+
+        /// <summary>
+        /// Les podcasts font-ils partie de la formule ? Ni Starter ni l'essai (Camara, le 15/11/2026) : la page des tarifs
+        /// les annonce dans Solo, « l'accès aux podcasts ». Même règle que <c>AccesForfaitService.PodcastsOuvertsAsync</c>.
+        /// </summary>
+        public bool AvecPodcasts => !EstEssai && PodcastsEleve.InclusDans(Code);
 
         /// <summary>Ce que paie le parent par enfant, s'il remplit toutes les places.</summary>
         public int PrixParEnfantCentimes =>
@@ -299,5 +316,11 @@ namespace SchoolWebApp.Domain.Models
         /// un cours de terminale dense en explications.
         /// </summary>
         PlafondJetons = 6,
+
+        /// <summary>
+        /// LA CONSEILLÈRE D'ORIENTATION N'EST PAS DANS CETTE FORMULE (Starter, 14/11/2026). Ne concerne QUE ses séances :
+        /// les cours restent ouverts. Voir <c>ConseillereOrientation.FormulesSansConseillere</c>.
+        /// </summary>
+        ConseillereNonIncluse = 9,
     }
 }

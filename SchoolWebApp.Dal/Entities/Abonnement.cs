@@ -130,6 +130,17 @@ namespace SchoolWebApp.Dal.Entities
         /// </summary>
         public string? StripeAbonnementId { get; set; }
 
+        /// <summary>
+        /// UN ABONNEMENT OFFERT PAR L'ADMINISTRATION — Camara, le 13/11/2026 : « je voudrais pouvoir offrir un abonnement,
+        /// associer un abonnement à un parent sans le faire payer ». Null pour un abonnement souscrit. Sans Stripe, il se
+        /// reconduit de mois en mois (heures qui repartent) jusqu'à `DateFin`, ou sans fin si elle est nulle. Ne compte ni
+        /// dans le revenu, ni dans les « abonnements payants », ni dans la conversion.
+        /// </summary>
+        public DateTime? OffertLe { get; set; }
+
+        /// <summary>Pourquoi il a été offert. OBLIGATOIRE, comme le motif d'un ajustement d'heures.</summary>
+        public string? MotifOffert { get; set; }
+
         public DateTime DateCreation { get; set; }
 
         public virtual Parent? Parent { get; set; }

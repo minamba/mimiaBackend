@@ -266,6 +266,10 @@ namespace SchoolWebApp.Dal.Entities
 
                 // Le tutoriel, une fois par compte parent (02/11/2026).
                 entity.Property(e => e.TutorielVuLe).HasColumnName("tutoriel_vu_le");
+                entity.Property(e => e.TutorielFicheVuLe).HasColumnName("tutoriel_fiche_vu_le");
+                entity.Property(e => e.TutorielEnfantsVuLe).HasColumnName("tutoriel_enfants_vu_le");
+                entity.Property(e => e.ConditionsVersion).HasMaxLength(20).HasColumnName("conditions_version");
+                entity.Property(e => e.ConditionsAccepteesLe).HasColumnName("conditions_acceptees_le");
 
                 // Le rôle (17/10/2026) : supprimer un rôle rend ses comptes
                 // « Utilisateur » (la suppression recalcule aussi leur accès).
@@ -393,6 +397,7 @@ namespace SchoolWebApp.Dal.Entities
                 entity.Property(e => e.Nom).HasMaxLength(100).HasColumnName("nom");
                 entity.Property(e => e.Age).HasColumnName("age");
                 entity.Property(e => e.Sexe).HasColumnName("sexe").HasDefaultValue(Domain.Models.Sexe.NonPrecise);
+                entity.Property(e => e.Avatar).HasMaxLength(60).HasColumnName("avatar");
                 entity.Property(e => e.DateCreation).HasColumnName("date_creation");
                 entity.Property(e => e.DerniereActivite).HasColumnName("derniere_activite");
                 entity.Property(e => e.ArchiveLe).HasColumnName("archive_le");
@@ -1445,6 +1450,8 @@ namespace SchoolWebApp.Dal.Entities
                 entity.Property(e => e.EstAdmin).HasDefaultValue(false).HasColumnName("est_admin");
                 entity.Property(e => e.Competence).HasMaxLength(1000).HasColumnName("competence");
                 entity.Property(e => e.LigneDeTestId).HasColumnName("ligne_de_test_id");
+                entity.Property(e => e.RouvertLe).HasColumnName("rouvert_le");
+                entity.Property(e => e.Reouvertures).HasDefaultValue(0).HasColumnName("reouvertures");
 
                 entity.HasOne(e => e.Parent)
                       .WithMany(p => p.Signalements)
@@ -1568,8 +1575,9 @@ namespace SchoolWebApp.Dal.Entities
                 entity.Property(e => e.Competence).HasMaxLength(1000).IsRequired().HasColumnName("competence");
                 entity.Property(e => e.Statut).HasMaxLength(20).IsRequired().HasColumnName("statut");
                 entity.Property(e => e.DateCreation).HasColumnName("date_creation");
-                entity.Property(e => e.DateEffectuee).HasColumnType("date").HasColumnName("date_effectuee");
+                entity.Property(e => e.DateEffectuee).HasColumnType("datetime2").HasColumnName("date_effectuee");
                 entity.Property(e => e.Commentaire).HasMaxLength(2000).HasColumnName("commentaire");
+                entity.Property(e => e.Position).HasColumnName("position");
 
                 entity.HasOne(e => e.Test)
                       .WithMany(t => t.Lignes)
@@ -1650,6 +1658,8 @@ namespace SchoolWebApp.Dal.Entities
                 entity.Property(e => e.OffrePrevueId).HasColumnName("offre_prevue_id");
                 entity.Property(e => e.PeriodicitePrevue).HasMaxLength(20).HasColumnName("periodicite_prevue");
                 entity.Property(e => e.ChangementPrevuLe).HasColumnName("changement_prevu_le");
+                entity.Property(e => e.OffertLe).HasColumnName("offert_le");
+                entity.Property(e => e.MotifOffert).HasMaxLength(500).HasColumnName("motif_offert");
                 entity.Property(e => e.DateCreation).HasColumnName("date_creation");
 
                 entity.HasOne(e => e.Parent)
@@ -2419,6 +2429,8 @@ namespace SchoolWebApp.Dal.Entities
                 // avec leur cours.
                 entity.Property(e => e.ComplementDe).HasColumnName("complement_de");
                 entity.Property(e => e.PagesEffaceesLe).HasColumnName("pages_effacees_le");
+                entity.Property(e => e.Libre).HasDefaultValue(false).HasColumnName("libre");
+                entity.Property(e => e.ProfAvatar).HasMaxLength(50).HasColumnName("prof_avatar");
                 entity.Property(e => e.DateCreation).HasColumnName("date_creation");
                 entity.Property(e => e.DateModification).HasColumnName("date_modification");
 
@@ -2694,7 +2706,8 @@ namespace SchoolWebApp.Dal.Entities
             modelBuilder.Entity<CreditFichesFamille>(entity =>
             {
                 entity.ToTable("CreditFichesFamille");
-                entity.HasKey(e => e.ParentId);
+                // UN SOLDE PAR NATURE (15/11/2026) : les crédits de podcasts ne se mélangent pas à ceux des fiches.
+                entity.HasKey(e => new { e.ParentId, e.Nature });
 
                 entity.Property(e => e.ParentId).ValueGeneratedNever().HasColumnName("parent_id");
                 entity.Property(e => e.Solde).HasColumnName("solde");
@@ -2757,6 +2770,10 @@ namespace SchoolWebApp.Dal.Entities
 
                 entity.HasIndex(e => e.Code).IsUnique();
             });
+
+            // FICHES OU PODCASTS (15/11/2026) — voir `NatureCours.cs`.
+            ConfigurerNatureCours(modelBuilder);
+            FiltrerNatureCours(modelBuilder);
         }
     }
 }

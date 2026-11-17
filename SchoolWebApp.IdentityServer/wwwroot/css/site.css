@@ -260,6 +260,13 @@ h1 {
 
 .checkbox input { margin-top: 3px; flex-shrink: 0; }
 
+.checkbox a {
+    color: inherit;
+    font-weight: 600;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
 .btn {
     display: block;
     width: 100%;
@@ -713,3 +720,428 @@ html.blue-sky.saison-back-to-school .badge-beta { border-color: rgba(255, 200, 6
 html.blue-sky.saison-back-to-school .auth-footnote { color: #d2f2e2; }
 
 html.blue-sky.saison-black-friday .auth-footnote { color: #bdbdbd; }
+
+/* CYBER MONDAY (15/11/2026) : nuit violette, néons magenta et cyan. */
+html.blue-sky.saison-cyber-monday {
+    --card: rgba(18, 10, 50, 0.7);
+    --ink-soft: #cfc8ee;
+    --line: rgba(150, 220, 255, 0.26);
+    --line-bouton: rgba(207, 200, 238, 0.5);
+    --accent: #c2187f;
+    --accent-survol: #a01268;
+    --accent-texte: #ff7ae3;
+    --accent-ink: #ffffff;
+}
+
+html.blue-sky.saison-cyber-monday body {
+    background:
+        linear-gradient(rgba(5, 0, 20, 0.28), rgba(5, 0, 20, 0.28)) fixed,
+        #0b0620 url('../img/cyber_monday_bg.webp') center top / cover no-repeat fixed;
+}
+
+@media (max-width: 700px), (hover: none) {
+    html.blue-sky.saison-cyber-monday body {
+        background: linear-gradient(rgba(5, 0, 20, 0.28), rgba(5, 0, 20, 0.28)), #0b0620 url('../img/cyber_monday_bg.webp') center top / cover no-repeat;
+        background-attachment: scroll;
+    }
+}
+
+html.blue-sky.saison-cyber-monday .auth-card { box-shadow: 0 30px 80px rgba(5, 0, 20, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.08); }
+html.blue-sky.saison-cyber-monday h1 { text-shadow: 0 2px 20px rgba(34, 200, 255, 0.5); }
+html.blue-sky.saison-cyber-monday .field input:focus { outline-color: #5cf2ff; }
+html.blue-sky.saison-cyber-monday .badge-beta { border-color: rgba(255, 63, 210, 0.45); background: rgba(255, 63, 210, 0.14); color: #ffc4f2; }
+html.blue-sky.saison-cyber-monday .auth-footnote { color: #cfc8ee; }
+
+
+/* ================================================================== */
+/* LA CONNEXION ILLUSTRÉE — maquette de Camara, 16/11/2026            */
+/*                                                                     */
+/* La carte en verre bleu nuit au liseré lumineux, le cerisier en haut */
+/* à droite, le Fuji et les vagues japonaises en bas ; le logo souligné */
+/* d'un trait orange ; la porte des élèves en carte bleue lumineuse, le */
+/* sac qui déborde, « élève » en corail ; « ou, pour les parents » dans */
+/* une pastille ; le titre avec ses parents dessinés ; des champs à    */
+/* icône ; « Se connecter → » en pilule orange lumineuse, avec ses     */
+/* nuages et ses éclats ; Google en pilule à contour.                  */
+/*                                                                     */
+/* Les décors (cerisier, Fuji, nuages, éclats) viennent des maquettes  */
+/* de l'accueil (copiés dans wwwroot/img). Toutes les couleurs passent */
+/* par les variables de la page (--accent, --accent-texte, --lueur) :  */
+/* chaque saison les redéfinit déjà, plus bas pour --lueur. Mêmes      */
+/* règles pour l'inscription et le mot de passe oublié, qui partagent  */
+/* cette feuille. Aucune animation en boucle.                          */
+/* ================================================================== */
+
+:root {
+    /* Le bleu des liserés lumineux ; chaque saison le remplace (fin du bloc). */
+    --lueur: #6fb0ff;
+}
+
+.auth-card {
+    position: relative;
+    max-width: 460px;
+    padding: 30px 30px 34px;
+    border: 2px solid color-mix(in srgb, var(--lueur) 80%, transparent);
+    border-radius: 30px;
+    background:
+        url('../img/cerisier.webp') right -8px top -14px / 150px auto no-repeat,
+        url('../img/fuji.webp') right -30px bottom -6px / 190px auto no-repeat,
+        radial-gradient(circle at 0% 100%, transparent 0 18%, color-mix(in srgb, var(--lueur) 22%, transparent) 19% 20.5%, transparent 21.5% 30%, color-mix(in srgb, var(--lueur) 18%, transparent) 31% 32.5%, transparent 33.5%) left bottom / 70% 22% no-repeat,
+        linear-gradient(180deg, color-mix(in srgb, var(--card) 70%, #16348a) 0%, var(--card) 100%);
+    box-shadow:
+        0 0 0 1px color-mix(in srgb, var(--lueur) 25%, transparent),
+        0 0 30px color-mix(in srgb, var(--lueur) 40%, transparent),
+        0 30px 80px rgba(0, 8, 30, 0.55),
+        inset 0 0 36px color-mix(in srgb, var(--lueur) 12%, transparent);
+}
+
+html.blue-sky .auth-card {
+    background:
+        url('../img/cerisier.webp') right -8px top -14px / 150px auto no-repeat,
+        url('../img/fuji.webp') right -30px bottom -6px / 190px auto no-repeat,
+        radial-gradient(circle at 0% 100%, transparent 0 18%, color-mix(in srgb, var(--lueur) 22%, transparent) 19% 20.5%, transparent 21.5% 30%, color-mix(in srgb, var(--lueur) 18%, transparent) 31% 32.5%, transparent 33.5%) left bottom / 70% 22% no-repeat,
+        linear-gradient(180deg, color-mix(in srgb, var(--card) 75%, #1a3d9a) 0%, var(--card) 100%);
+    box-shadow:
+        0 0 0 1px color-mix(in srgb, var(--lueur) 25%, transparent),
+        0 0 30px color-mix(in srgb, var(--lueur) 40%, transparent),
+        0 30px 80px rgba(0, 8, 30, 0.55),
+        inset 0 0 36px color-mix(in srgb, var(--lueur) 12%, transparent);
+}
+
+/* Le logo, plus grand, souligné d'un trait orange. */
+.auth-brand { position: relative; margin-bottom: 22px; padding-bottom: 8px; }
+.auth-brand__logo { height: 38px; }
+
+.auth-brand::after {
+    content: '';
+    position: absolute;
+    left: 14%;
+    right: -10%;
+    bottom: 0;
+    height: 3px;
+    border-radius: 50%;
+    background: linear-gradient(90deg, transparent, var(--accent-texte) 30%, var(--accent) 70%, transparent);
+}
+
+/* ------------------------------------------------ la porte des élèves */
+.entree-eleve-carte {
+    position: relative;
+    gap: 16px;
+    padding: 18px 18px 22px 14px;
+    border: 2px solid color-mix(in srgb, var(--lueur) 85%, #ffffff);
+    border-radius: 24px;
+    background:
+        url('../img/nuages-gauche.webp') left 2% bottom -3px / auto 32% no-repeat,
+        url('../img/nuages-droite.webp') right 4% bottom -3px / auto 30% no-repeat,
+        linear-gradient(180deg, color-mix(in srgb, var(--lueur) 34%, var(--card)) 0%, color-mix(in srgb, var(--lueur) 14%, var(--card)) 100%);
+    box-shadow:
+        0 0 0 1px color-mix(in srgb, var(--lueur) 30%, transparent),
+        0 0 22px color-mix(in srgb, var(--lueur) 45%, transparent),
+        inset 0 0 22px color-mix(in srgb, var(--lueur) 15%, transparent);
+}
+
+.entree-eleve-carte:hover {
+    box-shadow:
+        0 0 0 1px color-mix(in srgb, var(--lueur) 45%, transparent),
+        0 0 30px color-mix(in srgb, var(--lueur) 60%, transparent);
+}
+
+.entree-eleve-carte__illu { width: 64px; height: 64px; background: none; }
+.entree-eleve-carte__sac { width: 76px; height: 76px; }
+
+.entree-eleve-carte__texte strong {
+    font-size: 21px;
+    font-weight: 700;
+    color: #ffffff;
+}
+
+.entree-eleve-carte__texte strong .entree-eleve-carte__mot { font-size: inherit; line-height: inherit; color: var(--accent-texte); }
+.entree-eleve-carte__texte span:not(.entree-eleve-carte__mot) { font-size: 14px; color: #eef4ff; }
+
+/* La flèche dans un rond à contour lumineux. */
+.entree-eleve-carte__fleche {
+    display: grid;
+    place-items: center;
+    width: 42px;
+    height: 42px;
+    border: 2px solid color-mix(in srgb, var(--lueur) 80%, #ffffff);
+    border-radius: 50%;
+    color: #ffffff;
+    font-size: 20px;
+    box-shadow: 0 0 12px color-mix(in srgb, var(--lueur) 45%, transparent);
+}
+
+/* « ou, pour les parents » et « ou » dans une pastille à contour. */
+.separateur-portes span,
+.separator span {
+    padding: 4px 16px;
+    border: 1.5px solid color-mix(in srgb, var(--lueur) 70%, transparent);
+    border-radius: 999px;
+    color: #eef4ff;
+    font-size: 13.5px;
+}
+
+.separateur-portes::before,
+.separateur-portes::after,
+.separator::before,
+.separator::after {
+    background: color-mix(in srgb, var(--lueur) 50%, transparent);
+}
+
+/* ------------------------------------------------ le titre */
+.titre-connexion {
+    position: relative;
+    padding-left: 54px;
+    font-family: var(--sans);
+    font-size: 30px;
+    font-weight: 700;
+}
+
+/* Les deux parents dessinés, à la couleur de l'accent. */
+.titre-connexion::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 50%;
+    width: 44px;
+    height: 36px;
+    transform: translateY(-50%);
+    background: var(--accent-texte);
+    -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 44 36'%3E%3Ccircle cx='15' cy='10' r='8'/%3E%3Cpath d='M1 34c0-8 6.5-13 14-13s14 5 14 13Z'/%3E%3Ccircle cx='32' cy='12' r='6.5'/%3E%3Cpath d='M30 34c0-5-1.5-8.5-4-11 1.8-.9 3.8-1.4 6-1.4 6.3 0 11 4.2 11 12.4Z'/%3E%3C/svg%3E") center / contain no-repeat;
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 44 36'%3E%3Ccircle cx='15' cy='10' r='8'/%3E%3Cpath d='M1 34c0-8 6.5-13 14-13s14 5 14 13Z'/%3E%3Ccircle cx='32' cy='12' r='6.5'/%3E%3Cpath d='M30 34c0-5-1.5-8.5-4-11 1.8-.9 3.8-1.4 6-1.4 6.3 0 11 4.2 11 12.4Z'/%3E%3C/svg%3E") center / contain no-repeat;
+    filter: drop-shadow(0 0 8px color-mix(in srgb, var(--accent-texte) 50%, transparent));
+}
+
+.titre-connexion + .auth-subtitle {
+    position: relative;
+    padding-left: 54px;
+    padding-bottom: 10px;
+    font-size: 16px;
+    color: #eef4ff;
+}
+
+.titre-connexion + .auth-subtitle::after {
+    content: '';
+    position: absolute;
+    left: 54px;
+    bottom: 0;
+    width: 150px;
+    height: 3px;
+    border-radius: 50%;
+    background: linear-gradient(90deg, transparent, var(--accent) 30%, var(--accent-texte) 70%, transparent);
+}
+
+/* ------------------------------------------------ les champs */
+.field label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 15px;
+    font-weight: 600;
+}
+
+.field label[for="Email"]::before,
+.field label[for="Password"]::before {
+    content: '';
+    flex: none;
+    width: 18px;
+    height: 18px;
+    background: #eef4ff;
+    -webkit-mask: var(--icone-champ) center / contain no-repeat;
+    mask: var(--icone-champ) center / contain no-repeat;
+}
+
+.field label[for="Email"] {
+    --icone-champ: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M2 5h20v14H2Z M2 6l10 7 10-7' fill='none' stroke='%23000' stroke-width='2.4' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+
+.field label[for="Password"] {
+    --icone-champ: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect x='4' y='10' width='16' height='12' rx='2.5'/%3E%3Cpath d='M8 10V7a4 4 0 0 1 8 0v3' fill='none' stroke='%23000' stroke-width='2.6'/%3E%3C/svg%3E");
+}
+
+.field input[type="email"],
+.field input[type="password"],
+.field input[type="text"] {
+    padding: 14px 16px;
+    border: 1.5px solid color-mix(in srgb, var(--lueur) 70%, transparent);
+    border-radius: 14px;
+    background-color: color-mix(in srgb, var(--lueur) 14%, rgba(4, 16, 48, 0.6));
+    font-size: 16px;
+    box-shadow: inset 0 0 14px color-mix(in srgb, var(--lueur) 10%, transparent);
+}
+
+/* L'enveloppe dans le champ de l'adresse. */
+.field input[type="email"] {
+    padding-left: 48px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M2 5h20v14H2Z M2 6l10 7 10-7' fill='none' stroke='%23eef4ff' stroke-width='1.8' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: 15px center;
+    background-size: 22px 22px;
+}
+
+.field input:focus {
+    border-color: var(--accent-texte);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-texte) 20%, transparent), 0 0 14px color-mix(in srgb, var(--lueur) 30%, transparent);
+}
+
+.checkbox { font-size: 15px; color: #eef4ff; }
+.checkbox input { width: 18px; height: 18px; margin-top: 1px; accent-color: color-mix(in srgb, var(--lueur) 85%, #ffffff); }
+
+/* ------------------------------------------------ « Se connecter → » */
+.btn {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    padding: 16px 20px;
+    border: 2px solid color-mix(in srgb, var(--accent) 45%, #ffdcae);
+    border-radius: 999px;
+    background:
+        url('../img/nuages-droite.webp') right 5% bottom -3px / auto 55% no-repeat,
+        linear-gradient(180deg, color-mix(in srgb, var(--accent) 62%, #ffc56e) 0%, var(--accent) 58%, color-mix(in srgb, var(--accent) 82%, #7a1504) 100%);
+    font-size: 20px;
+    font-weight: 700;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.22);
+    box-shadow:
+        0 0 0 1px color-mix(in srgb, var(--accent) 30%, transparent),
+        0 0 22px color-mix(in srgb, var(--accent) 60%, transparent),
+        0 10px 24px rgba(0, 0, 0, 0.3),
+        inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+
+.btn:hover {
+    background:
+        url('../img/nuages-droite.webp') right 5% bottom -3px / auto 55% no-repeat,
+        linear-gradient(180deg, color-mix(in srgb, var(--accent) 55%, #ffd27f) 0%, color-mix(in srgb, var(--accent) 92%, #ffffff) 58%, var(--accent) 100%);
+}
+
+.btn::after { content: '→'; font-size: 1.1em; }
+
+/* « Mot de passe oublié ? » : l'accent, souligné d'un trait. */
+.auth-switch a {
+    font-weight: 700;
+    text-decoration: underline;
+    text-decoration-color: color-mix(in srgb, var(--accent-texte) 60%, transparent);
+    text-underline-offset: 4px;
+}
+
+/* ------------------------------------------------ Google */
+.btn-google {
+    padding: 15px 18px;
+    border: 2px solid color-mix(in srgb, var(--lueur) 70%, transparent);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--card) 80%, #000000);
+    font-size: 17px;
+    font-weight: 700;
+    box-shadow: 0 0 14px color-mix(in srgb, var(--lueur) 25%, transparent);
+}
+
+.btn-google:hover { background: color-mix(in srgb, var(--lueur) 14%, var(--card)); }
+.btn-google svg { width: 24px; height: 24px; }
+
+/* « Pas encore de compte ? » avec sa silhouette, et la note d'en bas avec son « i ». */
+.auth-card > .auth-switch:last-child::before,
+.auth-footnote::before {
+    content: '';
+    display: inline-block;
+    width: 18px;
+    height: 18px;
+    margin-right: 8px;
+    vertical-align: -3px;
+    background: currentColor;
+    -webkit-mask: var(--icone-ligne) center / contain no-repeat;
+    mask: var(--icone-ligne) center / contain no-repeat;
+}
+
+.auth-card > .auth-switch:last-child {
+    --icone-ligne: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.2'%3E%3Ccircle cx='12' cy='8' r='4'/%3E%3Cpath d='M4.5 21c.8-3.8 3.9-6.2 7.5-6.2s6.7 2.4 7.5 6.2Z'/%3E%3C/svg%3E");
+    font-size: 15px;
+    color: #eef4ff;
+}
+
+.auth-footnote {
+    --icone-ligne: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Ccircle cx='12' cy='12' r='9.5'/%3E%3Cpath d='M12 11v6M12 7.5v.01' stroke-linecap='round'/%3E%3C/svg%3E");
+    font-size: 13.5px;
+    max-width: 460px;
+}
+
+/* ------------------------------------------------ les saisons */
+/* Le liseré lumineux prend la couleur de la saison (le reste suit déjà --accent). */
+html.blue-sky.saison-soldes-ete { --lueur: #7fd3ff; }
+html.blue-sky.saison-soldes-hiver { --lueur: #8fd0ff; }
+html.blue-sky.saison-french-days { --lueur: #8fa6ff; }
+html.blue-sky.saison-black-friday { --lueur: #f5c542; }
+html.blue-sky.saison-back-to-school { --lueur: #7fe0b0; }
+html.blue-sky.saison-cyber-monday { --lueur: #5cf2ff; }
+
+@media (max-width: 460px) {
+    .auth-card { padding: 24px 18px 28px; border-radius: 24px; background-size: 110px auto, 150px auto, 70% 18%, auto; }
+    .entree-eleve-carte__sac { width: 62px; height: 62px; }
+    .entree-eleve-carte__illu { width: 52px; height: 52px; }
+    .entree-eleve-carte__texte strong { font-size: 18px; }
+    .titre-connexion { font-size: 26px; padding-left: 48px; }
+    .titre-connexion::before { width: 38px; height: 31px; }
+    .titre-connexion + .auth-subtitle { padding-left: 48px; font-size: 15px; }
+    .titre-connexion + .auth-subtitle::after { left: 48px; }
+    .btn { font-size: 18px; }
+}
+
+/* ================================================================== */
+/* LA CONNEXION PLUS COMPACTE — Camara, le 16/11/2026 : « la fenêtre   */
+/* de connexion est trop longue, compresse un peu ». Le même dessin,   */
+/* resserré : les espaces entre les blocs, la porte des élèves, le     */
+/* titre, les champs et les deux boutons. Vaut aussi pour              */
+/* l'inscription et le mot de passe oublié.                            */
+/* ================================================================== */
+.auth-card { padding: 22px 26px 24px; }
+.auth-brand { margin-bottom: 14px; padding-bottom: 6px; }
+.auth-brand__logo { height: 34px; }
+
+.entree-eleve-carte { margin-bottom: 14px; padding: 11px 14px 13px 12px; gap: 12px; }
+.entree-eleve-carte__illu { width: 54px; height: 54px; }
+.entree-eleve-carte__sac { width: 64px; height: 64px; }
+.entree-eleve-carte__texte strong { font-size: 19px; }
+.entree-eleve-carte__texte span:not(.entree-eleve-carte__mot) { font-size: 13.5px; }
+.entree-eleve-carte__fleche { width: 38px; height: 38px; font-size: 18px; }
+
+.separateur-portes { margin: 0 0 12px; }
+.separator { margin: 14px 0; }
+.separateur-portes span,
+.separator span { padding: 3px 14px; font-size: 13px; }
+
+.titre-connexion { padding-left: 48px; font-size: 26px; }
+.titre-connexion::before { width: 38px; height: 31px; }
+.titre-connexion + .auth-subtitle { margin-bottom: 16px; padding-left: 48px; padding-bottom: 8px; font-size: 15px; }
+.titre-connexion + .auth-subtitle::after { left: 48px; }
+
+.field { margin-bottom: 12px; }
+.field label { margin-bottom: 5px; font-size: 14.5px; }
+
+.field input[type="email"],
+.field input[type="password"],
+.field input[type="text"] { padding: 11px 14px; font-size: 15.5px; }
+
+/* PAS D'ENVELOPPE DANS LE CHAMP — Camara, le 17/11/2026 : « un gros espace sur le champ de l'adresse mail ». Quand
+   le navigateur remplit l'adresse tout seul, il efface le fond du champ : l'enveloppe disparaissait, sa place restait.
+   L'enveloppe reste devant le libellé « Adresse email » ; l'adresse se cale à gauche. */
+.field input[type="email"] { padding-left: 14px; background-image: none; }
+
+.checkbox { margin-bottom: 12px; font-size: 14.5px; }
+
+.btn { padding: 12px 18px; font-size: 18px; }
+.auth-switch { margin-top: 14px; }
+.btn-google { padding: 11px 16px; font-size: 16px; }
+.btn-google svg { width: 22px; height: 22px; }
+
+@media (max-width: 460px) {
+    .auth-card { padding: 18px 16px 20px; }
+    .entree-eleve-carte__sac { width: 56px; height: 56px; }
+    .entree-eleve-carte__illu { width: 48px; height: 48px; }
+    .entree-eleve-carte__texte strong { font-size: 17px; }
+    .titre-connexion { font-size: 24px; padding-left: 44px; }
+    .titre-connexion::before { width: 34px; height: 28px; }
+    .titre-connexion + .auth-subtitle { padding-left: 44px; font-size: 14.5px; }
+    .titre-connexion + .auth-subtitle::after { left: 44px; }
+    .btn { font-size: 17px; }
+}

@@ -287,6 +287,10 @@ namespace SchoolWebApp.IdentityServer.Controllers
                     .SetClaim(Claims.FamilyName, user.Nom)
                     .SetClaims(Claims.Role, (await RolesDuCompteAsync(user)).ToImmutableArray());
 
+            // LA CASE DES CONDITIONS, cochée à l'inscription : l'API, qui a sa propre base, la reprend de ce jeton.
+            var conditions = (await _userManager.GetClaimsAsync(user)).FirstOrDefault(c => c.Type == "cgv_cochees_le");
+            if (conditions is not null) identity.SetClaim("cgv_cochees_le", conditions.Value);
+
             identity.SetScopes(scopes);
 
             var resources = new List<string>();

@@ -268,7 +268,16 @@ namespace SchoolWebApp.Api.Services.Voix
                     // PAS DE REDITE, MAIS PEUT-ÊTRE UNE SUITE INVENTÉE : voir DebutDeLaSuite.
                     if (DebutDeLaSuite(attendus, entendus) is int suite)
                     {
-                        var coupeSuite = (long)(DebutDuSilenceAvant(fin, entendus[suite].Debut) * OctetsParSeconde) & ~1L;
+                        // JAMAIS AVANT LA FIN DU TEXTE — voir CoupeDeLaSuite. Sans coupe sûre, la suite reste.
+                        if (CoupeDeLaSuite(fin, entendus, suite) is not double secondesSuite)
+                        {
+                            _logger.LogInformation(
+                                "Suite inventee par Gemini laissee : la coupe tombait avant la fin du texte ({Mots} mots apres la fin).",
+                                entendus.Count - suite);
+                            return fin;
+                        }
+
+                        var coupeSuite = (long)(secondesSuite * OctetsParSeconde) & ~1L;
 
                         // AUCUN CONTENU DANS LE JOURNAL : des mesures seulement.
                         _logger.LogWarning(
@@ -279,6 +288,19 @@ namespace SchoolWebApp.Api.Services.Voix
 
                         CentiemesRetires = (int)((fin.Length - Math.Max(0, coupeSuite)) * 100L / OctetsParSeconde);
                         return new ReadOnlyMemory<byte>(fin, 0, (int)Math.Max(0, coupeSuite));
+                    }
+
+                    // UNE FIN QUI NE RESSEMBLE PAS AU TEXTE — 14/11/2026, « des professeurs parlent anglais » (Yann, en
+                    // production), jamais reproduit sur 74 prises de ses phrases exactes. La transcription est forcée en
+                    // français : de l'anglais, ou les consignes de mise en scène lues à voix haute, y deviennent des mots
+                    // sans rapport avec le texte, et la garde ne voyait rien (ni redite, ni suite). RELEVÉ SEULEMENT, pour
+                    // savoir quand et combien : rien n'est coupé ici, la décision de couper reste à prendre avec Camara.
+                    // AUCUN CONTENU DANS LE JOURNAL : des comptes seulement.
+                    if (PartRetrouveeDansLeTexte(attendus, entendus) is { } part && part < PartMinimumDuTexte)
+                    {
+                        _logger.LogWarning(
+                            "Fin de voix etrangere au texte : {Part:P0} des {Entendus} mots entendus sont dans le texte ({Attendus} mots), {Total:F1} s retenues, rien coupe.",
+                            part, entendus.Count, attendus.Count, fin.Length / (double)OctetsParSeconde);
                     }
 
                     _logger.LogInformation(
@@ -525,6 +547,19 @@ namespace SchoolWebApp.Api.Services.Voix
                 .ToList();
         }
 
+        /// <summary>En dessous de cette part de mots retrouvés dans le texte, la fin entendue lui est étrangère.</summary>
+        internal const double PartMinimumDuTexte = 0.34;
+
+        /// <summary>
+        /// La part des mots entendus qui se retrouvent dans le texte (à une lettre près) ; null s'il y a trop peu de
+        /// mots pour en juger (moins de six) : une fin de phrase courte se transcrit mal.
+        /// </summary>
+        internal static double? PartRetrouveeDansLeTexte(IReadOnlyList<string> attendus, IReadOnlyList<MotTranscrit> entendus)
+        {
+            if (entendus.Count < 6 || attendus.Count == 0) return null;
+            return entendus.Count(e => attendus.Any(a => Proches(a, e.Mot))) / (double)entendus.Count;
+        }
+
         private static bool Proches(string a, string b)
         {
             if (a == b) return true;
@@ -550,6 +585,31 @@ namespace SchoolWebApp.Api.Services.Voix
             }
 
             return ligne[b.Length];
+        }
+
+        /// <summary>
+        /// OÙ COUPER UNE SUITE INVENTÉE, SANS JAMAIS ENTAMER LA FIN DU TEXTE — Camara, le 11/11/2026, signalement du
+        /// 09/11 : « Nora ne termine pas ses phrases : Essaie encore : après soixante-treize… », sans « qu'est-ce qui
+        /// vient ? ». Gemini avait répété la question finale ; la garde l'a bien vue (« 3 mots après la fin du
+        /// texte ») mais a coupé au silence d'AVANT la vraie question. Mesuré : 1,4 s retirées sur 2,0, soit 0,6 s
+        /// gardées, alors que « qu'est-ce qui vient ? » en dure 0,8. Sur des mots répétés, la transcription situe la
+        /// répétition trop tôt ; le silence trouvé avant elle était la pause de la virgule.
+        ///
+        /// LA BORNE : ce qu'on garde doit pouvoir contenir les mots du texte qu'on a entendus, à la vitesse de cette
+        /// voix (80 % de la durée moyenne d'un mot, pour la marge). Si la coupe tombe avant, on la reporte au premier
+        /// silence franc (180 ms) qui suit cette durée — la pause du point d'interrogation. Sans ce silence, null : on ne coupe
+        /// pas, et la répétition passe. Une question entendue deux fois vaut mieux qu'une question jamais posée.
+        /// </summary>
+        public static double? CoupeDeLaSuite(byte[] fin, IReadOnlyList<MotTranscrit> entendus, int suite)
+        {
+            var secondes = fin.Length / (double)OctetsParSeconde;
+            var coupe = DebutDuSilenceAvant(fin, entendus[suite].Debut);
+
+            var parMot = secondes / Math.Max(1, entendus.Count);
+            var minimum = suite * parMot * 0.8;
+            if (coupe >= minimum) return coupe;
+
+            return PremierSilenceApres(fin, minimum) is double apres && apres < secondes - 0.1 ? apres : null;
         }
 
         /// <summary>

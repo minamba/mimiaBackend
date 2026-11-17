@@ -227,6 +227,21 @@ namespace SchoolWebApp.Api.Controllers
             return page is null ? BadRequest(new { message = refus?.Message }) : Ok(page);
         }
 
+        /// <summary>Le texte d'une fiche libre (06/11/2026), écrit ou dicté : il remplace le précédent.</summary>
+        public sealed record TexteCoursRequest(string? Texte);
+
+        [HttpPut("cours/{coursId:int}/texte")]
+        [AutoriseEleve]
+        [RequestSizeLimit(Regles.TexteMax * 4 + 4096)]
+        [SwaggerResponse(200, "Le texte reçu, comme une page.")]
+        [SwaggerResponse(400, "Texte refusé — le message est écrit pour l'enfant.")]
+        public async Task<IActionResult> EcrireTexte(int eleveId, int coursId, [FromBody] TexteCoursRequest requete, CancellationToken ct)
+        {
+            if (await _resolveur.ResoudreEleveAsync(eleveId) is null) return NotFound();
+            var (page, refus) = await _import.EcrireTexteAsync(eleveId, coursId, requete?.Texte, ct);
+            return page is null ? BadRequest(new { message = refus?.Message }) : Ok(page);
+        }
+
         [HttpDelete("cours/{coursId:int}/pages/{pageId:int}")]
         [AutoriseEleve]
         public async Task<IActionResult> SupprimerPage(int eleveId, int coursId, int pageId, CancellationToken ct)
@@ -389,6 +404,7 @@ namespace SchoolWebApp.Api.Controllers
             c.NotionsDemandees,
             c.DemandeLe,
             c.PagesDisponibles,
+            c.Libre,
             c.DateCreation,
             c.ComplementDe,
             c.ComplementDeTitre,

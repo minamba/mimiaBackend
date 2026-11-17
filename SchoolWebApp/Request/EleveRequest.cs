@@ -34,6 +34,13 @@ namespace SchoolWebApp.Api.Request
         [Range(1, 2, ErrorMessage = "Merci d'indiquer s'il s'agit d'une fille ou d'un garçon.")]
         public Sexe Sexe { get; set; }
 
+        /// <summary>
+        /// L'AVATAR (16/11/2026), facultatif : un code du catalogue du front (« cp-ce1-asie-garcon-courts »). Null = rien
+        /// d'envoyé (création : celui par défaut ; modification : inchangé) ; chaîne vide = revenir à celui par défaut.
+        /// </summary>
+        [RegularExpression(@"^$|^[a-z0-9-]{1,60}$", ErrorMessage = "Avatar inconnu.")]
+        public string? Avatar { get; set; }
+
         [Range(1, int.MaxValue, ErrorMessage = "Le niveau scolaire est obligatoire.")]
         public int NiveauScolaireId { get; set; }
 

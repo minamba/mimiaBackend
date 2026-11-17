@@ -20,6 +20,12 @@ namespace SchoolWebApp.Domain.Repositories
         Task<IEnumerable<PointAbonnements>> GetSerieAbonnementsAsync(
             Granularite granularite, DateTime debut, DateTime fin, int? eleveId);
 
+        /// <summary>
+        /// Les mêmes mouvements que la série, un par ligne, avec le parent (12/11/2026) : abonnements payants pris,
+        /// résiliations demandées, résiliations effectives, dans la fenêtre. Du plus récent au plus ancien.
+        /// </summary>
+        Task<IEnumerable<MouvementAbonnement>> GetMouvementsAbonnementsAsync(DateTime debut, DateTime fin);
+
         /// <summary>Inscriptions de parents par période, avec le cumul.</summary>
         /// <summary>
         /// Accorde ou retire le droit d'administrer. Rend faux si le parent
@@ -133,6 +139,7 @@ namespace SchoolWebApp.Domain.Repositories
         /// </param>
         Task<EleveAdmin?> ModifierEleveAsync(
             int id, string? prenom, string? nom, int? age, int? niveauScolaireId, Sexe? sexe,
-            int? academieId = null, bool? lv2Espagnol = null, IEnumerable<string>? specialites = null);
+            int? academieId = null, bool? lv2Espagnol = null, IEnumerable<string>? specialites = null,
+            string? avatar = null);
     }
 }

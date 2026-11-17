@@ -46,7 +46,8 @@
         <img src="~/img/sac.png" alt="" class="entree-eleve-carte__sac" />
     </span>
     <span class="entree-eleve-carte__texte">
-        <strong>Tu es élève ?</strong>
+        @* « élève » en corail, comme dans la maquette de Camara (16/11/2026). *@
+        <strong>Tu es <span class="entree-eleve-carte__mot">élève</span> ?</strong>
         <span>Entre ton code pour retrouver tes cours.</span>
     </span>
     <span class="entree-eleve-carte__fleche" aria-hidden="true">→</span>
@@ -118,7 +119,7 @@
 
 @if (!accesPrive && Model.FournisseursExternes.Contains("Google"))
 {
-<div class="separator">ou</div>
+<div class="separator"><span>ou</span></div>
 
 <form asp-action="ExternalLogin" asp-controller="Account" method="post">
     <input type="hidden" name="provider" value="Google" />

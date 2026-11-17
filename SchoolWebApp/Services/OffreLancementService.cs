@@ -215,9 +215,18 @@ namespace SchoolWebApp.Api.Services
         {
             if (codes.Count == 0) return string.Empty;
 
-            var catalogue = await _formules.GetOffresAsync(ct);
+            // DANS L'ORDRE DU CATALOGUE (Starter, Solo, Duo, Famille), pas dans l'ordre où les cases ont été cochées —
+            // Camara, le 15/11/2026 : le bandeau disait « Solo, Duo, Famille et Starter ». Le catalogue arrive trié
+            // par `Ordre` ; un code qui n'y est plus passe à la fin.
+            var catalogue = (await _formules.GetOffresAsync(ct)).ToList();
+            int Rang(string code)
+            {
+                var i = catalogue.FindIndex(o => string.Equals(o.Code, code, StringComparison.OrdinalIgnoreCase));
+                return i < 0 ? int.MaxValue : i;
+            }
 
             var noms = codes
+                .OrderBy(Rang)
                 .Select(code => catalogue
                     .FirstOrDefault(o => string.Equals(
                         o.Code, code, StringComparison.OrdinalIgnoreCase))?.Libelle

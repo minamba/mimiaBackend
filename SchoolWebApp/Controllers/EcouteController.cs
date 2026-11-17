@@ -201,6 +201,8 @@ namespace SchoolWebApp.Api.Controllers
                 or SchoolWebApp.Domain.Models.MotifRefus.PlafondEnfant =>
                 "Il n'y a plus d'heures de cours pour aujourd'hui : le micro est fermé. "
                 + "Tu peux encore écrire ton message.",
+            SchoolWebApp.Domain.Models.MotifRefus.ConseillereNonIncluse =>
+                SchoolWebApp.Domain.Models.ConseillereOrientation.MessageNonIncluseEnfant,
             _ =>
                 "Le micro n'est pas disponible pour cette séance. Tu peux écrire ton message.",
         };
@@ -259,11 +261,38 @@ namespace SchoolWebApp.Api.Controllers
 
             var pcm = sonDuTour.Prendre();
 
+            // « UN AUTRE EXERCICE » N'EST PAS UNE SYLLABE RATÉE — Camara, le 14/11/2026, signalement d'une famille : voir
+            // ChangementDExercice. Dit en deux mots pendant la lecture en images, sa demande était comptée comme une
+            // tentative (« J'ai lu la syllabe exercice », « On réessaie ») et n'arrivait jamais au professeur. Elle
+            // passe telle quelle, sans verdict.
+            if (Services.ChangementDExercice.Demande(fragment.Texte)) return fragment;
+
             // L'ÉCOUTE DES MOTS — Camara, le 05/11/2026 : « le même système que les syllabes, sauf que ce sera Bonne
             // écoute et Mauvaise écoute ». Ici, on compare ce qu'il dit avoir entendu : la voix n'a rien à juger.
             try
             {
                 var parole = await _chatBuilder.DerniereParoleDuProfesseurAsync(conversationId);
+
+                // LA LECTURE EN IMAGES — Camara, le 07/11/2026 : « l'inverse de l'exercice des syllabes et des mots ». Ce qu'il
+                // a lu se compare à ce que montre l'image, comme l'écoute : le micro écrit, le code compare, aucun modèle audio.
+                if (LectureDImage.Affiche(parole) is { } aLire)
+                {
+                    var reglagesLecture = HttpContext.RequestServices.GetRequiredService<SchoolWebApp.Domain.Repositories.IReglageRepository>();
+                    if (!await reglagesLecture.EstActifAsync(RegleVerificationSon.Reglage, RegleVerificationSon.ActifParDefaut, ct)) return fragment;
+
+                    var lecture = await HttpContext.RequestServices.GetRequiredService<IVerificationSonService>()
+                        .VerifierLectureAsync(conversationId, aLire, fragment.Texte, ct, sonDuTour.Langue);
+
+                    return lecture is null
+                        ? fragment
+                        : fragment with
+                        {
+                            Texte = LectureDImage.TexteDeLEleve(aLire, lecture),
+                            Son = true,
+                            Juste = lecture.SansJugement ? null : lecture.Juste,
+                        };
+                }
+
                 if (RegleVerificationSon.EstEcouteDeMot(parole, await _chatBuilder.EnEcouteDeMotsAsync(conversationId)))
                 {
                     var reglagesEcoute = HttpContext.RequestServices.GetRequiredService<SchoolWebApp.Domain.Repositories.IReglageRepository>();
@@ -320,6 +349,64 @@ namespace SchoolWebApp.Api.Controllers
         }
 
         /// <summary>
+        /// LA LECTURE DES NOMBRES, JUGÉE COMME UNE SYLLABE — Camara, le 12/11/2026 : « il n'y a pas écrit Bonne lecture
+        /// ou mauvaise lecture comme les exercices sur les syllabes et les mots, et il n'y a pas le son qui va avec ; je
+        /// veux exactement la même mécanique ». Le verdict part avec le texte final, AVANT l'envoi : l'écran affiche la
+        /// bulle et joue le son comme pour une syllabe, et le message devient « J'ai lu le nombre … ». Seul le texte est
+        /// comparé (LectureDesNombres.Canonique) : ni son gardé, ni modèle audio, et aucun changement à l'écoute elle-même.
+        /// Hors de l'exercice, ou à la moindre panne, le fragment passe tel quel.
+        /// </summary>
+        private async Task<FragmentTranscription?> AvecLaLectureDeNombreAsync(
+            int conversationId, FragmentTranscription fragment, TourDeNombre tour)
+        {
+            if (fragment.Erreur is not null || fragment.Attente) return fragment;
+
+            try
+            {
+                // Le nombre affiché, lu une fois par tour : au premier provisoire, ou au final s'il arrive seul.
+                if (!tour.Lu)
+                {
+                    tour.ALire = LectureDesNombres.Affiche(await _chatBuilder.DerniereParoleDuProfesseurAsync(conversationId));
+                    tour.Lu = true;
+                }
+
+                // RIEN NE S'ÉCRIT PENDANT QU'IL LIT LE NOMBRE, comme pour une syllabe : l'écran n'affichera que le verdict.
+                if (!fragment.Final) return tour.ALire is null ? fragment : null;
+
+                var aLire = tour.ALire;
+                tour.Lu = false; // le tour est clos : le suivant relira le tableau
+                if (aLire is null || string.IsNullOrWhiteSpace(fragment.Texte)) return fragment;
+
+                // « Un autre exercice » n'est pas une lecture du nombre « un » (14/11/2026, voir ChangementDExercice).
+                if (Services.ChangementDExercice.Demande(fragment.Texte)) return fragment;
+
+                var lu =LectureDesNombres.Canonique(fragment.Texte);
+                if (lu is null) return fragment; // « je sais pas », une question : ce n'est pas une lecture
+
+                return fragment with
+                {
+                    Texte = LectureDesNombres.TexteDeLEleve(new LectureDesNombres.Verdict(aLire, false, fragment.Texte)),
+                    Son = true,
+                    Juste = lu == LectureDesNombres.Normaliser(aLire.Cible),
+                };
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogWarning(ex, "Lecture d'un nombre non jugee (conversation {ConversationId}).", conversationId);
+                tour.Lu = false;
+                return fragment;
+            }
+        }
+
+        /// <summary>Le nombre au tableau pendant ce tour de parole, lu une seule fois (voir AvecLaLectureDeNombreAsync).</summary>
+        private sealed class TourDeNombre
+        {
+            public bool Lu { get; set; }
+
+            public LectureDesNombres.Element? ALire { get; set; }
+        }
+
+        /// <summary>
         /// Le professeur vient-il de demander un son vérifiable, la vérification étant
         /// allumée ? La même lecture que <see cref="AvecLaVoixAsync"/> fera du tour clos.
         /// </summary>
@@ -330,6 +417,9 @@ namespace SchoolWebApp.Api.Controllers
 
             var parole = await _chatBuilder.DerniereParoleDuProfesseurAsync(conversationId);
             var enExercice = await _chatBuilder.EnExerciceDeSonsAsync(conversationId);
+
+            // NI PENDANT QU'IL LIT L'IMAGE DU TABLEAU (07/11/2026) : l'écran n'affichera que le verdict.
+            if (LectureDImage.Affiche(parole) is not null) return true;
 
             // RIEN NE S'ÉCRIT NON PLUS PENDANT QU'IL DIT CE QU'IL A ENTENDU : l'écran n'affichera que le verdict.
             if (RegleVerificationSon.EstEcouteDeMot(parole, await _chatBuilder.EnEcouteDeMotsAsync(conversationId))) return enExercice;
@@ -378,14 +468,20 @@ namespace SchoolWebApp.Api.Controllers
                 // part reviendrait à lui faire payer deux fois la même minute.
                 // Ce chiffre sert à comparer le coût réel au modèle — et c'est
                 // `MinutesAudioMax` qui borne les dérives, pas le quota.
+                // La lecture des nombres de ce tour : lue une fois par tour, pas à chaque provisoire.
+                var tourDeNombre = new TourDeNombre();
+
                 await _transcription.RelayerAsync(
                     sonDuTour is null ? file.Reader.ReadAllAsync(ct) : sonDuTour.Garder(file.Reader.ReadAllAsync(ct)),
                     async fragment =>
                     {
                         // Null : un provisoire retenu pendant un son (voir AvecLaVoixAsync).
-                        var aEmettre = sonDuTour is null || conversationId is null
+                        // Hors français et anglais du primaire, seule la lecture des nombres est jugée (12/11/2026).
+                        var aEmettre = conversationId is null
                             ? fragment
-                            : await AvecLaVoixAsync(conversationId.Value, sonDuTour, fragment, ct);
+                            : sonDuTour is null
+                                ? await AvecLaLectureDeNombreAsync(conversationId.Value, fragment, tourDeNombre)
+                                : await AvecLaVoixAsync(conversationId.Value, sonDuTour, fragment, ct);
 
                         if (aEmettre is not null) await emetteur.EmettreAsync(aEmettre, ct);
                     },

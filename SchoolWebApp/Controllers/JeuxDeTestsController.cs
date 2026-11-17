@@ -1,6 +1,9 @@
 using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
+using SchoolWebApp.Api.Services;
+using SchoolWebApp.Domain.Emails;
 using SchoolWebApp.Api.Utils;
 using SchoolWebApp.Domain.Models;
 using SchoolWebApp.Domain.Repositories;
@@ -41,8 +44,6 @@ namespace SchoolWebApp.Api.Controllers
 
         public string? Statut { get; set; }
 
-        public DateTime? DateEffectuee { get; set; }
-
         [StringLength(2000, ErrorMessage = "Le commentaire ne peut pas dépasser 2 000 caractères.")]
         public string? Commentaire { get; set; }
     }
@@ -51,6 +52,12 @@ namespace SchoolWebApp.Api.Controllers
     {
         [Required]
         public string? Statut { get; set; }
+    }
+
+    public class PositionLigneRequest
+    {
+        /// <summary>Son rang une fois déplacée, à partir de 0 (tout en haut du test).</summary>
+        public int Position { get; set; }
     }
 
     /// <summary>
@@ -74,10 +81,20 @@ namespace SchoolWebApp.Api.Controllers
         private readonly IJeuxDeTestsRepository _jeux;
         private readonly IReferentielService _referentiel;
         private readonly ICurrentUserAccessor _utilisateur;
+        private readonly ISignalementRepository _signalements;
+        private readonly IServiceScopeFactory _scopes;
+        private readonly OptionsEmail _optionsEmail;
+        private readonly ILogger<JeuxDeTestsController> _logger;
 
         public JeuxDeTestsController(
-            IJeuxDeTestsRepository jeux, IReferentielService referentiel, ICurrentUserAccessor utilisateur)
+            IJeuxDeTestsRepository jeux, IReferentielService referentiel, ICurrentUserAccessor utilisateur,
+            ISignalementRepository signalements, IServiceScopeFactory scopes, IOptions<OptionsEmail> optionsEmail,
+            ILogger<JeuxDeTestsController> logger)
         {
+            _signalements = signalements ?? throw new ArgumentNullException(nameof(signalements));
+            _scopes = scopes ?? throw new ArgumentNullException(nameof(scopes));
+            _optionsEmail = optionsEmail?.Value ?? throw new ArgumentNullException(nameof(optionsEmail));
+            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _jeux = jeux ?? throw new ArgumentNullException(nameof(jeux));
             _referentiel = referentiel ?? throw new ArgumentNullException(nameof(referentiel));
             _utilisateur = utilisateur ?? throw new ArgumentNullException(nameof(utilisateur));
@@ -190,12 +207,14 @@ namespace SchoolWebApp.Api.Controllers
             if (!StatutsDeTest.Connu(requete.Statut)) return BadRequest(new { message = StatutInconnu });
 
             var commentaire = requete.Commentaire?.Trim();
+            var avant = await StatutAvantAsync(ligneId, ct);
 
-            return Rendre(
-                await _jeux.ModifierLigneAsync(
-                    id, ligneId, requete.Competence?.Trim() ?? string.Empty, requete.Statut!, requete.DateEffectuee,
-                    string.IsNullOrEmpty(commentaire) ? null : commentaire, ct),
-                LigneIntrouvable);
+            var jeu = await _jeux.ModifierLigneAsync(
+                id, ligneId, requete.Competence?.Trim() ?? string.Empty, requete.Statut!,
+                string.IsNullOrEmpty(commentaire) ? null : commentaire, HeureFrance.Locale(DateTime.UtcNow), ct);
+
+            if (jeu is not null) await ApresChangementDeStatutAsync(ligneId, avant, requete.Statut!, ct);
+            return Rendre(jeu, LigneIntrouvable);
         }
 
         [HttpPut("{id:int}/lignes/{ligneId:int}/statut")]
@@ -207,7 +226,110 @@ namespace SchoolWebApp.Api.Controllers
         {
             if (!StatutsDeTest.Connu(requete.Statut)) return BadRequest(new { message = StatutInconnu });
 
-            return Rendre(await _jeux.ChangerStatutAsync(id, ligneId, requete.Statut!, ct), LigneIntrouvable);
+            var avant = await StatutAvantAsync(ligneId, ct);
+            var jeu = await _jeux.ChangerStatutAsync(id, ligneId, requete.Statut!, HeureFrance.Locale(DateTime.UtcNow), ct);
+
+            if (jeu is not null) await ApresChangementDeStatutAsync(ligneId, avant, requete.Statut!, ct);
+            return Rendre(jeu, LigneIntrouvable);
+        }
+
+        [HttpPut("{id:int}/lignes/{ligneId:int}/position")]
+        [SwaggerResponse(200, "Ligne déplacée dans son test, l'ordre est mémorisé.", typeof(JeuDeTest))]
+        [SwaggerResponse(404, "Ligne inexistante dans ce jeu.")]
+        public async Task<IActionResult> DeplacerLigne(
+            int id, int ligneId, [FromBody] PositionLigneRequest requete, CancellationToken ct) =>
+            Rendre(await _jeux.DeplacerLigneAsync(id, ligneId, requete.Position, ct), LigneIntrouvable);
+
+        private async Task<string?> StatutAvantAsync(int ligneId, CancellationToken ct) =>
+            (await _jeux.LignesDeSignalementAsync([ligneId], ct)).FirstOrDefault()?.Statut;
+
+        /// <summary>
+        /// CE QUE LE TESTEUR DÉCIDE PART AU SUPPORT — Camara, le 06/11/2026. Seulement au PASSAGE d'un statut à
+        /// l'autre (une ligne réenregistrée telle quelle ne prévient personne), et seulement pour une ligne reliée à
+        /// un signalement admin. Les mails partent après l'écriture : une panne d'envoi ne défait rien, elle se lit
+        /// dans le journal.
+        ///
+        /// - KO : « ça remet le ticket en Nouveau, au lieu de Traité, avec un badge montrant qu'il a été rouvert
+        ///   après un test » — seulement s'il était TRAITÉ (un KO avant toute correction n'a rien à rouvrir).
+        /// - OK : « un mail dans la boîte du support pour dire que le test est OK ». Le signalement ne bouge pas.
+        /// </summary>
+        private async Task ApresChangementDeStatutAsync(int ligneId, string? avant, string apres, CancellationToken ct)
+        {
+            if (apres == avant) return;
+
+            if (apres == StatutsDeTest.Ko)
+            {
+                var rouvert = await _signalements.RouvrirApresTestAsync(ligneId, DateTime.UtcNow, ct);
+                if (rouvert is null) return;
+
+                _logger.LogInformation("Signalement {Id} rouvert apres un test KO (ligne {Ligne}, {Fois} fois).",
+                    rouvert.Id, ligneId, rouvert.Reouvertures);
+                await EcrireAuSupportAsync(ligneId, rouvert, "Test KO : le bug « {0} » est rouvert", "test-ko",
+                    rouvert.Reouvertures > 1 ? $" (pour la {rouvert.Reouvertures}<sup>e</sup> fois)" : string.Empty, ct);
+                return;
+            }
+
+            if (apres == StatutsDeTest.Ok)
+            {
+                var signalement = await _signalements.GetAdminDeLigneAsync(ligneId, ct);
+                if (signalement is null) return;
+
+                _logger.LogInformation("Signalement {Id} : test OK (ligne {Ligne}).", signalement.Id, ligneId);
+                await EcrireAuSupportAsync(ligneId, signalement, "Test réussi : « {0} » s'est terminé avec succès", "test-ok",
+                    signalement.Reouvertures > 0
+                        ? $" Il avait été rouvert {signalement.Reouvertures} fois avant."
+                        : string.Empty, ct);
+            }
+        }
+
+        /// <summary>Un mail à la boîte du support (`OptionsEmail.RecipientEmail`), sur une ligne et son signalement.</summary>
+        private async Task EcrireAuSupportAsync(
+            int ligneId, Signalement signalement, string sujet, string gabarit, string fois, CancellationToken ct)
+        {
+            var support = string.IsNullOrWhiteSpace(_optionsEmail.RecipientEmail) ? _optionsEmail.SenderEmail : _optionsEmail.RecipientEmail;
+            var ligne = (await _jeux.LignesDeSignalementAsync([ligneId], ct)).FirstOrDefault();
+            if (string.IsNullOrWhiteSpace(support) || ligne is null)
+            {
+                _logger.LogWarning("Mail « {Gabarit} » non envoye : pas de boite support ou ligne {Ligne} introuvable.", gabarit, ligneId);
+                return;
+            }
+
+            static string Html(string? texte) => System.Net.WebUtility.HtmlEncode(texte ?? string.Empty);
+            var section = ligne.Section switch { "elementaire" => "Élémentaire", "college" => "Collège", "lycee" => "Lycée", _ => ligne.Section };
+            var nom = ligne.Competence.Length > 90 ? ligne.Competence[..90].TrimEnd() + "…" : ligne.Competence;
+
+            var valeurs = new Dictionary<string, string>
+            {
+                ["competence"] = Html(ligne.Competence),
+                ["jeu"] = Html(string.IsNullOrWhiteSpace(ligne.JeuTitre) ? $"{section} · {ligne.Classe}" : ligne.JeuTitre),
+                ["classe"] = Html($"{section} · {ligne.Classe}"),
+                ["bloc"] = Html($"{ligne.TestTitre} · {ligne.Matiere}"),
+                ["commentaire"] = Html(ligne.Commentaire ?? signalement.Description),
+                ["testeur"] = Html(Auteur()),
+                ["fois"] = fois,
+            };
+
+            // EN ARRIÈRE-PLAN (06/11/2026) : le serveur d'envoi peut mettre des secondes, voire deux minutes à
+            // répondre ; le clic du testeur, lui, doit revenir tout de suite. Une portée à part : celle de la
+            // requête est fermée quand le mail part.
+            var objet = string.Format(sujet, nom);
+            var signalementId = signalement.Id;
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    using var portee = _scopes.CreateScope();
+                    var email = portee.ServiceProvider.GetRequiredService<IServiceEmail>();
+                    if (!await email.EnvoyerAsync(support, objet, gabarit, valeurs, CancellationToken.None))
+                    {
+                        _logger.LogError("Mail « {Gabarit} » NON ENVOYE au support (signalement {Id}).", gabarit, signalementId);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Mail « {Gabarit} » au support en echec (signalement {Id}).", gabarit, signalementId);
+                }
+            });
         }
 
         [HttpDelete("{id:int}/lignes/{ligneId:int}")]

@@ -87,10 +87,26 @@ namespace SchoolWebApp.Api.Middleware
                 return;
             }
 
+            // L'EN-TÊTE, OU LE PARAMÈTRE `billet` POUR LE MICRO : un WebSocket ne
+            // peut pas porter d'en-tête choisi (06/11/2026).
             var billet = contexte.Request.Headers[EnTete].ToString();
-            if (Guid.TryParse(billet, out var jeton) && salle.EstAdmis(jeton))
+            if (string.IsNullOrEmpty(billet)) billet = contexte.Request.Query["billet"].ToString();
+            var aUnBillet = Guid.TryParse(billet, out var jeton) && jeton != Guid.Empty;
+
+            if (aUnBillet && salle.EstAdmis(jeton))
             {
                 await _suivant(contexte);
+                return;
+            }
+
+            // SANS BILLET, ON REFUSE SANS EN CRÉER — Camara, le 06/11/2026 : « comment je peux avoir 10 personnes
+            // en file d'attente alors que je suis tout seul ? ». Au chargement, la page lance une dizaine d'appels
+            // à la fois, tous sans billet : chacun en recevait un NEUF, et un seul visiteur prenait dix rangs (les
+            // neuf orphelins expiraient ensuite en trente secondes, d'où un rang qui descend tout seul). Le billet
+            // ne se délivre plus qu'au guichet (`affluence/billet`), que le site appelle une seule fois.
+            if (!aUnBillet)
+            {
+                await RefuserAsync(contexte, null);
                 return;
             }
 
@@ -98,21 +114,25 @@ namespace SchoolWebApp.Api.Middleware
             // visiteur refoulé ici est justement celui qui doit prendre son
             // rang ; le lui donner dans la même réponse lui épargne un appel
             // de plus, et nous une requête de plus.
-            var place = salle.Demander(jeton, reglage.Places);
+            await RefuserAsync(contexte, salle.Demander(jeton, reglage.Places));
+        }
 
+        /// <summary>Le 503, avec le billet complet quand il y en a un ; sans billet, le site va le chercher au guichet.</summary>
+        private static async Task RefuserAsync(HttpContext contexte, Billet? place)
+        {
             contexte.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
-            contexte.Response.Headers.RetryAfter = place.RappelDans.ToString();
+            contexte.Response.Headers.RetryAfter = (place?.RappelDans ?? 1).ToString();
             contexte.Response.ContentType = "application/json; charset=utf-8";
 
             await contexte.Response.WriteAsync(JsonSerializer.Serialize(new
             {
                 code = Code,
                 message = "Beaucoup de monde en ce moment. Votre place est gardée.",
-                billet = place.Jeton,
-                rang = place.Rang,
-                devant = place.Devant,
-                attenteSecondes = place.AttenteSecondes,
-                rappelDans = place.RappelDans,
+                billet = place?.Jeton,
+                rang = place?.Rang,
+                devant = place?.Devant,
+                attenteSecondes = place?.AttenteSecondes,
+                rappelDans = place?.RappelDans ?? 1,
             }));
         }
 
@@ -124,7 +144,7 @@ namespace SchoolWebApp.Api.Middleware
         /// deux, et c'est le genre de panne qu'on ne découvre qu'un jour
         /// d'affluence.
         /// </summary>
-        private static bool EstAdministrateur(System.Security.Claims.ClaimsPrincipal? qui)
+        internal static bool EstAdministrateur(System.Security.Claims.ClaimsPrincipal? qui)
             => qui is not null
                && (qui.HasClaim("role", "Admin") || qui.IsInRole("Admin")
                    || qui.HasClaim("role", "SuperAdmin") || qui.IsInRole("SuperAdmin"));

@@ -32,12 +32,21 @@ namespace SchoolWebApp.Domain.Repositories
 
         Task<JeuDeTest?> AjouterLigneAsync(int jeuId, int testId, string competence, CancellationToken ct = default);
 
+        /// <summary>`maintenant` (heure de France) devient « Effectué le » dès qu'un élément de la ligne change.</summary>
         Task<JeuDeTest?> ModifierLigneAsync(
-            int jeuId, int ligneId, string competence, string statut, DateTime? dateEffectuee, string? commentaire,
-            CancellationToken ct = default);
+            int jeuId, int ligneId, string competence, string statut, string? commentaire,
+            DateTime maintenant, CancellationToken ct = default);
 
-        /// <summary>Le choix dans la liste : le statut seul, pour ne rien écraser d'autre.</summary>
-        Task<JeuDeTest?> ChangerStatutAsync(int jeuId, int ligneId, string statut, CancellationToken ct = default);
+        /// <summary>
+        /// Le choix dans la liste : le statut, et « Effectué le » à `maintenant` (heure de France) s'il a changé.
+        /// </summary>
+        Task<JeuDeTest?> ChangerStatutAsync(int jeuId, int ligneId, string statut, DateTime maintenant, CancellationToken ct = default);
+
+        /// <summary>
+        /// Place la ligne au rang `position` (0 = tout en haut) dans SON test, et mémorise l'ordre de tout le test. Un rang
+        /// hors de la liste vaut le bout le plus proche.
+        /// </summary>
+        Task<JeuDeTest?> DeplacerLigneAsync(int jeuId, int ligneId, int position, CancellationToken ct = default);
 
         Task<JeuDeTest?> SupprimerLigneAsync(int jeuId, int ligneId, CancellationToken ct = default);
 

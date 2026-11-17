@@ -708,7 +708,9 @@ namespace SchoolWebApp.Api.Services.Voix
         /// </summary>
         public static bool EnExerciceDeSons(IEnumerable<string?> messagesRecents) =>
             messagesRecents.Any(m => m is not null
-                && (m.Contains(Prompts.PromptsPedagogiques.SonFait, StringComparison.Ordinal) || MentionDeSons().IsMatch(m)));
+                && (m.Contains(Prompts.PromptsPedagogiques.SonFait, StringComparison.Ordinal) || MentionDeSons().IsMatch(m)
+                    // LA LECTURE EN IMAGES (07/11/2026) : l'image montrée, ou « je veux lire des mots », qui ne nomme aucun son.
+                    || LectureDImage.Affiche(m) is not null || LectureDImage.ChoixDeLEnfant(m) is not null));
 
         /// <summary>
         /// UN VERDICT RÉCENT PROUVE QUE L'EXERCICE CONTINUE — Camara, le 05/11/2026 : « on est toujours sur
@@ -721,6 +723,22 @@ namespace SchoolWebApp.Api.Services.Voix
             var messages = messagesRecents.ToList();
             return messages.Any(m => m.SonJuste is not null) || EnExerciceDeSons(messages.Select(m => m.Contenu));
         }
+
+        /// <summary>
+        /// UN MESSAGE DU PROFESSEUR PORTE-T-IL UN VRAI SIGNE D'EXERCICE DE SONS ? Après que l'enfant a demandé à changer
+        /// d'exercice (14/11/2026, voir ChangementDExercice), « d'accord, on laisse les syllabes » ne doit pas rouvrir
+        /// l'exercice : le mot seul ne suffit plus. Il faut ce qui FAIT l'exercice : une balise de voix, un tableau, une
+        /// image à lire, la carte du choix, ou la consigne (« qu'as-tu entendu », « voici la prochaine syllabe »).
+        /// </summary>
+        public static bool PorteUnExercice(string? messageDuProfesseur) =>
+            !string.IsNullOrWhiteSpace(messageDuProfesseur)
+            && (PassageDeVoix().IsMatch(messageDuProfesseur)
+                || messageDuProfesseur.Contains("[ARDOISE]", StringComparison.OrdinalIgnoreCase)
+                || messageDuProfesseur.Contains(Prompts.PromptsPedagogiques.SonFait, StringComparison.Ordinal)
+                || LectureDImage.Affiche(messageDuProfesseur) is not null
+                || messageDuProfesseur.Contains(LectureDImage.BaliseChoix[..^1], StringComparison.OrdinalIgnoreCase)
+                || AttendCeQuIlAEntendu().IsMatch(messageDuProfesseur)
+                || AnnonceDuSon().IsMatch(messageDuProfesseur));
 
         public const string BaliseSupportSon = "[SUPPORT_SON]";
 
@@ -804,7 +822,11 @@ namespace SchoolWebApp.Api.Services.Voix
         [GeneratedRegex(@"\b(?:des|les|aux|de)\s+mots\b|\bmots\s+entiers\b|\bécoute\s+des\s+mots\b|\bj.ai\s+entendu\s+le\s+mot\b", RegexOptions.IgnoreCase)]
         private static partial Regex LEnfantParleDeMots();
 
-        [GeneratedRegex(@"\bsyllabes?\b", RegexOptions.IgnoreCase)]
+        [GeneratedRegex(@"\b(?:[ée]cout\w*|entend\w*)\b", RegexOptions.IgnoreCase)]
+        private static partial Regex VerbeDEcoute();
+
+        // « Je veux écouter des sons » : le bouton de l'anglais, où les « syllabes » sont les sons (07/11/2026).
+        [GeneratedRegex(@"\bsyllabes?\b|\b(?:des|les)\s+sons\b", RegexOptions.IgnoreCase)]
         private static partial Regex LEnfantParleDeSyllabes();
 
         // « T'as encore changé d'exercice », « pourquoi pied ? » : une plainte. « Je veux changer d'exercice, je vais faire
@@ -819,9 +841,24 @@ namespace SchoolWebApp.Api.Services.Voix
         /// </summary>
         public static string? TypeDEcoute(IEnumerable<string?> recents)
         {
-            foreach (var r in recents.Reverse())
+            var liste = recents as IReadOnlyList<string?> ?? recents.ToList();
+
+            // L'EXERCICE QUE LE PROFESSEUR TIENT EN CE MOMENT — production, le 07/11/2026 : en pleine lecture en images,
+            // « change de syllabe » ou « je suis bloqué sur cette syllabe » faisait basculer vers l'ÉCOUTE des syllabes
+            // (le mot « syllabe » suffisait), et Adrien repartait sur son tableau et le juge de prononciation. Tant qu'une
+            // image à lire est le dernier exercice ouvert, il faut un verbe (« écouter », « entendre », « lire ») pour changer.
+            var enLectureDImages = liste.Reverse().Where(r => r is not null).Select(r => r!)
+                .Select(r => LectureDImage.TypeDuMessage(r) is not null ? (bool?)true
+                    : ConsigneDeLaSyllabe().IsMatch(r) || AnnonceDeSyllabe().IsMatch(r) || ConsigneDeLEcoute().IsMatch(r) || AnnonceDeMot().IsMatch(r) ? false
+                    : null)
+                .FirstOrDefault(e => e is not null) == true;
+
+            foreach (var r in liste.Reverse())
             {
                 if (r is null) continue;
+
+                // LA LECTURE EN IMAGES (07/11/2026) : l'image que le code vient de montrer dit l'exercice en cours.
+                if (LectureDImage.TypeDuMessage(r) is { } montre) return montre;
 
                 var estDuProfesseur = PassageDeVoix().IsMatch(r) || r.Contains("[ARDOISE]", StringComparison.OrdinalIgnoreCase)
                     || ConsigneDeLEcoute().IsMatch(r) || ConsigneDeLaSyllabe().IsMatch(r) || AttendCeQuIlAEntendu().IsMatch(r)
@@ -837,6 +874,15 @@ namespace SchoolWebApp.Api.Services.Voix
                 // UNE PLAINTE OU UNE QUESTION N'EST PAS UN CHOIX : « là on est sur des mots, t'as encore changé » (05/11/2026).
                 if (PlainteOuQuestion().IsMatch(r)) continue;
 
+                // « JE VEUX LIRE DES SYLLABES » : la lecture, avant « syllabes » qui dirait l'écoute.
+                if (LectureDImage.ChoixDeLEnfant(r) is { } lecture) return lecture;
+
+                // « UN EXERCICE SUR LES MOTS », SANS DIRE LEQUEL (07/11/2026) : rien n'est choisi, la carte le lui demande.
+                if (LectureDImage.DemandeSansPrecision(r)) return null;
+
+                // EN LECTURE EN IMAGES, « SYLLABE » SEUL NE CHANGE RIEN : voir enLectureDImages.
+                if (enLectureDImages && !VerbeDEcoute().IsMatch(r)) continue;
+
                 // LES DEUX DANS LA MÊME PHRASE : LE DERNIER NOMMÉ EST CE QU'IL VEUT — « je veux plus faire de mots, je veux
                 // faire les syllabes » (Camara, 05/11/2026, 21h03). Une question (« syllabes ou mots ? ») est déjà écartée.
                 var syllabes = LEnfantParleDeSyllabes().Matches(r).LastOrDefault();
@@ -849,8 +895,40 @@ namespace SchoolWebApp.Api.Services.Voix
         }
 
         /// <summary>Le fait du tour, quand l'exercice est connu : le professeur n'en change pas de lui-même.</summary>
-        public static string FaitTypeDEcoute(string type, IEnumerable<string?>? recents = null, string? niveau = null)
+        public static string FaitTypeDEcoute(string type, IEnumerable<string?>? recents = null, string? niveau = null, bool anglais = false)
         {
+            // EN ANGLAIS, JAMAIS DE SYLLABE FRANÇAISE — Camara, le 06/11/2026 : « c'est une erreur super grave, je suis en
+            // anglais et elle me sort des syllabes en français ». Ce fait donnait à Marine les exemples du français
+            // (jou, bon, cha, ri), et elle dictait « ri ». En anglais, les « syllabes » sont les SONS de l'anglais, travaillés
+            // dans de petits mots anglais de la liste vérifiée, en attendant la banque des sons de Marine.
+            if (anglais)
+            {
+                // LES MOTS QUI ONT UNE IMAGE (07/11/2026) : 242 mots de Camara, du CP à sa classe ; l'image s'affiche quand il
+                // a trouvé. Une douzaine par tour, ceux déjà dictés en moins : une règle ne vaut pas un fait.
+                if (type != Syllabe)
+                {
+                    var illustres = MotsAnglaisIllustres.JusquA(niveau);
+                    if (illustres.Count == 0) return FaitEcouteDeMotsAnglais;
+                    var fil = recents?.ToList() ?? [];
+                    var dicte = fil.Where(r => r is not null && PassageDeVoix().IsMatch(r)).Select(r => DicteeDeMots.MotDit(r!))
+                        .Where(d => d is not null).Select(d => d!).ToHashSet(StringComparer.OrdinalIgnoreCase);
+                    var libres = illustres.Where(m => !dicte.Contains(m.Mot)).ToList();
+                    if (libres.Count == 0) libres = illustres.ToList();
+                    var pas = Math.Max(1, libres.Count / 12);
+                    var proposes = Enumerable.Range(0, Math.Min(12, libres.Count))
+                        .Select(i => libres[(fil.Count + i * pas) % libres.Count].Mot).Distinct();
+                    return FaitEcouteDeMotsAnglais[..^1] + " Choisis de préférence un mot qui a son image : " + string.Join(", ", proposes) + ".]";
+                }
+
+                // LES MOTS DES IMAGES DE SA CLASSE (06/11/2026) : chaque son de l'anglais a une image, qui s'affiche au
+                // tableau quand l'enfant trouve SON mot (front, lib/imagesSonsAnglais.js). Le professeur les reçoit
+                // pour les choisir : une règle ne vaut pas un fait.
+                var sons = SonsAnglaisIllustres.DeLaClasse(niveau);
+                return sons.Count == 0 ? FaitSonsAnglais
+                    : FaitSonsAnglais[..^1] + " Pour les sons de sa classe, prends de préférence le mot de leur image : "
+                        + string.Join(", ", sons.Select(s => $"{s.Son} → {s.Mot}")) + ".]";
+            }
+
             if (type != Syllabe)
             {
                 // LES MOTS DE SA CLASSE, DITS AU PROFESSEUR — voir BanqueDeSons.PropositionDeMots.
@@ -878,6 +956,17 @@ namespace SchoolWebApp.Api.Services.Voix
         }
 
         private const string FaitEcouteDeMots = "[Fait pour ce tour : l'élève a choisi l'écoute de MOTS. Tu dictes un mot court et tu dis « mot ». Tu ne passes aux syllabes que s'il le demande lui-même.]";
+
+        /// <summary>Les sons de l'anglais, dans de petits mots anglais (06/11/2026) : voir FaitTypeDEcoute.</summary>
+        public const string FaitSonsAnglais =
+            "[Fait pour ce tour : cours d'ANGLAIS, l'élève travaille les SONS DE L'ANGLAIS. Il n'y a pas de syllabes françaises ici : "
+            + "ne dicte JAMAIS une syllabe française (ri, cha, bon, jou, ba) ni un mot français. Tu annonces en français le son travaillé "
+            + "(« le son sh », « le a de cat »), puis tu dictes UN petit mot anglais qui le contient, pris dans la liste MOTS VÉRIFIÉS, "
+            + "dans ta balise [EN] (ship, fish, sheep, moon, cat, dog), et tu dis « Voici le prochain mot. ».]";
+
+        public const string FaitEcouteDeMotsAnglais =
+            "[Fait pour ce tour : cours d'ANGLAIS, l'élève a choisi l'écoute de MOTS ANGLAIS. Tu dictes UN mot anglais court de la "
+            + "liste MOTS VÉRIFIÉS dans ta balise [EN], jamais un mot ni une syllabe en français, et tu dis « mot ».]";
 
         /// <summary>« chapeau » dicté en plein exercice de syllabes devient « cha » : jusqu'au premier groupe de voyelles, avec sa nasale.</summary>
         public static string PremiereSyllabe(string mot)
@@ -935,6 +1024,28 @@ namespace SchoolWebApp.Api.Services.Voix
             return mots.Count is >= 1 and <= 2 && !mots.Any(PasUneReponse.Contains) ? mots[^1] : null;
         }
 
+        /// <summary>
+        /// LE MOT BANAL QUI PEUT ÊTRE LA RÉPONSE — Camara, le 07/11/2026 : il lit « coi » (coiffeur), le micro écrit
+        /// « Quoi ? », et « quoi » est dans la liste de ce qui n'est pas une réponse : aucun verdict, « c'est pas bon ».
+        /// Un mot seul de cette liste est rendu ici ; l'appelant ne le retient que s'il SONNE comme la cible : « quoi »
+        /// pour « coi » est juste, « quoi ? » devant « bi » reste une question sans verdict.
+        /// </summary>
+        public static string? MotBanal(string? texte)
+        {
+            var mots = MotsDUneReponseCourte(texte);
+            return mots is { Count: 1 } && EstBanal(mots[0]) ? mots[0] : null;
+        }
+
+        /// <summary>Les mots d'une réponse courte (un ou deux), normalisés ; null si c'est vide ou une phrase.</summary>
+        public static IReadOnlyList<string>? MotsDUneReponseCourte(string? texte)
+        {
+            if (string.IsNullOrWhiteSpace(texte)) return null;
+            var mots = texte.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).Select(Normaliser).Where(m => m.Length > 0).ToList();
+            return mots.Count is >= 1 and <= 2 ? mots : null;
+        }
+
+        public static bool EstBanal(string mot) => PasUneReponse.Contains(mot);
+
         /// <summary>L'écriture ne compte pas ici : « Riz », « ris » se comparent ensuite au son. Le micro colle parfois « mot » et le mot.</summary>
         public static bool MemeMotEntendu(string dit, string mot)
         {
@@ -966,9 +1077,9 @@ namespace SchoolWebApp.Api.Services.Voix
         /// LE MOT À ÉCOUTER NE S'AFFICHE PAS, ET LA CONSIGNE EST DONNÉE. Si la conversation ne l'a jamais portée, le code
         /// la place devant le mot. Les balises placées en pleine phrase laissaient un trou : « tu as bien entendu  ! ».
         /// </summary>
-        public static string EcouteDesMots(string texte, IEnumerable<string> recents, string entier, string langue = LanguesDesSons.Francais, string? niveau = null, string? messageDeLEleve = null)
+        public static string EcouteDesMots(string texte, IEnumerable<string> recents, string entier, string langue = LanguesDesSons.Francais, string? niveau = null, string? messageDeLEleve = null, string? motGarde = null, string? abandonne = null, string? motDeLImage = null)
         {
-            var propre = DicteeDeMots.MotALaFin(DicteeDeMots.MasquerMotDicte(DicteeDeMots.GarderSeulementLaDerniereVoix(texte)));
+            var propre = DicteeDeMots.MotALaFin(DicteeDeMots.MasquerMotDicte(DicteeDeMots.GarderSeulementLaDerniereVoix(texte, motGarde)));
             var liste = recents as IReadOnlyList<string> ?? recents.ToList();
             var dit = DicteeDeMots.MotDit(propre);
 
@@ -1006,6 +1117,39 @@ namespace SchoolWebApp.Api.Services.Voix
             {
                 var dits = liste.Where(r => r is not null && PassageDeVoix().IsMatch(r)).Select(r => DicteeDeMots.MotDit(r));
                 if (BanqueDeSons.MotDisponible(rang, $"{dit}|{liste.Count}", dits) is { } autre)
+                {
+                    propre = Dicter(dit, autre);
+                    dit = autre;
+                }
+            }
+
+            // TROIS ESSAIS, PAS PLUS — Camara, le 07/11/2026 : « au bout de 3 essais il faut passer à la suivante ; faut pas
+            // laisser l'enfant essayer à l'infini, il va finir frustré ». Le professeur le sait (EssaisRates.Fait) ; s'il
+            // redemande quand même le même son, le code en dicte un autre.
+            if (abandonne is not null && dit is not null && SansAccents(dit) == SansAccents(abandonne))
+            {
+                var dejaDits = liste.Where(r => r is not null && PassageDeVoix().IsMatch(r)).Select(r => DicteeDeMots.MotDit(r)).ToList();
+                string? autre;
+                if (langue == LanguesDesSons.Anglais)
+                {
+                    var choix = SonsAnglaisIllustres.DeLaClasse(niveau).Select(x => x.Mot.ToLowerInvariant())
+                        .Where(m => m is not "thumb" and not "knee" && !string.Equals(m, abandonne, StringComparison.OrdinalIgnoreCase))
+                        .ToList();
+                    if (choix.Count == 0) choix = ["cat", "dog", "sun", "ship", "fish", "moon"];
+                    var neufs = choix.Where(m => !dejaDits.Any(d => string.Equals(d, m, StringComparison.OrdinalIgnoreCase))).ToList();
+                    var pool = neufs.Count > 0 ? neufs : choix;
+                    autre = pool[liste.Count % pool.Count];
+                }
+                else if (syllabe)
+                {
+                    autre = BanqueDeSons.Nombre > 0 ? BanqueDeSons.SyllabeDisponible($"{dit}|abandon|{liste.Count}", dejaDits.Append(dit)) : null;
+                }
+                else
+                {
+                    autre = rang > 0 && BanqueDeSons.NombreDeMots > 0 ? BanqueDeSons.MotDisponible(rang, $"{dit}|abandon|{liste.Count}", dejaDits.Append(dit)) : null;
+                }
+
+                if (autre is not null && SansAccents(autre) != SansAccents(dit))
                 {
                     propre = Dicter(dit, autre);
                     dit = autre;
@@ -1053,7 +1197,11 @@ namespace SchoolWebApp.Api.Services.Voix
                 : syllabe ? "Voici la prochaine syllabe." : "Voici le prochain mot.";
 
             var morceaux = new List<string>();
-            if (LignesVides().Replace(corps, "\n\n").Trim() is { Length: > 0 } reste) morceaux.Add(reste);
+            // « « Sin », comme dans singe ! » : la syllabe seule se lit mal hors de sa balise (voir ImageAuTableau.SansSyllabeCitee).
+            // « Comme dans… » : le mot de l'image ou rien, en français (en anglais, « le a de cat » annonce le son).
+            var relu = ImageAuTableau.SansSyllabeCitee(LignesVides().Replace(corps, "\n\n").Trim());
+            if (langue == LanguesDesSons.Francais) relu = ImageAuTableau.CommeDans(relu, motDeLImage);
+            if (relu is { Length: > 0 } reste) morceaux.Add(reste);
             if (annonce is not null) morceaux.Add(annonce);
             morceaux.Add(voix.Value);
 
@@ -1078,8 +1226,11 @@ namespace SchoolWebApp.Api.Services.Voix
         [GeneratedRegex(@"[^.!?…\n]*\btu\s+(?:diras|dis|vas\s+dire|peux\s+dire|me\s+diras|me\s+dis)\b[^.!?…\n]*\bj.ai\s+entendu\b[^.!?…\n]*[.!?…]?", RegexOptions.IgnoreCase)]
         private static partial Regex PhraseConsigneDeReponse();
 
-        /// <summary>Une annonce seule dans sa phrase : « Voici la syllabe. », « Voici le prochain mot : », « Je te la redis. »</summary>
-        [GeneratedRegex(@"(?<=^|[.!?…\n]\s*)\s*(?:voici\s+(?:la|le)\s+(?:(?:prochaine|première|premiere|nouvelle|prochain|premier|nouveau)\s+)?(?:syllabe|mot)|je\s+te\s+l[ae]\s+redis)\s*[.!:…]?", RegexOptions.IgnoreCase)]
+        /// <summary>
+        /// Une annonce seule dans sa phrase : « Voici la syllabe. », « Voici le prochain mot : », « Je te la redis. », et la forme
+        /// courte « Voici la prochaine. » (Camara, capture du 07/11/2026 : elle restait, et l'annonce du code suivait — en double).
+        /// </summary>
+        [GeneratedRegex(@"(?<=^|[.!?…\n]\s*)\s*(?:voici\s+(?:la|le)\s+(?:(?:prochaine|première|premiere|nouvelle|prochain|premier|nouveau)(?:\s+(?:syllabe|mot)|(?=\s*(?:[.!:…\n]|$)))|syllabe|mot)|je\s+te\s+l[ae]\s+redis)\s*[.!:…]?", RegexOptions.IgnoreCase)]
         private static partial Regex PhraseDAnnonce();
 
         [GeneratedRegex(@"\bvoici\s+la\s+(?:(?:prochaine|première|premiere|nouvelle)\s+)?syllabe\b|\bje\s+te\s+la\s+redis\b", RegexOptions.IgnoreCase)]
@@ -1377,6 +1528,12 @@ namespace SchoolWebApp.Api.Services.Voix
         /// <summary>« Bonne écoute » ou « Mauvaise écoute » : ce qu'il dit avoir entendu, comparé au son au mot dit. Null : pas une réponse, ou panne.</summary>
         Task<VerdictSon?> VerifierEcouteAsync(int conversationId, string paroleDuProfesseur, string? texte, CancellationToken ct, string langue = LanguesDesSons.Francais, string? typeDEcoute = null);
 
+        /// <summary>
+        /// LA LECTURE EN IMAGES (07/11/2026) : ce qu'il a lu, comparé à ce que montre l'image, exactement comme l'écoute.
+        /// Null : pas une réponse (trop long, vide), ou panne.
+        /// </summary>
+        Task<VerdictSon?> VerifierLectureAsync(int conversationId, LectureDImage.Element aLire, string? texte, CancellationToken ct, string langue = LanguesDesSons.Francais);
+
         /// <summary>Le fait à joindre à ce tour, une seule fois ; null s'il n'y en a pas.</summary>
         string? PrendreFait(int conversationId);
 
@@ -1389,7 +1546,7 @@ namespace SchoolWebApp.Api.Services.Voix
         Task<bool> DemandeDeSonAsync(string? paroleDuProfesseur, CancellationToken ct, string langue = LanguesDesSons.Francais, bool enExercice = true);
 
         /// <summary>Le filtre d'une réponse dans un exercice de sons : la liste blanche, et la réponse cachée quand l'enfant doit l'écrire.</summary>
-        Task<FiltreMotsVerifies?> FiltrePourAsync(string langue, IReadOnlyList<string> messagesRecents, int graine, CancellationToken ct, bool supportConnu = true, bool photoAttendue = false, EtatDuMot? etat = null, bool retenirTout = false, string? niveau = null, string? messageDeLEleve = null);
+        Task<FiltreMotsVerifies?> FiltrePourAsync(string langue, IReadOnlyList<string> messagesRecents, int graine, CancellationToken ct, bool supportConnu = true, bool photoAttendue = false, EtatDuMot? etat = null, bool retenirTout = false, string? niveau = null, string? messageDeLEleve = null, string? motGarde = null, string? abandonne = null, LectureDImage.Tour? lecture = null, string? poserLeChoix = null, string? motDeLImage = null);
     }
 
     public sealed class VerificationSonService : IVerificationSonService
@@ -1598,7 +1755,14 @@ namespace SchoolWebApp.Api.Services.Voix
 
             var mot = DicteeDeMots.MotDit(paroleDuProfesseur);
             var dit = RegleVerificationSon.ReponseDEcoute(texte);
-            if (mot is null || dit is null) return null;
+            if (mot is null) return null;
+
+            // « Quoi ? » entendu pour « coi » (07/11/2026) : un mot banal n'est retenu que s'il sonne comme le mot dit.
+            if (dit is null)
+            {
+                dit = RegleVerificationSon.MotBanal(texte);
+                if (dit is null || !await MemeSonQueAsync(dit, mot, langue, ct)) return null;
+            }
 
             var juste = RegleVerificationSon.MemeMotEntendu(dit, mot);
 
@@ -1613,7 +1777,8 @@ namespace SchoolWebApp.Api.Services.Voix
                     var attendus = IpaAttendusAsync(mot, delai.Token, langue);
                     var entendus = IpaAttendusAsync(dit, delai.Token, langue);
                     await Task.WhenAll(attendus, entendus);
-                    juste = RegleVerificationSon.MemeSon(attendus.Result, entendus.Result);
+                    // UNE SYLLABE SE PRONONCE PAR SES RÈGLES DE LECTURE (07/11/2026) : voir PrononciationDesSyllabes.
+                    juste = RegleVerificationSon.MemeSon(PrononciationDesSyllabes.AvecLesRegles(attendus.Result, mot, langue), entendus.Result);
                 }
                 catch (OperationCanceledException) when (!ct.IsCancellationRequested)
                 {
@@ -1634,12 +1799,109 @@ namespace SchoolWebApp.Api.Services.Voix
             return verdict;
         }
 
-        public async Task<FiltreMotsVerifies?> FiltrePourAsync(string langue, IReadOnlyList<string> messagesRecents, int graine, CancellationToken ct, bool supportConnu = true, bool photoAttendue = false, EtatDuMot? etat = null, bool retenirTout = false, string? niveau = null, string? messageDeLEleve = null)
+        public async Task<VerdictSon?> VerifierLectureAsync(int conversationId, LectureDImage.Element aLire, string? texte, CancellationToken ct, string langue = LanguesDesSons.Francais)
+        {
+            _cache.Remove(CleFait(conversationId));
+
+            var dit = RegleVerificationSon.ReponseDEcoute(texte);
+            if (dit is null)
+            {
+                // UN MOT OU DEUX, DONT UN « BANAL » — production, le 07/11/2026 : il lit « coi », le micro écrit « Quoi ? »,
+                // aucun verdict, rien de compté, bloqué sur la même image bien au-delà de trois essais. Ici, dans la
+                // lecture en images, tout ce qui est court est une tentative : le mot utile s'il y en a un ; un mot banal
+                // qui SONNE comme la cible est juste (« quoi » pour « coi ») ; sinon c'est un essai raté, compté.
+                // Une vraie phrase (« je veux changer d'exercice ») n'est pas une tentative et part au professeur.
+                var mots = RegleVerificationSon.MotsDUneReponseCourte(texte);
+                if (mots is null) return null;
+
+                var utile = mots.LastOrDefault(m => !RegleVerificationSon.EstBanal(m));
+                if (utile is not null) dit = utile;
+                else
+                {
+                    var juste = await MemeSonQueAsync(mots[^1], aLire.Cible, langue, ct);
+                    var verdictBanal = new VerdictSon(aLire.Cible, juste ? mots[^1] : string.Join(" ", mots), juste);
+                    _cache.Set(CleFait(conversationId), LectureDImage.FaitVerdict(verdictBanal, aLire), DureeDuFait);
+                    return verdictBanal;
+                }
+            }
+
+            VerdictSon verdict;
+
+            // LE MOT ENTIER AU LIEU DE LA SYLLABE (« joker » pour « jo ») : ni juste, ni faux, il n'a pas compris la consigne.
+            //
+            // SAUF S'IL SE DIT COMME LA SYLLABE — responsable du pôle pédagogique, le 08/11/2026 : « joie », « noix » : l'enfant
+            // lit juste « joi », le micro écrit « joie », et l'exercice restait bloqué sur cette syllabe. 18 images sont
+            // dans ce cas (chat, nid, fée, loup, roue, pont, rond, deux, toit, bras, grue…). Le son d'abord : c'est alors juste.
+            if (aLire.MotDeLImage is { } motDeLImage && RegleVerificationSon.MemeMotEntendu(dit, motDeLImage)
+                && !await MemeSonQueAsync(dit, aLire.Cible, langue, ct))
+            {
+                verdict = new VerdictSon(aLire.Cible, dit, false, SansJugement: true);
+            }
+            else
+            {
+                var juste = RegleVerificationSon.MemeMotEntendu(dit, aLire.Cible);
+
+                // COMPARÉ AU SON, ENSUITE — comme l'écoute : « beau » écrit par le micro est une bonne lecture de « bo ».
+                if (!juste && !string.IsNullOrWhiteSpace(_options.ApiKey))
+                {
+                    using var delai = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                    delai.CancelAfter(Delai);
+
+                    try
+                    {
+                        var attendus = IpaAttendusAsync(aLire.Cible, delai.Token, langue);
+                        var entendus = IpaAttendusAsync(dit, delai.Token, langue);
+                        await Task.WhenAll(attendus, entendus);
+                        // « can » lu, « quand » écrit par le micro (10105-10109) : la syllabe se prononce par ses règles.
+                        juste = RegleVerificationSon.MemeSon(PrononciationDesSyllabes.AvecLesRegles(attendus.Result, aLire.Cible, langue), entendus.Result);
+                    }
+                    catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+                    {
+                        _logger.LogWarning("Comparaison d'une lecture : pas de reponse sous {Delai} s.", Delai.TotalSeconds);
+                        return null;
+                    }
+                    catch (Exception ex) when (ex is HttpRequestException or JsonException or InvalidOperationException)
+                    {
+                        _logger.LogWarning("Comparaison d'une lecture impossible : {Cause}.", ex.GetType().Name);
+                        return null;
+                    }
+                }
+
+                verdict = new VerdictSon(aLire.Cible, dit, juste);
+            }
+
+            _cache.Set(CleFait(conversationId), LectureDImage.FaitVerdict(verdict, aLire), DureeDuFait);
+            return verdict;
+        }
+
+        /// <summary>Deux mots se prononcent-ils pareil ? L'écriture d'abord, puis le son (règles des syllabes comprises) ; faux en cas de panne.</summary>
+        private async Task<bool> MemeSonQueAsync(string dit, string cible, string langue, CancellationToken ct)
+        {
+            if (RegleVerificationSon.MemeMotEntendu(dit, cible)) return true;
+            if (string.IsNullOrWhiteSpace(_options.ApiKey)) return false;
+
+            using var delai = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            delai.CancelAfter(Delai);
+            try
+            {
+                var attendus = IpaAttendusAsync(cible, delai.Token, langue);
+                var entendus = IpaAttendusAsync(dit, delai.Token, langue);
+                await Task.WhenAll(attendus, entendus);
+                return RegleVerificationSon.MemeSon(PrononciationDesSyllabes.AvecLesRegles(attendus.Result, cible, langue), entendus.Result);
+            }
+            catch (Exception ex) when (ex is OperationCanceledException && !ct.IsCancellationRequested || ex is HttpRequestException or JsonException or InvalidOperationException)
+            {
+                _logger.LogWarning("Comparaison d'un mot banal impossible : {Cause}.", ex.GetType().Name);
+                return false;
+            }
+        }
+
+        public async Task<FiltreMotsVerifies?> FiltrePourAsync(string langue, IReadOnlyList<string> messagesRecents, int graine, CancellationToken ct, bool supportConnu = true, bool photoAttendue = false, EtatDuMot? etat = null, bool retenirTout = false, string? niveau = null, string? messageDeLEleve = null, string? motGarde = null, string? abandonne = null, LectureDImage.Tour? lecture = null, string? poserLeChoix = null, string? motDeLImage = null)
         {
             // INTERRUPTEUR ÉTEINT, LA LISTE NE S'APPLIQUE PAS, MAIS LA RÉPONSE RESTE CACHÉE : le signalement
             // vient de la production, où il l'est. Une liste vide ne remplace aucun mot.
             IReadOnlyList<string> fiables = await _fiabilite.ActifAsync(ct) ? await _fiabilite.ListeAsync(langue, ct) : [];
-            return new FiltreMotsVerifies(langue, fiables, messagesRecents, graine, supportConnu, photoAttendue, etat, retenirTout, niveau, messageDeLEleve);
+            return new FiltreMotsVerifies(langue, fiables, messagesRecents, graine, supportConnu, photoAttendue, etat, retenirTout, niveau, messageDeLEleve, motGarde, abandonne, lecture, poserLeChoix, motDeLImage);
         }
 
         public async Task<bool> DemandeDeSonAsync(string? paroleDuProfesseur, CancellationToken ct, string langue = LanguesDesSons.Francais, bool enExercice = true)

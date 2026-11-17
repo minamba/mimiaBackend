@@ -26,13 +26,15 @@ namespace SchoolWebApp.Api.Services.MesFiches
         private readonly IFichesDeCoursRepository _depot;
         private readonly IReglageRepository _reglages;
         private readonly ReveilFichesDeCours _reveil;
+        private readonly ReveilPodcasts? _reveilPodcasts;
         private readonly QuotaFichesService _quota;
         private readonly AccesForfaitService _acces;
 
         public ImportCoursService(
             IFichesDeCoursRepository depot, IReglageRepository reglages, ReveilFichesDeCours reveil, QuotaFichesService quota,
-            AccesForfaitService acces)
+            AccesForfaitService acces, ReveilPodcasts? reveilPodcasts = null)
         {
+            _reveilPodcasts = reveilPodcasts;
             _acces = acces ?? throw new ArgumentNullException(nameof(acces));
             _quota = quota ?? throw new ArgumentNullException(nameof(quota));
             _depot = depot ?? throw new ArgumentNullException(nameof(depot));
@@ -40,19 +42,53 @@ namespace SchoolWebApp.Api.Services.MesFiches
             _reveil = reveil ?? throw new ArgumentNullException(nameof(reveil));
         }
 
-        public Task<bool> ModuleActifAsync(CancellationToken ct) =>
-            _reglages.EstActifAsync(Regles.Reglage, Regles.ActifParDefaut, ct);
+        /// <summary>
+        /// FICHES OU PODCASTS (15/11/2026) : le service sert les deux, la nature est celle du dépôt (donc de la portée,
+        /// posée par le contrôleur ou le QR code). Les règles et les phrases qui changent sont ci-dessous.
+        /// </summary>
+        public string Nature
+        {
+            get => _depot.Nature;
+            set => _depot.Nature = value;
+        }
+
+        private bool Podcasts => _depot.Nature == NaturesCours.Podcasts;
+
+        /// <summary>La tâche de fond de la bonne nature : fiches, ou podcasts.</summary>
+        private void Sonner()
+        {
+            if (Podcasts) _reveilPodcasts?.Sonner();
+            else _reveil.Sonner();
+        }
+
+        /// <summary>« fiches de révision » ou « podcasts », pour les phrases communes.</summary>
+        private string Module => Podcasts ? "podcasts" : "fiches de révision";
+
+        private Refus FermeModule() => new(Podcasts ? "Les podcasts ne sont pas ouverts." : "Les fiches de révision ne sont pas ouvertes.");
+
+        public Task<bool> ModuleActifAsync(CancellationToken ct) => Podcasts
+            ? _reglages.EstActifAsync(PodcastsEleve.Reglage, PodcastsEleve.ActifParDefaut, ct)
+            : _reglages.EstActifAsync(Regles.Reglage, Regles.ActifParDefaut, ct);
 
         public Task<QuotaFiches> QuotaAsync(int eleveId, CancellationToken ct) => _quota.LireAsync(eleveId, ct);
+
+        /// <summary>Le module des podcasts, quelle que soit la nature de cette portée (le menu de l'espace parent).</summary>
+        public Task<bool> PodcastsActifsAsync(CancellationToken ct) =>
+            _reglages.EstActifAsync(PodcastsEleve.Reglage, PodcastsEleve.ActifParDefaut, ct);
 
         /// <summary>
         /// Les plafonds d'import : ceux de tout le monde, ou ceux d'une famille
         /// administratrice. Dans l'espace parent, ceux du parent lui-même.
         /// </summary>
-        public async Task<Regles.LimitesImport> LimitesAsync(Proprietaire proprietaire, CancellationToken ct) =>
-            Regles.Limites(proprietaire.ParentId is int parentId
+        public async Task<Regles.LimitesImport> LimitesAsync(Proprietaire proprietaire, CancellationToken ct)
+        {
+            var sansLimite = proprietaire.ParentId is int parentId
                 ? (await _depot.DroitsEspaceParentAsync(parentId, ct)).SansLimite
-                : await _depot.FamilleSansLimiteAsync(proprietaire.EleveId ?? 0, ct));
+                : await _depot.FamilleSansLimiteAsync(proprietaire.EleveId ?? 0, ct);
+
+            // PODCASTS (15/11/2026) : quarante pages par cours (vingt pour les fiches).
+            return Podcasts ? PodcastsEleve.Limites(sansLimite) : Regles.Limites(sansLimite);
+        }
 
         /// <summary>
         /// LE QUOTA DU PROPRIÉTAIRE : le mois de l'enfant puis les crédits de la
@@ -80,12 +116,21 @@ namespace SchoolWebApp.Api.Services.MesFiches
             // la porte, pas le forfait (les crédits suffisent à un parent).
             if (proprietaire.ParentId is int parentId)
             {
-                return (await _depot.DroitsEspaceParentAsync(parentId, ct)).Fiches
-                    ? null
-                    : new Refus("Les fiches de révision ne sont pas ouvertes sur votre compte.");
+                // PODCASTS DU PARENT (15/11/2026) : le même droit que ses fiches (décision de Camara).
+                if (!(await _depot.DroitsEspaceParentAsync(parentId, ct)).Fiches)
+                    return new Refus($"Les {Module} ne sont pas ouverts sur votre compte.");
+
+                // PAS DE PODCASTS AVEC STARTER (Camara, le 15/11/2026).
+                return Podcasts && !await _acces.PodcastsOuvertsAsync(parentId, ct)
+                    ? new Refus(PodcastsEleve.MessageNonInclusParent)
+                    : null;
             }
 
             var eleveId = proprietaire.EleveId ?? 0;
+
+            // PAS DE PODCASTS AVEC STARTER (Camara, le 15/11/2026) : même pour relire ceux d'avant.
+            if (Podcasts && !await _acces.PodcastsPourEleveAsync(eleveId, ct)) return new Refus(PodcastsEleve.MessageNonInclusEnfant);
+
             var acces = await _acces.LirePourEleveAsync(eleveId, ct);
             if (acces.Ouvert) return null;
 
@@ -97,10 +142,10 @@ namespace SchoolWebApp.Api.Services.MesFiches
                 var passe = usage == UsageFiches.NouveauCours
                     ? essai == Regles.EssaiLibre
                     : essai != Regles.EssaiUtilise;
-                return passe ? null : new Refus(Regles.MessageEssaiUtilise);
+                return passe ? null : new Refus(Podcasts ? PodcastsEleve.MessageEssaiUtilise : Regles.MessageEssaiUtilise);
             }
 
-            return new Refus("Il faut un forfait pour accéder aux fiches de révision. Demande à tes parents d’en choisir un.");
+            return new Refus($"Il faut un forfait pour accéder aux {Module}. Demande à tes parents d’en choisir un.");
         }
 
         /// <summary>
@@ -112,17 +157,17 @@ namespace SchoolWebApp.Api.Services.MesFiches
                 ? await _depot.EssaiFichesAsync(eleveId, ct)
                 : null;
 
-        private static Refus QuotaEpuise(QuotaFiches quota, bool parent) => parent
-            ? new("Vous n’avez plus de crédits de fiches. Vous pouvez en acheter dans Mon forfait.")
+        private Refus QuotaEpuise(QuotaFiches quota, bool parent) => parent
+            ? new($"Vous n’avez plus de crédits de {(Podcasts ? "podcasts" : "fiches")}. Vous pouvez en acheter dans Mon forfait.")
             : new(
-                $"Tu as utilisé tes {quota.Maximum} cours de ce mois-ci. Demande à tes parents d’acheter des "
-                + $"crédits pour en importer d’autres. Sinon, tes cours reviennent le {quota.RemiseLe:dd/MM}.");
+                $"Tu as utilisé tes {quota.Maximum} {(Podcasts ? "podcasts" : "cours")} de ce mois-ci. Demande à tes parents d’acheter des "
+                + $"crédits pour en créer d’autres. Sinon, ils reviennent le {quota.RemiseLe:dd/MM}.");
 
         /// <summary>Une page de plus sur un brouillon : validée, comptée, rangée.</summary>
         public async Task<(PageDuCours? Page, Refus? Refus)> AjouterPageAsync(
             Proprietaire proprietaire, int coursId, string? nomFichier, string? typeAnnonce, byte[] donnees, CancellationToken ct)
         {
-            if (!await ModuleActifAsync(ct)) return (null, new Refus("Les fiches de révision ne sont pas ouvertes."));
+            if (!await ModuleActifAsync(ct)) return (null, FermeModule());
             if (await PorteDuForfaitAsync(proprietaire, UsageFiches.NouveauCours, ct) is Refus fermee) return (null, fermee);
 
             var cours = await _depot.GetAsync(proprietaire, coursId, ct);
@@ -168,12 +213,56 @@ namespace SchoolWebApp.Api.Services.MesFiches
         }
 
         /// <summary>
+        /// LE TEXTE D'UNE FICHE LIBRE (06/11/2026) : ce que l'enfant a écrit ou dicté,
+        /// rangé comme l'unique page du brouillon. Réécrit, il REMPLACE le précédent
+        /// (un nouvel essai après une erreur ne doit pas l'envoyer deux fois).
+        /// </summary>
+        public async Task<(PageDuCours? Page, Refus? Refus)> EcrireTexteAsync(
+            Proprietaire proprietaire, int coursId, string? texte, CancellationToken ct, bool livre = false)
+        {
+            if (!await ModuleActifAsync(ct)) return (null, FermeModule());
+            if (await PorteDuForfaitAsync(proprietaire, UsageFiches.NouveauCours, ct) is Refus fermee) return (null, fermee);
+
+            var propre = (texte ?? string.Empty).Replace("\r\n", "\n").Trim();
+            if (propre.Length < Regles.TexteMin)
+            {
+                return (null, new Refus("Écris ou dicte d’abord ce que tu veux réviser."));
+            }
+
+            if (propre.Length > Regles.TexteMax)
+            {
+                return (null, new Refus(
+                    $"Ton texte fait {propre.Length} caractères : c’est {Regles.TexteMax} au maximum. Garde seulement la leçon."));
+            }
+
+            var cours = await _depot.GetAsync(proprietaire, coursId, ct);
+            if (cours is null || cours.Etat != Regles.EtatBrouillon)
+            {
+                return (null, new Refus("Ce cours n’accepte plus de texte : il est déjà envoyé."));
+            }
+
+            foreach (var ancienne in cours.Pages)
+            {
+                await _depot.SupprimerPageAsync(proprietaire, coursId, ancienne.Id, ct);
+            }
+
+            var octets = System.Text.Encoding.UTF8.GetBytes(propre);
+            // LE RÉSUMÉ DE LIVRE (15/11/2026) : le même texte, marqué « livre » pour la lecture et la rédaction.
+            var page = await _depot.AjouterPageAsync(
+                proprietaire, coursId,
+                livre ? PodcastsEleve.NomLivre : Regles.NomTexte,
+                livre ? PodcastsEleve.TypeLivre : Regles.TypeTexte,
+                octets, 1, DateTime.UtcNow, ct);
+            return page is null ? (null, new Refus("Ce cours n’accepte plus de texte.")) : (page, null);
+        }
+
+        /// <summary>
         /// Le brouillon part à la lecture. La limite du mois se compte ici : un
         /// brouillon abandonné ne coûte rien et ne compte pas.
         /// </summary>
         public async Task<Refus?> EnvoyerAsync(Proprietaire proprietaire, int coursId, CancellationToken ct)
         {
-            if (!await ModuleActifAsync(ct)) return new Refus("Les fiches de révision ne sont pas ouvertes.");
+            if (!await ModuleActifAsync(ct)) return FermeModule();
             if (await PorteDuForfaitAsync(proprietaire, UsageFiches.NouveauCours, ct) is Refus fermee) return fermee;
 
             var maintenant = DateTime.UtcNow;
@@ -208,17 +297,20 @@ namespace SchoolWebApp.Api.Services.MesFiches
                 return new Refus("Ajoute au moins une page de ton cours avant de continuer.");
             }
 
-            _reveil.Sonner();
+            Sonner();
             return null;
         }
 
         /// <summary>Une demande de fiches sur un cours déjà lu : un type, et les notions choisies.</summary>
         public async Task<Refus?> DemanderAsync(Proprietaire proprietaire, int coursId, string type, IReadOnlyList<int>? notions, CancellationToken ct)
         {
-            if (!await ModuleActifAsync(ct)) return new Refus("Les fiches de révision ne sont pas ouvertes.");
+            if (!await ModuleActifAsync(ct)) return FermeModule();
             if (await PorteDuForfaitAsync(proprietaire, UsageFiches.Rediger, ct) is Refus fermee) return fermee;
 
-            var regle = Regles.Type(type);
+            // PODCASTS (15/11/2026) : un seul « type », un épisode par notion choisie.
+            var regle = Podcasts
+                ? new Regles.TypeFiche(PodcastsEleve.Type, "Podcast", ParNotion: true, RangMin: 1)
+                : Regles.Type(type);
             if (regle is null) return new Refus("Ce type de fiche n’existe pas.");
 
             var cours = await _depot.GetAsync(proprietaire, coursId, ct);
@@ -226,7 +318,7 @@ namespace SchoolWebApp.Api.Services.MesFiches
 
             if (!cours.PagesDisponibles)
             {
-                return new Refus("Ce cours a été effacé : importe-le à nouveau pour créer d’autres fiches.");
+                return new Refus($"Ce cours a été effacé : importe-le à nouveau pour créer d’autres {(Podcasts ? "épisodes" : "fiches")}.");
             }
 
             var rangs = regle.ParNotion
@@ -244,7 +336,7 @@ namespace SchoolWebApp.Api.Services.MesFiches
                 return new Refus("Ce cours est encore en cours de lecture. Attends qu’il soit prêt.");
             }
 
-            _reveil.Sonner();
+            Sonner();
             return null;
         }
     }

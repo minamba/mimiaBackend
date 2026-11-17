@@ -39,6 +39,12 @@ namespace SchoolWebApp.Domain.Models
 
         public int? LigneDeTestId { get; set; }
 
+        /// <summary>Traité puis repassé KO par le testeur (06/11/2026) : la dernière fois.</summary>
+        public DateTime? RouvertLe { get; set; }
+
+        /// <summary>Combien de fois il a été rouvert après un test.</summary>
+        public int Reouvertures { get; set; }
+
         /// <summary>Où se trouve la ligne : rempli pour l'onglet « Signalements Admin » seulement.</summary>
         public LigneDeSignalement? Test { get; set; }
     }

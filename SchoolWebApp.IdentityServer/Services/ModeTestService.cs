@@ -70,7 +70,7 @@ namespace SchoolWebApp.IdentityServer.Services
         private const string CleStyleSaison = "STYLE_SAISON";
 
         private static readonly HashSet<string> SaisonsConnues =
-            new(StringComparer.Ordinal) { "soldes-ete", "soldes-hiver", "french-days", "black-friday", "back-to-school" };
+            new(StringComparer.Ordinal) { "soldes-ete", "soldes-hiver", "french-days", "black-friday", "cyber-monday", "back-to-school" };
 
         private (string? Valeur, DateTime LuLe)? _saison;
 

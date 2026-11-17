@@ -379,8 +379,11 @@ namespace SchoolWebApp.Api.Services.Voix
         public async Task CopierAudioAsync(
             string texte, string? avatar, int age, Stream destination,
             bool dictee = false, string? langue = null, string? vitesse = null,
-            string? reference = null, CancellationToken ct = default)
+            string? reference = null, CancellationToken ct = default, string? origine = null)
         {
+            // L'ORIGINE AU JOURNAL : `voix` pour les cours, la sienne pour un podcast (15/11/2026).
+            var origineJournal = string.IsNullOrWhiteSpace(origine) ? OrigineVoix : origine;
+
             // UN PASSAGE MARQUÉ ANGLAIS CHEZ UN PROFESSEUR QUI N'A PAS LE DROIT : il se lit en français. Le code tient
             // là où le rappel n'a pas suffi — voir PromptsPedagogiques.AnglaisInterdit.
             if (langue == "en" && Prompts.PromptsPedagogiques.AnglaisInterdit(avatar))
@@ -506,7 +509,7 @@ namespace SchoolWebApp.Api.Services.Voix
                     // CENTIÈMES DE SECONDE, le son relu puis le son retiré. Voir
                     // `AppelClaude` pour la lecture.
                     await _journal.EnregistrerAsync(
-                        OrigineVoix, _options.GeminiModele, usage.JetonsEntree, usage.JetonsSortie,
+                        origineJournal, _options.GeminiModele, usage.JetonsEntree, usage.JetonsSortie,
                         garde.CentiemesRelus, garde.CentiemesRetires, reference, CancellationToken.None);
                     return;
                 }
@@ -544,7 +547,7 @@ namespace SchoolWebApp.Api.Services.Voix
                 // DANS LE `finally` : une phrase coupée par l'élève a été
                 // produite, donc facturée, jusqu'à la coupure.
                 await _journal.EnregistrerAsync(
-                    OrigineVoix, modele,
+                    origineJournal, modele,
                     entree: (texte.Length + 3) / 4,
                     sortie: (long)Math.Round(octets / (double)OctetsParSecondePcm / 60d * JetonsAudioParMinuteOpenAI),
                     0, 0, reference, CancellationToken.None);

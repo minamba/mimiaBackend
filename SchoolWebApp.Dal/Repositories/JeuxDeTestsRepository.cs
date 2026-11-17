@@ -67,8 +67,7 @@ namespace SchoolWebApp.Dal.Repositories
 
             if (jeu is null) return null;
 
-            // LE TEST LE PLUS RÉCENT D'ABORD — Camara, le 04/11/2026. Dans un test, les lignes
-            // gardent l'ordre où on les a écrites : « compétence 1 » reste avant « compétence 2 ».
+            // LE TEST LE PLUS RÉCENT D'ABORD — Camara, le 04/11/2026. Ses lignes : voir DansLOrdre.
             var tests = jeu.Tests
                 .OrderByDescending(t => t.Id)
                 .Select(t => new DomainTest
@@ -78,7 +77,7 @@ namespace SchoolWebApp.Dal.Repositories
                     Titre = t.Titre,
                     MatiereCode = t.MatiereCode,
                     Matiere = t.Matiere,
-                    Lignes = t.Lignes.OrderBy(l => l.Id).Select(VersDomaine).ToList(),
+                    Lignes = DansLOrdre(t.Lignes).Select(VersDomaine).ToList(),
                 })
                 .ToList();
 
@@ -100,6 +99,19 @@ namespace SchoolWebApp.Dal.Repositories
                 Tests = tests,
             };
         }
+
+        /// <summary>
+        /// L'ORDRE DES LIGNES D'UN TEST — Camara, le 08/11/2026 : la plus récente en haut, et une ligne déplacée garde sa place.
+        ///
+        /// Les lignes jamais déplacées d'abord, de la plus récente à la plus ancienne : une ligne neuve arrive donc toujours
+        /// en haut, même après un déplacement. Créées d'un coup (même date), elles gardent l'ordre où on les a écrites :
+        /// « compétence 1 » reste avant « compétence 2 ». Puis les lignes placées, dans leur ordre.
+        /// </summary>
+        private static IEnumerable<EntiteLigne> DansLOrdre(IEnumerable<EntiteLigne> lignes) => lignes
+            .OrderBy(l => l.Position is null ? 0 : 1)
+            .ThenBy(l => l.Position)
+            .ThenByDescending(l => l.DateCreation)
+            .ThenBy(l => l.Id);
 
         public async Task<DomainJeu> CreerAsync(
             string titre, string section, string niveauCode, string classe, string auteur, CancellationToken ct = default)
@@ -210,27 +222,53 @@ namespace SchoolWebApp.Dal.Repositories
         }
 
         public async Task<DomainJeu?> ModifierLigneAsync(
-            int jeuId, int ligneId, string competence, string statut, DateTime? dateEffectuee, string? commentaire,
-            CancellationToken ct = default)
+            int jeuId, int ligneId, string competence, string statut, string? commentaire,
+            DateTime maintenant, CancellationToken ct = default)
         {
             var ligne = await LigneDuJeuAsync(jeuId, ligneId, ct);
             if (ligne is null) return null;
 
+            // TOUTE MODIFICATION DATE LA LIGNE — Camara, le 08/11/2026 : plus de date au calendrier, le jour et l'heure se
+            // posent seuls dès qu'un élément change. Réenregistrer sans rien changer ne touche pas à la date.
+            if (ligne.Competence != competence || ligne.Statut != statut || ligne.Commentaire != commentaire)
+            {
+                ligne.DateEffectuee = maintenant;
+            }
+
             ligne.Competence = competence;
             ligne.Statut = statut;
-            ligne.DateEffectuee = dateEffectuee?.Date;
             ligne.Commentaire = commentaire;
 
             await _context.SaveChangesAsync(ct);
             return await GetAsync(jeuId, ct);
         }
 
-        public async Task<DomainJeu?> ChangerStatutAsync(int jeuId, int ligneId, string statut, CancellationToken ct = default)
+        public async Task<DomainJeu?> ChangerStatutAsync(
+            int jeuId, int ligneId, string statut, DateTime maintenant, CancellationToken ct = default)
         {
             var ligne = await LigneDuJeuAsync(jeuId, ligneId, ct);
             if (ligne is null) return null;
 
+            // LE TESTEUR CHANGE LE STATUT : « Effectué le » prend le jour ET l'heure (Camara, 06/11/2026), quel que soit le
+            // nouveau statut, « À tester » compris (08/11/2026 : « à chaque fois qu'un élément est modifié »).
+            if (ligne.Statut != statut) ligne.DateEffectuee = maintenant;
             ligne.Statut = statut;
+
+            await _context.SaveChangesAsync(ct);
+            return await GetAsync(jeuId, ct);
+        }
+
+        public async Task<DomainJeu?> DeplacerLigneAsync(int jeuId, int ligneId, int position, CancellationToken ct = default)
+        {
+            var ligne = await LigneDuJeuAsync(jeuId, ligneId, ct);
+            if (ligne is null) return null;
+
+            // TOUT LE TEST EST NUMÉROTÉ, PAS LA SEULE LIGNE DÉPLACÉE : sinon une ligne encore sans place repasserait devant
+            // elle à la prochaine lecture. La date « Effectué le » ne bouge pas : déplacer n'est pas modifier le test.
+            var lignes = DansLOrdre(await _context.LignesDeTest.Where(l => l.TestId == ligne.TestId).ToListAsync(ct)).ToList();
+            lignes.Remove(ligne);
+            lignes.Insert(Math.Clamp(position, 0, lignes.Count), ligne);
+            for (var i = 0; i < lignes.Count; i++) lignes[i].Position = i;
 
             await _context.SaveChangesAsync(ct);
             return await GetAsync(jeuId, ct);
@@ -282,6 +320,7 @@ namespace SchoolWebApp.Dal.Repositories
             ligne.Statut = StatutsDeTest.Ko;
             ligne.DateCreation = DateTime.UtcNow;
             ligne.DateEffectuee = null;
+            ligne.Position = null; // C'est une ligne nouvelle : elle arrive en haut.
 
             await _context.SaveChangesAsync(ct);
             return ligne.Id;

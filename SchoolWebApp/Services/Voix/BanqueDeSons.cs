@@ -50,6 +50,9 @@ namespace SchoolWebApp.Api.Services.Voix
 
         public static int NombreDeMots => Mots.Value.Classes.Count;
 
+        /// <summary>Les mots de la banque, écrits comme ils se lisent (accents compris) : voir LectureDImage.</summary>
+        public static IEnumerable<string> MotsDeLaBanque => Mots.Value.Classes.Keys;
+
         /// <summary>Un mot de la banque que l'enfant de cette classe peut entendre : sa classe ou une classe en dessous.</summary>
         public static bool EstUnMotPourLaClasse(string? mot, int rang) =>
             mot is not null && rang > 0 && Mots.Value.Classes.TryGetValue(Normaliser(mot), out var r) && r <= rang;

@@ -58,6 +58,25 @@ namespace SchoolWebApp.Api.Services
             + "sait. Si c'est juste, dis-le franchement : « oui, c'est ça ».]";
 
         /// <summary>
+        /// LE MÊME RAPPEL, AVEC LA VALEUR DES NOMBRES DITS EN LETTRES — Camara, le 11/11/2026, voir
+        /// <c>NombresEnLettres</c>. Le 09/11, « Soixante-treize. », juste, a reçu « Pas tout à fait ! Après
+        /// soixante-douze, on dit soixante-treize… Oh pardon, en fait tu as raison » : le professeur plaquait la
+        /// formule de ses tours précédents avant de comparer. Il a ici le nombre en chiffres, et l'ordre : comparer,
+        /// PUIS seulement choisir son premier mot. Sans nombre en lettres, c'est le rappel d'avant, inchangé.
+        /// </summary>
+        public static string RappelPour(string? messageEleve)
+        {
+            var valeurs = NombresEnLettres.Valeurs(Regex.Replace(messageEleve ?? string.Empty, @"\[[^\]]*\]", " "));
+            if (valeurs is null) return Rappel;
+
+            return "[SA RÉPONSE CONTIENT UN RÉSULTAT. Il a dit : " + valeurs + ". AVANT ton premier mot, "
+                + "compare ce nombre à la réponse que TU attends, calcul refait étape par étape. S'il est juste, "
+                + "ta réponse COMMENCE par « Oui » — jamais « pas tout à fait », « presque », « non » ou « tu es "
+                + "sûr ? » devant une réponse juste, et ne reprends pas la formule de tes messages précédents : "
+                + "chaque réponse se juge à neuf.]";
+        }
+
+        /// <summary>
         /// Pendant un contrôle, le professeur ne dit ni juste ni faux : il note.
         /// Il doit pourtant noter juste — le même calcul, sans verdict prononcé.
         /// </summary>

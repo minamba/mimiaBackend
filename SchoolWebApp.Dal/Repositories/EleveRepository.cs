@@ -83,6 +83,7 @@ namespace SchoolWebApp.Dal.Repositories
                 Nom = model.Nom,
                 Age = model.Age,
                 Sexe = model.Sexe,
+                Avatar = Domain.Models.AvatarEnfant.Retenu(model.Avatar),
                 Lv2Espagnol = model.Lv2Espagnol,
                 Specialites = Domain.Models.VoiesScolaires.EcrireSpecialites(model.Specialites),
                 DateCreation = model.DateCreation == default ? DateTime.UtcNow : model.DateCreation,
@@ -113,6 +114,10 @@ namespace SchoolWebApp.Dal.Repositories
             if (model.Nom is not null) entity.Nom = model.Nom;
             if (model.Age > 0) entity.Age = model.Age;
             if (model.Sexe != Domain.Models.Sexe.NonPrecise) entity.Sexe = model.Sexe;
+
+            // L'AVATAR (16/11/2026) : null = l'écran ne l'a pas envoyé, rien ne change ; une chaîne vide = « revenir
+            // à l'avatar par défaut ». Voir `AvatarEnfant`.
+            if (model.Avatar is not null) entity.Avatar = Domain.Models.AvatarEnfant.Retenu(model.Avatar);
             // AVANT d'écraser la classe : le changement doit être vu pour
             // fermer l'intervalle en cours. Une fois la colonne écrasée,
             // l'ancienne classe est perdue.
@@ -231,12 +236,14 @@ namespace SchoolWebApp.Dal.Repositories
             // Les cours importés pour ses fiches de révision (14/10/2026) : leurs
             // pages et leurs fiches partent avec eux (cascade). Des photos de son
             // cahier ne survivent pas à son profil.
-            await _context.CoursImportes.Where(c => c.EleveId == id).ExecuteDeleteAsync();
+            // Fiches ET podcasts (15/11/2026) : le filtre de nature ne doit rien laisser derrière.
+            await _context.CoursImportes.IgnoreQueryFilters().Where(c => c.EleveId == id).ExecuteDeleteAsync();
 
             entity.Prenom = "Profil supprimé";
             entity.Nom = null;
             entity.Age = 0;
             entity.Sexe = Domain.Models.Sexe.NonPrecise;
+            entity.Avatar = null;
             entity.DerniereActivite = null;
             // Une donnée de santé ne survit pas à l'effacement du profil.
             entity.BesoinsParticuliers = null;
@@ -390,6 +397,7 @@ namespace SchoolWebApp.Dal.Repositories
             Nom = entity.Nom,
             Age = entity.Age,
             Sexe = entity.Sexe,
+            Avatar = entity.Avatar,
             DateCreation = entity.DateCreation,
             DerniereActivite = entity.DerniereActivite,
             ArchiveLe = entity.ArchiveLe,

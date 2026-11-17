@@ -283,6 +283,30 @@ namespace SchoolWebApp.Dal.Repositories
                 EstAdmin = s.EstAdmin,
                 Competence = s.Competence,
                 LigneDeTestId = s.LigneDeTestId,
+                RouvertLe = s.RouvertLe,
+                Reouvertures = s.Reouvertures,
             };
+
+        public Task<DomainSignalement?> GetAdminDeLigneAsync(int ligneId, CancellationToken ct = default) =>
+            _context.Signalements.AsNoTracking()
+                .Where(s => s.EstAdmin && s.LigneDeTestId == ligneId)
+                .OrderByDescending(s => s.Id)
+                .Select(Projection)
+                .FirstOrDefaultAsync(ct);
+
+        public async Task<DomainSignalement?> RouvrirApresTestAsync(int ligneId, DateTime maintenant, CancellationToken ct = default)
+        {
+            var entite = await _context.Signalements
+                .FirstOrDefaultAsync(s => s.EstAdmin && s.LigneDeTestId == ligneId && s.Etat == "traite", ct);
+            if (entite is null) return null;
+
+            entite.Etat = "nouveau";
+            entite.RouvertLe = maintenant;
+            entite.Reouvertures += 1;
+            entite.DateMiseAJour = maintenant;
+            await _context.SaveChangesAsync(ct);
+
+            return await _context.Signalements.AsNoTracking().Where(s => s.Id == entite.Id).Select(Projection).FirstAsync(ct);
+        }
     }
 }

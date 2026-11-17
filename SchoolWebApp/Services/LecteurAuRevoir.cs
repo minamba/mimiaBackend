@@ -19,8 +19,13 @@ namespace SchoolWebApp.Api.Services
     {
         // L'élève prend congé. Pas « merci » seul, ni « salut » en début de
         // phrase : ce sont aussi des bonjours et des politesses en cours.
+        // « JE DOIS PARTIR » AUSSI — Camara, le 11/11/2026, signalement du 09/11 :
+        // l'élève annonce qu'il doit quitter la séance, et la lecture en images
+        // lui reposait une syllabe derrière l'au revoir de Nora.
         [GeneratedRegex(
-            @"\b(au\s+revoir|[àa]\s+la\s+prochaine|[àa]\s+plus(\s+tard)?|[àa]\s+bient[ôo]t|[àa]\s+demain|bonne\s+(soir[ée]e|journ[ée]e|nuit)|bye|ciao|je\s+m'en\s+vais|j'arr[êe]te|on\s+(s')?arr[êe]te)\b",
+            @"\b(au\s+revoir|[àa]\s+la\s+prochaine|[àa]\s+plus(\s+tard)?|[àa]\s+bient[ôo]t|[àa]\s+demain|bonne\s+(soir[ée]e|journ[ée]e|nuit)|bye|ciao|je\s+m'en\s+vais|j'arr[êe]te|on\s+(s')?arr[êe]te"
+            + @"|je\s+dois\s+(partir|y\s+aller|m'en\s+aller|quitter|arr[êe]ter|te\s+laisser)|(il\s+)?faut\s+que\s+(j'y\s+aille|je\s+(parte|te\s+laisse|quitte))"
+            + @"|je\s+vais\s+(devoir\s+)?(partir|y\s+aller|te\s+laisser|quitter))\b",
             RegexOptions.IgnoreCase)]
         private static partial Regex Conge();
 

@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Options;
+using SchoolWebApp.Domain.Models;
 using SchoolWebApp.Domain.Repositories;
 
 namespace SchoolWebApp.Api.Services.Paiement
@@ -68,6 +69,50 @@ namespace SchoolWebApp.Api.Services.Paiement
         {
             var parentId = await _credits.ParentDeLEleveAsync(eleveId, ct);
             return parentId is null ? new AccesForfait(false, MotifSansForfait) : await LireAsync(parentId.Value, ct);
+        }
+
+        /// <summary>
+        /// LA CONSEILLÈRE D'ORIENTATION, SELON LA FORMULE — Camara, le 14/11/2026 : pas de conseillère avec Starter.
+        /// L'ESSAI LA GARDE (Camara, le 15/11/2026, après l'avoir fermée le même jour) : on la découvre pendant l'essai,
+        /// l'écran dit bien qu'elle n'est incluse qu'à partir de Solo.
+        /// Administrateurs et comptes exemptés : toujours. Sans abonnement lisible : oui ici, le quota refusera de
+        /// toute façon. Voir <c>ConseillereOrientation.FormulesSansConseillere</c>.
+        /// </summary>
+        public async Task<bool> ConseillereOuverteAsync(int parentId, CancellationToken ct = default)
+        {
+            var parent = await _parents.GetParentByIdAsync(parentId);
+            if (parent is null) return false;
+            if (parent.EstAdministrateur || _exemptions.EstExempte(parent.Mail)) return true;
+
+            var etat = await _abonnements.GetEtatQuotaAsync(parentId, ct);
+            return etat is null || ConseillereOrientation.IncluseDans(etat.OffreCode);
+        }
+
+        public async Task<bool> ConseillerePourEleveAsync(int eleveId, CancellationToken ct = default)
+        {
+            var parentId = await _credits.ParentDeLEleveAsync(eleveId, ct);
+            return parentId is not null && await ConseillereOuverteAsync(parentId.Value, ct);
+        }
+
+        /// <summary>
+        /// LES PODCASTS, SELON LA FORMULE — Camara, le 15/11/2026 : ni avec Starter, ni en essai (« il faut minimum
+        /// l'abonnement Solo »). Même lecture que la conseillère : administrateurs et exemptés toujours, sans abonnement
+        /// lisible oui (le forfait refusera de toute façon). Voir <c>PodcastsEleve.FormulesSansPodcasts</c>.
+        /// </summary>
+        public async Task<bool> PodcastsOuvertsAsync(int parentId, CancellationToken ct = default)
+        {
+            var parent = await _parents.GetParentByIdAsync(parentId);
+            if (parent is null) return false;
+            if (parent.EstAdministrateur || _exemptions.EstExempte(parent.Mail)) return true;
+
+            var etat = await _abonnements.GetEtatQuotaAsync(parentId, ct);
+            return etat is null || (!etat.EstEssai && PodcastsEleve.InclusDans(etat.OffreCode));
+        }
+
+        public async Task<bool> PodcastsPourEleveAsync(int eleveId, CancellationToken ct = default)
+        {
+            var parentId = await _credits.ParentDeLEleveAsync(eleveId, ct);
+            return parentId is not null && await PodcastsOuvertsAsync(parentId.Value, ct);
         }
     }
 }

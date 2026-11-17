@@ -21,6 +21,9 @@ namespace SchoolWebApp.Domain.Models
 
         public Sexe Sexe { get; set; }
 
+        /// <summary>L'avatar choisi (code du catalogue du front), null = celui par défaut.</summary>
+        public string? Avatar { get; set; }
+
         public string? NiveauCode { get; set; }
 
         public string? NiveauLibelle { get; set; }

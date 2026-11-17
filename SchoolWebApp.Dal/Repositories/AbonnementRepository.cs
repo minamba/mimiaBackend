@@ -304,6 +304,87 @@ namespace SchoolWebApp.Dal.Repositories
             return await ComposerAsync(abonnement, ct);
         }
 
+        /// <summary>
+        /// L'ABONNEMENT OFFERT PAR L'ADMINISTRATION — Camara, le 13/11/2026. Sans Stripe, il suit la reconduction locale
+        /// de `RafraichirAsync` : les heures repartent chaque mois, et il se clôt de lui-même à `DateFin` (aucune si
+        /// « sans fin »). `OffertLe` et `MotifOffert` le distinguent d'un abonnement payé dans toutes les statistiques.
+        /// </summary>
+        public async Task<ResultatAbonnementOffert> OffrirAbonnementAsync(
+            int parentId, string codeOffre, int? mois, string motif, CancellationToken ct = default)
+        {
+            var offre = await _context.Offres.FirstOrDefaultAsync(o => o.Code == codeOffre && o.Active, ct);
+            if (offre is null || offre.EstEssai)
+            {
+                return new ResultatAbonnementOffert(null, "Cette formule n'existe pas ou n'est plus proposée.");
+            }
+
+            if (mois is <= 0 or > 60)
+            {
+                return new ResultatAbonnementOffert(null, "Durée invalide : de 1 à 60 mois, ou sans fin.");
+            }
+
+            var enCours = await _context.Abonnements
+                .Where(a => a.ParentId == parentId && a.Statut != StatutAbonnement.Resilie)
+                .ToListAsync(ct);
+
+            // UN ABONNEMENT PAYANT EN COURS : on refuse (choix de Camara). Stripe continuerait de le prélever pendant
+            // qu'on lui offre le même service ; il faut d'abord le résilier, ou attendre sa fin.
+            if (enCours.Any(a => !string.IsNullOrEmpty(a.StripeAbonnementId)))
+            {
+                return new ResultatAbonnementOffert(null,
+                    "Ce parent a un abonnement payant en cours. Résiliez-le d'abord (ou attendez sa fin) avant de lui en offrir un.");
+            }
+
+            var maintenant = DateTime.UtcNow;
+
+            // L'essai, ou un précédent abonnement offert, laisse la place : un seul abonnement en cours par compte.
+            foreach (var ancien in enCours)
+            {
+                ancien.Statut = StatutAbonnement.Resilie;
+                ancien.DateFin = maintenant;
+            }
+
+            var abonnement = new Abonnement
+            {
+                ParentId = parentId,
+                OffreId = offre.Id,
+                DateDebut = maintenant,
+                DateFin = mois is int m ? maintenant.AddMonths(m) : null,
+                Statut = StatutAbonnement.Actif,
+                Periodicite = Domain.Models.PeriodiciteAbonnement.Mensuel,
+                PeriodeDebut = maintenant,
+                PeriodeFin = maintenant.AddMonths(1),
+                StripeAbonnementId = null,
+                OffertLe = maintenant,
+                MotifOffert = motif.Trim().Length > 500 ? motif.Trim()[..500] : motif.Trim(),
+                DateCreation = maintenant,
+            };
+
+            _context.Abonnements.Add(abonnement);
+            await _context.SaveChangesAsync(ct);
+
+            abonnement.Offre = offre;
+            return new ResultatAbonnementOffert(await ComposerAsync(abonnement, ct), null, offre.Libelle, abonnement.DateFin);
+        }
+
+        public async Task<bool> ArreterAbonnementOffertAsync(int parentId, CancellationToken ct = default)
+        {
+            var offerts = await _context.Abonnements
+                .Where(a => a.ParentId == parentId && a.OffertLe != null && a.Statut != StatutAbonnement.Resilie)
+                .ToListAsync(ct);
+            if (offerts.Count == 0) return false;
+
+            var maintenant = DateTime.UtcNow;
+            foreach (var a in offerts)
+            {
+                a.Statut = StatutAbonnement.Resilie;
+                a.DateFin = maintenant;
+            }
+
+            await _context.SaveChangesAsync(ct);
+            return true;
+        }
+
         public async Task<EtatQuota?> OuvrirEssaiAsync(
             int parentId, CancellationToken ct = default)
         {

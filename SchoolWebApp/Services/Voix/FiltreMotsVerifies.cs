@@ -45,13 +45,33 @@ namespace SchoolWebApp.Api.Services.Voix
         /// <summary>La classe de l'enfant (CP ... CM2) : les mots dictés viennent de sa classe et des classes en dessous.</summary>
         private readonly string? _niveau;
 
+        /// <summary>Le mot de l'image anglaise du tableau : sa balise reste (voir ImageAuTableau).</summary>
+        private readonly string? _motGarde;
+
+        /// <summary>Le son raté trois fois : il ne se redemande pas à ce tour (voir EssaisRates).</summary>
+        private readonly string? _abandonne;
+
+        /// <summary>La lecture en images : ce que le code montre à ce tour (voir LectureDImage). Il commande tout le message.</summary>
+        private readonly LectureDImage.Tour? _lecture;
+
+        /// <summary>Le mot de l'image de la syllabe qu'il vient de trouver : le seul « comme dans… » permis (ImageAuTableau.CommeDans).</summary>
+        private readonly string? _motDeLImage;
+
+        /// <summary>Il demande un exercice de sons sans dire lequel : la carte est posée, rien ne commence (voir LectureDImage).</summary>
+        private readonly string? _poserLeChoix;
+
         /// <summary>Le message de l'enfant de ce tour, absent de l'historique : il peut changer d'exercice.</summary>
         private readonly string? _messageDeLEleve;
 
         /// <param name="supportConnu">Le choix cahier ou clavier a déjà été posé : la carte ne s'ajoute pas.</param>
         /// <param name="photoAttendue">Il écrit sur son cahier et la photo n'est pas là : rien ne s'affiche, quoi que dise le professeur.</param>
-        public FiltreMotsVerifies(string langue, IReadOnlyCollection<string> fiables, IReadOnlyList<string> messagesRecents, int graine, bool supportConnu = true, bool photoAttendue = false, EtatDuMot? etat = null, bool retenirTout = false, string? niveau = null, string? messageDeLEleve = null)
+        public FiltreMotsVerifies(string langue, IReadOnlyCollection<string> fiables, IReadOnlyList<string> messagesRecents, int graine, bool supportConnu = true, bool photoAttendue = false, EtatDuMot? etat = null, bool retenirTout = false, string? niveau = null, string? messageDeLEleve = null, string? motGarde = null, string? abandonne = null, LectureDImage.Tour? lecture = null, string? poserLeChoix = null, string? motDeLImage = null)
         {
+            _motDeLImage = motDeLImage;
+            _lecture = lecture;
+            _poserLeChoix = poserLeChoix;
+            _motGarde = motGarde;
+            _abandonne = abandonne;
             _niveau = niveau;
             _messageDeLEleve = messageDeLEleve;
             // L'ENFANT ÉCRIT CE QU'IL ENTEND : RIEN NE PART AVANT LA FIN. Le texte d'avant le premier repère pouvait
@@ -85,6 +105,24 @@ namespace SchoolWebApp.Api.Services.Voix
         /// <summary>La réponse est finie : la demande est lisible en entier, on tranche.</summary>
         public string Terminer()
         {
+            // LA CARTE DES EXERCICES : il n'a pas dit lequel, rien ne commence.
+            if (_poserLeChoix is not null)
+            {
+                var choix = LectureDImage.PoserLeChoix(_parti + _tampon, _poserLeChoix);
+                _parti = choix;
+                _tampon = string.Empty;
+                return choix;
+            }
+
+            // LA LECTURE EN IMAGES : le code montre, la consigne est la sienne, la cible ne se dit pas.
+            if (_lecture is not null)
+            {
+                var lu = LectureDImage.Reecrire(_parti + _tampon, _lecture);
+                _parti = lu;
+                _tampon = string.Empty;
+                return lu;
+            }
+
             // LE MOT EN COURS COMMANDE : voir DicteeDeMots. Ni liste, ni choix, ni cache : ce tour a déjà sa règle.
             if (_retenirTout || _etat is not null)
             {
@@ -98,7 +136,7 @@ namespace SchoolWebApp.Api.Services.Voix
             if (RegleVerificationSon.EstEcouteDeMot(complet, RegleVerificationSon.ContexteDEcoute(_recents)))
             {
                 _ecoute = complet;
-                var ecoute = RegleVerificationSon.EcouteDesMots(RegleVerificationSon.RetirerEcouteParasite(_tampon), _recents, complet, _langue, _niveau, _messageDeLEleve);
+                var ecoute = RegleVerificationSon.EcouteDesMots(RegleVerificationSon.RetirerEcouteParasite(_tampon), _recents, complet, _langue, _niveau, _messageDeLEleve, _motGarde, _abandonne, _motDeLImage);
                 _parti += ecoute;
                 _tampon = string.Empty;
                 return ecoute;
@@ -158,9 +196,11 @@ namespace SchoolWebApp.Api.Services.Voix
         /// <summary>Le texte enregistré dit la même chose que l'écran : l'historique ne reprendra pas ce mot.</summary>
         public string Corriger(string texte)
         {
+            if (_poserLeChoix is not null) return LectureDImage.PoserLeChoix(texte, _poserLeChoix);
+            if (_lecture is not null) return LectureDImage.Reecrire(texte, _lecture);
             var propre = RegleVerificationSon.RetirerEcouteParasite(texte);
             if (_retenirTout || _etat is not null) return EnEcriture(propre);
-            if (_ecoute is not null) return RegleVerificationSon.EcouteDesMots(propre, _recents, _ecoute, _langue, _niveau, _messageDeLEleve);
+            if (_ecoute is not null) return RegleVerificationSon.EcouteDesMots(propre, _recents, _ecoute, _langue, _niveau, _messageDeLEleve, _motGarde, _abandonne, _motDeLImage);
             if (_balisePrise) propre = RegleVerificationSon.BonneBaliseDeSupport(propre, propre, _dernierEleve);
             if (_sansVoix) propre = RegleVerificationSon.SansVoix(RegleVerificationSon.CacherLaReponse(propre, _langue));
             return CorrigerSuite(propre);

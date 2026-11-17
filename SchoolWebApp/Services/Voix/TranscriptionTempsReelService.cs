@@ -559,6 +559,13 @@ namespace SchoolWebApp.Api.Services.Voix
                     // croirait encore avoir de quoi clore un tour déjà clos.
                     "input_audio_buffer.committed" => Oublier(tampon),
 
+                    // LA TRANSCRIPTION A ÉCHOUÉ CHEZ LE FOURNISSEUR — Camara, le 07/11/2026 :
+                    // un ordre de fin de tour tombé sur une queue de souffle, et cet
+                    // évènement n'était pas lu : aucune réponse au navigateur, huit
+                    // secondes, « oreille morte », et le tour précédent RENVOYÉ. Le son
+                    // est consommé, rien ne viendra : un tour vide, pour qu'il le sache.
+                    "conversation.item.input_audio_transcription.failed" => EchecDeTranscription(racine),
+
                     "error" => Signaler(racine),
 
                     _ => null,
@@ -574,6 +581,14 @@ namespace SchoolWebApp.Api.Services.Voix
         {
             tampon.Vider();
             return null;
+        }
+
+        private FragmentTranscription EchecDeTranscription(JsonElement racine)
+        {
+            var detail = racine.TryGetProperty("error", out var erreur) ? erreur.ToString() : racine.ToString();
+            _logger.LogWarning("Transcription echouee chez le fournisseur, tour rendu vide : {Detail}",
+                detail.Length > 300 ? detail[..300] : detail);
+            return new FragmentTranscription("", true);
         }
 
         private FragmentTranscription? Signaler(JsonElement racine)

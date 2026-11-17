@@ -100,6 +100,13 @@ namespace SchoolWebApp.Api.Request
         /// contenu reste le son jugé : c'est lui que lit le professeur.
         /// </summary>
         public bool? SonJuste { get; set; }
+
+        /// <summary>
+        /// LA FIGURE QUE L'ÉCRAN N'A PAS SU DESSINER — Camara, le 11/11/2026. Les lignes du dernier bloc [FIGURE] du
+        /// professeur que le navigateur n'a pas comprises ; le serveur les vérifie contre ce message avant de les lui
+        /// renvoyer. Voir <c>LecteurFigure</c>.
+        /// </summary>
+        public List<string>? FigureIncomprise { get; set; }
     }
 
     /// <summary>

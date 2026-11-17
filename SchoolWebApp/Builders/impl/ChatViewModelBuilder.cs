@@ -1,4 +1,4 @@
-using System.Text.RegularExpressions;
+﻿using System.Text.RegularExpressions;
 using System.Runtime.CompilerServices;
 using AutoMapper;
 using SchoolWebApp.Api.Request;
@@ -106,6 +106,7 @@ namespace SchoolWebApp.Api.Builders.impl
         private readonly IMaitriseRepository _maitrises;
         private readonly IPlanificateurControleService _planificateur;
         private readonly IAbonnementRepository _abonnements;
+        private readonly Services.Paiement.AccesForfaitService _acces;
         private readonly IFileAlertesQuota _fileAlertes;
         private readonly Services.Jeux.IJeuxService _jeux;
         private readonly ILogger<ChatViewModelBuilder> _logger;
@@ -146,8 +147,10 @@ namespace SchoolWebApp.Api.Builders.impl
             ILogger<ChatViewModelBuilder> logger,
             IEleveRepository eleves,
             IRapportOrientationRepository rapportsOrientation,
-            Services.Voix.IVerificationSonService verificationSon)
+            Services.Voix.IVerificationSonService verificationSon,
+            Services.Paiement.AccesForfaitService acces)
         {
+            _acces = acces ?? throw new ArgumentNullException(nameof(acces));
             _verificationSon = verificationSon ?? throw new ArgumentNullException(nameof(verificationSon));
             _eleves = eleves ?? throw new ArgumentNullException(nameof(eleves));
             _rapportsOrientation = rapportsOrientation ?? throw new ArgumentNullException(nameof(rapportsOrientation));
@@ -193,20 +196,31 @@ namespace SchoolWebApp.Api.Builders.impl
 
         public async Task<bool> EnExerciceDeSonsAsync(int conversationId)
         {
-            var messages = await _conversationService.GetMessagesAsync(conversationId, MessagesPourExerciceDeSons);
-            return Services.Voix.RegleVerificationSon.EnExerciceDeSons(messages.Select(m => ((string?)m.Contenu, m.SonJuste)));
+            var messages = await FilDeLExerciceAsync(conversationId);
+            return Services.Voix.RegleVerificationSon.EnExerciceDeSons(messages.Select(m => (m.Contenu, m.SonJuste)));
         }
 
         public async Task<bool> EnEcouteDeMotsAsync(int conversationId)
         {
-            var messages = await _conversationService.GetMessagesAsync(conversationId, MessagesPourExerciceDeSons);
+            var messages = await FilDeLExerciceAsync(conversationId);
             return Services.Voix.RegleVerificationSon.ContexteDEcoute(messages.Select(m => m.Contenu));
         }
 
         public async Task<string?> TypeDEcouteAsync(int conversationId)
         {
-            var messages = await _conversationService.GetMessagesAsync(conversationId, MessagesPourExerciceDeSons);
+            var messages = await FilDeLExerciceAsync(conversationId);
             return Services.Voix.RegleVerificationSon.TypeDEcoute(messages.Select(m => m.Contenu));
+        }
+
+        /// <summary>
+        /// Les derniers messages qui comptent pour l'exercice de sons en cours, côté micro : rien d'avant la dernière
+        /// demande de changement d'exercice de l'enfant (14/11/2026, voir ChangementDExercice). Sans elle, sa parole
+        /// suivante était encore jugée comme une syllabe de l'exercice qu'il venait de quitter.
+        /// </summary>
+        private async Task<IReadOnlyList<(string Role, string? Contenu, bool? SonJuste)>> FilDeLExerciceAsync(int conversationId)
+        {
+            var messages = await _conversationService.GetMessagesAsync(conversationId, MessagesPourExerciceDeSons);
+            return ChangementDExercice.Fil(messages.Select(m => ((string)m.Role, (string?)m.Contenu, m.SonJuste)).ToList());
         }
 
         /// <summary>Assez pour retrouver « le son oin » dit au début de l'exercice.</summary>
@@ -461,10 +475,11 @@ namespace SchoolWebApp.Api.Builders.impl
 
         public IAsyncEnumerable<string> StreamReponseAsync(
             int conversationId, string contenu, IReadOnlyList<int> pieceJointeIds,
-            int? secondesRestantes, string? vitesseEcoute, bool? sonJuste, CancellationToken ct) =>
+            int? secondesRestantes, string? vitesseEcoute, bool? sonJuste, CancellationToken ct,
+            IReadOnlyList<string>? figureIncomprise = null) =>
             StreamTourAsync(conversationId, contenu, accueil: false, ct,
                 secondesRestantes: secondesRestantes, pieceJointeIds: pieceJointeIds,
-                vitesseEcoute: vitesseEcoute, sonJuste: sonJuste);
+                vitesseEcoute: vitesseEcoute, sonJuste: sonJuste, figureIncomprise: figureIncomprise);
 
         /// <summary>
         /// La sortie signalée par une page qui se ferme, SANS identité.
@@ -2654,7 +2669,8 @@ namespace SchoolWebApp.Api.Builders.impl
             int? secondesRestantes = null,
             IReadOnlyList<int>? pieceJointeIds = null,
             string? vitesseEcoute = null,
-            bool? sonJuste = null)
+            bool? sonJuste = null,
+            IReadOnlyList<string>? figureIncomprise = null)
         {
             var contexte = await _resolver.ResoudreConversationAsync(conversationId)
                 ?? throw new UnauthorizedAccessException(
@@ -2697,6 +2713,11 @@ namespace SchoolWebApp.Api.Builders.impl
 
             var typeAccueil = TypeAccueil.Aucun;
             TimeSpan? depuis = null;
+
+            // La lecture des nombres de ce tour — voir LectureDesNombres, plus bas.
+            var enLectureDeNombres = false;
+            Services.Voix.LectureDesNombres.Verdict? verdictNombre = null;
+            List<(string? Role, string? Contenu, bool? SonJuste)> recentsNombres = [];
 
             // Vrai quand la dictée interrompue n'a encore laissé aucune trace
             // — l'élève a fermé son onglet au lieu de cliquer « Quitter » : le
@@ -2799,6 +2820,28 @@ namespace SchoolWebApp.Api.Builders.impl
             }
             else
             {
+                // LA LECTURE DES NOMBRES (12/11/2026) — voir Services.Voix.LectureDesNombres. Le verdict se pose AVANT d'écrire son
+                // message, comme celui d'un son : la bulle dit « Bonne lecture » ou « On réessaie », et le message garde
+                // « J'ai lu le nombre … ». Jamais pendant un contrôle noté.
+                if (Services.Voix.LectureDesNombres.Concerne(contexte.Conversation.AgentSlug, contexte.Eleve.NiveauCode)
+                    && !string.IsNullOrWhiteSpace(contenu)
+                    && !LecteurAuRevoir.DitAuRevoir(contenu)
+                    && !LecteurEvaluation.EstOuvert(historique.Where(m => m.Role == "assistant").Select(m => m.Contenu)))
+                {
+                    recentsNombres = historique.TakeLast(MessagesPourExerciceDeSons)
+                        .Select(m => ((string?)m.Role, (string?)m.Contenu, m.SonJuste)).ToList();
+                    if (Services.Voix.LectureDesNombres.EnCours(recentsNombres, contenu))
+                    {
+                        enLectureDeNombres = true;
+                        verdictNombre = Services.Voix.LectureDesNombres.Juger(recentsNombres, contenu);
+                        if (verdictNombre is not null)
+                        {
+                            sonJuste ??= verdictNombre.Juste;
+                            contenu = Services.Voix.LectureDesNombres.TexteDeLEleve(verdictNombre);
+                        }
+                    }
+                }
+
                 var messageEleve = await _conversationService.AddMessageAsync(new DomainMessage
                 {
                     ConversationId = conversationId,
@@ -2865,7 +2908,10 @@ namespace SchoolWebApp.Api.Builders.impl
             {
                 TypeAccueil.FinProche => "[Le minuteur indique qu'il reste cinq minutes de séance.]",
                 TypeAccueil.FinSeance => "[Le temps de la séance est écoulé.]",
-                TypeAccueil.NouvelleSeance => "[L'élève relance une séance dans la foulée.]",
+                // LA RELANCE PARLE DANS LA CONTINUITÉ — Camara, le 11/11/2026 : « ce qu'on a vu hier », quelques
+                // minutes après. Le temps écoulé voyage dans le tour : voir PromptsPedagogiques.SeuilRelance.
+                TypeAccueil.NouvelleSeance => PromptsPedagogiques.DeclencheurNouvelleSeance,
+                TypeAccueil.Retour => PromptsPedagogiques.DeclencheurDeRetour(depuis),
                 TypeAccueil.FinImminente => "[Il reste trente secondes de séance.]",
                 TypeAccueil.ClotureProche => "[Le contrôle dépasse l'horaire depuis dix minutes.]",
                 TypeAccueil.ClotureForcee => "[Le délai supplémentaire est épuisé, il faut clôturer.]",
@@ -3157,9 +3203,10 @@ namespace SchoolWebApp.Api.Builders.impl
             // par « Presque ! », sans que le professeur ait rien calculé.
             if (ReponseChiffree.Contient(contenu))
             {
+                // Le contrôle noté garde son rappel tel quel : on n'y touche pas (Camara, 11/11/2026).
                 declencheur += "\n\n" + (controleOuvert
                     ? ReponseChiffree.RappelControle
-                    : ReponseChiffree.Rappel);
+                    : ReponseChiffree.RappelPour(contenu));
             }
 
             // ET SON SYMÉTRIQUE : « VAS-Y » N'EST PAS UNE RÉPONSE — voir
@@ -3312,13 +3359,119 @@ namespace SchoolWebApp.Api.Builders.impl
             }
 
             Services.Voix.EtatDuMot? etatDuMot = null;
+            Services.Voix.ImageAuTableau.ImageMontree? imageAuTableau = null;
+            Services.Voix.EssaisRates.Abandon? abandon = null;
+            Services.Voix.LectureDImage.Tour? lectureDuTour = null;
+            string? poserLeChoix = null;
             var langueDuSon = Services.Voix.RegleVerificationSon.LangueDe(contexte.Eleve.NiveauCycle, contexte.Conversation.MatiereCode);
+
+            // IL CHANGE D'EXERCICE QUAND IL VEUT — Camara, le 14/11/2026, signalement d'une famille : voir
+            // ChangementDExercice. Sa demande ferme l'exercice que le code tenait : ce qui la précède ne compte plus
+            // (`filSons`), et ce qu'elle rejette (« j'en ai marre des syllabes ») ne choisit rien (`contenuPourLesSons`).
+            // Une réponse jugée par le micro n'est jamais une demande. Pas pendant un contrôle noté : on n'y touche pas.
+            var changement = controleOuvert || sonJuste is not null || LecteurAuRevoir.DitAuRevoir(contenu)
+                ? ChangementDExercice.Nature.Aucune
+                : ChangementDExercice.Lire(contenu);
+            var change = changement != ChangementDExercice.Nature.Aucune;
+            var contenuPourLesSons = change ? ChangementDExercice.PartieQuiChoisit(contenu) : contenu;
+            var filSons = ChangementDExercice.Fil(
+                historique.TakeLast(MessagesPourExerciceDeSons).Select(m => ((string)m.Role, (string?)m.Contenu, m.SonJuste)).ToList(),
+                change);
 
             // UNIQUEMENT DANS UN EXERCICE DE SONS OU DE SYLLABES — Camara, le 05/11/2026. Hors de lui, le
             // français garde son rappel d'avant et l'anglais ne reçoit rien : voir EnExerciceDeSons.
             var enExerciceDeSons = langueDuSon is not null && Services.Voix.RegleVerificationSon.EnExerciceDeSons(
-                historique.TakeLast(MessagesPourExerciceDeSons).Select(m => ((string?)m.Contenu, m.SonJuste))
-                    .Append((contenu, null)));
+                filSons.Select(m => (m.Contenu, m.SonJuste)).Append((contenuPourLesSons, null)));
+
+            // LE FAIT DU CHANGEMENT, pour tous les professeurs. Pas quand sa demande choisit elle-même un exercice de
+            // sons (« je veux lire des mots », la carte des exercices) : là, c'est le code qui ouvre le suivant.
+            if (change && !(langueDuSon is not null && Services.Voix.LectureDImage.ChangeDExercice(contenuPourLesSons)))
+            {
+                declencheur += "\n\n" + ChangementDExercice.Fait(changement);
+                _logger.LogInformation(
+                    "Changement d'exercice demande ({Nature}, conversation {ConversationId}).", changement, conversationId);
+            }
+            else if (!change && !controleOuvert && ChangementDExercice.DemandeRecente(
+                historique.TakeLast(ChangementDExercice.MessagesDeSuite).Select(m => ((string)m.Role, (string?)m.Contenu, m.SonJuste)).ToList()))
+            {
+                declencheur += "\n\n" + ChangementDExercice.RappelDeSuite;
+            }
+
+            // LA RÈGLE DES TROIS ESSAIS, PARTOUT AILLEURS — Camara, le 11/11/2026, voir
+            // `PromptsPedagogiques.RegleDesTroisEssais`. Pas dans un exercice de sons ou de lecture : il a sa propre
+            // règle, comptée par le code (EssaisRates). Pas pendant un contrôle noté : on n'y touche pas.
+            if (!enExerciceDeSons && !controleOuvert && !enLectureDeNombres)
+            {
+                declencheur += "\n\n" + PromptsPedagogiques.RegleDesTroisEssais;
+            }
+
+            // LE TON DES TRACES ÉCRITES (13/11/2026) — voir PromptsPedagogiques.TonDesTracesEcrites. Aux tours où une
+            // remarque ou un compte rendu s'écrit : pendant un contrôle (la remarque notée), dans une séance qui prépare un
+            // contrôle ou une épreuve (le verdict « prêt »), et quand l'élève dit au revoir (le compte rendu).
+            if (controleOuvert
+                || contexte.Conversation.ModeSeance is ModesSeance.Controle or ModesSeance.Examen
+                || LecteurAuRevoir.DitAuRevoir(contenu))
+            {
+                declencheur += "\n\n" + PromptsPedagogiques.TonDesTracesEcrites;
+            }
+
+            // LES NOMBRES À ÉCRIRE APRÈS LES AVOIR ENTENDUS (14/11/2026) — voir DicteeDeNombres : le rappel de la balise
+            // [A_ECOUTER] part à chaque tour de la série. En maths, du CP à la 3e, hors contrôle noté et hors lecture
+            // des nombres (là, c'est l'application qui montre le nombre).
+            var dicteeDeNombres = !enLectureDeNombres && !controleOuvert
+                && Services.Voix.LectureDesNombres.Concerne(contexte.Conversation.AgentSlug, contexte.Eleve.NiveauCode)
+                && Services.Voix.DicteeDeNombres.EnCours(
+                    historique.Where(m => m.Role == "assistant").TakeLast(2).Select(m => m.Contenu), contenu);
+
+            // UNE RÉPONSE COURTE SE JUGE À NEUF (14/11/2026, Yann : « Pas tout à fait ! […] tu as raison » sur « Une plante
+            // vivace ») — voir ReponseCourte. Le jumeau sans nombre de ReponseChiffree. Pas dans les exercices qui ont
+            // leur propre verdict compté par le code (sons, lecture et dictée des nombres), ni pendant un contrôle noté.
+            // Ni quand il demande à changer d'exercice : ce n'est pas une réponse à juger.
+            if (!controleOuvert && !enExerciceDeSons && !enLectureDeNombres && !dicteeDeNombres && !change
+                && !ReponseChiffree.Contient(contenu)
+                && ReponseCourte.Concerne(
+                    contenu,
+                    historique.LastOrDefault(m => m.Role == "assistant"
+                        && !string.IsNullOrWhiteSpace(m.Contenu)
+                        && !m.Contenu!.TrimStart().StartsWith("[FICHE]", StringComparison.OrdinalIgnoreCase)
+                        && !m.Contenu.TrimStart().StartsWith("[RAPPORT]", StringComparison.OrdinalIgnoreCase))?.Contenu))
+            {
+                declencheur += "\n\n" + ReponseCourte.Rappel;
+            }
+
+            if (dicteeDeNombres)
+            {
+                declencheur += "\n\n" + Services.Voix.DicteeDeNombres.Rappel;
+
+                // LE VERDICT, COMPTÉ PAR LE CODE (14/11/2026, signalement : 65 → « soixante-deux » validé). Le professeur
+                // reçoit le fait ; il ne juge plus seul un nombre en lettres contre un nombre en chiffres.
+                var messagesDuProf = historique.Where(m => m.Role == "assistant")
+                    .Select(m => m.Contenu)
+                    .Where(c => !string.IsNullOrWhiteSpace(c) && !c!.TrimStart().StartsWith("[FICHE]", StringComparison.OrdinalIgnoreCase)
+                        && !c.TrimStart().StartsWith("[RAPPORT]", StringComparison.OrdinalIgnoreCase))
+                    .TakeLast(4)
+                    .ToList();
+                var faitNombre = Services.Voix.DicteeDeNombres.FaitVerdict(messagesDuProf.LastOrDefault(), messagesDuProf, contenu);
+                if (faitNombre is not null)
+                {
+                    declencheur += "\n\n" + faitNombre;
+                    _logger.LogInformation("Nombre a ecrire juge (conversation {ConversationId}) : {Fait}", conversationId, faitNombre);
+                }
+            }
+
+            // LA LECTURE DES NOMBRES (12/11/2026) — voir LectureDesNombres : le code choisit le nombre de ce tour, le
+            // professeur ne dit que son bravo ou son encouragement. Trois lectures fausses : on passe, sans la réponse.
+            Services.Voix.LectureDesNombres.Tour? nombresDuTour = null;
+            if (enLectureDeNombres)
+            {
+                nombresDuTour = Services.Voix.LectureDesNombres.AMontrer(
+                    contexte.Eleve.NiveauCode, recentsNombres, verdictNombre, $"{conversationId}|{historique.Count}");
+                declencheur += "\n\n" + Services.Voix.LectureDesNombres.FaitType;
+                if (verdictNombre is not null)
+                {
+                    declencheur += "\n\n" + Services.Voix.LectureDesNombres.FaitVerdict(verdictNombre, nombresDuTour);
+                }
+            }
 
             if (langueDuSon is not null)
             {
@@ -3326,18 +3479,30 @@ namespace SchoolWebApp.Api.Builders.impl
 
                 if (!enAnglais) declencheur += "\n\n" + PromptsPedagogiques.MarqueurSonsIsoles;
 
+                // LA CARTE DES EXERCICES DE SONS (07/11/2026) : écouter ou lire, des syllabes ou des mots — voir LectureDImage.
+                declencheur += "\n\n" + PromptsPedagogiques.MarqueurChoixExercicesSons(enAnglais);
+
+                // IL DEMANDE UN EXERCICE DE SONS SANS DIRE LEQUEL : c'est le code qui pose la carte, pas le professeur.
+                poserLeChoix = Services.Voix.LectureDImage.SujetDeLaDemande(contenuPourLesSons);
+                if (poserLeChoix is not null) declencheur += "\n\n" + Services.Voix.LectureDImage.FaitChoixAPoser(poserLeChoix);
+
                 if (enExerciceDeSons)
                 {
                     declencheur += "\n\n" + (enAnglais ? PromptsPedagogiques.MarqueurSonsAnglais : PromptsPedagogiques.RappelExerciceDeSons);
 
                     // L'EXERCICE CHOISI PAR L'ENFANT, REDIT À CHAQUE TOUR — voir TypeDEcoute.
                     var typeDEcoute = Services.Voix.RegleVerificationSon.TypeDEcoute(
-                        historique.TakeLast(MessagesPourExerciceDeSons).Select(m => m.Contenu).Append(contenu));
-                    if (typeDEcoute is not null)
+                        filSons.Select(m => m.Contenu).Append(contenuPourLesSons));
+                    if (Services.Voix.LectureDImage.EstLecture(typeDEcoute))
+                    {
+                        // LA LECTURE EN IMAGES (07/11/2026) : le code montre, le professeur ne dit rien à lire.
+                        declencheur += "\n\n" + Services.Voix.LectureDImage.FaitType(typeDEcoute!, enAnglais);
+                    }
+                    else if (typeDEcoute is not null)
                     {
                         declencheur += "\n\n" + Services.Voix.RegleVerificationSon.FaitTypeDEcoute(
-                            typeDEcoute, enAnglais ? null : historique.TakeLast(MessagesPourExerciceDeSons).Select(m => m.Contenu),
-                            contexte.Eleve.NiveauCode);
+                            typeDEcoute, historique.TakeLast(MessagesPourExerciceDeSons).Select(m => m.Contenu),
+                            contexte.Eleve.NiveauCode, enAnglais);
                     }
 
                     // LE MOT EN COURS, COMPARÉ ET COMPTÉ PAR LE CODE — voir DicteeDeMots.
@@ -3351,11 +3516,108 @@ namespace SchoolWebApp.Api.Builders.impl
                 {
                     declencheur += "\n\n" + faitSon;
                 }
+
+                // L'IMAGE QUE L'ENFANT VOIT AU TABLEAU, NOMMÉE PAR LE PROFESSEUR — Camara, le 07/11/2026 : voir ImageAuTableau.
+                var questionPrecedente = historique.LastOrDefault(m => m.Role == "assistant" && !string.IsNullOrWhiteSpace(m.Contenu)
+                    && !Services.Voix.ImageAuTableau.EstTechnique(m.Contenu))?.Contenu;
+                imageAuTableau = Services.Voix.ImageAuTableau.Montree(
+                    contenu, sonJuste, questionPrecedente, contexte.Eleve.NiveauCode, contexte.Conversation.MatiereCode);
+                if (imageAuTableau is not null) declencheur += "\n\n" + Services.Voix.ImageAuTableau.Fait(imageAuTableau);
+
+                // PAS D'IMAGE, PAS DE « COMME DANS… » — Camara, capture du 07/11/2026 : « jé », sans image, est devenu « comme
+                // dans jéroboam… enfin comme dans le début de gentil ». Il imitait la formule des tours où l'image était là.
+                // La lecture en images a son propre fait (l'image y est toujours) : « J'ai lu… » n'est pas concerné.
+                else if (sonJuste == true && enExerciceDeSons && Services.Voix.LectureDImage.TypeDuMessage(contenu) is null) declencheur += "\n\n" + Services.Voix.ImageAuTableau.FaitSansImage;
+
+                // TROIS ESSAIS, PAS PLUS — Camara, le 07/11/2026 : voir EssaisRates.
+                if (enExerciceDeSons)
+                {
+                    abandon = Services.Voix.EssaisRates.Lire(
+                        historique.Select(m => (m.Role, (string?)m.Contenu, m.SonJuste)).ToList(), sonJuste, contenu);
+                    if (abandon is not null)
+                    {
+                        var typeDuTour = Services.Voix.RegleVerificationSon.TypeDEcoute(
+                            filSons.Select(m => m.Contenu).Append(contenuPourLesSons));
+                        declencheur += "\n\n" + Services.Voix.EssaisRates.Fait(abandon,
+                            typeDuTour is Services.Voix.RegleVerificationSon.Syllabe or Services.Voix.LectureDImage.Syllabe
+                            || (typeDuTour is null && Services.Voix.BanqueDeSons.Contient(abandon.Son)));
+                    }
+
+                    // LA LECTURE EN IMAGES — Camara, le 07/11/2026 : « l'inverse de l'exercice des syllabes et des mots ».
+                    // Ce que le tableau montre à ce tour est choisi ici ; le filtre l'écrit à la fin du message.
+                    var typeDeLecture = Services.Voix.RegleVerificationSon.TypeDEcoute(
+                        filSons.Select(m => m.Contenu).Append(contenuPourLesSons));
+                    // PAS QUAND IL PART — Camara, le 11/11/2026 : « D'accord, pas de souci. À bientôt ! », puis « Regarde bien
+                    // la syllabe en couleur, et essaie encore » ajouté par le code. Son au revoir n'est pas une lecture ratée.
+                    if (Services.Voix.LectureDImage.EstLecture(typeDeLecture) && !LecteurAuRevoir.DitAuRevoir(contenu))
+                    {
+                        lectureDuTour = Services.Voix.LectureDImage.AMontrer(
+                            typeDeLecture!,
+                            langueDuSon == SchoolWebApp.Domain.Repositories.LanguesDesSons.Anglais,
+                            contexte.Eleve.NiveauCode,
+                            // Tout le fil, même d'avant un changement d'exercice : pour ne pas remontrer une image déjà lue.
+                            historique.TakeLast(MessagesPourExerciceDeSons).Select(m => (string?)m.Contenu).ToList(),
+                            sonJuste,
+                            abandon?.Son,
+                            contenuPourLesSons,
+                            $"{conversationId}|{historique.Count}");
+                    }
+                }
+            }
+
+            // LA LECTURE À VOIX HAUTE, À CHAQUE TOUR DE L'EXERCICE — Camara, le 06/11/2026 : « il faut un exercice
+            // de lecture pour que les enfants puissent lire ». Le texte au tableau est redit au professeur : il
+            // l'avait soufflé de la 2e phrase à la 3e. Voir LectureAVoixHaute.
+            if (Services.Voix.LectureAVoixHaute.Concerne(contexte.Eleve.NiveauCycle, contexte.Conversation.MatiereCode))
+            {
+                var duProfesseur = historique.Where(m => m.Role == "assistant").Select(m => (string?)m.Contenu).ToList();
+
+                // IL A DEMANDÉ À CHANGER D'EXERCICE (14/11/2026, voir ChangementDExercice) : les « lis la phrase » d'avant sa
+                // demande ne tiennent plus l'exercice ouvert. Sans demande, rien ne change.
+                if (change) duProfesseur = [];
+                else
+                {
+                    var derniers = historique.TakeLast(2 * Services.Voix.LectureAVoixHaute.MessagesSuivis)
+                        .Select(m => (Role: (string)m.Role, Contenu: (string?)m.Contenu, m.SonJuste)).ToList();
+                    var demande = ChangementDExercice.DerniereDemande(derniers);
+                    if (demande >= 0)
+                    {
+                        duProfesseur = derniers.Skip(demande).Where(m => m.Role == "assistant").Select(m => m.Contenu).ToList();
+                    }
+                }
+
+                if (Services.Voix.LectureAVoixHaute.EnCours(duProfesseur))
+                {
+                    declencheur += "\n\n" + Services.Voix.LectureAVoixHaute.Rappel(
+                        Services.Voix.LectureAVoixHaute.TexteAuTableau(duProfesseur.TakeLast(Services.Voix.LectureAVoixHaute.MessagesSuivis)),
+                        Services.Voix.LectureAVoixHaute.EnAnglais(contexte.Conversation.MatiereCode));
+                }
             }
 
             if (PromptsPedagogiques.AnglaisInterdit(contexte.Conversation.ProfAvatar))
             {
                 declencheur += "\n\n" + PromptsPedagogiques.MarqueurFrancaisSeul;
+            }
+
+            // LE GARDE-FOU DE LA FIGURE (11/11/2026) — voir LecteurFigure. En maths, à un tour d'élève seulement : ce que
+            // l'écran n'a pas su dessiner revient au professeur ; sinon, la syntaxe lui est rappelée quand on parle de
+            // géométrie. Le fait remplace le rappel : il porte déjà la syntaxe.
+            if (typeAccueil == TypeAccueil.Aucun && LecteurFigure.EnMaths(contexte.Conversation.AgentSlug))
+            {
+                var dernierProfFigure = historique.LastOrDefault(m => m.Role == "assistant")?.Contenu;
+                var nonDessinees = LecteurFigure.Verifiees(figureIncomprise, dernierProfFigure);
+
+                if (nonDessinees.Count > 0)
+                {
+                    declencheur += "\n\n" + LecteurFigure.Fait(nonDessinees);
+                    _logger.LogInformation(
+                        "Figure incomprise renvoyee au professeur : {Lignes} ligne(s) (conversation {ConversationId}).",
+                        nonDessinees.Count, conversationId);
+                }
+                else if (LecteurFigure.ParleDeGeometrie(contenu, dernierProfFigure))
+                {
+                    declencheur += "\n\n" + LecteurFigure.Rappel;
+                }
             }
 
             // LE GENRE DU PROFESSEUR, À CHAQUE TOUR — voir MarqueurGenre : un
@@ -3522,11 +3784,12 @@ namespace SchoolWebApp.Api.Builders.impl
             // IL PIOCHE DANS LA LISTE BLANCHE — voir FiltreMotsVerifies. Le français et l'anglais au
             // primaire, l'interrupteur allumé, et seulement dans un exercice de sons ou de syllabes :
             // ailleurs, pas de filtre, donc pas le moindre retard sur la voix.
-            var filtreMots = !enExerciceDeSons || langueDuSon is null
+            var filtreMots = (!enExerciceDeSons && poserLeChoix is null) || langueDuSon is null
                 ? null
                 : await _verificationSon.FiltrePourAsync(
                     langueDuSon,
-                    historique.TakeLast(MessagesPourExerciceDeSons).Select(m => m.Contenu ?? string.Empty).ToList(),
+                    // Le fil de l'exercice EN COURS : rien d'avant un changement d'exercice (voir ChangementDExercice).
+                    filSons.Select(m => m.Contenu ?? string.Empty).ToList(),
                     conversationId + historique.Count,
                     ct,
                     supportConnu: Services.Voix.RegleVerificationSon.SupportSonConnu(contenu, historique.Select(m => m.Contenu)),
@@ -3535,7 +3798,15 @@ namespace SchoolWebApp.Api.Builders.impl
                     retenirTout: contenu?.Contains(Services.Voix.RegleVerificationSon.MarqueurSonAuCahier, StringComparison.Ordinal) == true
                         || contenu?.Contains(Services.Voix.RegleVerificationSon.MarqueurSonAuClavier, StringComparison.Ordinal) == true,
                     niveau: contexte.Eleve.NiveauCode,
-                    messageDeLEleve: contenu);
+                    messageDeLEleve: contenuPourLesSons,
+                    motGarde: imageAuTableau is { Anglais: true } ? imageAuTableau.Mot : null,
+                    abandonne: abandon?.Son,
+                    lecture: lectureDuTour,
+                    poserLeChoix: poserLeChoix,
+                    motDeLImage: imageAuTableau is { Syllabe: not null } ? imageAuTableau.Mot : null);
+
+            // LA LECTURE DES NOMBRES : la réponse est retenue, puis remise en ordre (sa phrase, la consigne, la balise).
+            var filtreNombres = nombresDuTour is null ? null : new Services.Voix.FiltreLectureNombres(nombresDuTour);
 
             await foreach (var fragment in _agent.RepondreAsync(
                 contexte.Eleve, contexte.Conversation, historique, declencheur, bilan,
@@ -3544,6 +3815,7 @@ namespace SchoolWebApp.Api.Builders.impl
             {
                 var accorde = filtreAccord.Passer(fragment.Texte);
                 if (filtreMots is not null) accorde = filtreMots.Passer(accorde);
+                if (filtreNombres is not null) accorde = filtreNombres.Passer(accorde);
                 if (accorde.Length == 0) continue;
 
                 if (filtreEcoute is null)
@@ -3565,6 +3837,11 @@ namespace SchoolWebApp.Api.Builders.impl
                 {
                     _logger.LogInformation("Mot hors liste remplace (conversation {ConversationId}).", conversationId);
                 }
+            }
+
+            if (filtreNombres is not null)
+            {
+                finAccordee = filtreNombres.Passer(finAccordee) + filtreNombres.Terminer();
             }
 
             if (finAccordee.Length > 0)
@@ -3737,6 +4014,7 @@ namespace SchoolWebApp.Api.Builders.impl
 
                 // L'historique dit ce que l'élève a vu et entendu : le mot remplacé n'y revient pas.
                 if (filtreMots is not null) contenuPersiste = filtreMots.Corriger(contenuPersiste);
+                if (filtreNombres is not null) contenuPersiste = filtreNombres.Corriger(contenuPersiste);
 
                 // Ses accords aussi — déjà faits dans le flux, refaits ici pour
                 // ce qui n'y passe pas (un bloc écrit par l'application).
@@ -3823,6 +4101,16 @@ namespace SchoolWebApp.Api.Builders.impl
 
                 await ConstaterCorrectionDicteeAsync(
                     conversationId, contexte.Eleve.Id, resultat.TexteComplet, ct);
+
+                // « PAS TOUT À FAIT ! […] TU AS RAISON » (14/11/2026) — relevé pour savoir si le rappel suffit : grep
+                // « Ouverture contredite » dans docker logs mimia.
+                if (ReponseCourte.SeContredit(resultat.TexteComplet))
+                {
+                    _logger.LogWarning(
+                        "Ouverture contredite (conversation {ConversationId}) : {Debut}",
+                        conversationId,
+                        resultat.TexteComplet.Length > 160 ? resultat.TexteComplet[..160] : resultat.TexteComplet);
+                }
 
                 await EnregistrerComprehensionOraleAsync(
                     conversationId, contexte.Eleve.Id, contexte.Conversation.MatiereId,
@@ -5318,9 +5606,21 @@ namespace SchoolWebApp.Api.Builders.impl
         {
             var contexte = await _resolver.ResoudreConversationAsync(conversationId);
 
-            return contexte is null
-                ? VerdictQuota.Refus(MotifRefus.SansAbonnement)
-                : await _abonnements.VerifierAsync(contexte.Eleve.Id, ct);
+            if (contexte is null) return VerdictQuota.Refus(MotifRefus.SansAbonnement);
+
+            var verdict = await _abonnements.VerifierAsync(contexte.Eleve.Id, ct);
+
+            // PAS DE CONSEILLÈRE AVEC STARTER (14/11/2026) : vérifié ici, avant que Maëlle n'ouvre la bouche — l'accueil
+            // et chaque tour passent par là. Une famille qui redescend sur Starter en pleine séance est arrêtée au tour
+            // suivant. Les cours ne sont pas concernés.
+            if (verdict.Autorise
+                && ConseillereOrientation.Est(contexte.Conversation.MatiereCode)
+                && !await _acces.ConseillerePourEleveAsync(contexte.Eleve.Id, ct))
+            {
+                return VerdictQuota.Refus(MotifRefus.ConseillereNonIncluse);
+            }
+
+            return verdict;
         }
 
         public async Task<EcheanceForfait?> EcheanceAsync(int conversationId, CancellationToken ct = default)

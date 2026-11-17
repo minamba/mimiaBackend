@@ -274,6 +274,16 @@ namespace SchoolWebApp.IdentityServer.Controllers
 
             _logger.LogInformation("Nouveau compte parent créé : {Email}.", model.Email);
 
+            // LES CONDITIONS COCHÉES : la date du clic, gardée avec le compte. L'API l'apprend par le jeton, à la première
+            // connexion (AuthorizationController). Si cette écriture échoue, il reverra simplement la fenêtre sur le site :
+            // rien n'est perdu, et l'inscription ne doit pas échouer pour ça.
+            var conditions = await _userManager.AddClaimAsync(user,
+                new System.Security.Claims.Claim("cgv_cochees_le", DateTime.UtcNow.ToString("O")));
+            if (!conditions.Succeeded)
+            {
+                _logger.LogWarning("Conditions cochees non enregistrees pour le compte {UserId}.", user.Id);
+            }
+
             // Alerte Telegram, APRÈS la création et avant la redirection. Elle
             // n'attend rien et ne peut rien casser : ses erreurs sont avalées
             // et journalisées à l'intérieur.

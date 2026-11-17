@@ -43,6 +43,14 @@ namespace SchoolWebApp.Dal.Entities
         /// <summary>La ligne de jeu de test créée par ce signalement. Sans clé étrangère : la ligne peut être supprimée.</summary>
         public int? LigneDeTestId { get; set; }
 
+        /// <summary>
+        /// ROUVERT APRÈS UN TEST — Camara, le 06/11/2026 : traité, puis repassé KO par le testeur dans le jeu de
+        /// test. Il revient « Nouveau », avec un badge ; la dernière fois, et combien de fois.
+        /// </summary>
+        public DateTime? RouvertLe { get; set; }
+
+        public int Reouvertures { get; set; }
+
         public virtual Parent? Parent { get; set; }
 
         public virtual Eleve? Eleve { get; set; }

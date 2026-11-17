@@ -692,6 +692,14 @@ namespace SchoolWebApp.Api.Services
             ligne vide, chacun ouvert par le nom du domaine et un tiret long
             « — ». Jamais de deux-points juste après ce nom, jamais de puces.
 
+            LE TON (Camara, 13/11/2026) : l'élève et ses parents lisent cette
+            observation. Pose un constat juste, sans être cassant : ce qui est
+            acquis d'abord, puis ce qui reste à travailler comme la prochaine
+            étape, jamais comme un manque ou un reproche. Jamais « flou dans sa
+            tête », « malgré plusieurs reprises », « répond à côté »,
+            « lacunes », « faible » : écris « à consolider », « prochaine
+            étape », « gagnera à… ».
+
             # SI RIEN N'A ÉTÉ TRAVAILLÉ, N'ÉCRIS RIEN
 
             Des salutations, une intention, un mot isolé : il ne s'est rien
@@ -856,6 +864,14 @@ namespace SchoolWebApp.Api.Services
             phrase d'ensemble, puis un paragraphe par notion, séparés par une
             ligne vide, chacun ouvert par le nom de la notion et un tiret long
             « — ». Jamais de deux-points juste après ce nom, jamais de puces.
+
+            LE TON (Camara, 13/11/2026) : l'élève et ses parents lisent cette
+            observation. Pose un constat juste, sans être cassant : ce qui est
+            acquis d'abord, puis ce qui reste à travailler comme la prochaine
+            étape, jamais comme un manque ou un reproche. Jamais « flou dans sa
+            tête », « malgré plusieurs reprises », « répond à côté »,
+            « lacunes », « faible » : écris « à consolider », « prochaine
+            étape », « gagnera à… ».
 
             # Comment tu juges
 

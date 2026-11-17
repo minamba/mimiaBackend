@@ -681,6 +681,14 @@ builder.Services.AddScoped<SchoolWebApp.Api.Services.MesFiches.QuotaFichesServic
 builder.Services.AddScoped<SchoolWebApp.Api.Services.Paiement.AccesForfaitService>();
 builder.Services.AddScoped<SchoolWebApp.Api.Services.MesFiches.ImportCoursService>();
 builder.Services.AddHostedService<SchoolWebApp.Api.Workers.FichesDeCoursWorker>();
+
+// LES PODCASTS AUDIO DE L'ÉLÈVE (15/11/2026) : le même chemin que les fiches, une autre nature (voir NatureCours.cs).
+// Leur audio sur le disque, sous la racine de l'audio des archives (Stockage:Audio).
+builder.Services.AddSingleton<SchoolWebApp.Api.Workers.ReveilPodcasts>();
+builder.Services.AddSingleton<SchoolWebApp.Api.Workers.ProgressionPodcasts>();
+builder.Services.AddSingleton<SchoolWebApp.Api.Services.Podcasts.RedacteurPodcastService>();
+builder.Services.AddSingleton<SchoolWebApp.Domain.Services.IStockagePodcasts, SchoolWebApp.Dal.Stockage.StockagePodcastsDisque>();
+builder.Services.AddHostedService<SchoolWebApp.Api.Workers.PodcastsWorker>();
 builder.Services.AddHostedService<SchoolWebApp.Api.Workers.DeplacementPlanchesWorker>();
 builder.Services.AddHostedService<SchoolWebApp.Api.Workers.DeplacementPiecesModelesWorker>();
 builder.Services.AddHostedService<SchoolWebApp.Api.Workers.PurgePiecesSignalementsWorker>();
@@ -1140,6 +1148,12 @@ void ServirImages(string reglage, string nomDossier, string libelle)
 
 ServirImages("Stockage:ImagesMots", "images-mots", "des mots");
 ServirImages("Stockage:ImagesSyllabes", "images-syllabes", "des syllabes");
+// LES SONS DE L'ANGLAIS (06/11/2026), même système : une image par son (sh.webp, oo-long.webp), au tableau de Marine
+// quand l'enfant trouve le mot de l'image. /donnees/images-sons-en, réglage `Stockage:ImagesSonsAnglais`.
+ServirImages("Stockage:ImagesSonsAnglais", "images-sons-en", "des sons de l'anglais");
+// LES MOTS DE L'ANGLAIS (07/11/2026) : 242 images de mots (apple.webp), le mot et sa traduction dessinés, pour l'écoute et
+// la lecture des mots de Marine. /donnees/images-mots-en, réglage `Stockage:ImagesMotsAnglais`.
+ServirImages("Stockage:ImagesMotsAnglais", "images-mots-en", "des mots de l'anglais");
 
 app.UseDefaultFiles();
 app.UseStaticFiles(optionsFichiers);

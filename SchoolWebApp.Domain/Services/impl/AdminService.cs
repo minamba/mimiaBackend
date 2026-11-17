@@ -41,6 +41,9 @@ namespace SchoolWebApp.Domain.Services.impl
             Granularite granularite, DateTime debut, DateTime fin, int? eleveId) =>
             _adminRepository.GetSerieAbonnementsAsync(granularite, debut, fin, eleveId);
 
+        public Task<IEnumerable<MouvementAbonnement>> GetMouvementsAbonnementsAsync(DateTime debut, DateTime fin) =>
+            _adminRepository.GetMouvementsAbonnementsAsync(debut, fin);
+
         public Task<bool> DefinirAdministrateurAsync(int parentId, bool actif) =>
             _adminRepository.DefinirAdministrateurAsync(parentId, actif);
 
@@ -145,9 +148,10 @@ namespace SchoolWebApp.Domain.Services.impl
 
         public Task<EleveAdmin?> ModifierEleveAsync(
             int id, string? prenom, string? nom, int? age, int? niveauScolaireId, Sexe? sexe,
-            int? academieId = null, bool? lv2Espagnol = null, IEnumerable<string>? specialites = null) =>
+            int? academieId = null, bool? lv2Espagnol = null, IEnumerable<string>? specialites = null,
+            string? avatar = null) =>
             _adminRepository.ModifierEleveAsync(
-                id, prenom, nom, age, niveauScolaireId, sexe, academieId, lv2Espagnol, specialites);
+                id, prenom, nom, age, niveauScolaireId, sexe, academieId, lv2Espagnol, specialites, avatar);
 
         public Task<RepartitionParents> GetRepartitionParentsAsync(
             IReadOnlyCollection<string> mailsExclus) =>

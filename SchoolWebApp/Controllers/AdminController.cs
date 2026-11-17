@@ -183,6 +183,22 @@ namespace SchoolWebApp.Api.Controllers
         }
 
         /// <summary>
+        /// LES PARENTS DERRIÈRE LES BARRES — Camara, le 12/11/2026 : sous « Entrées et sorties », qui a pris un
+        /// abonnement, qui a demandé à résilier, dont la résiliation a pris effet. Même fenêtre que la série, mêmes
+        /// règles de comptage.
+        /// </summary>
+        [HttpGet("stats/abonnements/mouvements")]
+        [SwaggerResponse(200, "Mouvements d'abonnement de la fenêtre, avec le parent.", typeof(IEnumerable<MouvementAbonnement>))]
+        public async Task<IActionResult> GetMouvementsAbonnements(
+            [FromQuery] string granularite = "jour",
+            [FromQuery] DateTime? debut = null,
+            [FromQuery] DateTime? fin = null)
+        {
+            var (_, d, f) = Fenetre(granularite, debut, fin);
+            return await Executer(() => _adminService.GetMouvementsAbonnementsAsync(d, f));
+        }
+
+        /// <summary>
         /// La fréquentation du site public : combien de personnes distinctes,
         /// et comment elles se répartissent dans la période.
         ///
@@ -1394,6 +1410,98 @@ namespace SchoolWebApp.Api.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Erreur lors de l'ajustement des heures du parent {ParentId}.", id);
+                return StatusCode(500, new { message = "Une erreur est survenue, veuillez réessayer." });
+            }
+        }
+
+        /// <summary>
+        /// OFFRIR UN ABONNEMENT À UN PARENT, SANS LE FAIRE PAYER — Camara, le 13/11/2026. Choix validés : la durée se
+        /// choisit à chaque fois (1 à 60 mois, ou sans fin) ; refus si le parent a un abonnement payant en cours ; le
+        /// courriel part seulement si la case est cochée. Le motif est obligatoire, comme pour les heures.
+        /// </summary>
+        [HttpPost("parents/{id:int}/abonnement-offert")]
+        [SwaggerResponse(200, "Abonnement offert.", typeof(EtatQuota))]
+        [SwaggerResponse(400, "Formule inconnue, durée invalide, motif absent, ou abonnement payant en cours.")]
+        public async Task<IActionResult> OffrirAbonnement(
+            int id,
+            [FromBody] AbonnementOffertRequest model,
+            [FromServices] IAbonnementRepository abonnements,
+            [FromServices] IParentRepository parents,
+            [FromServices] SchoolWebApp.Domain.Emails.IServiceEmail email,
+            CancellationToken ct)
+        {
+            if (!ModelState.IsValid) return BadRequest(ModelState);
+            if (string.IsNullOrWhiteSpace(model.Motif)) return BadRequest(new { message = "Le motif est obligatoire." });
+
+            try
+            {
+                var parent = await parents.GetParentByIdAsync(id);
+                if (parent is null) return NotFound(new { message = "Ce parent n'existe pas." });
+
+                var resultat = await abonnements.OffrirAbonnementAsync(id, model.CodeOffre, model.Mois, model.Motif, ct);
+                if (resultat.Refus is not null) return BadRequest(new { message = resultat.Refus });
+
+                _logger.LogWarning(
+                    "Abonnement OFFERT : {Offre} au compte {ParentId}, {Duree}. Motif : {Motif}",
+                    model.CodeOffre, id, model.Mois is int m ? $"{m} mois" : "sans fin", model.Motif);
+
+                if (model.PrevenirLeParent && !string.IsNullOrWhiteSpace(parent.Mail))
+                {
+                    try
+                    {
+                        var jusqua = resultat.Jusquau is DateTime fin
+                            ? $"jusqu'au {fin:dd/MM/yyyy}"
+                            : "sans limite de durée";
+                        await email.EnvoyerAsync(
+                            parent.Mail!,
+                            $"Mimia vous offre votre abonnement {resultat.OffreLibelle}",
+                            "abonnement-offert",
+                            new Dictionary<string, string>
+                            {
+                                ["titre"] = $"Votre abonnement {resultat.OffreLibelle} vous est offert",
+                                ["offre"] = resultat.OffreLibelle ?? "—",
+                                ["duree"] = jusqua,
+                                ["explication"] = model.Motif.Trim(),
+                                ["lien"] = "https://mimia.fr/profil",
+                            });
+                        _logger.LogInformation("Courriel d'abonnement offert envoye au parent {ParentId}.", id);
+                    }
+                    catch (Exception ex)
+                    {
+                        // L'abonnement est offert : un courriel en panne ne le défait pas.
+                        _logger.LogError(ex, "Courriel d'abonnement offert NON ENVOYE au parent {ParentId}.", id);
+                    }
+                }
+
+                return Ok(resultat.Etat);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Erreur lors de l'offre d'un abonnement au parent {ParentId}.", id);
+                return StatusCode(500, new { message = "Une erreur est survenue, veuillez réessayer." });
+            }
+        }
+
+        /// <summary>Arrête tout de suite l'abonnement offert d'un parent (13/11/2026).</summary>
+        [HttpDelete("parents/{id:int}/abonnement-offert")]
+        [SwaggerResponse(204, "Abonnement offert arrêté.")]
+        [SwaggerResponse(404, "Aucun abonnement offert en cours.")]
+        public async Task<IActionResult> ArreterAbonnementOffert(
+            int id, [FromServices] IAbonnementRepository abonnements, CancellationToken ct)
+        {
+            try
+            {
+                if (!await abonnements.ArreterAbonnementOffertAsync(id, ct))
+                {
+                    return NotFound(new { message = "Ce parent n'a pas d'abonnement offert en cours." });
+                }
+
+                _logger.LogWarning("Abonnement offert ARRETE pour le compte {ParentId}.", id);
+                return NoContent();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Erreur lors de l'arret de l'abonnement offert du parent {ParentId}.", id);
                 return StatusCode(500, new { message = "Une erreur est survenue, veuillez réessayer." });
             }
         }
@@ -2701,7 +2809,7 @@ namespace SchoolWebApp.Api.Controllers
             {
                 var eleve = await _adminService.ModifierEleveAsync(
                     id, model.Prenom, model.Nom, model.Age, model.NiveauScolaireId, model.Sexe,
-                    model.AcademieId, model.Lv2Espagnol, model.Specialites);
+                    model.AcademieId, model.Lv2Espagnol, model.Specialites, model.Avatar);
 
                 return eleve is null ? NotFound() : Ok(eleve);
             }

@@ -51,6 +51,13 @@ namespace SchoolWebApp.Dal.Entities
         /// </summary>
         public Domain.Models.Sexe Sexe { get; set; }
 
+        /// <summary>
+        /// L'AVATAR CHOISI PAR LE PARENT (16/11/2026) — un code du catalogue du front, par exemple
+        /// « cp-ce1-asie-garcon-courts » (les images vivent dans le front, assets/avatars-enfants). Null : aucun choix,
+        /// l'écran montre l'avatar par défaut de sa tranche d'âge et de son sexe. Facultatif à la création.
+        /// </summary>
+        public string? Avatar { get; set; }
+
         public DateTime DateCreation { get; set; }
 
         public DateTime? DerniereActivite { get; set; }

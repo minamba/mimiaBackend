@@ -157,6 +157,10 @@ namespace SchoolWebApp.Api.Controllers
                     // adolescent de douze ans par défaut.
                     eleve.Age,
 
+                    // SON PORTRAIT (16/11/2026) : la barre du haut montre son avatar, pas son initiale.
+                    eleve.Sexe,
+                    eleve.Avatar,
+
                     // L'AFFICHAGE ADAPTÉ (lecture aérée, calme), jamais les besoins.
                     affichage = new { lectureAeree = affichage.LectureAeree, calme = affichage.Calme },
                 },

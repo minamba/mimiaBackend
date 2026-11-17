@@ -143,7 +143,7 @@ namespace SchoolWebApp.Api.Controllers
                 await foreach (var fragment in _chatBuilder.StreamReponseAsync(
                     id, model.Contenu ?? string.Empty, pieces,
                     model.SecondesRestantes, model.VitesseEcoute, model.SonJuste,
-                    HttpContext.RequestAborted))
+                    HttpContext.RequestAborted, model.FigureIncomprise))
                 {
                     await EcrireEvenementAsync(new { type = "delta", texte = fragment });
                 }

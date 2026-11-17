@@ -25,6 +25,12 @@ namespace SchoolWebApp.Api.Utils
         /// même claim « sub », volontairement.
         /// </summary>
         int? EleveId { get; }
+
+        /// <summary>
+        /// Quand ce parent a coché les conditions générales à son inscription : une autre base, donc ça voyage par le jeton
+        /// (08/11/2026). Null s'il est arrivé autrement, par Google ou avant la case.
+        /// </summary>
+        DateTime? ConditionsCocheesLe { get; }
     }
 
     public class CurrentUserAccessor : ICurrentUserAccessor
@@ -55,6 +61,10 @@ namespace SchoolWebApp.Api.Utils
 
         public int? EleveId =>
             int.TryParse(Premier(Auth.AuthentificationEleve.ClaimEleve), out var id) ? id : null;
+
+        public DateTime? ConditionsCocheesLe =>
+            DateTime.TryParse(Premier("cgv_cochees_le"), System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.RoundtripKind, out var le) ? le : null;
 
         private string? Premier(params string[] types)
         {

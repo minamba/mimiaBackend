@@ -141,6 +141,8 @@ namespace SchoolWebApp.Api.Controllers
                 // mêmes règles que depuis l'ordinateur (ImportCoursService).
                 if (destination.CoursImporteId is int coursId)
                 {
+                    // FICHES OU PODCASTS (15/11/2026) : le cours n'est visible que dans sa nature.
+                    importCours.Nature = destination.NatureCours ?? SchoolWebApp.Domain.Models.NaturesCours.Fiches;
                     var (page, refus) = await importCours.AjouterPageAsync(
                         destination.EleveId, coursId, fichier.FileName, fichier.ContentType,
                         flux.ToArray(), HttpContext.RequestAborted);

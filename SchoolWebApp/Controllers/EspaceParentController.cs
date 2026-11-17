@@ -78,14 +78,19 @@ namespace SchoolWebApp.Api.Controllers
         /// <summary>Ce que l'espace ouvre : la barre de navigation n'affiche le bouton que si `fiches` est vrai.</summary>
         [HttpGet("espace")]
         [SwaggerResponse(200, "fiches : le droit aux fiches ; sansLimite : administrateur ; actif : le module est ouvert.")]
-        public async Task<IActionResult> Espace(CancellationToken ct)
+        public async Task<IActionResult> Espace(
+            [FromServices] Services.Paiement.AccesForfaitService acces, CancellationToken ct)
         {
             var parent = await ParentAsync(ct);
             return Ok(new
             {
+                // PAS DE PODCASTS AVEC STARTER (15/11/2026) : le bouton reste, le clic dit pourquoi.
+                podcastsInclus = parent is { } p && await acces.PodcastsOuvertsAsync(p.ParentId, ct),
                 fiches = parent?.Droits.Fiches ?? false,
                 sansLimite = parent?.Droits.SansLimite ?? false,
                 actif = await _import.ModuleActifAsync(ct),
+                // PODCASTS DU PARENT (15/11/2026) : le même droit, et le module des podcasts allumé.
+                podcasts = (parent?.Droits.Fiches ?? false) && await _import.PodcastsActifsAsync(ct),
             });
         }
 
@@ -278,6 +283,18 @@ namespace SchoolWebApp.Api.Controllers
             await fichier.CopyToAsync(flux, ct);
 
             var (page, refus) = await _import.AjouterPageAsync(proprietaire, coursId, fichier.FileName, fichier.ContentType, flux.ToArray(), ct);
+            return page is null ? BadRequest(new { message = refus?.Message }) : Ok(page);
+        }
+
+        /// <summary>Le texte d'une fiche libre (06/11/2026), écrit ou dicté : il remplace le précédent.</summary>
+        [HttpPut("mes-fiches/cours/{coursId:int}/texte")]
+        [RequestSizeLimit(Regles.TexteMax * 4 + 4096)]
+        [SwaggerResponse(200, "Le texte reçu, comme une page.")]
+        [SwaggerResponse(400, "Texte refusé.")]
+        public async Task<IActionResult> EcrireTexte(int coursId, [FromBody] MesFichesController.TexteCoursRequest requete, CancellationToken ct)
+        {
+            if (await ParentAutoriseAsync(ct) is not int parentId) return NotFound();
+            var (page, refus) = await _import.EcrireTexteAsync(Proprietaire.Parent(parentId), coursId, requete?.Texte, ct);
             return page is null ? BadRequest(new { message = refus?.Message }) : Ok(page);
         }
 

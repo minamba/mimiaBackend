@@ -1,3 +1,4 @@
+using SchoolWebApp.Api.Middleware;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SchoolWebApp.Api.Services;
@@ -80,8 +81,12 @@ namespace SchoolWebApp.Api.Controllers
         /// d'un exercice donnerait la réponse à l'élève.
         /// </remarks>
         [HttpGet("{cle}")]
+        // HORS SALLE D'ATTENTE (14/11/2026) : une balise <img> (ou un fetch nu) ne peut pas porter l'en-tête X-Billet ;
+        // la garde la refusait donc toujours (503), et le visuel restait cassé dès que la salle était active. Une image
+        // lue en base, revalidée par étiquette, ne coûte rien aux places de cours : elle passe, comme les fichiers du site.
         [HttpGet("{cle}/{variante:regex(^(legende|muette)$)}")]
         [AllowAnonymous]
+        [HorsSalleDAttente]
         [SwaggerResponse(200, "La planche.")]
         [SwaggerResponse(404, "Aucune planche importée pour cette clé.")]
         public async Task<IActionResult> Get(string cle, string? variante = null)
@@ -139,6 +144,7 @@ namespace SchoolWebApp.Api.Controllers
         [HttpGet("{cle}/credit")]
         [HttpGet("{cle}/{variante:regex(^(legende|muette)$)}/credit")]
         [AllowAnonymous]
+        [HorsSalleDAttente] // lu par un fetch nu, sans billet (14/11/2026)
         [SwaggerResponse(200, "Le crédit à afficher sous la planche.")]
         [SwaggerResponse(204, "Planche sans crédit à afficher.")]
         [SwaggerResponse(404, "Aucune planche importée pour cette clé.")]

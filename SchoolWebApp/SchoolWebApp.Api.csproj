@@ -9,6 +9,8 @@
 
   <ItemGroup>
     <PackageReference Include="Anthropic" Version="12.39.0" />
+    <PackageReference Include="Concentus" Version="2.2.2" />
+    <PackageReference Include="Concentus.Oggfile" Version="1.0.7" />
 
     <!-- Compter exactement les pages d'un PDF avant de l'accepter. Une page
          coûte des milliers de jetons à CHAQUE tour tant qu'elle reste dans la

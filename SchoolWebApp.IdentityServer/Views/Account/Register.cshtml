@@ -1,6 +1,9 @@
 ﻿@model RegisterViewModel
+@inject IConfiguration Configuration
 @{
     ViewData["Title"] = "Créer un compte";
+
+    var spaUrl = (Configuration["Clients:Spa:Url"] ?? "http://localhost:3000").TrimEnd('/');
 }
 
 <h1>Créer un compte parent</h1>
@@ -86,12 +89,23 @@
     </div>
     <span asp-validation-for="ConfirmeResponsabiliteParentale" class="field-error"></span>
 
+    @* LE LIEN S'OUVRE DANS UN AUTRE ONGLET : ici, il ferait perdre tout le formulaire, mots de passe compris. *@
+    <div class="checkbox">
+        <input asp-for="AccepteConditions" type="checkbox" required
+               data-message-requis="Vous devez accepter les conditions générales pour créer un compte." />
+        <label for="AccepteConditions" style="margin:0;font-weight:400;">
+            J'ai lu et j'accepte les
+            <a href="@spaUrl/cgv" target="_blank" rel="noopener">conditions générales de vente et d'utilisation</a>
+        </label>
+    </div>
+    <span asp-validation-for="AccepteConditions" class="field-error"></span>
+
     <button type="submit" class="btn">Créer mon compte</button>
 </form>
 
 @if (Model.FournisseursExternes.Contains("Google"))
 {
-<div class="separator">ou</div>
+<div class="separator"><span>ou</span></div>
 
 <form asp-action="ExternalLogin" asp-controller="Account" method="post">
     <input type="hidden" name="provider" value="Google" />

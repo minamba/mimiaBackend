@@ -52,6 +52,17 @@ namespace SchoolWebApp.Domain.Repositories
             CancellationToken ct = default);
 
         /// <summary>
+        /// OFFRE UN ABONNEMENT, SANS PAIEMENT — Camara, le 13/11/2026. Une formule active (pas l'essai), pour `mois` mois
+        /// ou sans fin (null). Refusé si le parent a un abonnement PAYANT en cours : il serait prélevé par Stripe alors
+        /// qu'on lui offre le même service. Un essai ou un précédent abonnement offert est remplacé.
+        /// </summary>
+        Task<ResultatAbonnementOffert> OffrirAbonnementAsync(
+            int parentId, string codeOffre, int? mois, string motif, CancellationToken ct = default);
+
+        /// <summary>Arrête tout de suite l'abonnement offert en cours. Faux s'il n'y en a pas.</summary>
+        Task<bool> ArreterAbonnementOffertAsync(int parentId, CancellationToken ct = default);
+
+        /// <summary>
         /// Ouvre l'essai gratuit, UNE SEULE FOIS dans la vie du compte.
         ///
         /// La garde n'est pas un détail de confort, c'est ce qui rend la route

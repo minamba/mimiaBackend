@@ -52,5 +52,14 @@ namespace SchoolWebApp.Domain.Repositories
 
         /// <summary>Parmi ces signalements, ceux qui existent encore.</summary>
         Task<IReadOnlyList<int>> IdsExistantsAsync(IEnumerable<int> ids, CancellationToken ct = default);
+
+        /// <summary>
+        /// LE TESTEUR REPASSE LA LIGNE KO (06/11/2026) : le signalement admin TRAITÉ qui y est relié revient
+        /// « Nouveau », daté et compté. Rend le signalement rouvert, ou null s'il n'y en a pas (ou pas traité).
+        /// </summary>
+        Task<Signalement?> RouvrirApresTestAsync(int ligneId, DateTime maintenant, CancellationToken ct = default);
+
+        /// <summary>Le signalement admin relié à cette ligne de test, ou null (06/11/2026).</summary>
+        Task<Signalement?> GetAdminDeLigneAsync(int ligneId, CancellationToken ct = default);
     }
 }

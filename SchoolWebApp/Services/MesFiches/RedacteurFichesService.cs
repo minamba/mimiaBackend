@@ -50,18 +50,20 @@ namespace SchoolWebApp.Api.Services.MesFiches
             _journal = journal ?? throw new ArgumentNullException(nameof(journal));
         }
 
-        public async Task<LectureDuCours> LireAsync(CoursATraiter cours, CancellationToken ct)
+        /// <param name="notionsMaxImpose">Le plafond des notions d'un autre usage du cours (podcasts, 15/11/2026).</param>
+        public async Task<LectureDuCours> LireAsync(
+            CoursATraiter cours, CancellationToken ct, int? notionsMaxImpose = null, string origine = "fiches-lecture")
         {
             // Une famille administratrice n'a pas le plafond de huit notions
             // (Camara, le 16/10/2026) : la réponse grandit avec, à ~120 jetons
             // la notion (titre, résumé, rang).
-            var notionsMax = FichesRevisionEleve.Limites(cours.SansLimite).NotionsMax;
+            var notionsMax = notionsMaxImpose ?? FichesRevisionEleve.Limites(cours.SansLimite).NotionsMax;
             var maxTokens = MaxTokensLecture + Math.Max(0, notionsMax - FichesRevisionEleve.NotionsMax) * 120;
 
             var consigne = ConsignesFiches.Lecture(
                 cours.ClasseLibelle, cours.MatiereLibelle, notionsMax, cours.NotionsExistantes);
             var effort = AgentPedagogiqueService.ConvertirEffort(_options.Effort(TypeTache.Dialogue));
-            var reponse = await AppelerAsync(cours, consigne, maxTokens, effort, "fiches-lecture", ct);
+            var reponse = await AppelerAsync(cours, consigne, maxTokens, effort, origine, ct);
 
             var racine = ContenuFiche.ObjetJson(reponse);
             if (racine is null)
@@ -120,7 +122,11 @@ namespace SchoolWebApp.Api.Services.MesFiches
             return ContenuFiche.Lire(reponse, cours.Type);
         }
 
-        private async Task<string> AppelerAsync(
+        /// <summary>
+        /// L'appel commun : les pages du cours d'abord (mises en cache), la consigne ensuite. Interne pour que les
+        /// podcasts (15/11/2026) écrivent leurs épisodes sur le MÊME cache que la lecture du cours.
+        /// </summary>
+        internal async Task<string> AppelerAsync(
             CoursATraiter cours, string consigne, int maxTokens, Effort effort, string origine, CancellationToken ct)
         {
             var blocs = new List<ContentBlockParam>();
@@ -135,7 +141,17 @@ namespace SchoolWebApp.Api.Services.MesFiches
                 // suivants du même cours.
                 var cache = i == cours.Pages.Count - 1 ? new CacheControlEphemeral() : null;
 
-                if (typeMime == ValidationPieceJointe.TypePdf)
+                // UNE FICHE LIBRE (06/11/2026) : le texte écrit ou dicté par l'élève,
+                // tel quel, avec le même point de cache qu'une page.
+                if (FichesRevisionEleve.EstUnTexte(typeMime))
+                {
+                    blocs.Add(new TextBlockParam
+                    {
+                        Text = "Ce que l’élève a écrit ou dicté :\n\n" + System.Text.Encoding.UTF8.GetString(donnees),
+                        CacheControl = cache,
+                    });
+                }
+                else if (typeMime == ValidationPieceJointe.TypePdf)
                 {
                     blocs.Add(new DocumentBlockParam
                     {
@@ -163,6 +179,15 @@ namespace SchoolWebApp.Api.Services.MesFiches
                     });
                 }
             }
+
+            // Après les pages : la précision d'une fiche libre ne touche pas au cache.
+            var libre = cours.Pages.Count > 0 && cours.Pages.All(p => FichesRevisionEleve.EstUnTexte(p.TypeMime));
+            // Les podcasts (15/11/2026) ajoutent leur propre règle de rédaction libre : seule la lecture est commune.
+            // LE RÉSUMÉ DE LIVRE (15/11/2026) : ses notions sont les parties du livre, et rien n'est inventé.
+            var livre = libre && cours.Pages.All(p => PodcastsEleve.EstUnLivre(p.TypeMime));
+            if (livre && origine.EndsWith("-lecture", StringComparison.Ordinal)) consigne += ConsignesFiches.LectureLivre;
+            else if (libre && origine.EndsWith("-lecture", StringComparison.Ordinal)) consigne += ConsignesFiches.LectureLibre;
+            else if (libre && origine.StartsWith("fiches", StringComparison.Ordinal)) consigne += ConsignesFiches.RedactionLibre;
 
             blocs.Add(new TextBlockParam { Text = consigne });
 

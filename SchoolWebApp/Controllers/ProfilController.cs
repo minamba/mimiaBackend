@@ -1,6 +1,8 @@
+using SchoolWebApp.Domain.Models;
 using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SchoolWebApp.Api.Auth;
 using SchoolWebApp.Api.Services.Paiement;
 using SchoolWebApp.Api.Utils;
 using SchoolWebApp.Domain.Repositories;
@@ -42,10 +44,20 @@ namespace SchoolWebApp.Api.Controllers
 
         [HttpGet]
         [SwaggerOperation(Summary = "Compte du parent authentifié")]
-        public async Task<IActionResult> Get()
+        public async Task<IActionResult> Get(CancellationToken ct = default)
         {
             var parent = await ResoudreAsync();
             var eleves = await _eleveService.GetElevesByParentAsync(parent.Id);
+
+            // LA CASE COCHÉE À L'INSCRIPTION arrive ici : le formulaire vit sur le serveur d'identité, avec sa propre base. Sa
+            // date est celle du clic, pas celle de cette première venue.
+            if (_currentUser.EleveId is null
+                && !ConditionsEnVigueur.Acceptees(parent.ConditionsVersion)
+                && ConditionsEnVigueur.ValentPourLaCaseDu(_currentUser.ConditionsCocheesLe))
+            {
+                await _parentService.AccepterConditionsAsync(parent.Id, ConditionsEnVigueur.Version, _currentUser.ConditionsCocheesLe!.Value, ct);
+                parent.ConditionsVersion = ConditionsEnVigueur.Version;
+            }
 
             return Ok(new
             {
@@ -57,7 +69,44 @@ namespace SchoolWebApp.Api.Controllers
 
                 // Lu par la page d'un enfant : faux, le tutoriel se lance (02/11/2026).
                 TutorielVu = parent.TutorielVuLe != null,
+
+                // Lu par la fiche d'un enfant : faux, son tutoriel se lance (08/11/2026).
+                TutorielFicheVu = parent.TutorielFicheVuLe != null,
+
+                // Lu par « Vos enfants » : faux, son tutoriel se lance (17/11/2026).
+                TutorielEnfantsVu = parent.TutorielEnfantsVuLe != null,
+
+                // Lus par `VerrouConditions` : vrai, le parent n'entre pas tant qu'il n'a pas accepté (08/11/2026).
+                ConditionsAAccepter = !ConditionsEnVigueur.Acceptees(parent.ConditionsVersion),
+                ConditionsPremiereFois = ConditionsEnVigueur.PremiereFois(parent.ConditionsVersion, parent.DateCreation),
             });
+        }
+
+        /// <summary>
+        /// L'ENFANT ET LES CONDITIONS DE SON PARENT — Camara, le 08/11/2026 : un enfant dont le parent n'a pas accepté voit un
+        /// message et n'entre pas. `GET /profil` lui reste fermé, il porte le nom et l'adresse du parent : cette route-ci
+        /// répond à une seule question, et rien d'autre ne part. Elle ne note aucune venue du parent (voir `ResoudreAsync`).
+        /// </summary>
+        [HttpGet("conditions")]
+        [AutoriseEleve]
+        [SwaggerOperation(Summary = "Dit si les conditions générales en vigueur restent à accepter par le parent")]
+        public async Task<IActionResult> EtatConditions()
+        {
+            var parent = await ResoudreAsync();
+            return Ok(new { ConditionsAAccepter = !ConditionsEnVigueur.Acceptees(parent.ConditionsVersion) });
+        }
+
+        [HttpPost("conditions")]
+        [SwaggerOperation(Summary = "Note que le parent accepte les conditions générales en vigueur")]
+        public async Task<IActionResult> AccepterConditions(CancellationToken ct)
+        {
+            // L'ENFANT N'ACCEPTE RIEN : son jeton porte le « sub » de son parent, seul ce test les distingue.
+            if (_currentUser.EleveId is not null) return StatusCode(StatusCodes.Status403Forbidden);
+
+            var parent = await ResoudreAsync();
+            await _parentService.AccepterConditionsAsync(parent.Id, ConditionsEnVigueur.Version, DateTime.UtcNow, ct);
+            _logger.LogInformation("Parent {ParentId} : conditions generales {Version} acceptees.", parent.Id, ConditionsEnVigueur.Version);
+            return NoContent();
         }
 
         [HttpPost("tutoriel-vu")]
@@ -66,6 +115,24 @@ namespace SchoolWebApp.Api.Controllers
         {
             var parent = await ResoudreAsync();
             await _parentService.MarquerTutorielVuAsync(parent.Id, ct);
+            return NoContent();
+        }
+
+        [HttpPost("tutoriel-enfants-vu")]
+        [SwaggerOperation(Summary = "Note que le parent a vu le tutoriel de « Vos enfants » : il ne se relancera plus tout seul")]
+        public async Task<IActionResult> TutorielEnfantsVu(CancellationToken ct)
+        {
+            var parent = await ResoudreAsync();
+            await _parentService.MarquerTutorielEnfantsVuAsync(parent.Id, ct);
+            return NoContent();
+        }
+
+        [HttpPost("tutoriel-fiche-vu")]
+        [SwaggerOperation(Summary = "Note que le parent a vu le tutoriel de la fiche : il ne se relancera plus tout seul")]
+        public async Task<IActionResult> TutorielFicheVu(CancellationToken ct)
+        {
+            var parent = await ResoudreAsync();
+            await _parentService.MarquerTutorielFicheVuAsync(parent.Id, ct);
             return NoContent();
         }
 

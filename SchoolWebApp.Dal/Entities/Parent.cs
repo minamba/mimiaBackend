@@ -130,6 +130,26 @@ namespace SchoolWebApp.Dal.Entities
         /// </summary>
         public DateTime? TutorielVuLe { get; set; }
 
+        /// <summary>
+        /// LE TUTORIEL DE LA FICHE (08/11/2026) : vide tant que ce parent ne l'a pas vu. Il se lance une seule fois, quand il
+        /// ouvre la fiche d'un enfant qui a déjà suivi un cours.
+        /// </summary>
+        public DateTime? TutorielFicheVuLe { get; set; }
+
+        /// <summary>
+        /// LE TUTORIEL DE « VOS ENFANTS » (17/11/2026) : vide tant que ce parent ne l'a pas vu. Il se lance une seule fois,
+        /// quand la page montre au moins un enfant.
+        /// </summary>
+        public DateTime? TutorielEnfantsVuLe { get; set; }
+
+        /// <summary>
+        /// LES CONDITIONS GÉNÉRALES (08/11/2026) : la dernière version acceptée et sa date, la trace de son accord. Voir
+        /// ConditionsEnVigueur.
+        /// </summary>
+        public string? ConditionsVersion { get; set; }
+
+        public DateTime? ConditionsAccepteesLe { get; set; }
+
         public virtual ICollection<Eleve> Eleves { get; set; } = new List<Eleve>();
 
         public virtual ICollection<Abonnement> Abonnements { get; set; } = new List<Abonnement>();

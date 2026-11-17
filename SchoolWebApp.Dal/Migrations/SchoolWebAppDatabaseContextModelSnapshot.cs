@@ -59,6 +59,15 @@ namespace SchoolWebApp.Dal.Migrations
                         .HasColumnType("datetime2")
                         .HasColumnName("impaye_depuis");
 
+                    b.Property<string>("MotifOffert")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)")
+                        .HasColumnName("motif_offert");
+
+                    b.Property<DateTime?>("OffertLe")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("offert_le");
+
                     b.Property<int>("OffreId")
                         .HasColumnType("int")
                         .HasColumnName("offre_id");
@@ -171,6 +180,14 @@ namespace SchoolWebApp.Dal.Migrations
                         .HasColumnName("id");
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Nature")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(16)
+                        .HasColumnType("nvarchar(16)")
+                        .HasDefaultValue("fiches")
+                        .HasColumnName("nature");
 
                     b.Property<string>("Code")
                         .IsRequired()
@@ -1209,6 +1226,14 @@ namespace SchoolWebApp.Dal.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
+                    b.Property<string>("Nature")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(16)
+                        .HasColumnType("nvarchar(16)")
+                        .HasDefaultValue("fiches")
+                        .HasColumnName("nature");
+
                     b.Property<int?>("CategorieId")
                         .HasColumnType("int")
                         .HasColumnName("categorie_id");
@@ -1243,6 +1268,12 @@ namespace SchoolWebApp.Dal.Migrations
                         .HasColumnType("nvarchar(20)")
                         .HasColumnName("etat");
 
+                    b.Property<bool>("Libre")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false)
+                        .HasColumnName("libre");
+
                     b.Property<int?>("MatiereId")
                         .HasColumnType("int")
                         .HasColumnName("matiere_id");
@@ -1267,6 +1298,11 @@ namespace SchoolWebApp.Dal.Migrations
                     b.Property<int>("Poids")
                         .HasColumnType("int")
                         .HasColumnName("poids");
+
+                    b.Property<string>("ProfAvatar")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)")
+                        .HasColumnName("prof_avatar");
 
                     b.Property<string>("Remarque")
                         .HasMaxLength(500)
@@ -1369,11 +1405,17 @@ namespace SchoolWebApp.Dal.Migrations
                         .HasColumnType("datetime2")
                         .HasColumnName("date_modification");
 
+                    b.Property<string>("Nature")
+                        .HasMaxLength(16)
+                        .HasColumnType("nvarchar(16)")
+                        .HasDefaultValue("fiches")
+                        .HasColumnName("nature");
+
                     b.Property<int>("Solde")
                         .HasColumnType("int")
                         .HasColumnName("solde");
 
-                    b.HasKey("ParentId");
+                    b.HasKey("ParentId", "Nature");
 
                     b.ToTable("CreditFichesFamille", (string)null);
                 });
@@ -1612,6 +1654,11 @@ namespace SchoolWebApp.Dal.Migrations
                     b.Property<DateTime?>("ArchiveLe")
                         .HasColumnType("datetime2")
                         .HasColumnName("archive_le");
+
+                    b.Property<string>("Avatar")
+                        .HasMaxLength(60)
+                        .HasColumnType("nvarchar(60)")
+                        .HasColumnName("avatar");
 
                     b.Property<DateTime?>("BesoinsAccordLe")
                         .HasColumnType("datetime2")
@@ -2349,6 +2396,14 @@ namespace SchoolWebApp.Dal.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
+                    b.Property<string>("Nature")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(16)
+                        .HasColumnType("nvarchar(16)")
+                        .HasDefaultValue("fiches")
+                        .HasColumnName("nature");
+
                     b.Property<DateTime>("DateCreation")
                         .HasColumnType("datetime2")
                         .HasColumnName("date_creation");
@@ -2382,6 +2437,14 @@ namespace SchoolWebApp.Dal.Migrations
                         .HasColumnName("id");
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Nature")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(16)
+                        .HasColumnType("nvarchar(16)")
+                        .HasDefaultValue("fiches")
+                        .HasColumnName("nature");
 
                     b.Property<string>("Contenu")
                         .IsRequired()
@@ -2742,8 +2805,12 @@ namespace SchoolWebApp.Dal.Migrations
                         .HasColumnName("date_creation");
 
                     b.Property<DateTime?>("DateEffectuee")
-                        .HasColumnType("date")
+                        .HasColumnType("datetime2")
                         .HasColumnName("date_effectuee");
+
+                    b.Property<int?>("Position")
+                        .HasColumnType("int")
+                        .HasColumnName("position");
 
                     b.Property<string>("Statut")
                         .IsRequired()
@@ -3308,6 +3375,14 @@ namespace SchoolWebApp.Dal.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
+                    b.Property<string>("Nature")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(16)
+                        .HasColumnType("nvarchar(16)")
+                        .HasDefaultValue("fiches")
+                        .HasColumnName("nature");
+
                     b.Property<bool>("Active")
                         .HasColumnType("bit")
                         .HasColumnName("active");
@@ -3469,9 +3544,26 @@ namespace SchoolWebApp.Dal.Migrations
                         .HasColumnType("nvarchar(255)")
                         .HasColumnName("stripe_client_id");
 
+                    b.Property<DateTime?>("TutorielEnfantsVuLe")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("tutoriel_enfants_vu_le");
+
+                    b.Property<DateTime?>("TutorielFicheVuLe")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("tutoriel_fiche_vu_le");
+
                     b.Property<DateTime?>("TutorielVuLe")
                         .HasColumnType("datetime2")
                         .HasColumnName("tutoriel_vu_le");
+
+                    b.Property<DateTime?>("ConditionsAccepteesLe")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("conditions_acceptees_le");
+
+                    b.Property<string>("ConditionsVersion")
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)")
+                        .HasColumnName("conditions_version");
 
                     b.HasKey("Id");
 
@@ -4335,6 +4427,16 @@ namespace SchoolWebApp.Dal.Migrations
                     b.Property<int>("ParentId")
                         .HasColumnType("int")
                         .HasColumnName("parent_id");
+
+                    b.Property<int>("Reouvertures")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(0)
+                        .HasColumnName("reouvertures");
+
+                    b.Property<DateTime?>("RouvertLe")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("rouvert_le");
 
                     b.HasKey("Id");
 

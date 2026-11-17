@@ -168,7 +168,7 @@ namespace SchoolWebApp.Api.Controllers
 
         /// <summary>Les seules valeurs acceptées — les mêmes que `SAISONS` côté front.</summary>
         public static readonly IReadOnlySet<string> SaisonsConnues =
-            new HashSet<string>(StringComparer.Ordinal) { "soldes-ete", "soldes-hiver", "french-days", "black-friday", "back-to-school" };
+            new HashSet<string>(StringComparer.Ordinal) { "soldes-ete", "soldes-hiver", "french-days", "black-friday", "cyber-monday", "back-to-school" };
 
         /// <summary>
         /// LE MODE DÉVELOPPEUR : le professeur exécute tout, sans discuter.
@@ -578,6 +578,16 @@ namespace SchoolWebApp.Api.Controllers
                         SchoolWebApp.Domain.Models.FichesRevisionEleve.Reglage,
                         SchoolWebApp.Domain.Models.FichesRevisionEleve.ActifParDefaut, ct),
 
+                    // LES PODCASTS DE L'ÉLÈVE (15/11/2026) : la grille montre ou non leur carte.
+                    podcasts = await _reglages.EstActifAsync(
+                        SchoolWebApp.Domain.Models.PodcastsEleve.Reglage,
+                        SchoolWebApp.Domain.Models.PodcastsEleve.ActifParDefaut, ct),
+
+                    // LE BOUTON « TÉLÉCHARGER EN MP3 » DES PODCASTS (15/11/2026).
+                    podcastsTelechargement = await _reglages.EstActifAsync(
+                        SchoolWebApp.Domain.Models.PodcastsEleve.ReglageTelechargement,
+                        SchoolWebApp.Domain.Models.PodcastsEleve.TelechargementParDefaut, ct),
+
                     // LA CONSEILLÈRE D'ORIENTATION (18/10/2026) : la page des tarifs
                     // ne l'annonce que si elle est allumée — une offre ne promet
                     // jamais ce qui est éteint.
@@ -670,6 +680,15 @@ namespace SchoolWebApp.Api.Controllers
                 fichesRevision = await _reglages.EstActifAsync(
                     SchoolWebApp.Domain.Models.FichesRevisionEleve.Reglage,
                     SchoolWebApp.Domain.Models.FichesRevisionEleve.ActifParDefaut, ct),
+
+                // LES PODCASTS DE L'ÉLÈVE (15/11/2026) — éteints par défaut : chaque épisode coûte un texte et une voix.
+                podcasts = await _reglages.EstActifAsync(
+                    SchoolWebApp.Domain.Models.PodcastsEleve.Reglage,
+                    SchoolWebApp.Domain.Models.PodcastsEleve.ActifParDefaut, ct),
+
+                podcastsTelechargement = await _reglages.EstActifAsync(
+                    SchoolWebApp.Domain.Models.PodcastsEleve.ReglageTelechargement,
+                    SchoolWebApp.Domain.Models.PodcastsEleve.TelechargementParDefaut, ct),
 
                 modeTest = await _reglages.EstActifAsync(ModeTest, false, ct),
 
@@ -1120,6 +1139,35 @@ namespace SchoolWebApp.Api.Controllers
             _logger.LogWarning(
                 "Fiches de revision de l'eleve {Etat} par un administrateur.",
                 requete.Actif ? "ALLUMEES" : "ETEINTES");
+
+            return NoContent();
+        }
+
+        /// <summary>
+        /// Les podcasts audio que l'élève tire de son cours (15/11/2026). Éteint : la carte disparaît de la grille, les
+        /// routes refusent tout nouvel import, et la tâche de fond met en attente ce qui reste.
+        /// </summary>
+        [HttpPut("podcasts")]
+        [Authorize(Policy = "EstSuperAdmin")]
+        [SwaggerResponse(204, "Réglage enregistré.")]
+        public async Task<IActionResult> DefinirPodcasts([FromBody] DefinirReglageRequest requete, CancellationToken ct)
+        {
+            await _reglages.DefinirAsync(SchoolWebApp.Domain.Models.PodcastsEleve.Reglage, requete.Actif, ct);
+
+            _logger.LogWarning("Podcasts de l'eleve {Etat} par un administrateur.", requete.Actif ? "ALLUMES" : "ETEINTS");
+
+            return NoContent();
+        }
+
+        /// <summary>Le bouton « Télécharger en MP3 » sous chaque épisode (15/11/2026).</summary>
+        [HttpPut("podcasts-telechargement")]
+        [Authorize(Policy = "EstSuperAdmin")]
+        [SwaggerResponse(204, "Réglage enregistré.")]
+        public async Task<IActionResult> DefinirPodcastsTelechargement([FromBody] DefinirReglageRequest requete, CancellationToken ct)
+        {
+            await _reglages.DefinirAsync(SchoolWebApp.Domain.Models.PodcastsEleve.ReglageTelechargement, requete.Actif, ct);
+
+            _logger.LogWarning("Telechargement MP3 des podcasts {Etat} par un administrateur.", requete.Actif ? "AFFICHE" : "MASQUE");
 
             return NoContent();
         }

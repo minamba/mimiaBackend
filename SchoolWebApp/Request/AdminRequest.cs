@@ -59,6 +59,13 @@ namespace SchoolWebApp.Api.Request
         /// <summary>Corrige les accords du professeur. Ignoré s'il vaut NonPrecise.</summary>
         public Sexe? Sexe { get; set; }
 
+        /// <summary>
+        /// L'AVATAR (16/11/2026), facultatif : un code du catalogue du front (« cp-ce1-asie-garcon-courts »). Null = rien
+        /// d'envoyé (création : celui par défaut ; modification : inchangé) ; chaîne vide = revenir à celui par défaut.
+        /// </summary>
+        [RegularExpression(@"^$|^[a-z0-9-]{1,60}$", ErrorMessage = "Avatar inconnu.")]
+        public string? Avatar { get; set; }
+
         /// <summary>Détermine la zone de vacances scolaires. Null = pas de changement.</summary>
         public int? AcademieId { get; set; }
 
@@ -147,6 +154,26 @@ namespace SchoolWebApp.Api.Request
     /// <summary>
     /// Un ajustement manuel du pot d'heures.
     /// </summary>
+    /// <summary>
+    /// OFFRIR UN ABONNEMENT (13/11/2026) : la formule, la durée en mois (null : sans fin), le motif obligatoire, et la
+    /// case du courriel — c'est l'administrateur qui choisit, à chaque fois, d'écrire ou non au parent.
+    /// </summary>
+    public class AbonnementOffertRequest
+    {
+        [System.ComponentModel.DataAnnotations.Required]
+        [System.ComponentModel.DataAnnotations.StringLength(50)]
+        public string CodeOffre { get; set; } = string.Empty;
+
+        [System.ComponentModel.DataAnnotations.Range(1, 60)]
+        public int? Mois { get; set; }
+
+        [System.ComponentModel.DataAnnotations.Required]
+        [System.ComponentModel.DataAnnotations.StringLength(500)]
+        public string Motif { get; set; } = string.Empty;
+
+        public bool PrevenirLeParent { get; set; }
+    }
+
     public class AjustementHeuresRequest
     {
         /// <summary>

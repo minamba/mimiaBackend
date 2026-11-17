@@ -12,6 +12,8 @@ namespace SchoolWebApp.Domain.Services
         Task<IEnumerable<PointAbonnements>> GetSerieAbonnementsAsync(
             Granularite granularite, DateTime debut, DateTime fin, int? eleveId);
 
+        Task<IEnumerable<MouvementAbonnement>> GetMouvementsAbonnementsAsync(DateTime debut, DateTime fin);
+
         /// <summary>
         /// Accorde ou retire le droit d'administrer. Rend faux si le parent
         /// n'existe pas.
@@ -77,7 +79,8 @@ namespace SchoolWebApp.Domain.Services
 
         Task<EleveAdmin?> ModifierEleveAsync(
             int id, string? prenom, string? nom, int? age, int? niveauScolaireId, Sexe? sexe,
-            int? academieId = null, bool? lv2Espagnol = null, IEnumerable<string>? specialites = null);
+            int? academieId = null, bool? lv2Espagnol = null, IEnumerable<string>? specialites = null,
+            string? avatar = null);
 
         /// <summary>
         /// L adresse d un compte, sans le reste de sa fiche.
