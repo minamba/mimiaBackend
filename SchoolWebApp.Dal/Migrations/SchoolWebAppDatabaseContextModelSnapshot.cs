@@ -921,8 +921,8 @@ namespace SchoolWebApp.Dal.Migrations
 
                     b.Property<string>("TypeMime")
                         .IsRequired()
-                        .HasMaxLength(60)
-                        .HasColumnType("nvarchar(60)")
+                        .HasMaxLength(120)
+                        .HasColumnType("nvarchar(120)")
                         .HasColumnName("type_mime");
 
                     b.HasKey("Id");

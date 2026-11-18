@@ -546,6 +546,7 @@ namespace SchoolWebApp.Api.Controllers
         [SwaggerResponse(404, "Pack inconnu.")]
         public Task<IActionResult> AcheterFiches(
             [FromQuery] string pack,
+            [FromQuery] string? retour,
             [FromServices] ICaisseStripeService caisse,
             [FromServices] ICreditsFichesRepository fiches,
             [FromServices] AccesForfaitService acces,
@@ -578,11 +579,11 @@ namespace SchoolWebApp.Api.Controllers
                         });
                     }
 
-                    var ouverture = await caisse.OuvrirAchatFichesAsync(parentId, pack, ct);
+                    var ouverture = await caisse.OuvrirAchatFichesAsync(parentId, pack, ct, NaturesCours.Fiches, retour);
 
-                    return ouverture is null
-                        ? NotFound(new { message = "Pack inconnu." })
-                        : Ok(new { urlPaiement = ouverture.Url });
+                    return ouverture is not null
+                        ? Ok(new { urlPaiement = ouverture.Url })
+                        : await RefusPackAsync(fiches, pack, ct);
                 }
 
                 var solde = await fiches.CrediterAsync(parentId, pack, null, null, ct);
@@ -633,6 +634,7 @@ namespace SchoolWebApp.Api.Controllers
         [SwaggerResponse(404, "Pack inconnu.")]
         public Task<IActionResult> AcheterPodcasts(
             [FromQuery] string pack,
+            [FromQuery] string? retour,
             [FromServices] ICaisseStripeService caisse,
             [FromServices] ICreditsFichesRepository credits,
             [FromServices] AccesForfaitService acces,
@@ -666,15 +668,32 @@ namespace SchoolWebApp.Api.Controllers
                         return StatusCode(503, new { message = "Le paiement est momentanément indisponible. Réessayez plus tard." });
                     }
 
-                    var ouverture = await caisse.OuvrirAchatFichesAsync(parentId, pack, ct, NaturesCours.Podcasts);
-                    return ouverture is null
-                        ? NotFound(new { message = "Pack inconnu." })
-                        : Ok(new { urlPaiement = ouverture.Url });
+                    var ouverture = await caisse.OuvrirAchatFichesAsync(parentId, pack, ct, NaturesCours.Podcasts, retour);
+                    credits.Nature = NaturesCours.Podcasts;
+                    return ouverture is not null
+                        ? Ok(new { urlPaiement = ouverture.Url })
+                        : await RefusPackAsync(credits, pack, ct);
                 }
 
                 var solde = await credits.CrediterAsync(parentId, pack, null, null, ct);
                 return solde is null ? NotFound(new { message = "Pack inconnu." }) : Ok(new { credits = solde });
             });
+
+        /// <summary>
+        /// LE PAIEMENT D'UN PACK N'A PAS PU S'OUVRIR (17/11/2026) — Camara a lu « Pack inconnu » en achetant des crédits de
+        /// podcasts : le pack existait bien, mais il n'avait pas encore de tarif Stripe (le catalogue n'avait pas été
+        /// resynchronisé depuis l'ajout des podcasts, Admin › Modes). Un pack absent reste « inconnu » ; un pack connu mais
+        /// pas encore relié au paiement dit qu'il n'est pas disponible pour le moment (le journal porte déjà la cause).
+        /// </summary>
+        private async Task<IActionResult> RefusPackAsync(ICreditsFichesRepository packs, string code, CancellationToken ct)
+        {
+            var existe = (await packs.GetOffresAsync(ct))
+                .Any(p => string.Equals(p.Code, code, StringComparison.OrdinalIgnoreCase));
+
+            return existe
+                ? StatusCode(503, new { message = "Ce pack n’est pas encore disponible au paiement. Réessayez un peu plus tard." })
+                : NotFound(new { message = "Pack inconnu." });
+        }
 
         /// <summary>
         /// Résout le parent du jeton puis délègue. Extrait parce que les cinq

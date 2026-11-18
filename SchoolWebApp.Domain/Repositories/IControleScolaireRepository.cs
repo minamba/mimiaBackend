@@ -189,6 +189,15 @@ namespace SchoolWebApp.Domain.Repositories
             CancellationToken ct = default);
 
         /// <summary>
+        /// Parmi ces libellés, ceux qui ne répondent à AUCUNE ligne du
+        /// programme du contrôle — même rapprochement que la ligne `notions:`
+        /// du verdict (à la plume près, sinon l'un contenu dans l'autre si une
+        /// seule ligne répond). Voir IPlanificateurControleService.CompleterPerimetreAsync.
+        /// </summary>
+        Task<IReadOnlyList<string>> NotionsHorsPerimetreAsync(
+            int controleId, IEnumerable<string> libelles, CancellationToken ct = default);
+
+        /// <summary>
         /// C'est ce compteur, et non la bonne volonté du modèle, qui garantit
         /// qu'on cesse de demander : passé le plafond, `GetADebrieferAsync` ne
         /// rend plus ce contrôle.

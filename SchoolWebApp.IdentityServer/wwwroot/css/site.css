@@ -970,15 +970,6 @@ html.blue-sky .auth-card {
     box-shadow: inset 0 0 14px color-mix(in srgb, var(--lueur) 10%, transparent);
 }
 
-/* L'enveloppe dans le champ de l'adresse. */
-.field input[type="email"] {
-    padding-left: 48px;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M2 5h20v14H2Z M2 6l10 7 10-7' fill='none' stroke='%23eef4ff' stroke-width='1.8' stroke-linejoin='round'/%3E%3C/svg%3E");
-    background-repeat: no-repeat;
-    background-position: 15px center;
-    background-size: 22px 22px;
-}
-
 .field input:focus {
     border-color: var(--accent-texte);
     box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-texte) 20%, transparent), 0 0 14px color-mix(in srgb, var(--lueur) 30%, transparent);
@@ -1122,10 +1113,6 @@ html.blue-sky.saison-cyber-monday { --lueur: #5cf2ff; }
 .field input[type="password"],
 .field input[type="text"] { padding: 11px 14px; font-size: 15.5px; }
 
-/* PAS D'ENVELOPPE DANS LE CHAMP — Camara, le 17/11/2026 : « un gros espace sur le champ de l'adresse mail ». Quand
-   le navigateur remplit l'adresse tout seul, il efface le fond du champ : l'enveloppe disparaissait, sa place restait.
-   L'enveloppe reste devant le libellé « Adresse email » ; l'adresse se cale à gauche. */
-.field input[type="email"] { padding-left: 14px; background-image: none; }
 
 .checkbox { margin-bottom: 12px; font-size: 14.5px; }
 

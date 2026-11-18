@@ -827,14 +827,20 @@ FROM sys.database_files;";
         /// demanderait une table de nombres et une requête que personne ne
         /// relirait ; ici, c'est une boucle.
         /// </summary>
-        public async Task<RevenuPeriode> GetRevenuAsync(DateTime debut, DateTime fin)
+        public async Task<RevenuPeriode> GetRevenuAsync(DateTime debut, DateTime fin, IReadOnlyCollection<string> mailsExclus)
         {
+            // LES COMPTES DE L'EXPLOITANT NE RAPPORTENT RIEN — Camara, le 17/11/2026 : le super-administrateur et le compte
+            // de démonstration (la liste des comptes exemptés de facturation) ne sont comptés ni dans les abonnements ni
+            // dans les packs, quels qu'ils soient : tout est gratuit pour eux. Ils restent dans « ce que le produit coûte ».
+            var exclus = mailsExclus ?? Array.Empty<string>();
+
             var (debutUtc, finUtc, _) = EnUtc(debut, fin);
             var maintenant = DateTime.UtcNow;
 
             var abonnements = await _context.Abonnements
                 .AsNoTracking()
                 .Where(a => !a.Offre!.EstEssai && a.OffertLe == null // un abonnement offert ne rapporte rien (13/11/2026)
+                            && (a.Parent!.Mail == null || !exclus.Contains(a.Parent.Mail))
                             && a.DateDebut < finUtc
                             && (a.DateFin == null || a.DateFin > debutUtc))
                 .Select(a => new
@@ -931,7 +937,9 @@ FROM sys.database_files;";
             var packs = await _context.Recharges
                 .AsNoTracking()
                 .Where(r => r.DateAchat >= debutUtc && r.DateAchat < finUtc
-                            && r.DateRemboursement == null && r.PrixCentimes > 0)
+                            && r.DateRemboursement == null && r.PrixCentimes > 0
+                            && !_context.Abonnements.Any(a => a.Id == r.AbonnementId
+                                                             && a.Parent!.Mail != null && exclus.Contains(a.Parent.Mail)))
                 .Select(r => r.PrixCentimes)
                 .ToListAsync();
 
@@ -942,9 +950,14 @@ FROM sys.database_files;";
                 .IgnoreQueryFilters()
                 .AsNoTracking()
                 .Where(a => a.DateAchat >= debutUtc && a.DateAchat < finUtc
-                            && a.DateRemboursement == null && a.PrixCentimes > 0)
-                .Select(a => a.PrixCentimes)
+                            && a.DateRemboursement == null && a.PrixCentimes > 0
+                            && (a.Parent!.Mail == null || !exclus.Contains(a.Parent.Mail)))
+                .Select(a => new { a.PrixCentimes, a.Nature })
                 .ToListAsync();
+
+            // LES PACKS DE PODCASTS À PART (17/11/2026) : leur propre bloc dans « ce que le produit rapporte ».
+            var packsPodcasts = packsFiches.Where(a => a.Nature == NaturesCours.Podcasts).Select(a => a.PrixCentimes).ToList();
+            var packsDeFiches = packsFiches.Where(a => a.Nature != NaturesCours.Podcasts).Select(a => a.PrixCentimes).ToList();
 
             var detail = lignes.Values
                 .Select(l =>
@@ -972,11 +985,14 @@ FROM sys.database_files;";
                 AnnuelsEuros = annuelsLignes.Sum(l => l.Euros),
                 Packs = packs.Count,
                 PacksEuros = packs.Sum() / 100m,
-                PacksFiches = packsFiches.Count,
-                PacksFichesEuros = packsFiches.Sum() / 100m,
+                PacksFiches = packsDeFiches.Count,
+                PacksFichesEuros = packsDeFiches.Sum() / 100m,
+                PacksPodcasts = packsPodcasts.Count,
+                PacksPodcastsEuros = packsPodcasts.Sum() / 100m,
             };
 
-            revenu.TotalEuros = revenu.MensuelsEuros + revenu.AnnuelsEuros + revenu.PacksEuros + revenu.PacksFichesEuros;
+            revenu.TotalEuros = revenu.MensuelsEuros + revenu.AnnuelsEuros + revenu.PacksEuros + revenu.PacksFichesEuros
+                                + revenu.PacksPodcastsEuros;
 
             return revenu;
         }

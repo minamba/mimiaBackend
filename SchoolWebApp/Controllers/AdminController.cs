@@ -78,6 +78,18 @@ namespace SchoolWebApp.Api.Controllers
                       .Select(m => m.Trim())
                       .ToArray();
 
+        /// <summary>
+        /// LES COMPTES QUI NE SONT PAS DES CLIENTS, POUR LES CHIFFRES — Camara, le 17/11/2026 : le super-administrateur
+        /// et le compte de démonstration (la liste des comptes exemptés de facturation) ne comptent ni dans ce que le
+        /// produit rapporte, ni dans le fichier clients, QUI QUE SOIT L'ADMINISTRATEUR qui regarde. Ils restent dans la
+        /// liste des parents pour le super-administrateur (MailsCaches), et dans ce que le produit coûte.
+        /// </summary>
+        private IReadOnlyCollection<string> ComptesNonClients() =>
+            _exemptions.ComptesExemptes
+                .Where(m => !string.IsNullOrWhiteSpace(m))
+                .Select(m => m.Trim())
+                .ToArray();
+
         private bool EstSuperAdministrateur() =>
             User.HasClaim("role", "SuperAdmin") || User.IsInRole("SuperAdmin");
 
@@ -273,7 +285,7 @@ namespace SchoolWebApp.Api.Controllers
         [HttpGet("parents/repartition")]
         [SwaggerResponse(200, "Répartition des comptes.", typeof(RepartitionParents))]
         public async Task<IActionResult> GetRepartitionParents() =>
-            await Executer(() => _adminService.GetRepartitionParentsAsync(MailsCaches()));
+            await Executer(() => _adminService.GetRepartitionParentsAsync(ComptesNonClients()));
 
         [HttpGet("parents")]
         [SwaggerResponse(200, "Comptes parents.", typeof(IEnumerable<ParentAdmin>))]
@@ -363,7 +375,7 @@ namespace SchoolWebApp.Api.Controllers
                 return Ok(new RevenuPeriode { Debut = debut, Fin = fin, Disponible = false });
             }
 
-            return await Executer(() => _adminService.GetRevenuAsync(debut, fin));
+            return await Executer(() => _adminService.GetRevenuAsync(debut, fin, ComptesNonClients()));
         }
 
         /// <summary>

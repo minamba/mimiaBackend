@@ -333,6 +333,7 @@ namespace SchoolWebApp.Dal.Repositories
                         NiveauLibelle = c.Eleve.NiveauScolaire!.Libelle,
                         NiveauOrdre = c.Eleve.NiveauScolaire.Ordre,
                         NiveauCode = c.Eleve.NiveauScolaire.Code,
+                        NiveauScolaireId = c.Eleve.NiveauScolaireId,
                         ModeSeance = c.ModeSeance,
                         ModeControleId = c.ModeControleId,
                         ModeEpreuveCode = c.ModeEpreuveCode,

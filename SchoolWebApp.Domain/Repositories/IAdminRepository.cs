@@ -85,7 +85,7 @@ namespace SchoolWebApp.Domain.Repositories
         Task<CoutPeriode> GetCoutAsync(DateTime debut, DateTime fin);
 
         /// <summary>Ce que le produit a rapporté entre deux dates (mois ou année).</summary>
-        Task<RevenuPeriode> GetRevenuAsync(DateTime debut, DateTime fin);
+        Task<RevenuPeriode> GetRevenuAsync(DateTime debut, DateTime fin, IReadOnlyCollection<string> mailsExclus);
 
         /// <summary>
         /// La place occupée par la base, et la part des documents.

@@ -1366,7 +1366,8 @@ namespace SchoolWebApp.Dal.Entities
                 entity.Property(e => e.Id).HasColumnName("id");
                 entity.Property(e => e.ControleId).HasColumnName("controle_id");
                 entity.Property(e => e.NomFichier).IsRequired().HasMaxLength(255).HasColumnName("nom_fichier");
-                entity.Property(e => e.TypeMime).IsRequired().HasMaxLength(60).HasColumnName("type_mime");
+                // 120 et non 60 : le type d'un document Word fait 71 caractères (migration TypeMimeDocumentControle).
+                entity.Property(e => e.TypeMime).IsRequired().HasMaxLength(120).HasColumnName("type_mime");
                 entity.Property(e => e.Taille).HasColumnName("taille");
                 entity.Property(e => e.NombrePages).HasColumnName("nombre_pages");
                 entity.Property(e => e.Donnees).HasColumnName("donnees");

@@ -26,6 +26,17 @@ namespace SchoolWebApp.Api.Services
         Task<IReadOnlyDictionary<string, NotionDeclaree>> RapprocherAsync(
             IReadOnlyList<string> libelles, IReadOnlyList<CompetenceCandidate> referentiel,
             CancellationToken ct = default);
+
+        /// <summary>
+        /// Une notion que le professeur juge dans la ligne `notions:` de son
+        /// verdict, mais qui n'est pas au programme du contrôle, y entre —
+        /// rattachée au référentiel si possible. Rend les mêmes états, les
+        /// libellés remplacés par celui de la ligne posée, pour que le verdict
+        /// la retrouve. À appeler AVANT PoserVerdictPretAsync.
+        /// </summary>
+        Task<IReadOnlyList<EtatNotionDeclare>> CompleterPerimetreAsync(
+            int eleveId, int controleId, int matiereId, int? niveauScolaireId,
+            IReadOnlyList<EtatNotionDeclare> notions, CancellationToken ct = default);
     }
 
     /// <summary>
@@ -205,6 +216,84 @@ namespace SchoolWebApp.Api.Services
             }
 
             return resultat;
+        }
+
+        /// <summary>
+        /// LE PROFESSEUR JUGE UNE NOTION QUE LE CONTRÔLE NE CONNAÎT PAS —
+        /// signalé en prod le 17/11/2026 (Miyah, sciences) : barre à 100 % sous
+        /// un « Bientôt prêt » qui disait « il reste un point à consolider ».
+        /// Le programme du contrôle ne portait que les notions tenues ; celle à
+        /// consolider, jugée dans la ligne `notions:`, ne répondait à aucune
+        /// ligne, et PoserEtatsDuProfesseurAsync l'ignorait en silence. La
+        /// barre ne voyait donc que le tenu.
+        ///
+        /// Elle entre désormais au programme, comme une notion déclarée en
+        /// séance : rattachée au référentiel (à la plume près, puis par le
+        /// planificateur), sinon en texte libre. « pas vue » n'entre jamais —
+        /// ne rien savoir d'une notion n'est pas la mettre au programme.
+        /// </summary>
+        public async Task<IReadOnlyList<EtatNotionDeclare>> CompleterPerimetreAsync(
+            int eleveId, int controleId, int matiereId, int? niveauScolaireId,
+            IReadOnlyList<EtatNotionDeclare> notions, CancellationToken ct = default)
+        {
+            var jugees = notions
+                .Where(n => PretControle.EtatNotionValide(n.Etat) is not null)
+                .Select(n => n.Libelle)
+                .ToList();
+
+            if (jugees.Count == 0) return notions;
+
+            var absentes = await _controles.NotionsHorsPerimetreAsync(controleId, jugees, ct);
+            if (absentes.Count == 0) return notions;
+
+            var referentiel = niveauScolaireId is int niveau
+                ? (await _maitrises.GetNotionsDuNiveauAsync(matiereId, niveau, ct)).ToList()
+                : [];
+
+            var posees = new Dictionary<string, NotionDeclaree>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var libelle in absentes)
+            {
+                var cle = LibelleNotion.CleSouple(libelle);
+                var connue = referentiel.FirstOrDefault(
+                    c => c.Libelle is not null && LibelleNotion.CleSouple(c.Libelle) == cle);
+
+                posees[libelle] = new NotionDeclaree(connue?.Id, connue?.Libelle ?? libelle);
+            }
+
+            var libres = posees.Where(p => p.Value.CompetenceId is null).Select(p => p.Key).ToList();
+
+            if (libres.Count > 0 && referentiel.Count > 0)
+            {
+                try
+                {
+                    foreach (var (libelle, connue) in await RapprocherAsync(libres, referentiel, ct))
+                    {
+                        posees[libelle] = connue;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex,
+                        "Rapprochement impossible : {Nombre} notion(s) du verdict gardee(s) en texte libre (controle {ControleId}).",
+                        libres.Count, controleId);
+                }
+            }
+
+            await _controles.AjouterNotionsAsync(
+                eleveId, controleId, matiereId, posees.Values.ToList(), travaillee: true, ct);
+
+            _logger.LogInformation(
+                "Controle {ControleId} : {Nombre} notion(s) jugee(s) par le professeur ajoutee(s) au programme.",
+                controleId, posees.Count);
+
+            // Le libellé de la ligne posée (celui du référentiel si la notion
+            // a été rattachée) : c'est lui que le verdict cherchera.
+            return notions
+                .Select(n => posees.TryGetValue(n.Libelle, out var posee)
+                    ? n with { Libelle = posee.Libelle }
+                    : n)
+                .ToList();
         }
 
         private const string ConsigneRapprochement = """

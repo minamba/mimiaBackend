@@ -102,8 +102,8 @@ namespace SchoolWebApp.Domain.Services.impl
         public Task<CoutPeriode> GetCoutAsync(DateTime debut, DateTime fin) =>
             _adminRepository.GetCoutAsync(debut, fin);
 
-        public Task<RevenuPeriode> GetRevenuAsync(DateTime debut, DateTime fin) =>
-            _adminRepository.GetRevenuAsync(debut, fin);
+        public Task<RevenuPeriode> GetRevenuAsync(DateTime debut, DateTime fin, IReadOnlyCollection<string> mailsExclus) =>
+            _adminRepository.GetRevenuAsync(debut, fin, mailsExclus);
 
         public Task<EtatBase> GetEtatBaseAsync() =>
             _adminRepository.GetEtatBaseAsync();

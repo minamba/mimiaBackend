@@ -167,6 +167,7 @@ namespace SchoolWebApp.Api.Services
         private readonly IExamenRepository _examens;
         private readonly OptionsClaude _options;
         private readonly IJournalClaudeRepository _journal;
+        private readonly IPlanificateurControleService _planificateur;
         private readonly ILogger<ObservateurCompetencesService> _logger;
 
         public ObservateurCompetencesService(
@@ -177,8 +178,10 @@ namespace SchoolWebApp.Api.Services
             IExamenRepository examens,
             IOptions<OptionsClaude> options,
             IJournalClaudeRepository journal,
+            IPlanificateurControleService planificateur,
             ILogger<ObservateurCompetencesService> logger)
         {
+            _planificateur = planificateur ?? throw new ArgumentNullException(nameof(planificateur));
             _examens = examens ?? throw new ArgumentNullException(nameof(examens));
             _client = client ?? throw new ArgumentNullException(nameof(client));
             _maitrises = maitrises ?? throw new ArgumentNullException(nameof(maitrises));
@@ -535,9 +538,27 @@ namespace SchoolWebApp.Api.Services
                     return;
                 }
 
+                // Comme pendant la séance : une notion jugée hors du programme
+                // y entre avant le verdict. Voir CompleterPerimetreAsync.
+                var notions = declare.Notions;
+
+                if (notions.Count > 0)
+                {
+                    try
+                    {
+                        notions = await _planificateur.CompleterPerimetreAsync(
+                            seance.EleveId, controle.Id, seance.MatiereId, seance.NiveauScolaireId, notions, ct);
+                    }
+                    catch (Exception ex) when (ex is not OperationCanceledException)
+                    {
+                        _logger.LogWarning(ex,
+                            "Notions de la conclusion non ajoutees au programme (controle {ControleId}).", controle.Id);
+                    }
+                }
+
                 await _controles.PoserVerdictPretAsync(
                     seance.EleveId, controle.Id, seance.MatiereId,
-                    declare.Verdict, declare.Observation, DateTime.UtcNow, declare.Notions, ct);
+                    declare.Verdict, declare.Observation, DateTime.UtcNow, notions, ct);
 
                 _logger.LogInformation(
                     "Preparation conclue apres coup : controle {ControleId} «{Verdict}» "

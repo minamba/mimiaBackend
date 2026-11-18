@@ -990,6 +990,27 @@ namespace SchoolWebApp.Dal.Repositories
             return true;
         }
 
+        public async Task<IReadOnlyList<string>> NotionsHorsPerimetreAsync(
+            int controleId, IEnumerable<string> libelles, CancellationToken ct = default)
+        {
+            var lignes = (await _context.ControlesNotions
+                    .AsNoTracking()
+                    .Where(n => n.ControleId == controleId)
+                    .Select(n => new
+                    {
+                        n.Id,
+                        Libelle = n.Competence != null ? n.Competence.Libelle! : n.Libelle,
+                    })
+                    .ToListAsync(ct))
+                .Select(l => (l.Id, l.Libelle))
+                .ToList();
+
+            return libelles
+                .Where(l => LibelleNotion.CleSouple(l).Length > 0 && TrouverParLibelle(lignes, l) is null)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+
         /// <summary>
         /// L'état que le professeur donne à chaque notion avec son verdict —
         /// Camara, le 13/10/2026. Rapproché par libellé : le nom du

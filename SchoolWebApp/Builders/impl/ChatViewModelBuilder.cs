@@ -4159,7 +4159,7 @@ namespace SchoolWebApp.Api.Builders.impl
 
                     await EnregistrerControlePretAsync(
                         conversationId, contexte.Eleve.Id, contexte.Conversation.MatiereId,
-                        controleMode.Value, resultat.TexteComplet, ct);
+                        contexte.Eleve.NiveauScolaireId, controleMode.Value, resultat.TexteComplet, ct);
                 }
 
                 // Le résultat, lui, est un fait rapporté par l'élève : il
@@ -5119,7 +5119,7 @@ namespace SchoolWebApp.Api.Builders.impl
         /// Silencieux : rater ce verdict ne doit pas faire perdre la séance.
         /// </summary>
         private async Task EnregistrerControlePretAsync(
-            int conversationId, int eleveId, int matiereId, int controleCible,
+            int conversationId, int eleveId, int matiereId, int? niveauScolaireId, int controleCible,
             string texte, CancellationToken ct)
         {
             var declare = LecteurControlePret.Lire(texte);
@@ -5136,9 +5136,28 @@ namespace SchoolWebApp.Api.Builders.impl
 
             try
             {
+                // Une notion jugée hors du programme du contrôle y entre
+                // d'abord — sinon son état serait perdu et la barre ne
+                // verrait que le tenu. Voir CompleterPerimetreAsync.
+                var notions = declare.Notions;
+
+                if (notions is { Count: > 0 })
+                {
+                    try
+                    {
+                        notions = await _planificateur.CompleterPerimetreAsync(
+                            eleveId, declare.Controle, matiereId, niveauScolaireId, notions, ct);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex,
+                            "Notions du verdict non ajoutees au programme (controle {ControleId}).", declare.Controle);
+                    }
+                }
+
                 var pose = await _controles.PoserVerdictPretAsync(
                     eleveId, declare.Controle, matiereId,
-                    declare.Verdict, declare.Observation, DateTime.UtcNow, declare.Notions, ct);
+                    declare.Verdict, declare.Observation, DateTime.UtcNow, notions, ct);
 
                 if (!pose)
                 {

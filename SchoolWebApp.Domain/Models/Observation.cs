@@ -69,6 +69,12 @@ namespace SchoolWebApp.Domain.Models
         public string? NiveauCode { get; set; }
 
         /// <summary>
+        /// La classe de l'élève, pour rattacher au référentiel une notion que
+        /// le verdict de fin de préparation ajoute au programme d'un contrôle.
+        /// </summary>
+        public int? NiveauScolaireId { get; set; }
+
+        /// <summary>
         /// D'où venait l'élève — voir <see cref="ModesSeance"/>. Le filet de
         /// conclusion ne juge une préparation QUE sur une séance ouverte par le
         /// bouton de ce contrôle ou de cette épreuve.

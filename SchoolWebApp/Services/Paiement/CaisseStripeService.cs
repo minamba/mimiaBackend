@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using SchoolWebApp.Domain.Models;
 using SchoolWebApp.Domain.Repositories;
@@ -37,7 +37,8 @@ namespace SchoolWebApp.Api.Services.Paiement
         /// Stripe.
         /// </summary>
         Task<OuvertureCaisse?> OuvrirAchatFichesAsync(
-            int parentId, string codePack, CancellationToken ct = default, string nature = NaturesCours.Fiches);
+            int parentId, string codePack, CancellationToken ct = default, string nature = NaturesCours.Fiches,
+            string? retour = null);
 
         /// <summary>
         /// Ouvre le portail client : changer de carte, lire ses factures,
@@ -253,8 +254,34 @@ namespace SchoolWebApp.Api.Services.Paiement
             return new OuvertureCaisse(session.Url);
         }
 
+        /// <summary>
+        /// LA PAGE D'OÙ PART L'ACHAT, SUR LE SITE SEULEMENT (17/11/2026). Le navigateur donne un chemin (« /eleves/3/
+        /// mes-podcasts ») ; il est rejoint à l'origine de l'adresse de retour configurée — jamais une adresse complète
+        /// venue du navigateur : Stripe ne doit pouvoir renvoyer que sur Mimia. Null si le chemin ne convient pas.
+        /// </summary>
+        internal static string? PageDeRetour(string? urlConfiguree, string? chemin)
+        {
+            if (string.IsNullOrWhiteSpace(chemin) || string.IsNullOrWhiteSpace(urlConfiguree)) return null;
+            chemin = chemin.Trim();
+            if (chemin.Length > 300 || !chemin.StartsWith('/') || chemin.StartsWith("//") || chemin.Contains('\\')
+                || chemin.Contains(':') || chemin.Any(char.IsControl)) return null;
+            if (!Uri.TryCreate(urlConfiguree, UriKind.Absolute, out var base_)) return null;
+            return base_.GetLeftPart(UriPartial.Authority) + chemin;
+        }
+
+        /// <summary>Ajoute des paramètres à une adresse qui en porte peut-être déjà (« ?onglet=forfait »).</summary>
+        internal static string AvecParametres(string? adresse, string parametres)
+        {
+            adresse ??= string.Empty;
+            // Les marques d'un précédent retour de Stripe ne s'accumulent pas.
+            var propre = System.Text.RegularExpressions.Regex.Replace(adresse, @"([?&])(paiement|achat)=[^&#]*", "$1")
+                .Replace("?&", "?").Replace("&&", "&").TrimEnd('?', '&');
+            return propre + (propre.Contains('?') ? "&" : "?") + parametres;
+        }
+
         public async Task<OuvertureCaisse?> OuvrirAchatFichesAsync(
-            int parentId, string codePack, CancellationToken ct = default, string nature = NaturesCours.Fiches)
+            int parentId, string codePack, CancellationToken ct = default, string nature = NaturesCours.Fiches,
+            string? retour = null)
         {
             // FICHES OU PODCASTS (15/11/2026) : les packs, puis le crédit du webhook, de cette nature.
             _fiches.Nature = nature;
@@ -296,8 +323,15 @@ namespace SchoolWebApp.Api.Services.Paiement
                     // Le parent achète depuis « Mon forfait » (Camara, le
                     // 16/10/2026) et y revient : `paiement=ok` ouvre l'onglet,
                     // `achat=fiches` dit à l'encart des fiches de se relire.
-                    SuccessUrl = $"{reglages.UrlRetour}?paiement=ok&achat={(podcasts ? "podcasts" : "fiches")}",
-                    CancelUrl = $"{reglages.UrlAnnulation}?paiement=abandon",
+                    // LE RETOUR SUR LA PAGE D'OÙ L'ON VIENT (Camara, le 17/11/2026 : « quand je clique sur retour, il me
+                    // renvoie sur la page des tarifs au lieu de la page d'où je viens ») : la page de l'achat (podcasts,
+                    // fiches, Mon forfait), sinon les adresses de la configuration.
+                    SuccessUrl = AvecParametres(
+                        PageDeRetour(reglages.UrlRetour, retour) ?? reglages.UrlRetour,
+                        $"paiement=ok&achat={(podcasts ? "podcasts" : "fiches")}"),
+                    CancelUrl = AvecParametres(
+                        PageDeRetour(reglages.UrlRetour, retour) ?? reglages.UrlAnnulation,
+                        $"paiement=abandon&achat={(podcasts ? "podcasts" : "fiches")}"),
 
                     Metadata = etiquettes,
                     PaymentIntentData = new SessionPaymentIntentDataOptions { Metadata = etiquettes },

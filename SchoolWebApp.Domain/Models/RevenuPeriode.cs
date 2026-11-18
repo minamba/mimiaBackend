@@ -63,6 +63,11 @@ namespace SchoolWebApp.Domain.Models
 
         public decimal PacksFichesEuros { get; set; }
 
+        /// <summary>Packs de crédits de podcasts vendus sur la période (17/11/2026), remboursés exclus.</summary>
+        public int PacksPodcasts { get; set; }
+
+        public decimal PacksPodcastsEuros { get; set; }
+
         public decimal TotalEuros { get; set; }
     }
 
