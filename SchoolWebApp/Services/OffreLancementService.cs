@@ -160,12 +160,15 @@ namespace SchoolWebApp.Api.Services
 
                 var codes = await FormulesAsync(ct);
 
-                // `> DateTime.UtcNow` et non `>=` : l'échéance est le dernier
-                // instant où l'offre vaut. Une seconde après, elle est morte.
+                // `>=` et non `>` : l'échéance est le DERNIER INSTANT OÙ
+                // L'OFFRE VAUT, il en fait donc partie. Stripe date ses
+                // événements à la seconde : un paiement à 22:59:59Z pile, pour
+                // une échéance à 22:59:59Z, est dans l'offre (retour d'Omar,
+                // test H11). Une seconde après (23:00:00Z), elle est morte.
                 var vivante = allumee
                     && minutes > 0
                     && codes.Count > 0
-                    && (fin is null || fin > instant);
+                    && (fin is null || fin >= instant);
 
                 // ALLUMÉ PAR DÉFAUT, et jamais sans offre vivante derrière.
                 var bandeau = vivante && await _reglages.EstActifAsync(

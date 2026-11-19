@@ -873,14 +873,55 @@ namespace SchoolWebApp.Api.Services.Paiement
                 // inconnue n'ouvre rien et n'annonce rien.
                 if (etat is not null)
                 {
-                    await _telegram.NotifierAbonnementAsync(
-                        parent, etat.OffreLibelle ?? code, etat.Periodicite, changement: false);
+                    AlerterSansAttendre(parent, etat.OffreLibelle ?? code, etat.Periodicite);
                 }
 
                 return etat;
             }
 
             return null;
+        }
+
+        /// <summary>
+        /// Annonce « Nouvel abonnement » SANS FAIRE ATTENDRE LE PARENT
+        /// (19/11/2026, retour d'Omar).
+        ///
+        /// Le rattrapage tourne pendant que la page de retour de la caisse
+        /// attend sa réponse. Attendre Telegram ici, c'était lier l'affichage
+        /// du forfait à un service tiers : proxy ou Telegram injoignable, et
+        /// le parent attendait jusqu'à 10 s (le délai de `TelegramService`)
+        /// juste après avoir payé. L'alerte part donc en arrière-plan.
+        ///
+        /// Ce qui rend le départ sûr :
+        /// - on n'emporte qu'une COPIE détachée du parent (prénom, nom, mail),
+        ///   jamais l'entité suivie par le DbContext de la requête, qui sera
+        ///   libéré avant la fin de l'envoi ;
+        /// - `TelegramService` est un singleton (fabrique HTTP, logger) : il
+        ///   survit à la requête ;
+        /// - aucune exception ne peut s'échapper sans trace : `EnvoyerAsync`
+        ///   attrape déjà tout, et le filet ci-dessous journalise le reste
+        ///   (une tâche abandonnée qui échoue serait sinon muette).
+        /// </summary>
+        private void AlerterSansAttendre(Parent? parent, string formule, string? periodicite)
+        {
+            var copie = parent is null
+                ? null
+                : new Parent { Prenom = parent.Prenom, Nom = parent.Nom, Mail = parent.Mail };
+
+            var telegram = _telegram;
+            var logger = _logger;
+
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await telegram.NotifierAbonnementAsync(copie, formule, periodicite, changement: false);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "Rattrapage : alerte Telegram « Nouvel abonnement » non envoyee.");
+                }
+            });
         }
 
         private static string? Etiquette(IDictionary<string, string>? etiquettes, string cle) =>
