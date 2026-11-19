@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using SchoolWebApp.Domain.Models;
 using SchoolWebApp.Domain.Repositories;
@@ -197,16 +198,25 @@ namespace SchoolWebApp.Api.Services.Paiement
                 return;
             }
 
-            // DÉJÀ OUVERT PAR UN PASSAGE PRÉCÉDENT ? (19/11/2026, offre Black Friday)
+            // L'ABONNEMENT EST-IL DÉJÀ OUVERT ? (19/11/2026, offre Black Friday)
             //
-            // Stripe réémet cet événement tant qu'il n'a pas eu son 200. Si le
-            // premier passage a ouvert l'abonnement puis échoué AVANT de créditer
-            // les heures offertes (base indisponible un instant, délai dépassé),
-            // chaque rejeu butait sur l'index unique `stripe_abonnement_id` dans
-            // `SouscrireAsync` : 500 à chaque fois, et les heures promises sur
-            // /tarifs n'étaient jamais créditées. On reprend donc là où le premier
-            // passage s'est arrêté — l'offre reste protégée du double crédit par sa
-            // clé `lancement:<session>`.
+            // Deux causes, et c'est la première qui est le cas NORMAL :
+            //  1. LE RATTRAPAGE. Au retour sur `?paiement=ok`, le front appelle
+            //     aussitôt `/abonnements/rattraper`, qui demande à Stripe ce qui a
+            //     été payé et ouvre l'abonnement — souvent AVANT ce webhook. Le
+            //     rattrapage n'offre pas les heures de lancement : c'est ici
+            //     qu'elles se créditent.
+            //  2. LE REJEU. Stripe réémet l'événement tant qu'il n'a pas eu son
+            //     200 ; un premier passage a pu ouvrir l'abonnement puis échouer
+            //     avant de créditer (base indisponible un instant, délai dépassé).
+            //
+            // Avant ce correctif, `SouscrireAsync` butait alors sur l'index unique
+            // `stripe_abonnement_id` : 500 à chaque envoi, et les heures promises
+            // sur /tarifs n'étaient jamais créditées. On ne recrée donc rien, on
+            // vérifie seulement l'offre — protégée du double crédit par sa clé
+            // `lancement:<session>` (index unique `UX_Recharge_stripe_session`).
+            // Pas de notification Telegram sur ce chemin : celui qui a ouvert
+            // l'abonnement (rattrapage ou premier passage) l'a déjà envoyée.
             var dejaOuvert = !string.IsNullOrWhiteSpace(session.SubscriptionId)
                 && (await _abonnements.AbonnementsStripeAsync(parentId, ct))
                     .Contains(session.SubscriptionId);
@@ -214,16 +224,47 @@ namespace SchoolWebApp.Api.Services.Paiement
             if (dejaOuvert)
             {
                 _logger.LogInformation(
-                    "Session {Session} rejouee : abonnement Stripe {Sub} deja ouvert, "
-                    + "seule l'offre de lancement est reverifiee.", session.Id, session.SubscriptionId);
+                    "Session {Session} : abonnement Stripe {Sub} deja ouvert (rattrapage ou rejeu), "
+                    + "seule l'offre de lancement est verifiee.", session.Id, session.SubscriptionId);
 
                 await OffrirLancementAsync(session, parentId, codeOffre, periodicite, ct);
                 return;
             }
 
-            var etat = await _abonnements.SouscrireAsync(
-                parentId, codeOffre, periodicite ?? PeriodiciteAbonnement.Mensuel,
-                session.SubscriptionId, ct);
+            EtatQuota? etat;
+
+            try
+            {
+                etat = await _abonnements.SouscrireAsync(
+                    parentId, codeOffre, periodicite ?? PeriodiciteAbonnement.Mensuel,
+                    session.SubscriptionId, ct);
+            }
+            catch (DbUpdateException) when (!string.IsNullOrWhiteSpace(session.SubscriptionId))
+            {
+                // LA COURSE AVEC LE RATTRAPAGE, PERDUE DE PEU.
+                //
+                // Le test ci-dessus et l'écriture ne sont pas atomiques : le
+                // rattrapage a pu ouvrir le même `sub_…` entre les deux, et
+                // l'index unique refuse alors notre insertion. C'est le même cas
+                // que « déjà ouvert », découvert une milliseconde trop tard.
+                //
+                // On le VÉRIFIE en relisant la base plutôt que de deviner sur le
+                // type d'exception : si l'abonnement n'y est pas, l'erreur a une
+                // autre cause et doit remonter (500, Stripe réémettra).
+                // `SouscrireAsync` a vidé le contexte avant de lever : l'insertion
+                // refusée ne repartira pas avec le crédit des heures offertes.
+                var ouvertEntreTemps = (await _abonnements.AbonnementsStripeAsync(parentId, ct))
+                    .Contains(session.SubscriptionId);
+
+                if (!ouvertEntreTemps) throw;
+
+                _logger.LogInformation(
+                    "Session {Session} : abonnement Stripe {Sub} ouvert en parallele (rattrapage), "
+                    + "seule l'offre de lancement est verifiee.", session.Id, session.SubscriptionId);
+
+                await OffrirLancementAsync(session, parentId, codeOffre, periodicite, ct);
+                return;
+            }
 
             if (etat is null)
             {

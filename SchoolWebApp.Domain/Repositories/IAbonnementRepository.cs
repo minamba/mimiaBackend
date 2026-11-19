@@ -44,6 +44,13 @@ namespace SchoolWebApp.Domain.Repositories
         /// passent pas par la caisse, et leur inventer un identifiant ferait
         /// chercher un abonnement inexistant au premier renouvellement.
         /// </param>
+        /// <remarks>
+        /// DbUpdateException : écriture refusée par la base — typiquement l'index unique
+        /// `stripe_abonnement_id` quand le webhook et le rattrapage ouvrent le
+        /// même abonnement en même temps. Le contexte est alors VIDÉ avant que
+        /// l'exception remonte : l'appelant peut relire et écrire de nouveau
+        /// dans la même requête sans renvoyer l'insertion refusée.
+        /// </remarks>
         Task<EtatQuota?> SouscrireAsync(
             int parentId,
             string codeOffre,

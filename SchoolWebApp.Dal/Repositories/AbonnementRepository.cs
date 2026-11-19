@@ -298,7 +298,27 @@ namespace SchoolWebApp.Dal.Repositories
             };
 
             _context.Abonnements.Add(abonnement);
-            await _context.SaveChangesAsync(ct);
+
+            try
+            {
+                await _context.SaveChangesAsync(ct);
+            }
+            catch (DbUpdateException)
+            {
+                // LE CONTEXTE EST VIDÉ AVANT DE RENDRE L'ERREUR (19/11/2026).
+                //
+                // Cas typique : le webhook et le rattrapage ouvrent le même
+                // `stripe_abonnement_id` en même temps, l'index unique refuse le
+                // second. Sans ce vidage, le nouvel abonnement (Added) et les
+                // anciens marqués « résiliés » resteraient suivis : la PROCHAINE
+                // écriture de la requête (crédit des heures offertes,
+                // rafraîchissement du quota) les renverrait à la base, et
+                // buterait sur le même index. L'appelant qui rattrape
+                // l'exception repart ainsi d'un contexte propre et relit l'état
+                // réel en base.
+                _context.ChangeTracker.Clear();
+                throw;
+            }
 
             abonnement.Offre = offre;
             return await ComposerAsync(abonnement, ct);
