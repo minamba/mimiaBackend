@@ -38,6 +38,16 @@ namespace SchoolWebApp.Api.Services
 
         /// <summary>Ce que le navigateur a besoin de savoir pour l'afficher.</summary>
         Task<OffreLancement> LireAsync(CancellationToken ct = default);
+
+        /// <summary>
+        /// La même lecture, mais l'échéance est jugée à `instant` et non à
+        /// l'heure présente. Sert au webhook : c'est l'heure du PAIEMENT qui
+        /// compte, pas celle du traitement — un événement réémis par Stripe
+        /// après la fin de l'offre doit honorer ce qui était affiché au parent
+        /// quand il a payé. L'interrupteur, lui, reste lu MAINTENANT : éteint,
+        /// il coupe tout, y compris les paiements passés.
+        /// </summary>
+        Task<OffreLancement> LireAsync(DateTime instant, CancellationToken ct = default);
     }
 
     /// <param name="Active">Vivante en ce moment : interrupteur ET date.</param>
@@ -127,7 +137,10 @@ namespace SchoolWebApp.Api.Services
         public async Task<bool> EstVivanteAsync(CancellationToken ct = default) =>
             (await LireAsync(ct)).Active;
 
-        public async Task<OffreLancement> LireAsync(CancellationToken ct = default)
+        public Task<OffreLancement> LireAsync(CancellationToken ct = default) =>
+            LireAsync(DateTime.UtcNow, ct);
+
+        public async Task<OffreLancement> LireAsync(DateTime instant, CancellationToken ct = default)
         {
             try
             {
@@ -152,7 +165,7 @@ namespace SchoolWebApp.Api.Services
                 var vivante = allumee
                     && minutes > 0
                     && codes.Count > 0
-                    && (fin is null || fin > DateTime.UtcNow);
+                    && (fin is null || fin > instant);
 
                 // ALLUMÉ PAR DÉFAUT, et jamais sans offre vivante derrière.
                 var bandeau = vivante && await _reglages.EstActifAsync(

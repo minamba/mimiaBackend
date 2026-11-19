@@ -99,7 +99,9 @@ namespace SchoolWebApp.Api.Services.Paiement
             switch (evenement.Type)
             {
                 case EventTypes.CheckoutSessionCompleted:
-                    await OuvrirAsync((Session)evenement.Data.Object, ct);
+                    // `evenement.Created` = l'instant où Stripe a constaté le
+                    // paiement. Il ne bouge pas quand Stripe réémet l'événement.
+                    await OuvrirAsync((Session)evenement.Data.Object, evenement.Created, ct);
                     break;
 
                 case EventTypes.InvoicePaid:
@@ -132,7 +134,7 @@ namespace SchoolWebApp.Api.Services.Paiement
         ///
         /// C'est le seul endroit du programme où un abonnement payant naît.
         /// </summary>
-        private async Task OuvrirAsync(Session session, CancellationToken ct)
+        private async Task OuvrirAsync(Session session, DateTime paiement, CancellationToken ct)
         {
             // `paid` et non `complete` : une session peut être « complète »
             // avec un paiement encore en attente — un virement SEPA met
@@ -227,7 +229,7 @@ namespace SchoolWebApp.Api.Services.Paiement
                     "Session {Session} : abonnement Stripe {Sub} deja ouvert (rattrapage ou rejeu), "
                     + "seule l'offre de lancement est verifiee.", session.Id, session.SubscriptionId);
 
-                await OffrirLancementAsync(session, parentId, codeOffre, periodicite, ct);
+                await OffrirLancementAsync(session, paiement, parentId, codeOffre, periodicite, ct);
                 return;
             }
 
@@ -262,7 +264,7 @@ namespace SchoolWebApp.Api.Services.Paiement
                     "Session {Session} : abonnement Stripe {Sub} ouvert en parallele (rattrapage), "
                     + "seule l'offre de lancement est verifiee.", session.Id, session.SubscriptionId);
 
-                await OffrirLancementAsync(session, parentId, codeOffre, periodicite, ct);
+                await OffrirLancementAsync(session, paiement, parentId, codeOffre, periodicite, ct);
                 return;
             }
 
@@ -278,7 +280,7 @@ namespace SchoolWebApp.Api.Services.Paiement
                 "Abonnement {Offre} ouvert pour le parent {ParentId} apres paiement "
                 + "(abonnement Stripe {Sub}).", codeOffre, parentId, session.SubscriptionId);
 
-            await OffrirLancementAsync(session, parentId, codeOffre, periodicite, ct);
+            await OffrirLancementAsync(session, paiement, parentId, codeOffre, periodicite, ct);
 
             // ALERTE DEPUIS LE WEBHOOK, ET NON DEPUIS LE CONTRÔLEUR.
             //
@@ -327,7 +329,7 @@ namespace SchoolWebApp.Api.Services.Paiement
         /// n'a pas à passer par la création d'un produit marchand.
         /// </summary>
         private async Task OffrirLancementAsync(
-            Session session, int parentId, string codeOffre,
+            Session session, DateTime paiement, int parentId, string codeOffre,
             string? periodicite, CancellationToken ct)
         {
             // MENSUEL SEULEMENT, parce que la carte annonce « 12 h LE PREMIER
@@ -353,7 +355,13 @@ namespace SchoolWebApp.Api.Services.Paiement
             // dix heures au lieu de trois ne demande aucun déploiement. Et
             // c'est LA MÊME lecture qui a servi à l'annoncer sur la page des
             // tarifs — les deux ne peuvent pas désigner des packs différents.
-            var offre = await _lancement.LireAsync(ct);
+            //
+            // L'ÉCHÉANCE, ELLE, EST JUGÉE À L'HEURE DU PAIEMENT (décision de
+            // Min's, 19/11/2026) et non à l'heure où ce webhook est traité : un
+            // parent qui a payé le 28/11 à 23h58 garde ses heures même si Stripe
+            // ne nous livre l'événement — ou ne le réémet — qu'après minuit.
+            // L'interrupteur, les minutes et les formules restent lus MAINTENANT.
+            var offre = await _lancement.LireAsync(InstantFiable(paiement), ct);
 
             if (!offre.Active) return;
 
@@ -777,6 +785,31 @@ namespace SchoolWebApp.Api.Services.Paiement
             ?? facture.Lines?.Data?
                 .Select(l => l.Parent?.SubscriptionItemDetails?.Subscription)
                 .FirstOrDefault(s => !string.IsNullOrWhiteSpace(s));
+
+        /// <summary>
+        /// L'heure du paiement, telle que Stripe la donne — ou l'heure présente
+        /// si elle est inutilisable.
+        ///
+        /// L'HEURE DE L'ÉVÉNEMENT ET NON `session.Created`. La seconde est
+        /// l'OUVERTURE de la page de paiement (valable 24 h) : une page ouverte
+        /// à 23h50 et payée à 0h10 aurait reçu une offre déjà terminée.
+        /// `checkout.session.completed` naît, lui, à l'instant où le paiement
+        /// aboutit, et Stripe le réémet À L'IDENTIQUE (même identifiant, même
+        /// date) tant qu'il n'a pas eu son 200.
+        ///
+        /// Absente ou nulle (événement mal formé), vieille de plus de 30 jours
+        /// (Stripe ne garde ni ne réémet un événement au-delà) ou dans le
+        /// futur (horloges décalées) : l'heure présente. Jamais plus généreux
+        /// que l'ancien comportement.
+        /// </summary>
+        private static DateTime InstantFiable(DateTime paiement)
+        {
+            var maintenant = DateTime.UtcNow;
+            var utc = paiement.Kind == DateTimeKind.Local ? paiement.ToUniversalTime() : paiement;
+
+            if (utc < maintenant.AddDays(-30) || utc > maintenant) return maintenant;
+            return utc;
+        }
 
         private static string? Lire(IDictionary<string, string>? etiquettes, string cle) =>
             etiquettes is not null && etiquettes.TryGetValue(cle, out var valeur) ? valeur : null;
