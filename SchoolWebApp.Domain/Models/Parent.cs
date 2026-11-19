@@ -56,5 +56,14 @@ namespace SchoolWebApp.Domain.Models
 
         /// <summary>Quand il l'a acceptée (UTC).</summary>
         public DateTime? ConditionsAccepteesLe { get; set; }
+
+        /// <summary>A-t-il consenti à recevoir les offres et nouveautés par email (19/11/2026) ? Faux par défaut.</summary>
+        public bool OffresEmail { get; set; }
+
+        /// <summary>Quand il a donné ce consentement (UTC) : la preuve RGPD.</summary>
+        public DateTime? OffresEmailConsentiLe { get; set; }
+
+        /// <summary>Quand il l'a retiré (UTC) ; vide s'il ne l'a jamais retiré.</summary>
+        public DateTime? OffresEmailRetireLe { get; set; }
     }
 }

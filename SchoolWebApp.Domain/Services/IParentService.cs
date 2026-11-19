@@ -41,5 +41,8 @@ namespace SchoolWebApp.Domain.Services
 
         /// <summary>Note la version des conditions générales que ce parent accepte, et quand.</summary>
         Task AccepterConditionsAsync(int parentId, string version, DateTime le, CancellationToken ct = default);
+
+        /// <summary>Note que ce parent consent, de lui-même, à recevoir les offres par email. Un consentement déjà donné garde sa date.</summary>
+        Task ConsentirOffresEmailAsync(int parentId, DateTime le, CancellationToken ct = default);
     }
 }

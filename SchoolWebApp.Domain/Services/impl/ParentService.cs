@@ -93,6 +93,9 @@ namespace SchoolWebApp.Domain.Services.impl
         public Task AccepterConditionsAsync(int parentId, string version, DateTime le, CancellationToken ct = default) =>
             _parentRepository.AccepterConditionsAsync(parentId, version, le, ct);
 
+        public Task ConsentirOffresEmailAsync(int parentId, DateTime le, CancellationToken ct = default) =>
+            _parentRepository.ConsentirOffresEmailAsync(parentId, le, ct);
+
         public Task<Parent?> UpdateParentAsync(Parent model) =>
             _parentRepository.UpdateParentAsync(model);
 

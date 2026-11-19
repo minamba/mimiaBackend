@@ -271,6 +271,11 @@ namespace SchoolWebApp.Dal.Entities
                 entity.Property(e => e.ConditionsVersion).HasMaxLength(20).HasColumnName("conditions_version");
                 entity.Property(e => e.ConditionsAccepteesLe).HasColumnName("conditions_acceptees_le");
 
+                // Le consentement aux offres par email (19/11/2026) : faux par défaut, dans le modèle ET la migration.
+                entity.Property(e => e.OffresEmail).HasDefaultValue(false).HasColumnName("offres_email");
+                entity.Property(e => e.OffresEmailConsentiLe).HasColumnName("offres_email_consenti_le");
+                entity.Property(e => e.OffresEmailRetireLe).HasColumnName("offres_email_retire_le");
+
                 // Le rôle (17/10/2026) : supprimer un rôle rend ses comptes
                 // « Utilisateur » (la suppression recalcule aussi leur accès).
                 entity.Property(e => e.RoleId).HasColumnName("role_id");

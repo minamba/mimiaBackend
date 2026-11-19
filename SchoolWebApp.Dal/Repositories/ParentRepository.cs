@@ -300,6 +300,9 @@ namespace SchoolWebApp.Dal.Repositories
             TutorielEnfantsVuLe = entity.TutorielEnfantsVuLe,
             ConditionsVersion = entity.ConditionsVersion,
             ConditionsAccepteesLe = entity.ConditionsAccepteesLe,
+            OffresEmail = entity.OffresEmail,
+            OffresEmailConsentiLe = entity.OffresEmailConsentiLe,
+            OffresEmailRetireLe = entity.OffresEmailRetireLe,
         };
 
         /// <summary>Écriture directe et ciblée, comme pour le tutoriel : rien d'autre du compte n'est réécrit.</summary>
@@ -309,6 +312,17 @@ namespace SchoolWebApp.Dal.Repositories
                 .ExecuteUpdateAsync(s => s
                     .SetProperty(p => p.ConditionsVersion, version)
                     .SetProperty(p => p.ConditionsAccepteesLe, le), ct);
+
+        /// <summary>
+        /// Le parent coche lui-même la case des offres. Un consentement déjà donné garde sa date d'origine ; la date d'un
+        /// retrait passé reste aussi, c'est l'historique. Écriture directe et ciblée, comme pour les conditions.
+        /// </summary>
+        public Task ConsentirOffresEmailAsync(int parentId, DateTime le, CancellationToken ct = default) =>
+            _context.Parents
+                .Where(p => p.Id == parentId && !p.OffresEmail)
+                .ExecuteUpdateAsync(s => s
+                    .SetProperty(p => p.OffresEmail, true)
+                    .SetProperty(p => p.OffresEmailConsentiLe, le), ct);
 
         /// <summary>
         /// La première date reste : le tutoriel n'est dû qu'une fois. Écriture

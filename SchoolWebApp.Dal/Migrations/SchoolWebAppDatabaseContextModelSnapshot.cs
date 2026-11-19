@@ -3511,6 +3511,20 @@ namespace SchoolWebApp.Dal.Migrations
                         .HasColumnType("nvarchar(100)")
                         .HasColumnName("nom");
 
+                    b.Property<bool>("OffresEmail")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false)
+                        .HasColumnName("offres_email");
+
+                    b.Property<DateTime?>("OffresEmailConsentiLe")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("offres_email_consenti_le");
+
+                    b.Property<DateTime?>("OffresEmailRetireLe")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("offres_email_retire_le");
+
                     b.Property<string>("OngletsAdmin")
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)")

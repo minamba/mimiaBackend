@@ -79,6 +79,9 @@ namespace SchoolWebApp.Api.Controllers
                 // Lus par `VerrouConditions` : vrai, le parent n'entre pas tant qu'il n'a pas accepté (08/11/2026).
                 ConditionsAAccepter = !ConditionsEnVigueur.Acceptees(parent.ConditionsVersion),
                 ConditionsPremiereFois = ConditionsEnVigueur.PremiereFois(parent.ConditionsVersion, parent.DateCreation),
+
+                // Lu par `VerrouConditions` : vrai, la case des offres n'est pas reproposée à qui a déjà consenti (19/11/2026).
+                parent.OffresEmail,
             });
         }
 
@@ -96,17 +99,40 @@ namespace SchoolWebApp.Api.Controllers
             return Ok(new { ConditionsAAccepter = !ConditionsEnVigueur.Acceptees(parent.ConditionsVersion) });
         }
 
+        /// <summary>
+        /// LES CONDITIONS, ET À CÔTÉ LA CASE DES OFFRES — Min's, le 19/11/2026. Deux accords distincts (RGPD) : les conditions
+        /// sont obligatoires pour entrer ; les offres par email sont facultatives, et seul `OffresEmail = true`, envoyé parce
+        /// que le parent a coché lui-même la case, les fait consentir. Absent ou faux : rien ne change, ni dans un sens ni
+        /// dans l'autre (un consentement déjà donné n'est pas retiré ici). Le corps est facultatif : un front plus ancien
+        /// n'envoie rien.
+        /// </summary>
         [HttpPost("conditions")]
-        [SwaggerOperation(Summary = "Note que le parent accepte les conditions générales en vigueur")]
-        public async Task<IActionResult> AccepterConditions(CancellationToken ct)
+        [SwaggerOperation(Summary = "Note que le parent accepte les conditions générales en vigueur, et s'il le coche, les offres par email")]
+        public async Task<IActionResult> AccepterConditions(
+            [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] AccepterConditionsRequest? requete,
+            CancellationToken ct)
         {
             // L'ENFANT N'ACCEPTE RIEN : son jeton porte le « sub » de son parent, seul ce test les distingue.
             if (_currentUser.EleveId is not null) return StatusCode(StatusCodes.Status403Forbidden);
 
             var parent = await ResoudreAsync();
-            await _parentService.AccepterConditionsAsync(parent.Id, ConditionsEnVigueur.Version, DateTime.UtcNow, ct);
+            var maintenant = DateTime.UtcNow;
+            await _parentService.AccepterConditionsAsync(parent.Id, ConditionsEnVigueur.Version, maintenant, ct);
             _logger.LogInformation("Parent {ParentId} : conditions generales {Version} acceptees.", parent.Id, ConditionsEnVigueur.Version);
+
+            if (requete?.OffresEmail == true)
+            {
+                await _parentService.ConsentirOffresEmailAsync(parent.Id, maintenant, ct);
+                _logger.LogInformation("Parent {ParentId} : consentement aux offres par email donne.", parent.Id);
+            }
+
             return NoContent();
+        }
+
+        /// <summary>Le corps de `POST /profil/conditions`. `OffresEmail` : la case des offres, cochée par le parent.</summary>
+        public sealed class AccepterConditionsRequest
+        {
+            public bool OffresEmail { get; set; }
         }
 
         [HttpPost("tutoriel-vu")]

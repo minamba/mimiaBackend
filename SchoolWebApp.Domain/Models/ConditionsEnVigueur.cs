@@ -7,16 +7,23 @@ namespace SchoolWebApp.Domain.Models
     ///
     /// POUR PUBLIER UNE NOUVELLE VERSION, DEUX GESTES : changer le texte et la version dans `ConditionsVente.js` (front),
     /// puis ici `Version` et `Depuis`. Tant que `Version` ne change pas, personne ne revoit la fenêtre.
+    ///
+    /// VERSION 2.0 (19/11/2026) — Min's : « les parents déjà inscrits vont devoir valider les nouvelles CGV ». Elle ajoute
+    /// l'envoi d'offres par email, fondé sur le consentement, à la politique de confidentialité. Tous les parents qui ont
+    /// accepté la 1.0 revoient donc la fenêtre une fois, avec la case des offres à part, jamais cochée d'avance.
     /// </summary>
     public static class ConditionsEnVigueur
     {
-        public const string Version = "1.0";
+        public const string Version = "2.0";
 
         /// <summary>
         /// Depuis quand cette version s'applique (UTC). Une case cochée à l'inscription avant cette date portait sur la
         /// version d'avant : elle ne compte pas.
+        ///
+        /// À METTRE AU JOUR DE LA MISE EN LIGNE. Plus tôt, une case cochée sur l'ancien texte vaudrait pour le nouveau ; plus
+        /// tard, un inscrit de l'entre-deux revoit seulement la fenêtre une fois, sans dommage.
         /// </summary>
-        public static readonly DateTime Depuis = new(2026, 11, 8, 0, 0, 0, DateTimeKind.Utc);
+        public static readonly DateTime Depuis = new(2026, 11, 20, 0, 0, 0, DateTimeKind.Utc);
 
         /// <summary>Le parent a-t-il accepté la version en vigueur ?</summary>
         public static bool Acceptees(string? versionDuParent) => versionDuParent == Version;

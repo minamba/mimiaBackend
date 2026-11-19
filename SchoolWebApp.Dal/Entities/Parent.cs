@@ -150,6 +150,17 @@ namespace SchoolWebApp.Dal.Entities
 
         public DateTime? ConditionsAccepteesLe { get; set; }
 
+        /// <summary>
+        /// LES OFFRES ET NOUVEAUTÉS PAR EMAIL (19/11/2026) : le consentement à la prospection (art. L34-5 CPCE, RGPD), séparé
+        /// des conditions générales. Faux pour tous les comptes existants : seul le parent le donne, en cochant lui-même la
+        /// case. Les deux dates sont la preuve : quand il l'a donné, et quand il l'a retiré (vide s'il ne l'a jamais retiré).
+        /// </summary>
+        public bool OffresEmail { get; set; }
+
+        public DateTime? OffresEmailConsentiLe { get; set; }
+
+        public DateTime? OffresEmailRetireLe { get; set; }
+
         public virtual ICollection<Eleve> Eleves { get; set; } = new List<Eleve>();
 
         public virtual ICollection<Abonnement> Abonnements { get; set; } = new List<Abonnement>();
