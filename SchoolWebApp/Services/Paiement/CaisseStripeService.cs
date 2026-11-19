@@ -113,6 +113,7 @@ namespace SchoolWebApp.Api.Services.Paiement
         private readonly IParentRepository _parents;
         private readonly ICreditsFichesRepository _fiches;
         private readonly IOptions<OptionsStripe> _options;
+        private readonly Notifications.ITelegramService _telegram;
         private readonly ILogger<CaisseStripeService> _logger;
 
         public CaisseStripeService(
@@ -120,8 +121,10 @@ namespace SchoolWebApp.Api.Services.Paiement
             IParentRepository parents,
             ICreditsFichesRepository fiches,
             IOptions<OptionsStripe> options,
+            Notifications.ITelegramService telegram,
             ILogger<CaisseStripeService> logger)
         {
+            _telegram = telegram ?? throw new ArgumentNullException(nameof(telegram));
             _fiches = fiches ?? throw new ArgumentNullException(nameof(fiches));
             _abonnements = abonnements ?? throw new ArgumentNullException(nameof(abonnements));
             _parents = parents ?? throw new ArgumentNullException(nameof(parents));
@@ -856,6 +859,23 @@ namespace SchoolWebApp.Api.Services.Paiement
                     "Paiement RATTRAPE au retour du navigateur : {Offre} pour le parent "
                     + "{ParentId} ({Sub}). Le webhook n'etait pas passe.",
                     code, parentId, abonnement.Id);
+
+                // L'ALERTE « NOUVEL ABONNEMENT » PART D'ICI QUAND C'EST LE
+                // RATTRAPAGE QUI OUVRE (19/11/2026).
+                //
+                // Le webhook n'alerte que lorsqu'IL crée l'abonnement ; s'il le
+                // trouve déjà ouvert (le cas courant, puisque le front appelle
+                // cette route dès `?paiement=ok`), il se tait pour ne pas
+                // doubler le message. Sans cette ligne, la vente n'était donc
+                // annoncée nulle part. Elle n'est envoyée qu'après une ouverture
+                // RÉUSSIE : le perdant d'une course (catch ci-dessus) n'alerte
+                // pas, celui qui a gagné l'a fait. `etat` non nul : une formule
+                // inconnue n'ouvre rien et n'annonce rien.
+                if (etat is not null)
+                {
+                    await _telegram.NotifierAbonnementAsync(
+                        parent, etat.OffreLibelle ?? code, etat.Periodicite, changement: false);
+                }
 
                 return etat;
             }
