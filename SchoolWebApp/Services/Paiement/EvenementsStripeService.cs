@@ -197,6 +197,30 @@ namespace SchoolWebApp.Api.Services.Paiement
                 return;
             }
 
+            // DÉJÀ OUVERT PAR UN PASSAGE PRÉCÉDENT ? (19/11/2026, offre Black Friday)
+            //
+            // Stripe réémet cet événement tant qu'il n'a pas eu son 200. Si le
+            // premier passage a ouvert l'abonnement puis échoué AVANT de créditer
+            // les heures offertes (base indisponible un instant, délai dépassé),
+            // chaque rejeu butait sur l'index unique `stripe_abonnement_id` dans
+            // `SouscrireAsync` : 500 à chaque fois, et les heures promises sur
+            // /tarifs n'étaient jamais créditées. On reprend donc là où le premier
+            // passage s'est arrêté — l'offre reste protégée du double crédit par sa
+            // clé `lancement:<session>`.
+            var dejaOuvert = !string.IsNullOrWhiteSpace(session.SubscriptionId)
+                && (await _abonnements.AbonnementsStripeAsync(parentId, ct))
+                    .Contains(session.SubscriptionId);
+
+            if (dejaOuvert)
+            {
+                _logger.LogInformation(
+                    "Session {Session} rejouee : abonnement Stripe {Sub} deja ouvert, "
+                    + "seule l'offre de lancement est reverifiee.", session.Id, session.SubscriptionId);
+
+                await OffrirLancementAsync(session, parentId, codeOffre, periodicite, ct);
+                return;
+            }
+
             var etat = await _abonnements.SouscrireAsync(
                 parentId, codeOffre, periodicite ?? PeriodiciteAbonnement.Mensuel,
                 session.SubscriptionId, ct);
