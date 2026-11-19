@@ -22,13 +22,23 @@ namespace SchoolWebApp.Dal.Repositories
         /// quatre fois finit toujours par manquer à l'une d'elles — et c'est
         /// alors un parent désabonné qui reçoit quand même.
         /// </summary>
-        private IQueryable<Entities.Parent> Joignables(string? categorie) =>
-            _context.Parents
+        private IQueryable<Entities.Parent> Joignables(string? categorie)
+        {
+            var requete = _context.Parents
                 .AsNoTracking()
                 .Where(p => p.Mail != null && p.Mail != ""
-                            && !_context.MailsBannis.Any(b => b.Mail == p.Mail)
-                            && (categorie == null
-                                || !_context.DesabonnementsMail.Any(d => d.ParentId == p.Id && d.Categorie == categorie)));
+                            && !_context.MailsBannis.Any(b => b.Mail == p.Mail));
+
+            // LE FILTRE D'ENVOI COMMERCIAL (19/11/2026) : une offre ne part qu'à qui a consenti. Posé ICI, une seule fois,
+            // il vaut pour la diffusion à tous comme pour les courriels programmés par cible. Le consentement est LA
+            // source de vérité : un ancien désabonnement des « annonces », antérieur, ne l'emporte pas sur un accord donné
+            // depuis en cochant la case ; et le retrait, lui, remet `OffresEmail` à faux.
+            if (CategorieDesabonnement.EstCommerciale(categorie)) return requete.Where(p => p.OffresEmail);
+
+            return categorie == null
+                ? requete
+                : requete.Where(p => !_context.DesabonnementsMail.Any(d => d.ParentId == p.Id && d.Categorie == categorie));
+        }
 
         public async Task<IReadOnlyList<DestinataireAutomatique>> GetEssaisExpirantAsync(
             DateTime debutUtc, DateTime finUtc, DateTime maintenantUtc, int limite, CancellationToken ct = default)
@@ -112,8 +122,8 @@ namespace SchoolWebApp.Dal.Repositories
         public async Task<IReadOnlyList<DestinataireAutomatique>> GetDestinatairesDiffusionAsync(
             CancellationToken ct = default)
         {
-            // Ni les bannis — ils ne reçoivent plus rien du tout —, ni ceux qui se
-            // sont désabonnés des annonces.
+            // Ni les bannis — ils ne reçoivent plus rien du tout —, et SEULEMENT
+            // les parents qui ont consenti aux offres par email (19/11/2026).
             var lignes = await Joignables(CategorieDesabonnement.Diffusion)
                 .OrderBy(p => p.Id)
                 .Select(p => new { p.Id, p.Mail, p.Prenom })
@@ -200,11 +210,30 @@ namespace SchoolWebApp.Dal.Repositories
                 .Where(e => e.Id == id)
                 .ExecuteUpdateAsync(s => s.SetProperty(e => e.Statut, statut), ct);
 
-        public Task<bool> EstDesabonneAsync(int parentId, string categorie, CancellationToken ct = default) =>
-            _context.DesabonnementsMail.AnyAsync(d => d.ParentId == parentId && d.Categorie == categorie, ct);
+        /// <summary>
+        /// Pour les offres (catégorie commerciale), « désabonné » veut dire « n'a pas consenti » : un parent qui n'a jamais
+        /// coché la case ne reçoit rien, exactement comme celui qui s'est désinscrit.
+        /// </summary>
+        public async Task<bool> EstDesabonneAsync(int parentId, string categorie, CancellationToken ct = default) =>
+            CategorieDesabonnement.EstCommerciale(categorie)
+                ? !await _context.Parents.AnyAsync(p => p.Id == parentId && p.OffresEmail, ct)
+                : await _context.DesabonnementsMail.AnyAsync(d => d.ParentId == parentId && d.Categorie == categorie, ct);
 
         public async Task DesabonnerAsync(int parentId, string categorie, CancellationToken ct = default)
         {
+            // LE RETRAIT DU CONSENTEMENT, EFFET IMMÉDIAT (19/11/2026) : la date du retrait est la preuve. Aucune ligne de
+            // désabonnement n'est écrite pour les offres : le consentement suffit, et une ligne survivrait à un nouvel
+            // accord. Rien ne change pour qui n'avait pas consenti (pas de fausse date de retrait).
+            if (CategorieDesabonnement.EstCommerciale(categorie))
+            {
+                await _context.Parents
+                    .Where(p => p.Id == parentId && p.OffresEmail)
+                    .ExecuteUpdateAsync(s => s
+                        .SetProperty(p => p.OffresEmail, false)
+                        .SetProperty(p => p.OffresEmailRetireLe, DateTime.UtcNow), ct);
+                return;
+            }
+
             if (await EstDesabonneAsync(parentId, categorie, ct)) return;
 
             // Un lien qui désigne un compte supprimé depuis : rien à faire.
@@ -230,9 +259,26 @@ namespace SchoolWebApp.Dal.Repositories
             }
         }
 
-        public Task ReabonnerAsync(int parentId, string categorie, CancellationToken ct = default) =>
-            _context.DesabonnementsMail
+        /// <summary>
+        /// Pour les offres, se réabonner c'est CONSENTIR : un geste du parent lui-même (l'interrupteur de son espace, ou
+        /// le bouton « me réabonner » de la page de désinscription), daté. Un consentement déjà donné garde sa date
+        /// d'origine ; la date d'un retrait passé reste, c'est l'historique.
+        /// </summary>
+        public async Task ReabonnerAsync(int parentId, string categorie, CancellationToken ct = default)
+        {
+            // Pour les offres, ce ménage efface une éventuelle ligne d'avant le 19/11/2026 (désabonnement des « annonces »).
+            await _context.DesabonnementsMail
                 .Where(d => d.ParentId == parentId && d.Categorie == categorie)
                 .ExecuteDeleteAsync(ct);
+
+            if (CategorieDesabonnement.EstCommerciale(categorie))
+            {
+                await _context.Parents
+                    .Where(p => p.Id == parentId && !p.OffresEmail)
+                    .ExecuteUpdateAsync(s => s
+                        .SetProperty(p => p.OffresEmail, true)
+                        .SetProperty(p => p.OffresEmailConsentiLe, DateTime.UtcNow), ct);
+            }
+        }
     }
 }

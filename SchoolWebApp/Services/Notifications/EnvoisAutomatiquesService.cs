@@ -144,8 +144,8 @@ namespace SchoolWebApp.Api.Services.Notifications
                 var courriel = _composeur.Composer(
                     modele,
                     pieces,
-                    Variables(destinataire, site),
-                    lien is null ? null : _diffusion.ComposerMentionPied(lien));
+                    Variables(destinataire, site, lien),
+                    lien is null ? null : _diffusion.ComposerMentionPied(lien, categorie));
 
                 bool envoye;
 
@@ -236,7 +236,7 @@ namespace SchoolWebApp.Api.Services.Notifications
         }
 
         private static IReadOnlyDictionary<string, ValeurVariable> Variables(
-            DestinataireAutomatique destinataire, string site)
+            DestinataireAutomatique destinataire, string site, string? lienDesinscription)
         {
             var variables = new Dictionary<string, ValeurVariable>
             {
@@ -244,6 +244,9 @@ namespace SchoolWebApp.Api.Services.Notifications
                 ["lienTarifs"] = new("voir les formules", $"{site}/tarifs"),
                 ["lienAvis"] = new("donner mon avis", $"{site}{CheminAvis}"),
             };
+
+            // `{{lien_desinscription}}` (19/11/2026) : seulement pour un courriel qui a une catégorie de désabonnement.
+            DiffusionService.AjouterLienDesinscription(variables, lienDesinscription);
 
             if (destinataire.DateFinEssai is { } fin)
             {

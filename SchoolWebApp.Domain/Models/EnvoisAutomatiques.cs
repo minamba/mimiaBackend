@@ -110,13 +110,23 @@ namespace SchoolWebApp.Domain.Models
 
         public static bool EstConnue(string? categorie) => categorie is Avis or Relance or Rappels or Diffusion;
 
+        /// <summary>
+        /// LES OFFRES ET NOUVEAUTÉS : LA SEULE CATÉGORIE COMMERCIALE — Min's, le 19/11/2026 (art. L34-5 CPCE, RGPD).
+        ///
+        /// La diffusion à tous et tout courriel créé depuis l'écran (voir `CodeModeleMail.Categorie`) sont de la
+        /// prospection : ils ne partent qu'aux parents qui ont CONSENTI (`Parent.OffresEmail`), et se désabonner de cette
+        /// catégorie, c'est retirer ce consentement (la date du retrait est gardée). Les autres catégories (avis,
+        /// relances, rappels) restent sur le simple désabonnement ; les bilans et les messages sur le compte ne changent pas.
+        /// </summary>
+        public static bool EstCommerciale(string? categorie) => categorie == Diffusion;
+
         /// <summary>Ce que la page de désabonnement dit en toutes lettres.</summary>
         public static string Libelle(string categorie) => categorie switch
         {
             Avis => "les demandes d’avis",
             Relance => "les relances",
             Rappels => "les rappels",
-            Diffusion => "les annonces de Mimia",
+            Diffusion => "les offres et nouveautés de Mimia",
             _ => "ces messages",
         };
     }

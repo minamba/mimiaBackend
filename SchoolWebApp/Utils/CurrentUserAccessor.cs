@@ -31,6 +31,12 @@ namespace SchoolWebApp.Api.Utils
         /// (08/11/2026). Null s'il est arrivé autrement, par Google ou avant la case.
         /// </summary>
         DateTime? ConditionsCocheesLe { get; }
+
+        /// <summary>
+        /// Quand ce parent a coché, à son inscription, la case des offres par email (19/11/2026) : même voyage par le jeton.
+        /// Null s'il ne l'a pas cochée, ou s'il est arrivé autrement.
+        /// </summary>
+        DateTime? OffresCocheesLe { get; }
     }
 
     public class CurrentUserAccessor : ICurrentUserAccessor
@@ -64,6 +70,10 @@ namespace SchoolWebApp.Api.Utils
 
         public DateTime? ConditionsCocheesLe =>
             DateTime.TryParse(Premier("cgv_cochees_le"), System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.RoundtripKind, out var le) ? le : null;
+
+        public DateTime? OffresCocheesLe =>
+            DateTime.TryParse(Premier("offres_cochees_le"), System.Globalization.CultureInfo.InvariantCulture,
                 System.Globalization.DateTimeStyles.RoundtripKind, out var le) ? le : null;
 
         private string? Premier(params string[] types)

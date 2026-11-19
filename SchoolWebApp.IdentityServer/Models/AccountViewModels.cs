@@ -71,6 +71,12 @@ namespace SchoolWebApp.IdentityServer.Models
         [Range(typeof(bool), "true", "true", ErrorMessage = "Vous devez accepter les conditions générales pour créer un compte.")]
         public bool AccepteConditions { get; set; }
 
+        /// <summary>
+        /// LES OFFRES ET NOUVEAUTÉS PAR EMAIL — Min's, le 19/11/2026 (art. L34-5 CPCE, RGPD). FACULTATIF et jamais coché
+        /// d'avance : l'inscription passe sans. Distinct des conditions : accepter les unes ne vaut pas accepter l'autre.
+        /// </summary>
+        public bool AccepteOffresEmail { get; set; }
+
         public string? ReturnUrl { get; set; }
 
         public IList<string> FournisseursExternes { get; set; } = new List<string>();

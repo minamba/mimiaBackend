@@ -2567,14 +2567,18 @@ namespace SchoolWebApp.Api.Controllers
             {
                 ["titre"] = sujet ?? string.Empty,
                 ["titreMessage"] = titre ?? string.Empty,
-                ["corpsMessage"] = diffusion.ComposerCorps(texte ?? string.Empty, images?.Count ?? 0),
+                // `{{lien_desinscription}}` montré à sa place dans l'aperçu d'une diffusion (19/11/2026) ; il ne mène nulle part d'ici.
+                ["corpsMessage"] = diffusion.ComposerCorps(texte ?? string.Empty, images?.Count ?? 0,
+                    signature ? null : LienDesinscriptionApercu()),
                 ["blocPiecesJointes"] = diffusion.ComposerPiecesJointes(
                     documents?.Select(d => d.FileName).ToList() ?? []),
                 // LE LIEN DE DÉSABONNEMENT DANS L'APERÇU D'UNE DIFFUSION (17/10/2026) :
                 // à l'envoi, chaque parent a le sien ; l'aperçu le montre à sa place
                 // (il ne mène nulle part d'ici). « Écrire à un parent » (signature)
                 // n'en a pas : c'est une correspondance, pas une annonce.
-                ["mentionPied"] = signature ? diffusion.ComposerMentionPied() : diffusion.ComposerMentionPied("#"),
+                ["mentionPied"] = signature
+                    ? diffusion.ComposerMentionPied()
+                    : diffusion.ComposerMentionPied("#", SchoolWebApp.Domain.Models.CategorieDesabonnement.Diffusion),
             };
 
             // LA SIGNATURE DANS L'APERÇU — Camara, le 17/10/2026 : « on ne voit pas
@@ -2649,6 +2653,24 @@ namespace SchoolWebApp.Api.Controllers
 
             return Accepted(new { message = "Diffusion lancée." });
         }
+
+        private static Dictionary<string, ValeurVariable> LienDesinscriptionApercu()
+        {
+            var variables = new Dictionary<string, ValeurVariable>();
+            DiffusionService.AjouterLienDesinscription(variables, "#");
+            return variables;
+        }
+
+        /// <summary>
+        /// COMBIEN LA RECEVRONT — Min's, le 19/11/2026 : une diffusion ne part plus qu'aux parents qui ont consenti aux
+        /// offres par email. Le nombre de comptes ne dit donc plus à combien on écrit : l'écran de confirmation affiche
+        /// celui-ci, calculé par la MÊME requête que l'envoi (adresse non bannie, consentement, une adresse comptée une fois).
+        /// </summary>
+        [HttpGet("diffusion/destinataires")]
+        [SwaggerResponse(200, "Le nombre de parents qui recevraient une diffusion maintenant.")]
+        public async Task<IActionResult> CompterDestinatairesDiffusion(
+            [FromServices] IEnvoiAutomatiqueRepository envois, CancellationToken ct) =>
+            Ok(new { nombre = (await envois.GetDestinatairesDiffusionAsync(ct)).Count });
 
         /// <summary>L'avancement, interrogé par l'écran pendant l'envoi.</summary>
         [HttpGet("diffusion/etat")]

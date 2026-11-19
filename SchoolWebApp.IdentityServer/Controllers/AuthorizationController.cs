@@ -288,8 +288,13 @@ namespace SchoolWebApp.IdentityServer.Controllers
                     .SetClaims(Claims.Role, (await RolesDuCompteAsync(user)).ToImmutableArray());
 
             // LA CASE DES CONDITIONS, cochée à l'inscription : l'API, qui a sa propre base, la reprend de ce jeton.
-            var conditions = (await _userManager.GetClaimsAsync(user)).FirstOrDefault(c => c.Type == "cgv_cochees_le");
+            var claimsDuCompte = await _userManager.GetClaimsAsync(user);
+            var conditions = claimsDuCompte.FirstOrDefault(c => c.Type == "cgv_cochees_le");
             if (conditions is not null) identity.SetClaim("cgv_cochees_le", conditions.Value);
+
+            // LA CASE DES OFFRES PAR EMAIL, cochée à l'inscription (19/11/2026) : même voyage, vers l'access token seulement.
+            var offres = claimsDuCompte.FirstOrDefault(c => c.Type == "offres_cochees_le");
+            if (offres is not null) identity.SetClaim("offres_cochees_le", offres.Value);
 
             identity.SetScopes(scopes);
 

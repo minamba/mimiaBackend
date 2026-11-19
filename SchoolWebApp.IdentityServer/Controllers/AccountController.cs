@@ -284,6 +284,19 @@ namespace SchoolWebApp.IdentityServer.Controllers
                 _logger.LogWarning("Conditions cochees non enregistrees pour le compte {UserId}.", user.Id);
             }
 
+            // LES OFFRES PAR EMAIL, SEULEMENT SI LA CASE EST COCHÉE (19/11/2026) : même chemin que les conditions — la date
+            // du clic, gardée avec le compte, que l'API reprend du jeton à la première connexion. Case vide : aucune trace,
+            // le parent n'a pas consenti. Un échec ici ne bloque pas l'inscription : il pourra consentir depuis son espace.
+            if (model.AccepteOffresEmail)
+            {
+                var offres = await _userManager.AddClaimAsync(user,
+                    new System.Security.Claims.Claim("offres_cochees_le", DateTime.UtcNow.ToString("O")));
+                if (!offres.Succeeded)
+                {
+                    _logger.LogWarning("Consentement aux offres non enregistre pour le compte {UserId}.", user.Id);
+                }
+            }
+
             // Alerte Telegram, APRÈS la création et avant la redirection. Elle
             // n'attend rien et ne peut rien casser : ses erreurs sont avalées
             // et journalisées à l'intérieur.

@@ -59,6 +59,22 @@ namespace SchoolWebApp.Api.Controllers
                 parent.ConditionsVersion = ConditionsEnVigueur.Version;
             }
 
+            // LA CASE DES OFFRES COCHÉE À L'INSCRIPTION (19/11/2026), même chemin, datée du clic. Appliquée UNE SEULE FOIS :
+            // seulement si le parent n'a encore jamais rien décidé (ni consentement ni retrait enregistrés). Le jeton
+            // porte cette date pour toujours ; sans ce garde-fou, un parent qui s'est désinscrit serait réinscrit à sa
+            // connexion suivante.
+            if (_currentUser.EleveId is null
+                && _currentUser.OffresCocheesLe is { } offresCocheesLe
+                && !parent.OffresEmail
+                && parent.OffresEmailConsentiLe is null
+                && parent.OffresEmailRetireLe is null)
+            {
+                await _parentService.ConsentirOffresEmailAsync(parent.Id, offresCocheesLe, ct);
+                parent.OffresEmail = true;
+                parent.OffresEmailConsentiLe = offresCocheesLe;
+                _logger.LogInformation("Parent {ParentId} : consentement aux offres par email donne a l'inscription.", parent.Id);
+            }
+
             return Ok(new
             {
                 parent.Prenom,
@@ -278,6 +294,8 @@ namespace SchoolWebApp.Api.Controllers
             }
 
             var parent = await ResoudreAsync();
+            // POUR LES OFFRES (19/11/2026), cet interrupteur EST le consentement : l'allumer consent (daté), l'éteindre le
+            // retire (daté), avec effet immédiat — voir `IEnvoiAutomatiqueRepository`.
             if (requete?.Abonne == true) await envois.ReabonnerAsync(parent.Id, categorie, ct);
             else await envois.DesabonnerAsync(parent.Id, categorie, ct);
 

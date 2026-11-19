@@ -100,6 +100,16 @@
     </div>
     <span asp-validation-for="AccepteConditions" class="field-error"></span>
 
+    @* LES OFFRES PAR EMAIL (19/11/2026) : FACULTATIF, JAMAIS COCHÉ D'AVANCE (pas de « required », pas de « checked » par
+       défaut). Seule une case cochée par le parent lui-même fait consentir ; la date du clic est la preuve. *@
+    <div class="checkbox">
+        <input asp-for="AccepteOffresEmail" type="checkbox" />
+        <label for="AccepteOffresEmail" style="margin:0;font-weight:400;">
+            J'accepte de recevoir par email les offres et nouveautés de Mimia (désinscription possible à tout moment).
+            <span style="display:block;font-size:.85em;opacity:.75;">Facultatif : vous pouvez créer votre compte sans cocher cette case.</span>
+        </label>
+    </div>
+
     <button type="submit" class="btn">Créer mon compte</button>
 </form>
 

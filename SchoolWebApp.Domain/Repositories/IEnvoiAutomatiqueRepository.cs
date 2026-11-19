@@ -34,15 +34,15 @@ namespace SchoolWebApp.Domain.Repositories
             DateTime depuisUtc, int limite, CancellationToken ct = default);
 
         /// <summary>
-        /// Les parents d'une diffusion de masse : ceux qui ont une adresse et ne
-        /// se sont pas désabonnés des annonces.
+        /// Les parents d'une diffusion de masse : ceux qui ont une adresse, non
+        /// bannie, et qui ont CONSENTI aux offres par email (19/11/2026).
         /// </summary>
         Task<IReadOnlyList<DestinataireAutomatique>> GetDestinatairesDiffusionAsync(CancellationToken ct = default);
 
         /// <summary>
         /// Les parents d'une cible (`CibleEnvoi`, 17/10/2026), joignables et non
-        /// désabonnés de la catégorie ; une adresse sur deux comptes ne compte
-        /// qu'une fois.
+        /// désabonnés de la catégorie (pour les offres : ayant consenti) ; une
+        /// adresse sur deux comptes ne compte qu'une fois.
         /// </summary>
         Task<IReadOnlyList<DestinataireAutomatique>> GetDestinatairesCibleAsync(
             string cible, string categorie, DateTime maintenantUtc, CancellationToken ct = default);
@@ -56,11 +56,13 @@ namespace SchoolWebApp.Domain.Repositories
 
         Task MarquerAsync(int id, string statut, CancellationToken ct = default);
 
+        /// <summary>Pour les offres (catégorie commerciale) : vrai tant que le parent n'a pas consenti.</summary>
         Task<bool> EstDesabonneAsync(int parentId, string categorie, CancellationToken ct = default);
 
-        /// <summary>Idempotent : désabonner deux fois ne fait rien de plus.</summary>
+        /// <summary>Idempotent : désabonner deux fois ne fait rien de plus. Pour les offres : retire le consentement, daté.</summary>
         Task DesabonnerAsync(int parentId, string categorie, CancellationToken ct = default);
 
+        /// <summary>Pour les offres : donne le consentement, daté (geste du parent lui-même).</summary>
         Task ReabonnerAsync(int parentId, string categorie, CancellationToken ct = default);
     }
 }

@@ -74,6 +74,12 @@ namespace SchoolWebApp.Api.Services.Notifications
         string ComposerMentionPied(string? lienDesabonnement);
 
         /// <summary>
+        /// La mention d'un courriel de cette catégorie : pour les offres (catégorie commerciale, 19/11/2026), elle dit
+        /// pourquoi le parent la reçoit (il a accepté) et le lien s'appelle « Me désinscrire » ; sinon, la mention habituelle.
+        /// </summary>
+        string ComposerMentionPied(string? lienDesabonnement, string? categorie);
+
+        /// <summary>
         /// Lance la diffusion en arrière-plan. Faux si une autre est déjà en
         /// cours — deux diffusions simultanées écriraient deux fois à tout le
         /// monde.
@@ -332,6 +338,37 @@ namespace SchoolWebApp.Api.Services.Notifications
                   + "style=\"color:#a5abb8; text-decoration:underline;\">Ne plus recevoir ces messages</a>";
         }
 
+        public string ComposerMentionPied(string? lienDesabonnement, string? categorie)
+        {
+            if (!CategorieDesabonnement.EstCommerciale(categorie)) return ComposerMentionPied(lienDesabonnement);
+
+            var mention = "Vous recevez ce message parce que vous avez accepté de recevoir les offres et nouveautés "
+                          + "de Mimia par email. Une question ? Écrivez-nous à "
+                          + "<a href=\"mailto:support@mimia.fr\" style=\"color:#a5abb8; text-decoration:underline;\">"
+                          + "support@mimia.fr</a>.";
+
+            return lienDesabonnement is null
+                ? mention
+                : mention
+                  + $"<br><a href=\"{WebUtility.HtmlEncode(lienDesabonnement)}\" "
+                  + "style=\"color:#a5abb8; text-decoration:underline;\">Me désinscrire de ces emails</a>";
+        }
+
+        /// <summary>
+        /// `{{lien_desinscription}}` — Min's, le 19/11/2026 : le lien de désinscription signé, propre au parent, que le
+        /// texte d'un courriel commercial peut placer où il veut (en plus du pied, qui le porte toujours). Les deux
+        /// écritures sont acceptées : `lien_desinscription`, demandée pour le modèle Black Friday, et `lienDesinscription`,
+        /// dans le style des autres variables (`lienTarifs`, `lienAvis`).
+        /// </summary>
+        public static readonly IReadOnlyList<string> ClesLienDesinscription = ["lien_desinscription", "lienDesinscription"];
+
+        /// <summary>Ajoute la variable du lien de désinscription, si le lien existe (une clé de signature configurée).</summary>
+        public static void AjouterLienDesinscription(IDictionary<string, ValeurVariable> variables, string? lien)
+        {
+            if (string.IsNullOrEmpty(lien)) return;
+            foreach (var cle in ClesLienDesinscription) variables[cle] = new ValeurVariable("me désinscrire", lien);
+        }
+
         public string ComposerPiecesJointes(IReadOnlyList<string> nomsFichiers)
         {
             if (nomsFichiers.Count == 0) return string.Empty;
@@ -439,10 +476,13 @@ namespace SchoolWebApp.Api.Services.Notifications
 
                 foreach (var destinataire in destinataires)
                 {
+                    var lienDesinscription = _jetons.Lien(destinataire.ParentId, CategorieDesabonnement.Diffusion);
+
                     var variables = new Dictionary<string, ValeurVariable>
                     {
                         ["prenom"] = new(destinataire.Prenom?.Trim() ?? string.Empty),
                     };
+                    AjouterLienDesinscription(variables, lienDesinscription);
 
                     var sujetPersonnel = RemplacerVariables(sujet, variables);
 
@@ -452,8 +492,7 @@ namespace SchoolWebApp.Api.Services.Notifications
                         ["titreMessage"] = RemplacerVariables(titre, variables),
                         ["corpsMessage"] = ComposerCorps(texte, images.Count, variables),
                         ["blocPiecesJointes"] = blocPieces,
-                        ["mentionPied"] = ComposerMentionPied(
-                            _jetons.Lien(destinataire.ParentId, CategorieDesabonnement.Diffusion)),
+                        ["mentionPied"] = ComposerMentionPied(lienDesinscription, CategorieDesabonnement.Diffusion),
                     };
 
                     bool envoye;

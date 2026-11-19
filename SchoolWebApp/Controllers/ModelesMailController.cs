@@ -451,11 +451,14 @@ namespace SchoolWebApp.Api.Controllers
                 ? CategorieDesabonnement.Diffusion
                 : CodeModeleMail.Categorie(detail.Code);
 
+            var exemples = new Dictionary<string, ValeurVariable>(Exemples());
+            if (categorie is not null) DiffusionService.AjouterLienDesinscription(exemples, "#");
+
             var courriel = _composeur.Composer(
                 detail,
                 await _modeles.GetPiecesAsync(id, ct),
-                Exemples(),
-                categorie is null ? null : _diffusion.ComposerMentionPied("#"));
+                exemples,
+                categorie is null ? null : _diffusion.ComposerMentionPied("#", categorie));
 
             // LA SIGNATURE DANS L'APERÇU (17/10/2026) : envoyé à un parent, le
             // template part signé de son nom — l'aperçu le montre aussi.
@@ -589,10 +592,15 @@ namespace SchoolWebApp.Api.Controllers
 
             // Une adresse tapée à la main n'a pas de prénom connu : la variable
             // disparaît proprement (« Bonjour, »).
+            // `{{lien_desinscription}}` disparaît aussi : un message à un parent est une correspondance, sans lien de
+            // désinscription — mieux vaut un blanc que le marqueur brut dans sa boîte (19/11/2026).
+            var vides = new Dictionary<string, ValeurVariable> { ["prenom"] = new(string.Empty) };
+            foreach (var cle in DiffusionService.ClesLienDesinscription) vides[cle] = new(string.Empty);
+
             var courriel = _composeur.Composer(
                 detail,
                 await _modeles.GetPiecesAsync(id, ct),
-                new Dictionary<string, ValeurVariable> { ["prenom"] = new(string.Empty) });
+                vides);
 
             var valeurs = new Dictionary<string, string>(courriel.Valeurs)
             {
@@ -652,9 +660,13 @@ namespace SchoolWebApp.Api.Controllers
         {
             static object V(string cle, string description) => new { cle, description };
 
+            // `{{lien_desinscription}}` (19/11/2026) : le lien signé propre au parent, pour un courriel qui a une
+            // catégorie de désabonnement. Le pied le porte déjà ; la variable le place aussi dans le texte.
+            var desinscription = V("lien_desinscription", "Le lien pour se désinscrire (déjà présent en pied du courriel)");
+
             if (nature == NatureModeleMail.Diffusion)
             {
-                return [V("prenom", "Le prénom du parent")];
+                return [V("prenom", "Le prénom du parent"), desinscription];
             }
 
             return code switch
@@ -665,8 +677,8 @@ namespace SchoolWebApp.Api.Controllers
                     [V("prenom", "Le prénom du parent"), V("dateFinEssai", "Le jour où l’essai se termine"),
                      V("lienTarifs", "Le lien vers les formules")],
                 CodeModeleMail.AvisEssai or CodeModeleMail.AvisGeneral =>
-                    [V("prenom", "Le prénom du parent"), V("lienAvis", "Le lien pour donner son avis")],
-                _ => [V("prenom", "Le prénom du parent")],
+                    [V("prenom", "Le prénom du parent"), V("lienAvis", "Le lien pour donner son avis"), desinscription],
+                _ => [V("prenom", "Le prénom du parent"), desinscription],
             };
         }
 
