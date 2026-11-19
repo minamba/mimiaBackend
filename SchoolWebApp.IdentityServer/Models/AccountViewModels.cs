@@ -68,7 +68,7 @@ namespace SchoolWebApp.IdentityServer.Models
         /// Camara, le 08/11/2026 : obligatoire pour que l'inscription soit valide. Le libellé est écrit dans la vue : il
         /// porte un lien vers les conditions.
         /// </summary>
-        [Range(typeof(bool), "true", "true", ErrorMessage = "Vous devez accepter les conditions générales pour créer un compte.")]
+        [Range(typeof(bool), "true", "true", ErrorMessage = "Vous devez accepter les conditions générales et la politique de confidentialité pour créer un compte.")]
         public bool AccepteConditions { get; set; }
 
         /// <summary>

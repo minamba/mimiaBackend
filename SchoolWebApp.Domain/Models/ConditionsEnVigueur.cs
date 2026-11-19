@@ -8,9 +8,13 @@ namespace SchoolWebApp.Domain.Models
     /// POUR PUBLIER UNE NOUVELLE VERSION, DEUX GESTES : changer le texte et la version dans `ConditionsVente.js` (front),
     /// puis ici `Version` et `Depuis`. Tant que `Version` ne change pas, personne ne revoit la fenêtre.
     ///
-    /// VERSION 2.0 (19/11/2026) — Min's : « les parents déjà inscrits vont devoir valider les nouvelles CGV ». Elle ajoute
-    /// l'envoi d'offres par email, fondé sur le consentement, à la politique de confidentialité. Tous les parents qui ont
-    /// accepté la 1.0 revoient donc la fenêtre une fois, avec la case des offres à part, jamais cochée d'avance.
+    /// `Version` EST CELLE DE L'ENSEMBLE ACCEPTÉ : CGV + politique de confidentialité. Changer l'un des deux textes sur le
+    /// fond suffit à la faire monter.
+    ///
+    /// VERSION 2.0 (19/11/2026) — Min's : c'est la POLITIQUE DE CONFIDENTIALITÉ qui change (offres et nouveautés par email :
+    /// finalité, consentement, durée, désinscription ; Brevo parmi les prestataires). Les CGV restent en 1.0, sans
+    /// changement. Tous les parents qui ont accepté la 1.0 revoient donc la fenêtre une fois : « J'ai lu et j'accepte la
+    /// politique de confidentialité » (obligatoire) et, en dessous, la case des offres à part, jamais cochée d'avance.
     /// </summary>
     public static class ConditionsEnVigueur
     {

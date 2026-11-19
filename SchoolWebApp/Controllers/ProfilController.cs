@@ -123,7 +123,7 @@ namespace SchoolWebApp.Api.Controllers
         /// n'envoie rien.
         /// </summary>
         [HttpPost("conditions")]
-        [SwaggerOperation(Summary = "Note que le parent accepte les conditions générales en vigueur, et s'il le coche, les offres par email")]
+        [SwaggerOperation(Summary = "Note que le parent accepte les conditions en vigueur (CGV + politique de confidentialité), et s'il le coche, les offres par email")]
         public async Task<IActionResult> AccepterConditions(
             [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] AccepterConditionsRequest? requete,
             CancellationToken ct)
@@ -134,7 +134,7 @@ namespace SchoolWebApp.Api.Controllers
             var parent = await ResoudreAsync();
             var maintenant = DateTime.UtcNow;
             await _parentService.AccepterConditionsAsync(parent.Id, ConditionsEnVigueur.Version, maintenant, ct);
-            _logger.LogInformation("Parent {ParentId} : conditions generales {Version} acceptees.", parent.Id, ConditionsEnVigueur.Version);
+            _logger.LogInformation("Parent {ParentId} : conditions {Version} (CGV + politique de confidentialite) acceptees.", parent.Id, ConditionsEnVigueur.Version);
 
             if (requete?.OffresEmail == true)
             {
