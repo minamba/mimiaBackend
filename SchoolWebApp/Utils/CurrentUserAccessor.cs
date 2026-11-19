@@ -37,6 +37,12 @@ namespace SchoolWebApp.Api.Utils
         /// Null s'il ne l'a pas cochée, ou s'il est arrivé autrement.
         /// </summary>
         DateTime? OffresCocheesLe { get; }
+
+        /// <summary>
+        /// La version des conditions affichée quand il a coché la case à l'inscription (19/11/2026). Null pour un compte
+        /// créé avant ce claim : sa case portait sur un texte plus ancien.
+        /// </summary>
+        string? ConditionsVersionCochee { get; }
     }
 
     public class CurrentUserAccessor : ICurrentUserAccessor
@@ -71,6 +77,8 @@ namespace SchoolWebApp.Api.Utils
         public DateTime? ConditionsCocheesLe =>
             DateTime.TryParse(Premier("cgv_cochees_le"), System.Globalization.CultureInfo.InvariantCulture,
                 System.Globalization.DateTimeStyles.RoundtripKind, out var le) ? le : null;
+
+        public string? ConditionsVersionCochee => Premier("cgv_version");
 
         public DateTime? OffresCocheesLe =>
             DateTime.TryParse(Premier("offres_cochees_le"), System.Globalization.CultureInfo.InvariantCulture,

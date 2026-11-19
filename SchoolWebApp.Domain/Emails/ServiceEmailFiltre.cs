@@ -53,7 +53,8 @@ namespace SchoolWebApp.Domain.Emails
             CancellationToken ct = default,
             Expediteur? expediteur = null,
             IReadOnlyList<string>? copies = null,
-            IReadOnlyList<string>? copiesCachees = null)
+            IReadOnlyList<string>? copiesCachees = null,
+            IReadOnlyDictionary<string, string>? enTetes = null)
         {
             var autorises = new List<string>(destinataires.Count);
 
@@ -76,7 +77,7 @@ namespace SchoolWebApp.Domain.Emails
 
             return await _service.DiffuserAsync(
                 autorises, sujet, gabarit, valeurs, imagesIntegrees, piecesJointes, avancement, ct, expediteur,
-                await FiltrerAsync(copies), await FiltrerAsync(copiesCachees));
+                await FiltrerAsync(copies), await FiltrerAsync(copiesCachees), enTetes);
         }
 
         public Task<string> ComposerAsync(string sujet, string gabarit, IDictionary<string, string> valeurs) =>

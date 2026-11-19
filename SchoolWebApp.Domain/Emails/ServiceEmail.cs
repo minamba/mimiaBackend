@@ -124,7 +124,8 @@ namespace SchoolWebApp.Domain.Emails
             CancellationToken ct = default,
             Expediteur? expediteur = null,
             IReadOnlyList<string>? copies = null,
-            IReadOnlyList<string>? copiesCachees = null)
+            IReadOnlyList<string>? copiesCachees = null,
+            IReadOnlyDictionary<string, string>? enTetes = null)
         {
             if (!Disponible)
             {
@@ -177,6 +178,12 @@ namespace SchoolWebApp.Domain.Emails
                         // chacun d'eux.
                         message.To.Add(MailboxAddress.Parse(cible));
                         message.Subject = sujet;
+
+                        // `List-Unsubscribe` d'une offre envoyée à un parent (19/11/2026).
+                        foreach (var (nom, valeur) in enTetes ?? new Dictionary<string, string>())
+                        {
+                            message.Headers.Add(nom, valeur);
+                        }
 
                         // LES COPIES D'UN COURRIEL PERSONNEL (19/10/2026). Pas en
                         // développement quand l'envoi est détourné : elles

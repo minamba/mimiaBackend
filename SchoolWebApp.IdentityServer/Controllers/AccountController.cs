@@ -284,6 +284,16 @@ namespace SchoolWebApp.IdentityServer.Controllers
                 _logger.LogWarning("Conditions cochees non enregistrees pour le compte {UserId}.", user.Id);
             }
 
+            // LA VERSION DU TEXTE QUE LE PARENT A SOUS LES YEUX (19/11/2026, retour d'Omar) : la case vaut pour CETTE version,
+            // pas pour une date. L'API ne l'applique que si elle est encore la version en vigueur — plus besoin de caler une
+            // date de mise en ligne pour savoir sur quel texte un inscrit de l'entre-deux a coché.
+            var version = await _userManager.AddClaimAsync(user,
+                new System.Security.Claims.Claim("cgv_version", SchoolWebApp.Domain.Models.ConditionsEnVigueur.Version));
+            if (!version.Succeeded)
+            {
+                _logger.LogWarning("Version des conditions non enregistree pour le compte {UserId}.", user.Id);
+            }
+
             // LES OFFRES PAR EMAIL, SEULEMENT SI LA CASE EST COCHÉE (19/11/2026) : même chemin que les conditions — la date
             // du clic, gardée avec le compte, que l'API reprend du jeton à la première connexion. Case vide : aucune trace,
             // le parent n'a pas consenti. Un échec ici ne bloque pas l'inscription : il pourra consentir depuis son espace.

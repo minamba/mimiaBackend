@@ -53,7 +53,7 @@ namespace SchoolWebApp.Api.Controllers
             // date est celle du clic, pas celle de cette première venue.
             if (_currentUser.EleveId is null
                 && !ConditionsEnVigueur.Acceptees(parent.ConditionsVersion)
-                && ConditionsEnVigueur.ValentPourLaCaseDu(_currentUser.ConditionsCocheesLe))
+                && ConditionsEnVigueur.ValentPourLaCaseDe(_currentUser.ConditionsVersionCochee, _currentUser.ConditionsCocheesLe))
             {
                 await _parentService.AccepterConditionsAsync(parent.Id, ConditionsEnVigueur.Version, _currentUser.ConditionsCocheesLe!.Value, ct);
                 parent.ConditionsVersion = ConditionsEnVigueur.Version;
@@ -69,7 +69,7 @@ namespace SchoolWebApp.Api.Controllers
                 && parent.OffresEmailConsentiLe is null
                 && parent.OffresEmailRetireLe is null)
             {
-                await _parentService.ConsentirOffresEmailAsync(parent.Id, offresCocheesLe, ct);
+                await _parentService.ConsentirOffresEmailAsync(parent.Id, offresCocheesLe, SourceConsentement.Inscription, ct);
                 parent.OffresEmail = true;
                 parent.OffresEmailConsentiLe = offresCocheesLe;
                 _logger.LogInformation("Parent {ParentId} : consentement aux offres par email donne a l'inscription.", parent.Id);
@@ -138,7 +138,7 @@ namespace SchoolWebApp.Api.Controllers
 
             if (requete?.OffresEmail == true)
             {
-                await _parentService.ConsentirOffresEmailAsync(parent.Id, maintenant, ct);
+                await _parentService.ConsentirOffresEmailAsync(parent.Id, maintenant, SourceConsentement.FenetreConditions, ct);
                 _logger.LogInformation("Parent {ParentId} : consentement aux offres par email donne.", parent.Id);
             }
 
@@ -296,8 +296,8 @@ namespace SchoolWebApp.Api.Controllers
             var parent = await ResoudreAsync();
             // POUR LES OFFRES (19/11/2026), cet interrupteur EST le consentement : l'allumer consent (daté), l'éteindre le
             // retire (daté), avec effet immédiat — voir `IEnvoiAutomatiqueRepository`.
-            if (requete?.Abonne == true) await envois.ReabonnerAsync(parent.Id, categorie, ct);
-            else await envois.DesabonnerAsync(parent.Id, categorie, ct);
+            if (requete?.Abonne == true) await envois.ReabonnerAsync(parent.Id, categorie, SourceConsentement.EspaceParent, ct);
+            else await envois.DesabonnerAsync(parent.Id, categorie, SourceConsentement.EspaceParent, ct);
 
             _logger.LogInformation("Parent {ParentId} {Choix} « {Categorie} » depuis son compte.",
                 parent.Id, requete?.Abonne == true ? "abonne a" : "desabonne de", categorie);

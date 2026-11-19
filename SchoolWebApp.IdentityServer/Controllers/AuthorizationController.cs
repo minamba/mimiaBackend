@@ -292,6 +292,10 @@ namespace SchoolWebApp.IdentityServer.Controllers
             var conditions = claimsDuCompte.FirstOrDefault(c => c.Type == "cgv_cochees_le");
             if (conditions is not null) identity.SetClaim("cgv_cochees_le", conditions.Value);
 
+            // ET LA VERSION SUR LAQUELLE ELLE A ÉTÉ COCHÉE (19/11/2026) : même voyage, vers l'access token seulement.
+            var versionConditions = claimsDuCompte.FirstOrDefault(c => c.Type == "cgv_version");
+            if (versionConditions is not null) identity.SetClaim("cgv_version", versionConditions.Value);
+
             // LA CASE DES OFFRES PAR EMAIL, cochée à l'inscription (19/11/2026) : même voyage, vers l'access token seulement.
             var offres = claimsDuCompte.FirstOrDefault(c => c.Type == "offres_cochees_le");
             if (offres is not null) identity.SetClaim("offres_cochees_le", offres.Value);

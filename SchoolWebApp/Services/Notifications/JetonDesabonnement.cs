@@ -24,6 +24,15 @@ namespace SchoolWebApp.Api.Services.Notifications
 
         /// <summary>Le parent et la catégorie d'un jeton, ou nul s'il est faux ou abîmé.</summary>
         (int ParentId, string Categorie)? Lire(string? jeton);
+
+        /// <summary>
+        /// LE JETON D'ANNULATION (19/11/2026, retour d'Omar) : remis par la désinscription à la page qui vient de la faire,
+        /// il permet « Je me suis trompé, me réabonner » pendant <paramref name="validite"/> seulement. Nul sans clé.
+        /// </summary>
+        string? CreerAnnulation(int parentId, string categorie, DateTime maintenantUtc, TimeSpan validite);
+
+        /// <summary>Vrai si ce jeton d'annulation est authentique, pour ce parent et cette catégorie, et pas expiré.</summary>
+        bool AnnulationValide(string? jeton, int parentId, string categorie, DateTime maintenantUtc);
     }
 
     /// <summary>
@@ -131,6 +140,48 @@ namespace SchoolWebApp.Api.Services.Notifications
                 return null;
             }
         }
+
+        /// <summary>
+        /// UNE CHARGE QUI NE PEUT PAS PASSER POUR UN LIEN DE DÉSINSCRIPTION : elle commence par « annulation. », que `Lire`
+        /// refuse (ce n'est pas un numéro de parent). Et l'inverse : un lien de courriel, sans échéance, n'est jamais pris
+        /// pour une annulation. Le lien d'un vieux courriel ne suffit donc plus à redonner un consentement aux offres.
+        /// </summary>
+        public string? CreerAnnulation(int parentId, string categorie, DateTime maintenantUtc, TimeSpan validite)
+        {
+            if (_cle is null) return null;
+
+            var echeance = new DateTimeOffset(DateTime.SpecifyKind(maintenantUtc, DateTimeKind.Utc) + validite).ToUnixTimeSeconds();
+            var charge = Encoding.UTF8.GetBytes($"{PrefixeAnnulation}{parentId}.{categorie}.{echeance}");
+            return $"{WebEncoders.Base64UrlEncode(charge)}.{WebEncoders.Base64UrlEncode(Signer(charge))}";
+        }
+
+        public bool AnnulationValide(string? jeton, int parentId, string categorie, DateTime maintenantUtc)
+        {
+            if (_cle is null || string.IsNullOrWhiteSpace(jeton)) return false;
+
+            var morceaux = jeton.Split('.');
+            if (morceaux.Length != 2) return false;
+
+            try
+            {
+                var charge = WebEncoders.Base64UrlDecode(morceaux[0]);
+                var signature = WebEncoders.Base64UrlDecode(morceaux[1]);
+                if (!CryptographicOperations.FixedTimeEquals(signature, Signer(charge))) return false;
+
+                var texte = Encoding.UTF8.GetString(charge);
+                var attendu = $"{PrefixeAnnulation}{parentId}.{categorie}.";
+                if (!texte.StartsWith(attendu, StringComparison.Ordinal)) return false;
+
+                return long.TryParse(texte[attendu.Length..], out var echeance)
+                       && DateTimeOffset.FromUnixTimeSeconds(echeance) > new DateTimeOffset(DateTime.SpecifyKind(maintenantUtc, DateTimeKind.Utc));
+            }
+            catch (FormatException)
+            {
+                return false;
+            }
+        }
+
+        private const string PrefixeAnnulation = "annulation.";
 
         private string? Creer(int parentId, string categorie)
         {

@@ -315,14 +315,10 @@ namespace SchoolWebApp.Dal.Repositories
 
         /// <summary>
         /// Le parent coche lui-même la case des offres. Un consentement déjà donné garde sa date d'origine ; la date d'un
-        /// retrait passé reste aussi, c'est l'historique. Écriture directe et ciblée, comme pour les conditions.
+        /// retrait passé reste aussi, c'est l'historique. Avec sa source et sa ligne de journal (19/11/2026).
         /// </summary>
-        public Task ConsentirOffresEmailAsync(int parentId, DateTime le, CancellationToken ct = default) =>
-            _context.Parents
-                .Where(p => p.Id == parentId && !p.OffresEmail)
-                .ExecuteUpdateAsync(s => s
-                    .SetProperty(p => p.OffresEmail, true)
-                    .SetProperty(p => p.OffresEmailConsentiLe, le), ct);
+        public Task ConsentirOffresEmailAsync(int parentId, DateTime le, string source, CancellationToken ct = default) =>
+            ConsentementOffres.ChangerAsync(_context, parentId, true, source, le, ct);
 
         /// <summary>
         /// La première date reste : le tutoriel n'est dû qu'une fois. Écriture

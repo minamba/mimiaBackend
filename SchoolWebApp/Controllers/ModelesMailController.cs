@@ -447,9 +447,7 @@ namespace SchoolWebApp.Api.Controllers
 
             // Le lien de désabonnement apparaît dans l'aperçu là où il
             // apparaîtra chez le parent — il ne mène nulle part d'ici.
-            var categorie = detail.Nature == NatureModeleMail.Diffusion
-                ? CategorieDesabonnement.Diffusion
-                : CodeModeleMail.Categorie(detail.Code);
+            var categorie = CategorieDu(detail);
 
             var exemples = new Dictionary<string, ValeurVariable>(Exemples());
             if (categorie is not null) DiffusionService.AjouterLienDesinscription(exemples, "#");
@@ -535,6 +533,8 @@ namespace SchoolWebApp.Api.Controllers
             [FromServices] IServiceEmail email,
             [FromServices] IBannissementRepository bannis,
             [FromServices] SchoolWebApp.Api.Services.IBoitesAdminService boites,
+            [FromServices] IEnvoiAutomatiqueRepository envois,
+            [FromServices] IJetonDesabonnement jetons,
             CancellationToken ct,
             [FromQuery(Name = "boite")] string? depuis = null)
         {
@@ -590,17 +590,44 @@ namespace SchoolWebApp.Api.Controllers
             var faute = VerifierEnvoi(detail);
             if (faute is not null) return BadRequest(new { message = faute });
 
-            // Une adresse tapée à la main n'a pas de prénom connu : la variable
-            // disparaît proprement (« Bonjour, »).
-            // `{{lien_desinscription}}` disparaît aussi : un message à un parent est une correspondance, sans lien de
-            // désinscription — mieux vaut un blanc que le marqueur brut dans sa boîte (19/11/2026).
-            var vides = new Dictionary<string, ValeurVariable> { ["prenom"] = new(string.Empty) };
-            foreach (var cle in DiffusionService.ClesLienDesinscription) vides[cle] = new(string.Empty);
+            // UNE OFFRE ENVOYÉE À UN SEUL PARENT OBÉIT À LA MÊME RÈGLE QU'UNE OFFRE ENVOYÉE À TOUS (19/11/2026, retour
+            // d'Omar) : un template de catégorie commerciale ne part qu'à un parent inscrit qui a CONSENTI aux offres par
+            // email, jamais à une adresse libre ni en copie, et toujours avec son lien de désinscription signé, le pied
+            // commercial et les en-têtes `List-Unsubscribe` — exactement comme la diffusion.
+            var categorie = CategorieDu(detail);
+            var commerciale = CategorieDesabonnement.EstCommerciale(categorie);
+            var variables = new Dictionary<string, ValeurVariable> { ["prenom"] = new(string.Empty) };
+            string? mentionPied = null;
+            IReadOnlyDictionary<string, string>? enTetes = null;
+
+            if (commerciale)
+            {
+                var (consentant, refus) = await ControlerEnvoiCommercialAsync(adresse, copies, cachees, categorie!, envois, jetons, ct);
+                if (consentant is null)
+                {
+                    _logger.LogWarning("Template {Id} (offre) : envoi individuel refuse ({Raison}).", id, refus);
+                    return BadRequest(new { code = "offre_sans_consentement", message = refus });
+                }
+
+                var lien = jetons.Lien(consentant.ParentId, categorie!);
+                variables["prenom"] = new(consentant.Prenom?.Trim() ?? string.Empty);
+                DiffusionService.AjouterLienDesinscription(variables, lien);
+                mentionPied = _diffusion.ComposerMentionPied(lien, categorie);
+                enTetes = jetons.EnTetes(consentant.ParentId, categorie!);
+            }
+            else
+            {
+                // Une adresse tapée à la main n'a pas de prénom connu : la variable disparaît proprement (« Bonjour, »).
+                // `{{lien_desinscription}}` disparaît aussi : hors offre, un message à un parent est une correspondance,
+                // sans lien de désinscription — mieux vaut un blanc que le marqueur brut dans sa boîte (19/11/2026).
+                foreach (var cle in DiffusionService.ClesLienDesinscription) variables[cle] = new(string.Empty);
+            }
 
             var courriel = _composeur.Composer(
                 detail,
                 await _modeles.GetPiecesAsync(id, ct),
-                vides);
+                variables,
+                mentionPied);
 
             var valeurs = new Dictionary<string, string>(courriel.Valeurs)
             {
@@ -610,7 +637,7 @@ namespace SchoolWebApp.Api.Controllers
             var resultat = await email.DiffuserAsync(
                 new[] { adresse }, courriel.Sujet, "diffusion", valeurs,
                 courriel.Images, courriel.Documents, ct: ct, expediteur: boite.Expediteur,
-                copies: copies, copiesCachees: cachees);
+                copies: copies, copiesCachees: cachees, enTetes: enTetes);
 
             if (resultat.Envoyes == 0)
             {
@@ -680,6 +707,45 @@ namespace SchoolWebApp.Api.Controllers
                     [V("prenom", "Le prénom du parent"), V("lienAvis", "Le lien pour donner son avis"), desinscription],
                 _ => [V("prenom", "Le prénom du parent"), desinscription],
             };
+        }
+
+        /// <summary>La catégorie de désabonnement d'un template : celle de la diffusion pour un template de l'écran.</summary>
+        private static string? CategorieDu(ModeleMailDetail detail) =>
+            detail.Nature == NatureModeleMail.Diffusion
+                ? CategorieDesabonnement.Diffusion
+                : CodeModeleMail.Categorie(detail.Code);
+
+        /// <summary>
+        /// L'ENVOI INDIVIDUEL D'UNE OFFRE (19/11/2026, retour d'Omar) : le parent consentant à qui elle peut partir, ou la
+        /// raison du refus. Refusé sans clé de désinscription (pas de lien, pas d'offre — comme la diffusion), avec des
+        /// copies (elles iraient à des adresses dont personne n'a vérifié le consentement), et pour toute adresse qui
+        /// n'est pas celle d'un parent ayant consenti (adresse libre, parent non consentant, adresse bannie).
+        /// </summary>
+        public static async Task<(DestinataireAutomatique? Parent, string? Refus)> ControlerEnvoiCommercialAsync(
+            string adresse,
+            IReadOnlyCollection<string> copies,
+            IReadOnlyCollection<string> cachees,
+            string categorie,
+            IEnvoiAutomatiqueRepository envois,
+            IJetonDesabonnement jetons,
+            CancellationToken ct)
+        {
+            if (!jetons.Disponible)
+            {
+                return (null, "Clé de désabonnement absente (Courrier:CleDesabonnement) : une offre ne part pas sans lien de désinscription.");
+            }
+
+            if (copies.Count + cachees.Count > 0)
+            {
+                return (null, "Ce template est une offre commerciale : il part au seul parent destinataire, sans copie ni copie cachée.");
+            }
+
+            var parent = await envois.GetDestinataireParMailAsync(adresse, categorie, ct);
+            return parent is null
+                ? (null, "Ce template est une offre commerciale : il ne part qu’à un parent inscrit qui a accepté les offres "
+                         + "et nouveautés par e-mail, et cette adresse ne correspond à aucun parent consentant. Pour une "
+                         + "réponse personnelle, écrivez sans template.")
+                : (parent, null);
         }
 
         private static string? VerifierEnvoi(ModeleMailDetail detail)

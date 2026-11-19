@@ -48,6 +48,13 @@ namespace SchoolWebApp.Domain.Repositories
             string cible, string categorie, DateTime maintenantUtc, CancellationToken ct = default);
 
         /// <summary>
+        /// Le parent de cette adresse, s'il est joignable pour la catégorie (pour les offres : s'il a CONSENTI) ; nul
+        /// sinon — adresse inconnue, bannie, ou parent non consentant (19/11/2026, envoi individuel d'une offre).
+        /// </summary>
+        Task<DestinataireAutomatique?> GetDestinataireParMailAsync(
+            string mail, string categorie, CancellationToken ct = default);
+
+        /// <summary>
         /// Réserve un envoi AVANT de le faire. Nul si la clé est déjà prise :
         /// ce courriel est déjà parti à ce parent.
         /// </summary>
@@ -60,9 +67,11 @@ namespace SchoolWebApp.Domain.Repositories
         Task<bool> EstDesabonneAsync(int parentId, string categorie, CancellationToken ct = default);
 
         /// <summary>Idempotent : désabonner deux fois ne fait rien de plus. Pour les offres : retire le consentement, daté.</summary>
-        Task DesabonnerAsync(int parentId, string categorie, CancellationToken ct = default);
+        /// <param name="source">Où le parent a fait ce geste (`SourceConsentement`) : gardé pour les offres.</param>
+        Task DesabonnerAsync(int parentId, string categorie, string source, CancellationToken ct = default);
 
         /// <summary>Pour les offres : donne le consentement, daté (geste du parent lui-même).</summary>
-        Task ReabonnerAsync(int parentId, string categorie, CancellationToken ct = default);
+        /// <param name="source">Où le parent a fait ce geste (`SourceConsentement`) : gardé pour les offres.</param>
+        Task ReabonnerAsync(int parentId, string categorie, string source, CancellationToken ct = default);
     }
 }

@@ -58,7 +58,7 @@ namespace SchoolWebApp.Domain.Repositories
         Task AccepterConditionsAsync(int parentId, string version, DateTime le, CancellationToken ct = default);
 
         /// <summary>Note que ce parent consent, de lui-même, à recevoir les offres par email. Un consentement déjà donné garde sa date.</summary>
-        Task ConsentirOffresEmailAsync(int parentId, DateTime le, CancellationToken ct = default);
+        Task ConsentirOffresEmailAsync(int parentId, DateTime le, string source, CancellationToken ct = default);
 
         /// <summary>
         /// Retient le client Stripe créé pour ce parent, à sa première visite

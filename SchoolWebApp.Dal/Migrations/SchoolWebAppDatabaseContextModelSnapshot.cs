@@ -2780,6 +2780,41 @@ namespace SchoolWebApp.Dal.Migrations
                     b.ToTable("JeuDeTest", (string)null);
                 });
 
+            modelBuilder.Entity("SchoolWebApp.Dal.Entities.JournalConsentementOffres", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<bool>("Consenti")
+                        .HasColumnType("bit")
+                        .HasColumnName("consenti");
+
+                    b.Property<DateTime>("Le")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("le");
+
+                    b.Property<int>("ParentId")
+                        .HasColumnType("int")
+                        .HasColumnName("parent_id");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)")
+                        .HasColumnName("source");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ParentId")
+                        .HasDatabaseName("IX_ConsentementOffresJournal_parent_id");
+
+                    b.ToTable("ConsentementOffresJournal", (string)null);
+                });
+
             modelBuilder.Entity("SchoolWebApp.Dal.Entities.LigneDeTest", b =>
                 {
                     b.Property<int>("Id")
@@ -3524,6 +3559,11 @@ namespace SchoolWebApp.Dal.Migrations
                     b.Property<DateTime?>("OffresEmailRetireLe")
                         .HasColumnType("datetime2")
                         .HasColumnName("offres_email_retire_le");
+
+                    b.Property<string>("OffresEmailSource")
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)")
+                        .HasColumnName("offres_email_source");
 
                     b.Property<string>("OngletsAdmin")
                         .HasMaxLength(500)
@@ -5366,6 +5406,15 @@ namespace SchoolWebApp.Dal.Migrations
                     b.Navigation("Eleve");
 
                     b.Navigation("NiveauScolaire");
+                });
+
+            modelBuilder.Entity("SchoolWebApp.Dal.Entities.JournalConsentementOffres", b =>
+                {
+                    b.HasOne("SchoolWebApp.Dal.Entities.Parent", null)
+                        .WithMany()
+                        .HasForeignKey("ParentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("SchoolWebApp.Dal.Entities.LigneDeTest", b =>

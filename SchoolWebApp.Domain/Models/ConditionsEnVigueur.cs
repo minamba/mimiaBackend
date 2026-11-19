@@ -21,19 +21,24 @@ namespace SchoolWebApp.Domain.Models
         public const string Version = "2.0";
 
         /// <summary>
-        /// Depuis quand cette version s'applique (UTC). Une case cochée à l'inscription avant cette date portait sur la
-        /// version d'avant : elle ne compte pas.
+        /// Depuis quand cette version s'applique (UTC). Ne sert plus qu'au LIBELLÉ de la fenêtre (`PremiereFois` : « mise à
+        /// jour » ou première acceptation) : la case de l'inscription porte désormais sa version dans le claim `cgv_version`
+        /// (19/11/2026, retour d'Omar), et c'est elle qui décide si elle vaut — voir `ValentPourLaCaseDe`.
         ///
-        /// À METTRE AU JOUR DE LA MISE EN LIGNE. Plus tôt, une case cochée sur l'ancien texte vaudrait pour le nouveau ; plus
-        /// tard, un inscrit de l'entre-deux revoit seulement la fenêtre une fois, sans dommage.
+        /// À METTRE AU JOUR DE LA MISE EN LIGNE quand même : un parent arrivé par Google entre cette date et la mise en ligne
+        /// lirait « première fois » au lieu de « mise à jour », rien de plus.
         /// </summary>
         public static readonly DateTime Depuis = new(2026, 11, 20, 0, 0, 0, DateTimeKind.Utc);
 
         /// <summary>Le parent a-t-il accepté la version en vigueur ?</summary>
         public static bool Acceptees(string? versionDuParent) => versionDuParent == Version;
 
-        /// <summary>La case cochée à l'inscription, à cette date, porte-t-elle sur la version en vigueur ?</summary>
-        public static bool ValentPourLaCaseDu(DateTime? cocheeLe) => cocheeLe is { } le && le >= Depuis;
+        /// <summary>
+        /// La case cochée à l'inscription porte-t-elle sur la version en vigueur ? Oui seulement si elle a été cochée sous
+        /// CETTE version (claim `cgv_version`) et à une date connue. Un compte sans version a coché un texte plus ancien.
+        /// </summary>
+        public static bool ValentPourLaCaseDe(string? versionCochee, DateTime? cocheeLe) =>
+            cocheeLe is not null && versionCochee == Version;
 
         /// <summary>
         /// Rien à « mettre à jour » pour lui : il n'a jamais rien accepté, et son compte est plus récent que le texte. C'est

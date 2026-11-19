@@ -161,6 +161,12 @@ namespace SchoolWebApp.Dal.Entities
 
         public DateTime? OffresEmailRetireLe { get; set; }
 
+        /// <summary>
+        /// Où a eu lieu le dernier geste (consentement ou retrait) : voir `SourceConsentement`. Tout l'historique est dans
+        /// `JournalConsentementOffres` (19/11/2026, retour d'Omar).
+        /// </summary>
+        public string? OffresEmailSource { get; set; }
+
         public virtual ICollection<Eleve> Eleves { get; set; } = new List<Eleve>();
 
         public virtual ICollection<Abonnement> Abonnements { get; set; } = new List<Abonnement>();

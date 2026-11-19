@@ -38,6 +38,12 @@ namespace SchoolWebApp.Api.Controllers
         private static readonly ConcurrentDictionary<string, List<DateTime>> Appels = new();
         private const int MaxParHeure = 30;
 
+        /// <summary>Le temps laissé pour revenir sur une désinscription des offres, depuis la page qui l'a faite.</summary>
+        public static readonly TimeSpan DureeAnnulation = TimeSpan.FromMinutes(30);
+
+        private const string ReabonnementEspaceParent =
+            "Pour recevoir de nouveau nos offres, activez-les depuis votre espace parent : Mon compte › Paramètres.";
+
         private const string LienInvalide =
             "Ce lien n’est pas valide. S’il a été coupé en le copiant, ouvrez-le directement depuis le courriel.";
 
@@ -74,6 +80,8 @@ namespace SchoolWebApp.Api.Controllers
                 categorie = lu.Value.Categorie,
                 libelle = CategorieDesabonnement.Libelle(lu.Value.Categorie),
                 desabonne,
+                // Lu par la page : pour les offres, « me réabonner » n'est proposé qu'à la session qui vient de se désinscrire.
+                commerciale = CategorieDesabonnement.EstCommerciale(lu.Value.Categorie),
             });
         }
 
@@ -87,18 +95,33 @@ namespace SchoolWebApp.Api.Controllers
             var lu = _jetons.Lire(requete?.Jeton);
             if (lu is null) return BadRequest(new { message = LienInvalide });
 
-            await _envois.DesabonnerAsync(lu.Value.ParentId, lu.Value.Categorie, ct);
+            await _envois.DesabonnerAsync(lu.Value.ParentId, lu.Value.Categorie, SourceConsentement.LienCourriel, ct);
 
             _logger.LogInformation(
                 "Parent {Parent} desabonne de « {Categorie} ».", lu.Value.ParentId, lu.Value.Categorie);
 
-            return Ok(new { desabonne = true });
+            // Pour les offres, le droit de revenir sur ce clic, et lui seulement : un jeton d'annulation de courte durée,
+            // remis à la page qui vient de désinscrire (voir `Reabonner`).
+            var jetonAnnulation = CategorieDesabonnement.EstCommerciale(lu.Value.Categorie)
+                ? _jetons.CreerAnnulation(lu.Value.ParentId, lu.Value.Categorie, DateTime.UtcNow, DureeAnnulation)
+                : null;
+
+            return Ok(new { desabonne = true, jetonAnnulation });
         }
 
-        /// <summary>« Je me suis trompé » : le parent recevra de nouveau ces messages.</summary>
+        /// <summary>
+        /// « Je me suis trompé » : le parent recevra de nouveau ces messages.
+        ///
+        /// POUR LES OFFRES, PAS AVEC LE SEUL LIEN DU COURRIEL (19/11/2026, retour d'Omar). Ce lien n'expire pas et peut
+        /// avoir été transféré : quiconque l'a en main pourrait redonner un consentement à la place du parent. Se
+        /// réabonner aux offres, c'est consentir : il faut soit l'espace parent connecté (interrupteur de Paramètres),
+        /// soit le jeton d'annulation que la désinscription vient de remettre à cette page (valable 30 minutes). Les
+        /// autres catégories (avis, relances, rappels) restent en opt-out : le lien suffit, comme avant.
+        /// </summary>
         [HttpPost("reabonnement")]
         [SwaggerResponse(200, "Réabonné.")]
         [SwaggerResponse(400, "Lien invalide.")]
+        [SwaggerResponse(403, "Offres : réabonnement possible seulement depuis l'espace parent ou juste après la désinscription.")]
         public async Task<IActionResult> Reabonner([FromBody] JetonRequest? requete, CancellationToken ct)
         {
             if (TropDAppels()) return StatusCode(429, new { message = "Trop de tentatives. Réessayez dans une heure." });
@@ -106,7 +129,23 @@ namespace SchoolWebApp.Api.Controllers
             var lu = _jetons.Lire(requete?.Jeton);
             if (lu is null) return BadRequest(new { message = LienInvalide });
 
-            await _envois.ReabonnerAsync(lu.Value.ParentId, lu.Value.Categorie, ct);
+            if (CategorieDesabonnement.EstCommerciale(lu.Value.Categorie)
+                && !_jetons.AnnulationValide(requete?.JetonAnnulation, lu.Value.ParentId, lu.Value.Categorie, DateTime.UtcNow))
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new
+                {
+                    code = "reabonnement_espace_parent",
+                    message = ReabonnementEspaceParent,
+                });
+            }
+
+            await _envois.ReabonnerAsync(
+                lu.Value.ParentId,
+                lu.Value.Categorie,
+                CategorieDesabonnement.EstCommerciale(lu.Value.Categorie)
+                    ? SourceConsentement.AnnulationDesinscription
+                    : SourceConsentement.LienCourriel,
+                ct);
 
             _logger.LogInformation(
                 "Parent {Parent} reabonne a « {Categorie} ».", lu.Value.ParentId, lu.Value.Categorie);
@@ -129,7 +168,7 @@ namespace SchoolWebApp.Api.Controllers
             var lu = _jetons.Lire(jeton);
             if (lu is null) return BadRequest();
 
-            await _envois.DesabonnerAsync(lu.Value.ParentId, lu.Value.Categorie, ct);
+            await _envois.DesabonnerAsync(lu.Value.ParentId, lu.Value.Categorie, SourceConsentement.UnClic, ct);
             return Ok();
         }
 
@@ -152,6 +191,9 @@ namespace SchoolWebApp.Api.Controllers
         public class JetonRequest
         {
             public string? Jeton { get; set; }
+
+            /// <summary>Offres seulement : le jeton remis par la désinscription qui vient d'avoir lieu (réabonnement).</summary>
+            public string? JetonAnnulation { get; set; }
         }
     }
 }

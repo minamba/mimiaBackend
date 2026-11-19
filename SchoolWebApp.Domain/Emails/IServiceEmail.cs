@@ -131,6 +131,10 @@ namespace SchoolWebApp.Domain.Emails
         /// (19/10/2026) : ajoutées à CHAQUE message — à n'utiliser qu'avec un
         /// seul destinataire. Jamais en développement quand l'envoi est détourné.
         /// </param>
+        /// <param name="enTetes">
+        /// `List-Unsubscribe` d'une offre envoyée à UN parent (19/11/2026), ajoutés à chaque message — comme les copies, à
+        /// n'utiliser qu'avec un seul destinataire. Nuls : aucun.
+        /// </param>
         Task<ResultatDiffusion> DiffuserAsync(
             IReadOnlyList<string> destinataires,
             string sujet,
@@ -142,7 +146,8 @@ namespace SchoolWebApp.Domain.Emails
             CancellationToken ct = default,
             Expediteur? expediteur = null,
             IReadOnlyList<string>? copies = null,
-            IReadOnlyList<string>? copiesCachees = null);
+            IReadOnlyList<string>? copiesCachees = null,
+            IReadOnlyDictionary<string, string>? enTetes = null);
 
         /// <summary>
         /// Compose le corps mis en page, SANS l.envoyer et SANS toucher au logo.

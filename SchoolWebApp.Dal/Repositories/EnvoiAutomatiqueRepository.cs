@@ -175,6 +175,23 @@ namespace SchoolWebApp.Dal.Repositories
                 .ToList();
         }
 
+        public async Task<DestinataireAutomatique?> GetDestinataireParMailAsync(
+            string mail, string categorie, CancellationToken ct = default)
+        {
+            // LE MÊME FILTRE QUE LA DIFFUSION (`Joignables`) : une offre envoyée à un seul parent obéit à la même règle
+            // qu'une offre envoyée à tous. Comparaison sans casse ni espaces, comme le dédoublonnage des listes.
+            var adresse = mail?.Trim() ?? string.Empty;
+            if (adresse.Length == 0) return null;
+
+            var ligne = await Joignables(categorie)
+                .Where(p => p.Mail!.Trim().ToLower() == adresse.ToLower())
+                .OrderBy(p => p.Id)
+                .Select(p => new { p.Id, p.Mail, p.Prenom })
+                .FirstOrDefaultAsync(ct);
+
+            return ligne is null ? null : new DestinataireAutomatique(ligne.Id, ligne.Mail!.Trim(), ligne.Prenom, null, null);
+        }
+
         public async Task<int?> ReserverAsync(
             string codeModele, int parentId, string? cle, DateTime occurrenceUtc, CancellationToken ct = default)
         {
@@ -219,18 +236,14 @@ namespace SchoolWebApp.Dal.Repositories
                 ? !await _context.Parents.AnyAsync(p => p.Id == parentId && p.OffresEmail, ct)
                 : await _context.DesabonnementsMail.AnyAsync(d => d.ParentId == parentId && d.Categorie == categorie, ct);
 
-        public async Task DesabonnerAsync(int parentId, string categorie, CancellationToken ct = default)
+        public async Task DesabonnerAsync(int parentId, string categorie, string source, CancellationToken ct = default)
         {
             // LE RETRAIT DU CONSENTEMENT, EFFET IMMÉDIAT (19/11/2026) : la date du retrait est la preuve. Aucune ligne de
             // désabonnement n'est écrite pour les offres : le consentement suffit, et une ligne survivrait à un nouvel
             // accord. Rien ne change pour qui n'avait pas consenti (pas de fausse date de retrait).
             if (CategorieDesabonnement.EstCommerciale(categorie))
             {
-                await _context.Parents
-                    .Where(p => p.Id == parentId && p.OffresEmail)
-                    .ExecuteUpdateAsync(s => s
-                        .SetProperty(p => p.OffresEmail, false)
-                        .SetProperty(p => p.OffresEmailRetireLe, DateTime.UtcNow), ct);
+                await ConsentementOffres.ChangerAsync(_context, parentId, false, source, DateTime.UtcNow, ct);
                 return;
             }
 
@@ -261,10 +274,10 @@ namespace SchoolWebApp.Dal.Repositories
 
         /// <summary>
         /// Pour les offres, se réabonner c'est CONSENTIR : un geste du parent lui-même (l'interrupteur de son espace, ou
-        /// le bouton « me réabonner » de la page de désinscription), daté. Un consentement déjà donné garde sa date
+        /// le bouton « me réabonner » juste après une désinscription, avec le jeton d'annulation), daté, avec sa source. Un consentement déjà donné garde sa date
         /// d'origine ; la date d'un retrait passé reste, c'est l'historique.
         /// </summary>
-        public async Task ReabonnerAsync(int parentId, string categorie, CancellationToken ct = default)
+        public async Task ReabonnerAsync(int parentId, string categorie, string source, CancellationToken ct = default)
         {
             // Pour les offres, ce ménage efface une éventuelle ligne d'avant le 19/11/2026 (désabonnement des « annonces »).
             await _context.DesabonnementsMail
@@ -273,11 +286,7 @@ namespace SchoolWebApp.Dal.Repositories
 
             if (CategorieDesabonnement.EstCommerciale(categorie))
             {
-                await _context.Parents
-                    .Where(p => p.Id == parentId && !p.OffresEmail)
-                    .ExecuteUpdateAsync(s => s
-                        .SetProperty(p => p.OffresEmail, true)
-                        .SetProperty(p => p.OffresEmailConsentiLe, DateTime.UtcNow), ct);
+                await ConsentementOffres.ChangerAsync(_context, parentId, true, source, DateTime.UtcNow, ct);
             }
         }
     }

@@ -116,6 +116,9 @@ namespace SchoolWebApp.Dal.Entities
         public virtual DbSet<EnvoiAutomatique> EnvoisAutomatiques { get; set; }
         public virtual DbSet<DesabonnementMail> DesabonnementsMail { get; set; }
 
+        /// <summary>Le journal du consentement aux offres par e-mail : en ajout seul (19/11/2026).</summary>
+        public virtual DbSet<JournalConsentementOffres> JournalConsentementOffres { get; set; }
+
         public virtual DbSet<MailBanni> MailsBannis { get; set; }
 
         /// <summary>Les annees scolaires passees chez nous, en intervalles.</summary>
@@ -275,6 +278,7 @@ namespace SchoolWebApp.Dal.Entities
                 entity.Property(e => e.OffresEmail).HasDefaultValue(false).HasColumnName("offres_email");
                 entity.Property(e => e.OffresEmailConsentiLe).HasColumnName("offres_email_consenti_le");
                 entity.Property(e => e.OffresEmailRetireLe).HasColumnName("offres_email_retire_le");
+                entity.Property(e => e.OffresEmailSource).HasMaxLength(30).HasColumnName("offres_email_source");
 
                 // Le rôle (17/10/2026) : supprimer un rôle rend ses comptes
                 // « Utilisateur » (la suppression recalcule aussi leur accès).
@@ -2112,6 +2116,26 @@ namespace SchoolWebApp.Dal.Entities
 
                 // La fenêtre de trois mois de la demande d'avis générale.
                 entity.HasIndex(e => new { e.ParentId, e.CodeModele, e.DateEnvoi });
+            });
+
+            // Le journal du consentement aux offres (19/11/2026) : une ligne par changement d'état, jamais modifiée.
+            modelBuilder.Entity<JournalConsentementOffres>(entity =>
+            {
+                entity.ToTable("ConsentementOffresJournal");
+                entity.HasKey(e => e.Id);
+
+                entity.Property(e => e.Id).HasColumnName("id");
+                entity.Property(e => e.ParentId).HasColumnName("parent_id");
+                entity.Property(e => e.Consenti).HasColumnName("consenti");
+                entity.Property(e => e.Source).IsRequired().HasMaxLength(30).HasColumnName("source");
+                entity.Property(e => e.Le).HasColumnName("le");
+
+                entity.HasIndex(e => e.ParentId).HasDatabaseName("IX_ConsentementOffresJournal_parent_id");
+
+                entity.HasOne<Parent>()
+                      .WithMany()
+                      .HasForeignKey(e => e.ParentId)
+                      .OnDelete(DeleteBehavior.Cascade);
             });
 
             modelBuilder.Entity<DesabonnementMail>(entity =>
