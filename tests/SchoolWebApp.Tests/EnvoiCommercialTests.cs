@@ -100,6 +100,35 @@ namespace SchoolWebApp.Tests
             Assert.Equal("List-Unsubscribe=One-Click", envoi.EnTetes["List-Unsubscribe-Post"]);
         }
 
+        /// <summary>
+        /// LE COURRIEL TEL QUE LE PARENT LE REÇOIT : les valeurs exactes de l'envoi, rendues par le vrai service et le vrai
+        /// gabarit embarqué « diffusion ». Avec `MIMIA_TEST_RENDU=<dossier>`, le HTML y est écrit (capture du compte rendu).
+        /// </summary>
+        [Fact]
+        public async Task Rendu_reel_dans_le_gabarit_avec_pied_et_lien()
+        {
+            var parent = await CreerParentAsync(consenti: true, prenom: "Nadia");
+            var p = Preparer(Jetons);
+            await EnvoyerAsync(p, Jetons, parent.Mail!);
+            var envoi = Assert.Single(p.Envois);
+
+            var service = new ServiceEmail(
+                Microsoft.Extensions.Options.Options.Create(new OptionsEmail()), NullLogger<ServiceEmail>.Instance);
+            var html = await service.RendreAsync("Bonjour Nadia", "diffusion", envoi.Valeurs);
+
+            Assert.Contains("Bonjour Nadia", html);
+            Assert.Contains("https://site.exemple.invalid/desabonnement?jeton=", html);
+            Assert.Contains("Me désinscrire de ces e-mails", html);
+            Assert.Contains("accepté de recevoir les offres et nouveautés", html);
+            Assert.DoesNotContain("{{", html);
+
+            var dossier = Environment.GetEnvironmentVariable("MIMIA_TEST_RENDU");
+            if (!string.IsNullOrWhiteSpace(dossier))
+            {
+                await File.WriteAllTextAsync(Path.Combine(dossier, "offre-individuelle.html"), html);
+            }
+        }
+
         [Fact]
         public async Task Parent_non_consentant_refuse_rien_ne_part()
         {

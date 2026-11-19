@@ -5,8 +5,8 @@ namespace SchoolWebApp.IdentityServer.Models
     public class LoginViewModel
     {
         [Required(ErrorMessage = "L'adresse email est obligatoire.")]
-        [EmailAddress(ErrorMessage = "Adresse email invalide.")]
-        [Display(Name = "Adresse email")]
+        [EmailAddress(ErrorMessage = "Adresse e-mail invalide.")]
+        [Display(Name = "Adresse e-mail")]
         public string Email { get; set; } = string.Empty;
 
         [Required(ErrorMessage = "Le mot de passe est obligatoire.")]
@@ -40,8 +40,8 @@ namespace SchoolWebApp.IdentityServer.Models
         public string Nom { get; set; } = string.Empty;
 
         [Required(ErrorMessage = "L'adresse email est obligatoire.")]
-        [EmailAddress(ErrorMessage = "Adresse email invalide.")]
-        [Display(Name = "Adresse email")]
+        [EmailAddress(ErrorMessage = "Adresse e-mail invalide.")]
+        [Display(Name = "Adresse e-mail")]
         public string Email { get; set; } = string.Empty;
 
         [Required(ErrorMessage = "Le mot de passe est obligatoire.")]
@@ -85,8 +85,8 @@ namespace SchoolWebApp.IdentityServer.Models
     public class ForgotPasswordViewModel
     {
         [Required(ErrorMessage = "L'adresse email est obligatoire.")]
-        [EmailAddress(ErrorMessage = "Adresse email invalide.")]
-        [Display(Name = "Adresse email")]
+        [EmailAddress(ErrorMessage = "Adresse e-mail invalide.")]
+        [Display(Name = "Adresse e-mail")]
         public string? Email { get; set; }
 
         public string? ReturnUrl { get; set; }

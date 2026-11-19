@@ -94,19 +94,20 @@
         <input asp-for="AccepteConditions" type="checkbox" required
                data-message-requis="Vous devez accepter les conditions générales et la politique de confidentialité pour créer un compte." />
         <label for="AccepteConditions" style="margin:0;font-weight:400;">
-            J'ai lu et j'accepte les
-            <a href="@spaUrl/cgv" target="_blank" rel="noopener">conditions générales de vente et d'utilisation</a>
+            J’ai lu et j’accepte les
+            <a href="@spaUrl/cgv" target="_blank" rel="noopener">conditions générales de vente et d’utilisation</a>
             et la <a href="@spaUrl/confidentialite" target="_blank" rel="noopener">politique de confidentialité</a>
         </label>
     </div>
     <span asp-validation-for="AccepteConditions" class="field-error"></span>
 
-    @* LES OFFRES PAR EMAIL (19/11/2026) : FACULTATIF, JAMAIS COCHÉ D'AVANCE (pas de « required », pas de « checked » par
-       défaut). Seule une case cochée par le parent lui-même fait consentir ; la date du clic est la preuve. *@
+    @* LES OFFRES PAR E-MAIL (19/11/2026) : FACULTATIF, JAMAIS COCHÉ D'AVANCE (pas de « required », pas de « checked » par
+       défaut). Seule une case cochée par le parent lui-même fait consentir ; la date du clic est la preuve.
+       LE LIBELLÉ EST MOT POUR MOT CELUI DE LA FENÊTRE DU SITE (`LIBELLE_OFFRES` dans VerrouConditions.js). *@
     <div class="checkbox">
         <input asp-for="AccepteOffresEmail" type="checkbox" />
         <label for="AccepteOffresEmail" style="margin:0;font-weight:400;">
-            J'accepte de recevoir par email les offres et nouveautés de Mimia (désinscription possible à tout moment).
+            J’accepte de recevoir par e-mail les offres et nouveautés de Mimia (désinscription possible à tout moment).
             <span style="display:block;font-size:.85em;opacity:.75;">Facultatif : vous pouvez créer votre compte sans cocher cette case.</span>
         </label>
     </div>

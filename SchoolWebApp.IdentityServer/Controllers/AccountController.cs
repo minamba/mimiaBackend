@@ -129,7 +129,7 @@ namespace SchoolWebApp.IdentityServer.Controllers
                 _logger.LogInformation(
                     "Connexion refusee : le compte de demonstration est desactive.");
 
-                ModelState.AddModelError(string.Empty, "Adresse email ou mot de passe incorrect.");
+                ModelState.AddModelError(string.Empty, "Adresse e-mail ou mot de passe incorrect.");
                 return View(model);
             }
 
@@ -856,7 +856,7 @@ namespace SchoolWebApp.IdentityServer.Controllers
             "PasswordTooShort" => "Le mot de passe doit contenir au moins 10 caractères.",
             "PasswordRequiresDigit" => "Le mot de passe doit contenir au moins un chiffre.",
             "PasswordRequiresUpper" => "Le mot de passe doit contenir au moins une majuscule.",
-            "InvalidEmail" => "Adresse email invalide.",
+            "InvalidEmail" => "Adresse e-mail invalide.",
             _ => error.Description
         };
     }

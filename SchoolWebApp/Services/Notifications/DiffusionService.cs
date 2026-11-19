@@ -343,7 +343,7 @@ namespace SchoolWebApp.Api.Services.Notifications
             if (!CategorieDesabonnement.EstCommerciale(categorie)) return ComposerMentionPied(lienDesabonnement);
 
             var mention = "Vous recevez ce message parce que vous avez accepté de recevoir les offres et nouveautés "
-                          + "de Mimia par email. Une question ? Écrivez-nous à "
+                          + "de Mimia par e-mail. Une question ? Écrivez-nous à "
                           + "<a href=\"mailto:support@mimia.fr\" style=\"color:#a5abb8; text-decoration:underline;\">"
                           + "support@mimia.fr</a>.";
 
@@ -351,7 +351,7 @@ namespace SchoolWebApp.Api.Services.Notifications
                 ? mention
                 : mention
                   + $"<br><a href=\"{WebUtility.HtmlEncode(lienDesabonnement)}\" "
-                  + "style=\"color:#a5abb8; text-decoration:underline;\">Me désinscrire de ces emails</a>";
+                  + "style=\"color:#a5abb8; text-decoration:underline;\">Me désinscrire de ces e-mails</a>";
         }
 
         /// <summary>
