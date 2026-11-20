@@ -467,12 +467,28 @@ namespace SchoolWebApp.Api.Services.Voix
         // ou « lis-moi » suffisent seuls. « Tu lis très bien les nombres » (pluriel, sans tableau) reste.
         // « dis-le-moi à voix haute », « Regarde bien le tableau et dis-moi ce que tu vois », « celui qui est affiché… dis-moi »
         // (vus au bout en bout de cette tâche) aussi, mais « dis-le-moi » seul reste (« si tu es fatigué, dis-le-moi ! »).
+        // Refus d'Omar (3bc3b0b) : « dis-moi » n'est une consigne que s'il porte sur LE NOMBRE LUI-MÊME (« dis-moi ce nombre »,
+        // « dis-moi comment il s'appelle », « dis-moi ce que tu vois », « dis-moi ! » seul après le tableau) ; « Dis-moi combien de
+        // dizaines a le nombre. », « Dis-moi d'abord le chiffre des dizaines, le tableau t'aide. » sont de vrais indices et restent.
+        // Même chose pour « lis / dis-le » suivis de « d'abord », « combien », « le chiffre » (`PasUnIndice`) ; « dis-le » ne s'arrête
+        // jamais avant « -moi » (sinon « Dis-le-moi d'abord… » échappait à la garde).
         [GeneratedRegex(@"[^.!?\n]*(?:"
             + @"(?<!\p{L})(?:re)?lis-(?:le|la|moi)(?!\p{L})"
-            + @"|(?<!\p{L})(?:lis|lire|relis|relire|dis-le(?:-moi)?|dis-moi)(?!\p{L})[^.!?\n]*(?:\b(?:voix\s+haute|au\s+tableau|le\s+tableau)\b|" + CeNombre + @")"
-            + @"|(?:\btableau\b|\baffich\p{L}*|\bcelui\s+qui\b|" + CeNombre + @")[^.!?\n]*(?<!\p{L})(?:lis|relis|dis-le(?:-moi)?|dis-moi)(?!\p{L})"
+            + @"|(?<!\p{L})(?:lis|lire|relis|relire|dis-le(?:-moi)?)(?![\p{L}-])" + PasUnIndice + @"[^.!?\n]*(?:\b(?:voix\s+haute|au\s+tableau|le\s+tableau)\b|" + CeNombre + @")"
+            + @"|(?<!\p{L})" + DisMoi + @"\s*" + CeNombre
+            + @"|(?<!\p{L})" + DisMoi + @"\s*ce\s+que\s+tu\s+vois\b[^.!?\n]*\b(?:au|le|sur\s+le)\s+tableau\b"
+            + @"|(?:\btableau\b|\baffich\p{L}*|\bcelui\s+qui\b|" + CeNombre + @")[^.!?\n]*(?<!\p{L})(?:"
+            + @"(?:lis|relis|dis-le(?:-moi)?)(?![\p{L}-])" + PasUnIndice
+            + @"|" + DisMoi + @"\s*(?:" + CeNombre + @"|comment\s+il\s+s['’]appelle\b|ce\s+que\s+tu\s+vois\b|(?=[.!:]|\r?\n|$))"
+            + @")"
             + @")[^.!?\n]*[.!:]*", RegexOptions.IgnoreCase)]
         private static partial Regex ConsigneDuProfesseur();
+
+        // « dis-moi », « dis-moi bien », « dis-moi, à voix haute, » : l'objet qui suit décide si c'est une consigne.
+        private const string DisMoi = @"dis-moi(?!\p{L})(?:\s+(?:bien|vite|donc))?(?:\s*,?\s*[àa]\s+voix\s+haute\s*,?)?";
+
+        // Ce qui suit le verbe en fait un indice sur une partie du nombre, pas l'ordre de le lire (Omar, refus de 3bc3b0b).
+        private const string PasUnIndice = @"(?!\s+(?:d['’]abord|combien|(?:le|les|un|ce|chaque)\s+chiffres?\b|seulement|juste\b))";
 
         // « Regarde le prochain nombre. », « Regarde bien celui qui est au tableau. » : une phrase qui ne fait QUE montrer le
         // nombre double la consigne du code (vu au bout en bout). « Regarde bien le nombre, le chiffre de gauche… » reste.
