@@ -25,7 +25,7 @@ namespace SchoolWebApp.Api.Services.Voix
         public sealed record Element(string Cible, int Rang);
 
         /// <summary>Ce que le code montre à ce tour : l'élément, s'il est redemandé ou nouveau, et s'il vient d'abandonner.</summary>
-        public sealed record Tour(Element Element, bool Redite, bool Premier, bool Abandon);
+        public sealed record Tour(Element Element, bool Redite, bool Premier, bool Abandon, bool Demande = false);
 
         /// <summary>Le verdict du message de l'enfant : ce qu'il devait lire, s'il est juste, et ce qu'il a dit.</summary>
         public sealed record Verdict(Element Montre, bool Juste, string Dit);
@@ -143,6 +143,8 @@ namespace SchoolWebApp.Api.Services.Voix
         {
             var montre = DernierMontre(recents);
             if (montre is null || string.IsNullOrWhiteSpace(messageDeLEleve) || DemandeDeLecture().IsMatch(messageDeLEleve)) return null;
+            // « Écris le nombre 23 » n'est pas une lecture du nombre affiché : c'est une demande (signalement #50).
+            if (CanoniqueDemande(messageDeLEleve) is not null) return null;
             var lu = Canonique(messageDeLEleve);
             if (lu is null) return null;
             return new Verdict(montre, lu == Normaliser(montre.Cible), messageDeLEleve.Trim());
@@ -156,6 +158,54 @@ namespace SchoolWebApp.Api.Services.Voix
         [GeneratedRegex(@"^\s*j.ai lu le nombre\b", RegexOptions.IgnoreCase)]
         private static partial Regex VerdictDeLecture();
 
+        // ------------------------------------------------------------------ le nombre qu'il demande (signalement #50)
+
+        // « Écris le nombre 23 au tableau », « montre-moi 48 », « affiche le chiffre sept », « mets-moi un autre nombre : 12 ».
+        // Le verbe, puis seulement des petits mots de consigne, puis le nombre. « un » / « une » ne sont des mots de
+        // consigne que devant « nombre », « chiffre », « autre » ou « nouveau » (« écris un nombre » ne demande pas « 1 »).
+        [GeneratedRegex(@"(?<!\p{L})(?:[ée]cri(?:s|re|vez)|affiche[rz]?|montre[rz]?|mets|mettre|donne[rz]?|propose[rz]?)(?!\p{L})"
+            + @"(?:[-\s,:'’]+(?:moi|nous|le|la|l|ce|cet|au|du|tableau|nombre|chiffre|autre|nouveau|s|il|te|pla[iî]t|stp|maintenant|alors|plut[oô]t|(?:un|une)(?=[-\s]+(?:nombre|chiffre|autre|nouveau)))(?!\p{L}))*"
+            + @"[-\s,:'’«""]+(?<suite>[^.!?;\n]{1,60})", RegexOptions.IgnoreCase)]
+        private static partial Regex Demande();
+
+        [GeneratedRegex(@"^(?:au|aux|sur|a|et|s'il|s’il|stp|svp|pour|que|qu|je|j|tableau|en|dans|ici|maintenant|merci|alors|puis|stp|please)\b", RegexOptions.IgnoreCase)]
+        private static partial Regex MotApresLeNombre();
+
+        /// <summary>Le nombre qu'il demande d'afficher, en écriture canonique (« 23 »), ou null.</summary>
+        public static string? CanoniqueDemande(string? message)
+        {
+            if (string.IsNullOrWhiteSpace(message) || VerdictDeLecture().IsMatch(message)) return null;
+            foreach (Match m in Demande().Matches(message))
+            {
+                // Seulement le nombre qui suit, mot à mot : « 23 au tableau et je te le lis » → « 23 ».
+                var mots = new List<string>();
+                string? apres = null;
+                foreach (var brut in m.Groups["suite"].Value.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+                {
+                    var mot = brut.Trim('«', '»', '"', '“', '”', ',');
+                    var simple = SansAccents(mot.ToLowerInvariant());
+                    var estNombre = Regex.IsMatch(mot, @"^\(?[+-]?\d[\d,./^x()−-]*$")
+                        || simple.Split('-', StringSplitOptions.RemoveEmptyEntries).All(p => EstMotNombre(p) || p is "et" or "zero" or "virgule");
+                    if (!estNombre || simple.Length == 0) { apres = simple; break; }
+                    mots.Add(mot);
+                }
+                while (mots.Count > 0 && SansAccents(mots[^1].ToLowerInvariant()) is "et" or "virgule") mots.RemoveAt(mots.Count - 1);
+                if (mots.Count == 0) continue;
+                // « Donne-moi deux exemples », « montre-moi un indice » : un nom suit, ce n'est pas un nombre à afficher.
+                if (apres is not null && !MotApresLeNombre().IsMatch(apres)) continue;
+                if (Canonique(string.Join(' ', mots)) is { } lu) return lu;
+            }
+            return null;
+        }
+
+        /// <summary>Le nombre demandé, s'il est au catalogue de sa classe ou d'une classe en dessous ; null sinon.</summary>
+        public static Element? NombreDemande(string? message, string? niveau)
+        {
+            var rang = Rang(niveau);
+            if (rang == 0 || CanoniqueDemande(message) is not { } lu) return null;
+            return Tous.FirstOrDefault(e => e.Rang >= 1 && e.Rang <= rang && Normaliser(e.Cible) == lu);
+        }
+
         // ------------------------------------------------------------------ ce que le code montre
 
         private const int EssaisMax = 3;
@@ -164,12 +214,21 @@ namespace SchoolWebApp.Api.Services.Voix
         /// LE NOMBRE DE CE TOUR. Le même tant qu'il ne l'a pas lu juste ; un autre après une bonne lecture, après trois
         /// lectures fausses de suite (on ne donne jamais la réponse, on passe), ou au début de l'exercice.
         /// </summary>
-        public static Tour? AMontrer(string? niveau, IReadOnlyList<(string? Role, string? Contenu, bool? SonJuste)> recents, Verdict? verdict, string graine)
+        public static Tour? AMontrer(string? niveau, IReadOnlyList<(string? Role, string? Contenu, bool? SonJuste)> recents, Verdict? verdict, string graine,
+            string? messageDeLEleve = null)
         {
             var possibles = Possibles(niveau);
             if (possibles.Count == 0) return null;
 
             var precedent = DernierMontre(recents);
+
+            // IL DEMANDE UN NOMBRE PRÉCIS (20/11/2026, signalement #50 : « Écris le nombre 23 au tableau, et je te le lis »,
+            // le code en montrait un autre, et « vingt-trois » était refusé). Hors d'une lecture en cours de jugement, le
+            // nombre demandé est celui du tour, s'il est au catalogue de sa classe ou d'une classe en dessous.
+            if (verdict is null && NombreDemande(messageDeLEleve, niveau) is { } demande)
+            {
+                return new Tour(demande, Redite: precedent?.Cible == demande.Cible, Premier: precedent is null, Abandon: false, Demande: true);
+            }
 
             // Les lectures fausses de suite sur ce nombre, celle de ce tour comprise.
             var abandon = false;
@@ -222,6 +281,11 @@ namespace SchoolWebApp.Api.Services.Voix
         [GeneratedRegex(@"[^.!?\n]*\b(?:lis|lis-le|lire|relis|relis-le|relire)\b[^.!?\n]*\b(?:voix\s+haute|au\s+tableau|le\s+tableau|ce\s+nombre|le\s+nombre)\b[^.!?\n]*[.!]*", RegexOptions.IgnoreCase)]
         private static partial Regex ConsigneDuProfesseur();
 
+        // « Écoute bien le nombre et dis-le-moi » (signalement #50) : il ne l'entend pas, il le LIT. La phrase s'en va,
+        // la consigne du code (« Regarde bien le nombre… ») dit la bonne chose.
+        [GeneratedRegex(@"[^.!?\n]*(?<!\p{L})(?:[ée]coute(?:s|z|r)?|entend(?:s|re)?)(?!\p{L})[^.!?\n]*[.!]*", RegexOptions.IgnoreCase)]
+        private static partial Regex PhraseDEcoute();
+
         [GeneratedRegex(@"\n{3,}")]
         private static partial Regex LignesVides();
 
@@ -237,6 +301,7 @@ namespace SchoolWebApp.Api.Services.Voix
             propre = Voix().Replace(propre, "$2");
             propre = Question().Replace(propre, string.Empty);
             propre = ConsigneDuProfesseur().Replace(propre, string.Empty);
+            propre = PhraseDEcoute().Replace(propre, string.Empty);
 
             // Le nombre à lire lui-même, s'il l'a cité (il ne le connaît pas, mais une redite peut le reprendre) : la ligne part.
             var affiche = Affichage(tour.Element.Cible);
@@ -262,7 +327,7 @@ namespace SchoolWebApp.Api.Services.Voix
         /// </summary>
         public static string Consigne(Tour tour) =>
             tour.Redite ? "Regarde bien le nombre, et essaie encore de le lire à voix haute."
-            : tour.Premier ? "Regarde le tableau : lis ce nombre à voix haute."
+            : tour.Premier || tour.Demande ? "Regarde le tableau : lis ce nombre à voix haute."
             : "Voici un autre nombre : lis-le à voix haute.";
 
         /// <summary>Le fait de l'exercice, à chaque tour.</summary>
@@ -271,7 +336,16 @@ namespace SchoolWebApp.Api.Services.Voix
             + "tableau et écrit la consigne à la fin de ton message. Toi, tu écris seulement une ou deux phrases courtes (bravo, "
             + "encouragement, un indice de méthode), SANS lui redemander de lire : la consigne est déjà écrite par le code. Tu "
             + "n'écris et ne prononces JAMAIS le nombre à lire, et tu n'écris rien au tableau (ni [ARDOISE], ni [FIGURE]). Tu ne "
-            + "changes d'exercice que s'il le demande lui-même.]";
+            + "changes d'exercice que s'il le demande lui-même. Il LIT le nombre au tableau, il ne l'entend pas : ne dis jamais "
+            + "« écoute » ni « tu as entendu », dis « regarde ».]";
+
+        /// <summary>
+        /// Le fait d'un nombre qu'il a demandé lui-même (signalement #50) : sans lui, le professeur répondait « je ne choisis
+        /// pas moi-même le nombre, c'est l'exercice qui s'en charge » alors que le tableau montrait justement le sien.
+        /// </summary>
+        public const string FaitDemande =
+            "[Fait pour ce tour : il a demandé lui-même ce nombre, et le code l'affiche au tableau. Dis-lui en une phrase "
+            + "que c'est parti. Ne dis pas que tu ne choisis pas le nombre, et ne le prononce pas : c'est lui qui le lit.]";
 
         /// <summary>Le fait du verdict.</summary>
         public static string FaitVerdict(Verdict v, Tour? tour)

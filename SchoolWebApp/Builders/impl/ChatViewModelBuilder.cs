@@ -3568,8 +3568,9 @@ namespace SchoolWebApp.Api.Builders.impl
             if (enLectureDeNombres)
             {
                 nombresDuTour = Services.Voix.LectureDesNombres.AMontrer(
-                    contexte.Eleve.NiveauCode, recentsNombres, verdictNombre, $"{conversationId}|{historique.Count}");
+                    contexte.Eleve.NiveauCode, recentsNombres, verdictNombre, $"{conversationId}|{historique.Count}", contenu);
                 declencheur += "\n\n" + Services.Voix.LectureDesNombres.FaitType;
+                if (nombresDuTour is { Demande: true }) declencheur += "\n\n" + Services.Voix.LectureDesNombres.FaitDemande;
                 if (verdictNombre is not null)
                 {
                     declencheur += "\n\n" + Services.Voix.LectureDesNombres.FaitVerdict(verdictNombre, nombresDuTour);
