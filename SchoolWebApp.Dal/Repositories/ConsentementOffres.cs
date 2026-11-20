@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using SchoolWebApp.Dal.Entities;
+using SchoolWebApp.Domain.Models;
 
 namespace SchoolWebApp.Dal.Repositories
 {
@@ -16,12 +17,72 @@ namespace SchoolWebApp.Dal.Repositories
     /// </summary>
     internal static class ConsentementOffres
     {
-        public static async Task<bool> ChangerAsync(
+        public static Task<bool> ChangerAsync(
+            SchoolWebAppDatabaseContext context, int parentId, bool consenti, string source, DateTime le, CancellationToken ct) =>
+            DansUneTransactionAsync(context, () => EcrireAsync(context, parentId, consenti, source, le, ct), ct);
+
+        /// <summary>
+        /// LE RETRAIT FAIT PENDANT UN RETOUR ARRIÈRE (20/11/2026, revue d'Omar). L'ancien code, qui ne connaît pas
+        /// `OffresEmail`, désinscrit en écrivant une ligne `DesabonnementMail` « diffusion » et laisse `OffresEmail = 1`.
+        /// L'envoi ne s'y trompe pas (`EnvoiAutomatiqueRepository.ConsentEnVigueur`) ; ceci l'inscrit en plus dans l'état
+        /// et le journal, à la date de cette ligne, source `retour_arriere`. Vrai si un tel retrait existait.
+        /// </summary>
+        public static Task<bool> InscrireRetraitDuRetourArriereAsync(
+            SchoolWebAppDatabaseContext context, int parentId, CancellationToken ct) =>
+            DansUneTransactionAsync(context, () => InscrireRetraitAsync(context, parentId, ct), ct);
+
+        private static Task<bool> DansUneTransactionAsync(
+            SchoolWebAppDatabaseContext context, Func<Task<bool>> ecrire, CancellationToken ct)
+        {
+            // DANS UNE TRANSACTION DÉJÀ OUVERTE PAR L'APPELANT : on écrit dedans, c'est lui qui valide.
+            if (context.Database.CurrentTransaction is not null) return ecrire();
+
+            // SINON, PAR LA STRATÉGIE D'EXÉCUTION DU CONTEXTE (20/11/2026, revue d'Omar). Aujourd'hui `UseSqlServer` est
+            // enregistré sans `EnableRetryOnFailure` (Program.cs) : la stratégie exécute une fois, sans rien changer.
+            // Mais si un jour on active les nouvelles tentatives, un `BeginTransaction` ouvert hors de la stratégie lève
+            // une exception : passer par `ExecuteAsync` garde ce code juste dans les deux cas (la transaction entière
+            // est rejouée, jamais une moitié).
+            return context.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
+            {
+                await using var transaction = await context.Database.BeginTransactionAsync(ct);
+                var change = await ecrire();
+                await transaction.CommitAsync(ct);
+                return change;
+            });
+        }
+
+        private static async Task<bool> EcrireAsync(
             SchoolWebAppDatabaseContext context, int parentId, bool consenti, string source, DateTime le, CancellationToken ct)
         {
-            var proprietaire = context.Database.CurrentTransaction is null;
-            await using var transaction = proprietaire ? await context.Database.BeginTransactionAsync(ct) : null;
+            // UN NOUVEL ACCORD APRÈS UN RETRAIT DU RETOUR ARRIÈRE : le retrait entre d'abord au journal, à sa date ; sinon
+            // `OffresEmail`, resté à 1, ferait croire qu'il n'y a rien à changer, et l'accord ne serait pas écrit.
+            if (consenti) await InscrireRetraitAsync(context, parentId, ct);
 
+            return await ModifierAsync(context, parentId, consenti, source, le, ct);
+        }
+
+        private static async Task<bool> InscrireRetraitAsync(SchoolWebAppDatabaseContext context, int parentId, CancellationToken ct)
+        {
+            var categorie = CategorieDesabonnement.Diffusion;
+
+            var le = await context.DesabonnementsMail
+                .AsNoTracking()
+                .Where(d => d.ParentId == parentId
+                            && d.Categorie == categorie
+                            && context.Parents.Any(p => p.Id == parentId
+                                                        && p.OffresEmail
+                                                        && (p.OffresEmailConsentiLe == null || d.DateCreation > p.OffresEmailConsentiLe)))
+                .OrderBy(d => d.DateCreation)
+                .Select(d => (DateTime?)d.DateCreation)
+                .FirstOrDefaultAsync(ct);
+
+            return le is not null
+                   && await ModifierAsync(context, parentId, false, SourceConsentement.RetourArriere, le.Value, ct);
+        }
+
+        private static async Task<bool> ModifierAsync(
+            SchoolWebAppDatabaseContext context, int parentId, bool consenti, string source, DateTime le, CancellationToken ct)
+        {
             var parents = context.Parents.Where(p => p.Id == parentId && p.OffresEmail != consenti);
 
             var changes = consenti
@@ -40,8 +101,6 @@ namespace SchoolWebApp.Dal.Repositories
                     $"INSERT INTO [ConsentementOffresJournal] ([parent_id], [consenti], [source], [le]) VALUES ({parentId}, {consenti}, {source}, {le})",
                     ct);
             }
-
-            if (transaction is not null) await transaction.CommitAsync(ct);
 
             return changes > 0;
         }

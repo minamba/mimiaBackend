@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
 using SchoolWebApp.Dal.Entities;
 using SchoolWebApp.Domain.Models;
@@ -33,12 +34,30 @@ namespace SchoolWebApp.Dal.Repositories
             // il vaut pour la diffusion à tous comme pour les courriels programmés par cible. Le consentement est LA
             // source de vérité : un ancien désabonnement des « annonces », antérieur, ne l'emporte pas sur un accord donné
             // depuis en cochant la case ; et le retrait, lui, remet `OffresEmail` à faux.
-            if (CategorieDesabonnement.EstCommerciale(categorie)) return requete.Where(p => p.OffresEmail);
+            if (CategorieDesabonnement.EstCommerciale(categorie)) return requete.Where(ConsentEnVigueur(categorie!));
 
             return categorie == null
                 ? requete
                 : requete.Where(p => !_context.DesabonnementsMail.Any(d => d.ParentId == p.Id && d.Categorie == categorie));
         }
+
+        /// <summary>
+        /// LE CONSENTEMENT AUX OFFRES EN VIGUEUR : la case cochée, ET aucune désinscription écrite APRÈS l'accord.
+        ///
+        /// LE PIÈGE DU RETOUR ARRIÈRE (20/11/2026, revue d'Omar). L'ancien code ne connaît pas `OffresEmail` : un parent
+        /// qui se désinscrit pendant un retour arrière n'y laisse qu'une ligne `DesabonnementMail` « diffusion », et
+        /// garde `OffresEmail = 1`. Sans ce test, la remise en ligne du lot lui renverrait les offres. Une ligne
+        /// ANTÉRIEURE à l'accord, elle, ne compte pas : c'est l'ancien désabonnement des « annonces », dépassé par la case
+        /// cochée depuis. Un accord sans date (impossible par le code) ne résiste à aucune ligne.
+        ///
+        /// UNE SEULE DÉFINITION, pour l'envoi (`Joignables`) comme pour l'état affiché (`EstDesabonneAsync`).
+        /// </summary>
+        private Expression<Func<Entities.Parent, bool>> ConsentEnVigueur(string categorie) =>
+            p => p.OffresEmail
+                 && !_context.DesabonnementsMail.Any(d =>
+                     d.ParentId == p.Id
+                     && d.Categorie == categorie
+                     && (p.OffresEmailConsentiLe == null || d.DateCreation > p.OffresEmailConsentiLe));
 
         public async Task<IReadOnlyList<DestinataireAutomatique>> GetEssaisExpirantAsync(
             DateTime debutUtc, DateTime finUtc, DateTime maintenantUtc, int limite, CancellationToken ct = default)
@@ -253,29 +272,33 @@ namespace SchoolWebApp.Dal.Repositories
                 .ExecuteUpdateAsync(s => s.SetProperty(e => e.Statut, statut), ct);
 
         /// <summary>
-        /// Pour les offres (catégorie commerciale), « désabonné » veut dire « n'a pas consenti » : un parent qui n'a jamais
-        /// coché la case ne reçoit rien, exactement comme celui qui s'est désinscrit.
+        /// Pour les offres (catégorie commerciale), « désabonné » veut dire « n'a pas de consentement en vigueur » : un
+        /// parent qui n'a jamais coché la case ne reçoit rien, exactement comme celui qui s'est désinscrit — y compris par
+        /// l'ancien code pendant un retour arrière (`ConsentEnVigueur`, la même règle que l'envoi).
         /// </summary>
         public async Task<bool> EstDesabonneAsync(int parentId, string categorie, CancellationToken ct = default) =>
             CategorieDesabonnement.EstCommerciale(categorie)
-                ? !await _context.Parents.AnyAsync(p => p.Id == parentId && p.OffresEmail, ct)
+                ? !await _context.Parents.Where(p => p.Id == parentId).AnyAsync(ConsentEnVigueur(categorie), ct)
                 : await _context.DesabonnementsMail.AnyAsync(d => d.ParentId == parentId && d.Categorie == categorie, ct);
 
-        public async Task DesabonnerAsync(int parentId, string categorie, string source, CancellationToken ct = default)
+        public async Task<bool> DesabonnerAsync(int parentId, string categorie, string source, CancellationToken ct = default)
         {
             // LE RETRAIT DU CONSENTEMENT, EFFET IMMÉDIAT (19/11/2026) : la date du retrait est la preuve. Aucune ligne de
             // désabonnement n'est écrite pour les offres : le consentement suffit, et une ligne survivrait à un nouvel
             // accord. Rien ne change pour qui n'avait pas consenti (pas de fausse date de retrait).
             if (CategorieDesabonnement.EstCommerciale(categorie))
             {
-                await ConsentementOffres.ChangerAsync(_context, parentId, false, source, DateTime.UtcNow, ct);
-                return;
+                // Déjà désinscrit pendant un retour arrière : ce retrait-là entre au journal, à sa date. Ce clic-ci ne
+                // retire rien — le parent ne recevait déjà plus d'offres —, il n'ouvre donc aucun droit d'annulation.
+                if (await ConsentementOffres.InscrireRetraitDuRetourArriereAsync(_context, parentId, ct)) return false;
+
+                return await ConsentementOffres.ChangerAsync(_context, parentId, false, source, DateTime.UtcNow, ct);
             }
 
-            if (await EstDesabonneAsync(parentId, categorie, ct)) return;
+            if (await EstDesabonneAsync(parentId, categorie, ct)) return false;
 
             // Un lien qui désigne un compte supprimé depuis : rien à faire.
-            if (!await _context.Parents.AnyAsync(p => p.Id == parentId, ct)) return;
+            if (!await _context.Parents.AnyAsync(p => p.Id == parentId, ct)) return false;
 
             var ligne = new DesabonnementMail
             {
@@ -289,30 +312,35 @@ namespace SchoolWebApp.Dal.Repositories
             try
             {
                 await _context.SaveChangesAsync(ct);
+                return true;
             }
             catch (DbUpdateException)
             {
                 // Deux clics simultanés : l'autre a gagné, le résultat est le même.
                 _context.Entry(ligne).State = EntityState.Detached;
+                return false;
             }
         }
 
         /// <summary>
         /// Pour les offres, se réabonner c'est CONSENTIR : un geste du parent lui-même (l'interrupteur de son espace, ou
-        /// le bouton « me réabonner » juste après une désinscription, avec le jeton d'annulation), daté, avec sa source. Un consentement déjà donné garde sa date
-        /// d'origine ; la date d'un retrait passé reste, c'est l'historique.
+        /// le bouton « me réabonner » juste après une désinscription, avec le jeton d'annulation), daté, avec sa source.
+        /// Un consentement déjà en vigueur garde sa date d'origine ; la date d'un retrait passé reste, c'est l'historique.
         /// </summary>
         public async Task ReabonnerAsync(int parentId, string categorie, string source, CancellationToken ct = default)
         {
-            // Pour les offres, ce ménage efface une éventuelle ligne d'avant le 19/11/2026 (désabonnement des « annonces »).
-            await _context.DesabonnementsMail
-                .Where(d => d.ParentId == parentId && d.Categorie == categorie)
-                .ExecuteDeleteAsync(ct);
-
+            // POUR LES OFFRES, L'ACCORD D'ABORD : `ConsentementOffres` inscrit au passage, à sa date, une désinscription faite
+            // pendant un retour arrière (il la lit dans `DesabonnementMail`), puis le nouvel accord, daté, avec sa source.
             if (CategorieDesabonnement.EstCommerciale(categorie))
             {
                 await ConsentementOffres.ChangerAsync(_context, parentId, true, source, DateTime.UtcNow, ct);
             }
+
+            // Puis le ménage : pour les offres, il efface une éventuelle ligne d'avant le 19/11/2026 (désabonnement des
+            // « annonces ») ou du retour arrière, désormais inscrite au journal.
+            await _context.DesabonnementsMail
+                .Where(d => d.ParentId == parentId && d.Categorie == categorie)
+                .ExecuteDeleteAsync(ct);
         }
     }
 }

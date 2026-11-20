@@ -24,5 +24,12 @@ namespace SchoolWebApp.Domain.Models
 
         /// <summary>« Je me suis trompé » juste après une désinscription, avec le jeton d'annulation de cette page.</summary>
         public const string AnnulationDesinscription = "annulation_desinscription";
+
+        /// <summary>
+        /// Désinscription faite pendant un retour arrière, par l'ANCIEN code (20/11/2026, revue d'Omar) : il écrivait une
+        /// ligne `DesabonnementMail` « diffusion » sans toucher au consentement. Le retrait est inscrit au journal à la
+        /// date de cette ligne, quand le parent repasse par la désinscription ou par l'interrupteur de son espace.
+        /// </summary>
+        public const string RetourArriere = "retour_arriere";
     }
 }

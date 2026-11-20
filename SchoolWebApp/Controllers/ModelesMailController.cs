@@ -519,6 +519,14 @@ namespace SchoolWebApp.Api.Controllers
             faute = VerifierEnvoi(detail);
             if (faute is not null) return BadRequest(new { message = faute });
 
+            // UNE INFORMATION DE SERVICE QUI CONTIENT `{{lien_desinscription}}` (20/11/2026, revue d'Omar) : c'est un modèle
+            // d'offre réutilisé. Refusé ici, pour qu'aucun appel direct ne la fasse partir à tous les parents.
+            if (modeLu == ModeDiffusion.Service
+                && DiffusionService.ContientLienDesinscription(detail.Sujet, detail.Titre, detail.Texte))
+            {
+                return BadRequest(new { message = DiffusionService.RefusLienDansInformationService });
+            }
+
             var courriel = _composeur.Composer(detail, await _modeles.GetPiecesAsync(id, ct));
 
             // Le sujet et le titre partent BRUTS : la diffusion remplace

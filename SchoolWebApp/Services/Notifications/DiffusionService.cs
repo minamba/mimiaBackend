@@ -388,6 +388,24 @@ namespace SchoolWebApp.Api.Services.Notifications
         /// </summary>
         public static readonly IReadOnlyList<string> ClesLienDesinscription = ["lien_desinscription", "lienDesinscription"];
 
+        // Large exprès : avec ou sans espaces, sans tenir compte de la casse — `{{ Lien_Desinscription }}` trahit autant
+        // le modèle d'offre réutilisé que la forme exacte.
+        private static readonly Regex MarqueurLienDesinscription = new(
+            @"\{\{\s*(lien_desinscription|liendesinscription)\s*\}\}", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+        /// <summary>
+        /// Vrai si l'un des textes contient `{{lien_desinscription}}` (ou `{{lienDesinscription}}`). Dans une information de
+        /// service, c'est le signe d'un modèle d'offre réutilisé (20/11/2026, revue d'Omar) : l'envoi est refusé.
+        /// </summary>
+        public static bool ContientLienDesinscription(params string?[] textes) =>
+            textes.Any(t => !string.IsNullOrEmpty(t) && MarqueurLienDesinscription.IsMatch(t));
+
+        /// <summary>Le message du refus, le même pour l'écran et pour un appel direct.</summary>
+        public const string RefusLienDansInformationService =
+            "Ce texte contient {{lien_desinscription}} : c’est la marque d’une offre commerciale. Une information de service "
+            + "n’a pas de lien de désinscription. Retirez cette variable, ou envoyez ce message comme « Message de diffusion » "
+            + "(offres, aux seuls parents qui les acceptent).";
+
         /// <summary>Ajoute la variable du lien de désinscription, si le lien existe (une clé de signature configurée).</summary>
         public static void AjouterLienDesinscription(IDictionary<string, ValeurVariable> variables, string? lien)
         {

@@ -32,11 +32,18 @@ namespace SchoolWebApp.Api.Controllers
     [AllowAnonymous]
     public class DesabonnementController : ControllerBase
     {
-        // Une route publique qui écrit en base se protège d'un robot qui la
-        // bombarderait. Trente appels par heure suffisent à un humain qui se
-        // trompe, se réabonne et se ravise.
-        private static readonly ConcurrentDictionary<string, List<DateTime>> Appels = new();
-        private const int MaxParHeure = 30;
+        // SEULS LES ÉCHECS SONT LIMITÉS (20/11/2026, revue d'Omar). Une route publique se protège d'un robot qui
+        // essaierait des jetons au hasard : trente jetons refusés par heure et par IP, puis 429. Mais une désinscription
+        // avec un jeton VALIDE n'est JAMAIS bloquée : les POST « un clic » (RFC 8058) arrivent des serveurs de Gmail ou
+        // de Yahoo, des IP partagées par des milliers de destinataires, et un envoi d'offres en déclenche des dizaines
+        // en quelques minutes. Les limiter, ce serait refuser des désinscriptions — l'inverse de ce que dit la loi.
+        // Vérifier un jeton ne coûte qu'un HMAC, sans base : on peut toujours le vérifier avant de compter.
+        //
+        // L'IP : derrière Traefik, `RemoteIpAddress` est celle du client et non celle du proxy, parce que le conteneur
+        // tourne avec `ASPNETCORE_FORWARDEDHEADERS_ENABLED=true` (docker-compose.production.yml) : ASP.NET Core lit alors
+        // `X-Forwarded-For`, que Traefik réécrit avec l'adresse réelle.
+        private static readonly ConcurrentDictionary<string, List<DateTime>> Echecs = new();
+        private const int MaxEchecsParHeure = 30;
 
         /// <summary>Le temps laissé pour revenir sur une désinscription des offres, depuis la page qui l'a faite.</summary>
         public static readonly TimeSpan DureeAnnulation = TimeSpan.FromMinutes(30);
@@ -65,13 +72,11 @@ namespace SchoolWebApp.Api.Controllers
         [HttpGet]
         [SwaggerResponse(200, "La catégorie et l'état.")]
         [SwaggerResponse(400, "Lien invalide.")]
-        [SwaggerResponse(429, "Trop d'appels.")]
+        [SwaggerResponse(429, "Trop de jetons refusés depuis cette adresse (jamais pour un jeton valide).")]
         public async Task<IActionResult> Lire([FromQuery] string? jeton, CancellationToken ct)
         {
-            if (TropDAppels()) return StatusCode(429, new { message = "Trop de tentatives. Réessayez dans une heure." });
-
             var lu = _jetons.Lire(jeton);
-            if (lu is null) return BadRequest(new { message = LienInvalide });
+            if (lu is null) return Refus(BadRequest(new { message = LienInvalide }));
 
             var desabonne = await _envois.EstDesabonneAsync(lu.Value.ParentId, lu.Value.Categorie, ct);
 
@@ -88,21 +93,26 @@ namespace SchoolWebApp.Api.Controllers
         [HttpPost]
         [SwaggerResponse(200, "Désabonné.")]
         [SwaggerResponse(400, "Lien invalide.")]
+        [SwaggerResponse(429, "Trop de jetons refusés depuis cette adresse (jamais pour un jeton valide).")]
         public async Task<IActionResult> Desabonner([FromBody] JetonRequest? requete, CancellationToken ct)
         {
-            if (TropDAppels()) return StatusCode(429, new { message = "Trop de tentatives. Réessayez dans une heure." });
-
             var lu = _jetons.Lire(requete?.Jeton);
-            if (lu is null) return BadRequest(new { message = LienInvalide });
+            if (lu is null) return Refus(BadRequest(new { message = LienInvalide }));
 
-            await _envois.DesabonnerAsync(lu.Value.ParentId, lu.Value.Categorie, SourceConsentement.LienCourriel, ct);
+            var retire = await _envois.DesabonnerAsync(lu.Value.ParentId, lu.Value.Categorie, SourceConsentement.LienCourriel, ct);
 
             _logger.LogInformation(
-                "Parent {Parent} desabonne de « {Categorie} ».", lu.Value.ParentId, lu.Value.Categorie);
+                "Parent {Parent} desabonne de « {Categorie} » ({Effet}).",
+                lu.Value.ParentId, lu.Value.Categorie, retire ? "fait" : "deja fait");
 
             // Pour les offres, le droit de revenir sur ce clic, et lui seulement : un jeton d'annulation de courte durée,
             // remis à la page qui vient de désinscrire (voir `Reabonner`).
-            var jetonAnnulation = CategorieDesabonnement.EstCommerciale(lu.Value.Categorie)
+            //
+            // SEULEMENT SI CE CLIC A RETIRÉ UN CONSENTEMENT EN VIGUEUR (20/11/2026, revue d'Omar). Sinon, quiconque tient
+            // le lien d'un parent qui n'a jamais consenti (ou s'est déjà désinscrit) pourrait enchaîner « désinscription »
+            // puis « je me suis trompé », et fabriquer un consentement « annulation_desinscription » que ce parent n'a
+            // jamais donné. Annuler, c'est revenir à l'état d'avant : on ne revient pas à un accord qui n'existait pas.
+            var jetonAnnulation = CategorieDesabonnement.EstCommerciale(lu.Value.Categorie) && retire
                 ? _jetons.CreerAnnulation(lu.Value.ParentId, lu.Value.Categorie, DateTime.UtcNow, DureeAnnulation)
                 : null;
 
@@ -124,19 +134,17 @@ namespace SchoolWebApp.Api.Controllers
         [SwaggerResponse(403, "Offres : réabonnement possible seulement depuis l'espace parent ou juste après la désinscription.")]
         public async Task<IActionResult> Reabonner([FromBody] JetonRequest? requete, CancellationToken ct)
         {
-            if (TropDAppels()) return StatusCode(429, new { message = "Trop de tentatives. Réessayez dans une heure." });
-
             var lu = _jetons.Lire(requete?.Jeton);
-            if (lu is null) return BadRequest(new { message = LienInvalide });
+            if (lu is null) return Refus(BadRequest(new { message = LienInvalide }));
 
             if (CategorieDesabonnement.EstCommerciale(lu.Value.Categorie)
                 && !_jetons.AnnulationValide(requete?.JetonAnnulation, lu.Value.ParentId, lu.Value.Categorie, DateTime.UtcNow))
             {
-                return StatusCode(StatusCodes.Status403Forbidden, new
+                return Refus(StatusCode(StatusCodes.Status403Forbidden, new
                 {
                     code = "reabonnement_espace_parent",
                     message = ReabonnementEspaceParent,
-                });
+                }));
             }
 
             await _envois.ReabonnerAsync(
@@ -163,29 +171,36 @@ namespace SchoolWebApp.Api.Controllers
         [SwaggerResponse(400, "Lien invalide.")]
         public async Task<IActionResult> UnClic([FromQuery] string? jeton, CancellationToken ct)
         {
-            if (TropDAppels()) return StatusCode(429);
-
             var lu = _jetons.Lire(jeton);
-            if (lu is null) return BadRequest();
+            if (lu is null) return Refus(BadRequest());
 
             await _envois.DesabonnerAsync(lu.Value.ParentId, lu.Value.Categorie, SourceConsentement.UnClic, ct);
             return Ok();
         }
 
-        private bool TropDAppels()
+        /// <summary>
+        /// Un jeton refusé : compté pour cette IP, et au-delà de trente par heure, 429 à la place de la réponse prévue.
+        /// Une requête au jeton valide ne passe jamais par ici.
+        /// </summary>
+        private IActionResult Refus(IActionResult reponse)
         {
-            var depuis = DateTime.UtcNow.AddHours(-1);
+            var maintenant = DateTime.UtcNow;
+            var depuis = maintenant.AddHours(-1);
             var cle = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "inconnue";
-            var recents = Appels.GetOrAdd(cle, _ => new List<DateTime>());
+            var recents = Echecs.GetOrAdd(cle, _ => new List<DateTime>());
 
             lock (recents)
             {
                 recents.RemoveAll(d => d < depuis);
-                if (recents.Count >= MaxParHeure) return true;
+                if (recents.Count >= MaxEchecsParHeure)
+                {
+                    return StatusCode(StatusCodes.Status429TooManyRequests, new { message = "Trop de tentatives. Réessayez dans une heure." });
+                }
 
-                recents.Add(DateTime.UtcNow);
-                return false;
+                recents.Add(maintenant);
             }
+
+            return reponse;
         }
 
         public class JetonRequest

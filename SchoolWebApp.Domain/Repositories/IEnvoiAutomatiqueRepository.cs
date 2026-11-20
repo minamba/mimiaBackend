@@ -77,7 +77,12 @@ namespace SchoolWebApp.Domain.Repositories
 
         /// <summary>Idempotent : désabonner deux fois ne fait rien de plus. Pour les offres : retire le consentement, daté.</summary>
         /// <param name="source">Où le parent a fait ce geste (`SourceConsentement`) : gardé pour les offres.</param>
-        Task DesabonnerAsync(int parentId, string categorie, string source, CancellationToken ct = default);
+        /// <returns>
+        /// VRAI SEULEMENT SI CE GESTE A CHANGÉ QUELQUE CHOSE (20/11/2026, revue d'Omar) : pour les offres, un consentement
+        /// réellement en vigueur vient d'être retiré ; pour les autres catégories, le parent vient d'être désabonné. Faux
+        /// pour un parent qui ne recevait déjà plus rien — c'est ce qui décide du jeton d'annulation.
+        /// </returns>
+        Task<bool> DesabonnerAsync(int parentId, string categorie, string source, CancellationToken ct = default);
 
         /// <summary>Pour les offres : donne le consentement, daté (geste du parent lui-même).</summary>
         /// <param name="source">Où le parent a fait ce geste (`SourceConsentement`) : gardé pour les offres.</param>

@@ -170,6 +170,67 @@ namespace SchoolWebApp.Tests
             modeles.Verify(m => m.GetDetailAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
         }
 
+        [Theory]
+        [InlineData("Bonjour {{prenom}}, profitez de -50 % : {{lien_desinscription}}", null, true)]
+        [InlineData("Texte sans variable", "Titre {{lienDesinscription}}", true)]
+        [InlineData("Texte {{ Lien_Desinscription }}", null, true)]
+        [InlineData("Nos prix changent le 1er décembre, {{prenom}}.", "Nouveaux prix", false)]
+        [InlineData("Le lien de désinscription n'existe pas ici.", null, false)]
+        public async Task Information_de_service_avec_le_lien_de_desinscription_refusee_et_rien_ne_part(
+            string texte, string? titre, bool refuse)
+        {
+            // Revue d'Omar du 20/11/2026 (mineur 5) : `{{lien_desinscription}}` dans une information de service = un
+            // modèle d'offre réutilisé. 400 avec un message clair, même confirmation cochée, et personne ne reçoit rien.
+            await CreerParentAsync();
+            var modeles = new Mock<IModeleMailRepository>();
+            modeles.Setup(m => m.GetDetailAsync(7, It.IsAny<CancellationToken>())).ReturnsAsync(new ModeleMailDetail
+            {
+                Id = 7, Nature = NatureModeleMail.Diffusion, Sujet = "Information Mimia", Titre = titre ?? string.Empty, Texte = texte,
+            });
+            modeles.Setup(m => m.GetPiecesAsync(7, It.IsAny<CancellationToken>())).ReturnsAsync([]);
+            var (diffusion, envois) = Diffusion(Jetons);
+            var controleur = new ModelesMailController(
+                modeles.Object, new ComposeurModeleMail(diffusion), diffusion,
+                Microsoft.Extensions.Options.Options.Create(new OptionsEmail()), NullLogger<ModelesMailController>.Instance);
+
+            var reponse = await controleur.Diffuser(7, CancellationToken.None, "service", confirmationNonCommerciale: true);
+
+            if (refuse)
+            {
+                var refus = Assert.IsType<BadRequestObjectResult>(reponse);
+                var message = (string)refus.Value!.GetType().GetProperty("message")!.GetValue(refus.Value)!;
+                Assert.Contains("{{lien_desinscription}}", message);
+                Assert.Contains("Message de diffusion", message);
+                Assert.False(diffusion.Etat.EnCours);
+                Assert.Empty(envois);
+                modeles.Verify(m => m.NoterEnvoiAsync(It.IsAny<int>(), It.IsAny<DateTime>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+            }
+            else
+            {
+                Assert.IsType<AcceptedResult>(reponse);
+                await AttendreFinAsync(diffusion);
+            }
+        }
+
+        [Fact]
+        public async Task Le_meme_template_part_en_offres_avec_son_lien()
+        {
+            // Le refus ne vaut que pour l'information de service : en « Message de diffusion », la variable est à sa place.
+            var modeles = new Mock<IModeleMailRepository>();
+            modeles.Setup(m => m.GetDetailAsync(8, It.IsAny<CancellationToken>())).ReturnsAsync(new ModeleMailDetail
+            {
+                Id = 8, Nature = NatureModeleMail.Diffusion, Sujet = "Offre", Texte = "Profitez-en : {{lien_desinscription}}",
+            });
+            modeles.Setup(m => m.GetPiecesAsync(8, It.IsAny<CancellationToken>())).ReturnsAsync([]);
+            var (diffusion, _) = Diffusion(Jetons);
+            var controleur = new ModelesMailController(
+                modeles.Object, new ComposeurModeleMail(diffusion), diffusion,
+                Microsoft.Extensions.Options.Options.Create(new OptionsEmail()), NullLogger<ModelesMailController>.Instance);
+
+            Assert.IsType<AcceptedResult>(await controleur.Diffuser(8, CancellationToken.None, "offres"));
+            await AttendreFinAsync(diffusion);
+        }
+
         [Fact]
         public async Task L_information_de_service_part_aux_non_consentants_sans_lien_ni_en_tetes_meme_sans_cle()
         {
