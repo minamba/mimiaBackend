@@ -64,6 +64,30 @@ namespace SchoolWebApp.Api.Services
             RegexOptions.IgnoreCase)]
         private static partial Regex PartieDecomposee();
 
+        /// <summary>
+        /// LE TABLEAU À TROUS — Minamba, le 20/11/2026, signalement #46. Au 2e essai sur 20, Nora a réécrit le tableau
+        /// « 20 = 2 dizaines + ? unités » et demandé « Il reste combien d'unités, dans 20 ? » : une question que
+        /// <see cref="QuestionDecomposition"/> ne lit pas (elle ne porte que sur les unités). Le code ne jugeait donc
+        /// rien, et « 2 dizaines et 0 unité », juste, a été refusé, puis « 0 » validé avec « je me suis trompée ».
+        /// Le tableau dit exactement ce qui est demandé : les cases « ? » (ou « … », « ___ »).
+        /// </summary>
+        [GeneratedRegex(@"(?<![\d,])(?<n>\d{1,4})\s*=\s*(?<parties>" + CaseDuTableau + @"(?:\s*(?:\+|et|,)\s*" + CaseDuTableau + @"){0,2})(?![ \t]*[+\d])",
+            RegexOptions.IgnoreCase)]
+        private static partial Regex TableauATrous();
+
+        private const string CaseDuTableau = @"(?:\d{1,4}|\?|…|_+|\.{2,})\s*(?:centaines?|dizaines?|unit[ée]s?)(?!\p{L})";
+
+        [GeneratedRegex(@"(?<v>\d{1,4}|\?|…|_+|\.{2,})\s*(?<u>centaines?|dizaines?|unit[ée]s?)(?!\p{L})", RegexOptions.IgnoreCase)]
+        private static partial Regex CaseLue();
+
+        /// <summary>
+        /// Une relance qui ne demande qu'UN rang : « Combien d'unités restent, alors ? », « Il reste combien
+        /// d'unités ? ». Elle ne sert qu'à préciser une décomposition déjà posée plus haut, jamais seule : sans
+        /// contexte, « combien d'unités dans 20 ? » peut attendre 0 (le chiffre) ou 20 (le nombre d'unités).
+        /// </summary>
+        [GeneratedRegex(@"combien\s+(?:d'|d’|de\s+)(?<u>centaines|dizaines|unit[ée]s)", RegexOptions.IgnoreCase)]
+        private static partial Regex RangDemande();
+
         [GeneratedRegex(@"\d+(?:[.,]\d+)?")]
         private static partial Regex NombreEnChiffres();
 
@@ -84,8 +108,8 @@ namespace SchoolWebApp.Api.Services
             var question = DerniereQuestion(messagesDuProfesseur);
             if (question is null) return null;
 
-            return question.Value.Decomposition is int n
-                ? JugerDecomposition(n, question.Value.AvecCentaines, reponse)
+            return question.Value.Decomposition is { } decomposition
+                ? JugerDecomposition(decomposition, reponse)
                 : JugerCalcul(question.Value.Expression!, question.Value.Resultat, reponse);
         }
 
@@ -143,7 +167,15 @@ namespace SchoolWebApp.Api.Services
 
         // ───────────── La question ─────────────
 
-        private readonly record struct Question(string? Expression, string Resultat, int? Decomposition, bool AvecCentaines);
+        private readonly record struct Question(string? Expression, string Resultat, DecompositionPosee? Decomposition);
+
+        /// <summary>
+        /// Une décomposition à donner : le nombre, la valeur attendue de chaque rang (c, d, u), les rangs qu'on demande
+        /// vraiment (les cases vides du tableau, ou tous pour « combien de dizaines et d'unités dans 20 ? ») et si la
+        /// décomposition attendue est l'ordinaire (2 dizaines et 0 unité) ou une autre que le tableau impose
+        /// (« 20 = 1 dizaine + ? unités » attend 10 unités).
+        /// </summary>
+        private sealed record DecompositionPosee(int N, Dictionary<char, int> Attendues, HashSet<char> Demandes, bool Ordinaire, string Enonce);
 
         /// <summary>
         /// La question du message le plus récent qui en pose une. Un message sans « ? » (« Ce n'est pas encore ça.
@@ -156,6 +188,10 @@ namespace SchoolWebApp.Api.Services
             // tous appartenir à la question retrouvée plus haut, sinon on ne sait pas de quoi la relance parle.
             var nombresDesRelances = new List<decimal>();
 
+            // Le rang que demande la relance la plus récente (« Combien d'unités restent, alors ? ») : '\0' tant
+            // qu'aucune relance n'en demande, null si elle en demande plusieurs.
+            char? rangDeLaRelance = '\0';
+
             foreach (var message in messagesDuProfesseur.Reverse().Take(MessagesRemontes))
             {
                 if (string.IsNullOrWhiteSpace(message)) continue;
@@ -163,36 +199,40 @@ namespace SchoolWebApp.Api.Services
                 var calculs = Calculs(message, out var illisible);
                 if (illisible) return null;
 
-                var decompositions = QuestionDecomposition().Matches(message)
-                    .Select(m => int.Parse(m.Groups["n"].Value, CultureInfo.InvariantCulture))
-                    .Distinct()
-                    .ToList();
-
-                // La décomposition ne vaut que si la question parle aussi des unités (ou des centaines) : « combien
-                // de dizaines dans 47 ? » attend 4, pas une décomposition.
-                if (decompositions.Count > 0 && !Regex.IsMatch(message, @"unit[ée]s|centaines", RegexOptions.IgnoreCase))
-                {
-                    decompositions.Clear();
-                }
+                var decompositions = Decompositions(message);
+                if (decompositions is null) return null;
 
                 if (calculs.Count + decompositions.Count > 1) return null;
 
                 if (calculs.Count == 1)
                 {
+                    // Une relance « combien d'unités ? » ne parle pas d'un calcul : on ne sait plus ce qui est demandé.
+                    if (rangDeLaRelance != '\0') return null;
+
                     var (expression, resultat) = calculs[0];
                     var operandes = Operandes(expression);
                     return nombresDesRelances.All(operandes.Contains)
-                        ? new Question(expression, Ecrire(resultat), null, false)
+                        ? new Question(expression, Ecrire(resultat), null)
                         : null;
                 }
 
                 if (decompositions.Count == 1)
                 {
-                    var n = decompositions[0];
-                    var avecCentaines = n >= 100 || Regex.IsMatch(message, "centaines", RegexOptions.IgnoreCase);
-                    return nombresDesRelances.All(x => x == n)
-                        ? new Question(null, n.ToString(CultureInfo.InvariantCulture), n, avecCentaines)
-                        : null;
+                    var d = decompositions[0];
+
+                    // Une relance sur une décomposition parle du nombre, de ses chiffres et de la dizaine : « Regarde :
+                    // 20, c'est bien 2 dizaines », « une dizaine, c'est 10 unités ».
+                    var permis = d.Attendues.Values.Select(v => (decimal)v).Append(d.N).Append(1).Append(10).Append(100).ToHashSet();
+                    if (!nombresDesRelances.All(permis.Contains)) return null;
+
+                    // « Combien d'unités restent, alors ? » après « 20 = 2 dizaines + ? unités » : on attend les unités.
+                    if (rangDeLaRelance is char rang && rang != '\0')
+                    {
+                        if (!d.Attendues.ContainsKey(rang)) return null;
+                        d = d with { Demandes = new HashSet<char> { rang } };
+                    }
+
+                    return new Question(null, d.N.ToString(CultureInfo.InvariantCulture), d);
                 }
 
                 // Un tableau réécrit ou effacé sans qu'on lise de question : l'exercice d'avant n'est plus affiché.
@@ -210,12 +250,104 @@ namespace SchoolWebApp.Api.Services
                 // (« il en reste », « ça fait », « en tout », « essaie »…) et ne cite aucun autre nombre que ceux du
                 // calcul. Sinon (« Maintenant, calcule 9 - 4. », « Combien de billes a Paul ? ») : on ne remonte plus.
                 // Une relance ne félicite pas : « Bravo, tu as trouvé le résultat ! Tu en veux un autre ? » clôt la question.
-                if (!RelanceDeCalcul().IsMatch(message) || Felicite().IsMatch(message)) return null;
+                var rangs = RangDemande().Matches(message).Select(m => char.ToLowerInvariant(m.Groups["u"].Value[0])).Distinct().ToList();
+                if (!(RelanceDeCalcul().IsMatch(message) || rangs.Count > 0) || Felicite().IsMatch(message)) return null;
                 nombresDesRelances.AddRange(nombres);
+
+                // Signalement #46 : seule la relance la plus récente dit ce qu'on attend maintenant.
+                if (rangDeLaRelance == '\0' && rangs.Count > 0) rangDeLaRelance = rangs.Count == 1 ? rangs[0] : null;
             }
 
             return null;
         }
+
+        /// <summary>
+        /// Les décompositions demandées dans un message : en toutes lettres (« combien de dizaines et d'unités dans
+        /// 20 ? ») ou par un tableau à trous (« 20 = 2 dizaines + ? unités »). Plusieurs nombres : null (illisible).
+        /// Un tableau entièrement rempli (« 17 = 1 dizaine + 7 unités », l'exemple) ne demande rien.
+        /// </summary>
+        private static List<DecompositionPosee>? Decompositions(string message)
+        {
+            var parNombre = new Dictionary<int, DecompositionPosee>();
+
+            // La décomposition en toutes lettres ne vaut que si la question parle aussi des unités (ou des
+            // centaines) : « combien de dizaines dans 47 ? » attend 4 ou 47 selon la classe, pas une décomposition.
+            if (Regex.IsMatch(message, @"unit[ée]s|centaines", RegexOptions.IgnoreCase))
+            {
+                foreach (Match m in QuestionDecomposition().Matches(message))
+                {
+                    var n = int.Parse(m.Groups["n"].Value, CultureInfo.InvariantCulture);
+                    var avecCentaines = n >= 100 || Regex.IsMatch(message, "centaines", RegexOptions.IgnoreCase);
+                    var attendues = Ordinaire(n, avecCentaines);
+                    parNombre[n] = new DecompositionPosee(n, attendues, attendues.Keys.ToHashSet(), true,
+                        $"combien de {(avecCentaines ? "centaines, de dizaines" : "dizaines")} et d'unités dans {n}");
+                }
+            }
+
+            foreach (Match m in TableauATrous().Matches(message))
+            {
+                var tableau = LireTableau(m);
+                if (tableau is null) continue;
+
+                // Le tableau dit précisément ce qui manque ; la question en lettres sur le même nombre ne retire rien.
+                if (parNombre.TryGetValue(tableau.N, out var enLettres))
+                {
+                    if (!enLettres.Attendues.All(a => tableau.Attendues.TryGetValue(a.Key, out var v) && v == a.Value)) return null;
+                    tableau = tableau with { Demandes = tableau.Demandes.Union(enLettres.Demandes).ToHashSet() };
+                }
+                parNombre[tableau.N] = tableau;
+            }
+
+            return parNombre.Values.ToList();
+        }
+
+        /// <summary>« 20 = 2 dizaines + ? unités » → 20, on attend 2 dizaines et 0 unité, on demande les unités.</summary>
+        private static DecompositionPosee? LireTableau(Match m)
+        {
+            var n = int.Parse(m.Groups["n"].Value, CultureInfo.InvariantCulture);
+            var remplies = new Dictionary<char, int>();
+            var vides = new List<char>();
+
+            foreach (Match c in CaseLue().Matches(m.Groups["parties"].Value))
+            {
+                var rang = char.ToLowerInvariant(c.Groups["u"].Value[0]);
+                if (remplies.ContainsKey(rang) || vides.Contains(rang)) return null;
+
+                if (int.TryParse(c.Groups["v"].Value, NumberStyles.None, CultureInfo.InvariantCulture, out var v)) remplies[rang] = v;
+                else vides.Add(rang);
+            }
+
+            if (vides.Count == 0) return null;
+
+            var ordinaire = Ordinaire(n, n >= 100 || remplies.ContainsKey('c') || vides.Contains('c'));
+            Dictionary<char, int> attendues;
+
+            if (vides.Count == 1)
+            {
+                // Une seule case vide : ce qui reste du nombre, dans le rang de la case (« 20 = 1 dizaine + ? unités »
+                // attend 10). Si ça ne tombe pas juste, on ne sait pas ce qui est demandé.
+                var reste = n - remplies.Sum(r => r.Value * Poids(r.Key));
+                if (reste < 0 || reste % Poids(vides[0]) != 0) return null;
+                attendues = new Dictionary<char, int>(remplies) { [vides[0]] = reste / Poids(vides[0]) };
+            }
+            else
+            {
+                // Plusieurs cases vides : seulement la décomposition ordinaire, rang par rang.
+                var rangs = remplies.Keys.Concat(vides).ToHashSet();
+                if (!rangs.SetEquals(ordinaire.Keys) || remplies.Any(r => ordinaire[r.Key] != r.Value)) return null;
+                attendues = ordinaire;
+            }
+
+            var estOrdinaire = attendues.Count == ordinaire.Count && attendues.All(a => ordinaire.TryGetValue(a.Key, out var o) && o == a.Value);
+            var enonce = Regex.Replace(m.Value.Trim(), @"\s+", " ");
+            return new DecompositionPosee(n, attendues, vides.ToHashSet(), estOrdinaire, enonce);
+        }
+
+        private static Dictionary<char, int> Ordinaire(int n, bool avecCentaines) => avecCentaines
+            ? new Dictionary<char, int> { ['c'] = n / 100, ['d'] = n / 10 % 10, ['u'] = n % 10 }
+            : new Dictionary<char, int> { ['d'] = n / 10, ['u'] = n % 10 };
+
+        private static int Poids(char rang) => rang switch { 'c' => 100, 'd' => 10, _ => 1 };
 
         /// <summary>Trois messages : la question, puis les deux relances de la règle des trois essais.</summary>
         public const int MessagesRemontes = 3;
@@ -388,6 +520,17 @@ namespace SchoolWebApp.Api.Services
             }
 
             var dit = reponse.Contains('=') ? reponse[(reponse.LastIndexOf('=') + 1)..] : reponse;
+            var valeur = ValeurUnique(dit);
+            if (valeur is null) return null;
+
+            var donne = Ecrire(valeur.Value);
+            return new Verdict(expression + " = ?", attendu, donne, donne == attendu ? Jugement.Juste : Jugement.Faux);
+        }
+
+        /// <summary>La seule valeur que porte la réponse (« 7 », « sept », « c'est 7 je crois »), sinon null.</summary>
+        private static decimal? ValeurUnique(string dit)
+        {
+            // Un nombre négatif (« moins 1 ») ne se lit pas encore : pas de verdict.
             if (Regex.IsMatch(dit, @"[-−–]\s*\d|\bmoins\b", RegexOptions.IgnoreCase)) return null;
 
             var valeurs = NombreEnChiffres().Matches(dit)
@@ -400,15 +543,12 @@ namespace SchoolWebApp.Api.Services
                 .Distinct()
                 .ToList();
 
-            if (toutes.Count != 1) return null;
-
-            var donne = Ecrire(toutes[0]);
-            return new Verdict(expression + " = ?", attendu, donne, donne == attendu ? Jugement.Juste : Jugement.Faux);
+            return toutes.Count == 1 ? toutes[0] : null;
         }
 
         // ───────────── La décomposition ─────────────
 
-        private static Verdict? JugerDecomposition(int n, bool avecCentaines, string reponse)
+        private static Verdict? JugerDecomposition(DecompositionPosee d, string reponse)
         {
             var parties = new Dictionary<char, int>();
 
@@ -422,26 +562,41 @@ namespace SchoolWebApp.Api.Services
                 parties[rang] = valeur.Value;
             }
 
-            if (parties.Count == 0) return null;
-
-            var attendues = avecCentaines
-                ? new Dictionary<char, int> { ['c'] = n / 100, ['d'] = n / 10 % 10, ['u'] = n % 10 }
-                : new Dictionary<char, int> { ['d'] = n / 10, ['u'] = n % 10 };
-
-            // Des centaines dans une question qui n'en parle pas : on compte quand même leur valeur.
-            var total = parties.Sum(p => p.Key switch { 'c' => p.Value * 100, 'd' => p.Value * 10, _ => p.Value });
-            var question = $"combien de {(avecCentaines ? "centaines, de dizaines" : "dizaines")} et d'unités dans {n}";
-            var attendu = Decrire(attendues);
-            var donne = Decrire(parties);
-
-            var conformes = parties.All(p => attendues.TryGetValue(p.Key, out var a) && a == p.Value);
-            if (conformes)
+            if (parties.Count == 0)
             {
-                var manque = attendues.Any(a => !parties.ContainsKey(a.Key) && a.Value != 0);
-                return new Verdict(question, attendu, donne, manque ? Jugement.Incomplet : Jugement.Juste);
+                // « 0 » tout court, quand on ne demande qu'un rang (« 20 = 2 dizaines + ? unités », « Combien d'unités
+                // restent ? ») — signalement #46, étape 4. Quand on demande tout, un nombre seul ne se lit pas.
+                if (d.Demandes.Count != 1) return null;
+                var seul = ValeurUnique(reponse);
+                if (seul is null || seul.Value != Math.Floor(seul.Value) || seul.Value > 9999) return null;
+
+                var rang = d.Demandes.Single();
+                var attenduDuRang = new Dictionary<char, int> { [rang] = d.Attendues[rang] };
+                var donneDuRang = new Dictionary<char, int> { [rang] = (int)seul.Value };
+                return new Verdict(d.Enonce, Decrire(attenduDuRang), Decrire(donneDuRang),
+                    (int)seul.Value == d.Attendues[rang] ? Jugement.Juste : Jugement.Faux);
             }
 
-            return new Verdict(question, attendu, donne, total == n ? Jugement.AutreDecomposition : Jugement.Faux);
+            // « 2 dizaines » quand le tableau ne demande que les unités : il ne répond pas à la question posée.
+            if (!parties.Keys.Any(d.Demandes.Contains)) return null;
+
+            // Des centaines dans une question qui n'en parle pas : on compte quand même leur valeur.
+            var total = parties.Sum(p => p.Value * Poids(p.Key));
+            var attendu = Decrire(d.Attendues);
+            var donne = Decrire(parties);
+
+            var conformes = parties.All(p => d.Attendues.TryGetValue(p.Key, out var a) && a == p.Value);
+            if (conformes)
+            {
+                var manque = d.Demandes.Any(r => !parties.ContainsKey(r) && d.Attendues[r] != 0);
+                return new Verdict(d.Enonce, attendu, donne, manque ? Jugement.Incomplet : Jugement.Juste);
+            }
+
+            // Le bon nombre, autrement décomposé : « essaie avec le moins d'unités possible » n'a de sens que si on
+            // attendait la décomposition ordinaire. Sinon (« 20 = 1 dizaine + ? unités »), on ne tranche pas.
+            if (total == d.N) return d.Ordinaire ? new Verdict(d.Enonce, attendu, donne, Jugement.AutreDecomposition) : null;
+
+            return new Verdict(d.Enonce, attendu, donne, Jugement.Faux);
         }
 
         private static int? ValeurDuMot(string mot)
