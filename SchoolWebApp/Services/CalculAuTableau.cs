@@ -195,7 +195,9 @@ namespace SchoolWebApp.Api.Services
 
         // « j'ai 7 ans », « attends 2 minutes », « c'est quoi 7 ? » : un nombre dans une phrase qui ne répond pas
         // (contrôle d'Omar, 20/11/2026). « 7 ? » tout court reste une réponse hésitante.
-        [GeneratedRegex(@"(?<!\p{L})(?:ans?|minutes?|heures?|secondes?|quoi|pourquoi|comment|attends?|attendez|pause)(?!\p{L})", RegexOptions.IgnoreCase)]
+        // « Pourquoi pas 8 ? » (contrôle d'Omar #50/#51 v3) est une réponse hésitante aussi : seul « pourquoi » sans « pas »
+        // (« pourquoi 7 ? ») ne répond pas.
+        [GeneratedRegex(@"(?<!\p{L})(?:ans?|minutes?|heures?|secondes?|quoi|pourquoi(?!\s+pas(?!\p{L}))|comment|attends?|attendez|pause)(?!\p{L})", RegexOptions.IgnoreCase)]
         private static partial Regex PasUneReponse();
 
         /// <summary>

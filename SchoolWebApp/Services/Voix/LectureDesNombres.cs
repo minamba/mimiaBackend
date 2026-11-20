@@ -138,7 +138,10 @@ namespace SchoolWebApp.Api.Services.Voix
             // comptage où elle affiche les images »). « Affiche le nombre 23 », « écris-moi 7 au tableau », même hors de
             // la lecture des nombres : le code montre l'IMAGE du nombre (nb-23), au lieu de laisser le professeur l'écrire
             // à la craie. Seulement un nombre du catalogue de sa classe ou d'une classe en dessous (il a une image).
-            if (NombreDemande(message, niveau) is not null) return true;
+            // « Pourquoi pas 8 ? » n'y fait PAS entrer (contrôle d'Omar, v3 — régression #45) : pendant un calcul
+            // (« Combien font 5 + 3 ? »), c'est sa RÉPONSE au calcul, qui doit être jugée. Il ne compte comme demande que
+            // si un nombre est déjà au tableau (la lecture est ouverte : voir plus bas, Affiche(dernier)).
+            if (NombreDemande(message, niveau, pourquoiPas: false) is not null) return true;
 
             var dernier = DernierDuProfesseur(recents);
             if (dernier is null) return false;
@@ -158,6 +161,11 @@ namespace SchoolWebApp.Api.Services.Voix
         // jusqu'à 100 », « on compare des nombres » restaient en lecture, alors que le fait dit « tu la fais »). Trois
         // formes : un verbe qui propose + une activité nommée ; « maintenant » + une activité nommée ; « on » / « je veux »
         // + un verbe d'activité (compter, comparer, calculer…).
+        //
+        // Contrôle d'Omar (v3) : les verbes nus faisaient quitter la lecture sur une remarque de MÉTHODE (« on compte les
+        // dizaines ? », « trente-quatre, on compte les dizaines », « je peux compter sur mes doigts ? », « on va comparer
+        // avec quarante »). Suivis de dizaines / unités / centaines / doigts, ou de « avec » + un nombre, ils ne nomment
+        // plus une activité (voir ObjetDeMethode et RemarqueDeMethode) : il reste dans la lecture.
         [GeneratedRegex(
             @"(?:(?:(?<!\p{L})(?:on|nous)\s+(?:(?:peut|pourrait|va|veut|pourra)\s+)?(?:fai(?:t|s|re)|refai(?:t|re)|pass(?:e|er)\s+(?:à|a|aux|au)|essai(?:e|er)|commenc(?:e|er))"
             + @"|(?<!\p{L})(?:je|j['’])\s*(?:veux|voudrais|aimerais|pr[ée]f[èe]re(?:rais)?|peux)(?:\s+(?:faire|refaire|passer\s+(?:à|a|aux|au)|essayer|apprendre))?"
@@ -168,14 +176,37 @@ namespace SchoolWebApp.Api.Services.Voix
             + @"|fractions?|tables?\s+(?:de|des|du|d['’])|dict[ée]es?|fran[çc]ais|conjugaison|grammaire|orthographe|anglais|histoire|g[ée]ographie|sciences?"
             + @"|comparaisons?|monnaie)(?!\p{L})"
             + @"|(?<!\p{L})(?:(?:on|nous)\s+(?:(?:peut|pourrait|va|veut|pourra)\s+)?|(?:je|j['’])\s*(?:veux|voudrais|aimerais|peux)\s+)"
-            + @"(?:compter?|comparer?|calculer?|ranger?|mesurer?|conjuguer?|dessiner?|r[ée]viser?\s+(?:les|la|le|l['’])\s*(?:tables?|additions?|soustractions?|fractions?))(?!\p{L})"
-            + @"|(?<!\p{L})(?:comptons|comparons|calculons|rangeons|mesurons|conjuguons|dessinons)(?!\p{L}))",
+            + @"(?:compter?|comparer?|calculer?|ranger?|mesurer?|conjuguer?|dessiner?|r[ée]viser?\s+(?:les|la|le|l['’])\s*(?:tables?|additions?|soustractions?|fractions?))(?!\p{L})(?!" + ObjetDeMethode + ")"
+            + @"|(?<!\p{L})(?:comptons|comparons|calculons|rangeons|mesurons|conjuguons|dessinons)(?!\p{L})(?!" + ObjetDeMethode + "))",
             RegexOptions.IgnoreCase)]
         private static partial Regex AutreActivite();
+
+        // Les petits nombres dits en lettres (« avec quarante », « avec dix-sept »). Pas « un » / « une » : « avec un autre… ».
+        private const string MotDeNombre =
+            @"(?:z[ée]ro|deux|trois|quatre|cinq|six|sept|huit|neuf|dix|onze|douze|treize|quatorze|quinze|seize|vingts?|trente|quarante|cinquante|soixante|cents?|mille)(?!\p{L})";
+
+        // Ce qui suit un verbe de méthode (contrôle d'Omar, v3) : les dizaines, les unités, les centaines, les doigts, ou
+        // « avec / à » + un nombre. « On compte jusqu'à 100 », « on compare des nombres » n'y sont pas : ce sont des activités.
+        private const string ObjetDeMethode =
+            @"\s+(?:(?:sur|avec|par|en)\s+)?(?:(?:les|des|mes|tes|ses|nos|vos|leurs?|la|le)\s+|l['’]\s*)?(?:dizaines?|unit[ée]s?|centaines?|milliers?|doigts?)(?!\p{L})"
+            + @"|\s+(?:avec|à|a)\s+(?:(?:le|ce)\s+)?(?:nombre\s+)?(?:\d|" + MotDeNombre + ")";
+
+        // UNE REMARQUE DE MÉTHODE PENDANT LA LECTURE (contrôle d'Omar, v3) : « on compte les dizaines ? », « je peux compter
+        // sur mes doigts ? », « on va comparer avec quarante ». Ce n'est ni une autre activité, ni une lecture : sa lecture
+        // éventuelle est ce qui précède (« trente-quatre, on compte les dizaines » = 34), le nombre qui suit « avec » n'est
+        // pas lu (« on va comparer avec quarante » n'est pas une lecture fausse de 40).
+        [GeneratedRegex(@"(?<!\p{L})(?:(?:on|nous)\s+(?:(?:peut|pourrait|va|veut|pourra|doit)\s+)?|(?:je|j['’])\s*(?:(?:veux|voudrais|aimerais|peux|vais|dois)\s+)?|tu\s+(?:(?:peux|veux|vas)\s+)?)?"
+            + @"(?:compt(?:e|es|er|ons|ez)|compar(?:e|es|er|ons|ez)|calcul(?:e|es|er|ons|ez)|rang(?:e|es|er|eons|ez)|mesur(?:e|es|er|ons|ez))(?=" + ObjetDeMethode + ")",
+            RegexOptions.IgnoreCase)]
+        private static partial Regex RemarqueDeMethode();
 
         /// <summary>Il nomme une autre activité de maths (« on fait une addition ») : la lecture des nombres s'arrête.</summary>
         public static bool DemandeUneAutreActivite(string? message) =>
             !string.IsNullOrWhiteSpace(message) && AutreActivite().IsMatch(message);
+
+        /// <summary>Il fait une remarque de méthode (« on compte les dizaines ? ») : il reste dans la lecture.</summary>
+        public static bool FaitUneRemarqueDeMethode(string? message) =>
+            !string.IsNullOrWhiteSpace(message) && RemarqueDeMethode().IsMatch(message);
 
         // Les mots qui relient sa lecture à sa demande : « vingt-huit. Maintenant on fait une addition ».
         [GeneratedRegex(@"(?:[\s,.;:!…-]|(?<!\p{L})(?:maintenant|et|alors|puis|apr[èe]s|bon|ok|d['’]accord|euh)(?!\p{L}))*$", RegexOptions.IgnoreCase)]
@@ -186,12 +217,15 @@ namespace SchoolWebApp.Api.Services.Voix
         /// lecture de 28 ET une demande d'addition. La lecture est jugée (« Bonne lecture »), puis on change d'exercice.
         /// Renvoie la partie à juger (tout le message s'il ne nomme pas d'autre activité) et la demande qui suit (ou null).
         /// </summary>
+        /// <remarks>Une remarque de méthode (« trente-quatre, on compte les dizaines », contrôle d'Omar v3) se coupe de la même
+        /// façon : 34 est jugé, la remarque reste pour le professeur, et on reste dans la lecture.</remarks>
         public static (string Lecture, string? Suite) Couper(string? message)
         {
             var texte = message ?? string.Empty;
-            var activite = AutreActivite().Match(texte);
-            if (!activite.Success) return (texte, null);
-            var avant = texte[..activite.Index];
+            var coupure = new[] { AutreActivite().Match(texte), RemarqueDeMethode().Match(texte) }
+                .Where(m => m.Success).OrderBy(m => m.Index).FirstOrDefault();
+            if (coupure is null) return (texte, null);
+            var avant = texte[..coupure.Index];
             var liaison = Liaison().Match(avant);
             var fin = liaison.Success ? liaison.Index : avant.Length;
             var suite = texte[fin..].TrimStart(' ', ',', '.', ';', ':', '!', '…', '-', '\n', '\t');
@@ -298,7 +332,8 @@ namespace SchoolWebApp.Api.Services.Voix
         // (sinon une réponse à un calcul ouvrirait la lecture des nombres, et une lecture serait prise pour une demande).
         // « Pourquoi pas le 23 ? » (contrôle d'Omar, #50/#51) : une DEMANDE aussi — Nora promettait « le 23 viendra après »
         // (faux) ; la règle de Min's (#50) est d'afficher le nombre demandé.
-        [GeneratedRegex(@"(?<!\p{L})(?<!\bje\s+(?:te\s+|t['’]\s*)?|\bj['’]\s*)(?:[ée]cri(?:s|re|vez|ves?)|affiche[rsz]?|montre[rsz]?|mets|mettre|mettes?|donne[rz]?|propose[rz]?|pourquoi\s+pas)(?!\p{L})"
+        // Le groupe « pourquoi » dit que la demande est un « pourquoi pas N » (ne fait pas entrer dans la lecture, voir EnCours).
+        [GeneratedRegex(@"(?<!\p{L})(?<!\bje\s+(?:te\s+|t['’]\s*)?|\bj['’]\s*)(?:[ée]cri(?:s|re|vez|ves?)|affiche[rsz]?|montre[rsz]?|mets|mettre|mettes?|donne[rz]?|propose[rz]?|(?<pourquoi>pourquoi\s+pas))(?!\p{L})"
             + @"(?:[-\s,:'’]+(?:moi|nous|le|la|l|ce|cet|au|du|tableau|nombre|chiffre|autre|nouveau|s|il|te|pla[iî]t|stp|maintenant|alors|plut[oô]t|(?:un|une)(?=[-\s]+(?:nombre|chiffre|autre|nouveau)))(?!\p{L}))*"
             + @"[-\s,:'’«""]+(?<suite>[^.!?;\n]{1,60})", RegexOptions.IgnoreCase)]
         private static partial Regex Demande();
@@ -307,11 +342,13 @@ namespace SchoolWebApp.Api.Services.Voix
         private static partial Regex MotApresLeNombre();
 
         /// <summary>Le nombre qu'il demande d'afficher, en écriture canonique (« 23 »), ou null.</summary>
-        public static string? CanoniqueDemande(string? message)
+        /// <param name="pourquoiPas">Faux : « pourquoi pas 8 ? » n'est pas une demande (hors de la lecture, voir EnCours).</param>
+        public static string? CanoniqueDemande(string? message, bool pourquoiPas = true)
         {
             if (string.IsNullOrWhiteSpace(message) || VerdictDeLecture().IsMatch(message)) return null;
             foreach (Match m in Demande().Matches(message))
             {
+                if (!pourquoiPas && m.Groups["pourquoi"].Success) continue;
                 // Seulement le nombre qui suit, mot à mot : « 23 au tableau et je te le lis » → « 23 ».
                 var mots = new List<string>();
                 string? apres = null;
@@ -334,10 +371,10 @@ namespace SchoolWebApp.Api.Services.Voix
         }
 
         /// <summary>Le nombre demandé, s'il est au catalogue de sa classe ou d'une classe en dessous ; null sinon.</summary>
-        public static Element? NombreDemande(string? message, string? niveau)
+        public static Element? NombreDemande(string? message, string? niveau, bool pourquoiPas = true)
         {
             var rang = Rang(niveau);
-            if (rang == 0 || CanoniqueDemande(message) is not { } lu) return null;
+            if (rang == 0 || CanoniqueDemande(message, pourquoiPas) is not { } lu) return null;
             return Tous.FirstOrDefault(e => e.Rang >= 1 && e.Rang <= rang && Normaliser(e.Cible) == lu);
         }
 
@@ -399,8 +436,9 @@ namespace SchoolWebApp.Api.Services.Voix
             if (precedent is not null && verdict is not { Juste: true } && !abandon)
             {
                 // Une question au lieu d'une lecture : il n'a pas essayé, la consigne ne dit pas « essaie encore » (Omar).
+                // Une remarque de méthode sans lecture (« on va comparer avec quarante ») non plus (Omar, v3).
                 return new Tour(precedent, Redite: true, Premier: false, Abandon: false,
-                    SansEssai: verdict is null && EstUneQuestion(messageDeLEleve));
+                    SansEssai: verdict is null && (EstUneQuestion(messageDeLEleve) || FaitUneRemarqueDeMethode(messageDeLEleve)));
             }
 
             var dejaVus = recents.Select(m => Affiche(m.Contenu)?.Cible).Where(c => c is not null).ToHashSet();

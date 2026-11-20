@@ -28,12 +28,20 @@ namespace SchoolWebApp.Api.Services.Voix
         // l'addition posée », « l'ordinateur compte en binaire », « l'application des règles »). Désormais, un de ces
         // mots ne compte que SUJET d'un verbe qui agit sur l'exercice (choisir, afficher, décider, tirer au sort,
         // sélectionner, générer, mettre, s'occuper / se charger de) — jamais « change », « montre » ni « compte ».
+        //
+        // CONTRÔLE D'OMAR (v3) : « Cet exercice te met au défi, bravo ! » et « Cet exercice a mis ta patience à l'épreuve »
+        // partaient. « met / mis / mettre » ne compte que suivi, dans la même phrase, de ce qu'il pose : un nombre (en
+        // chiffres, ou le mot « nombre » / « chiffre »), « au tableau », « à l'écran » (ObjetMis).
+        private const string ObjetMis =
+            @"(?=[^.!?\n]*?(?:\d|(?<!\p{L})(?:nombres?|chiffres?|au\s+tableau|(?:à|a|sur)\s+l['’]\s*[ée]cran)(?!\p{L})))";
+
         [GeneratedRegex(
             @"[^.!?\n]*(?:"
             + @"(?:(?<!\p{L})(?:le|la|un|une|ce|cet|cette|mon|ma|notre|son|sa|du|au)\s+|(?<!\p{L})l['’]\s*)"
             + @"(?:code|algorithme|ordinateur|application|appli|programme|logiciel|syst[èe]me|machine|site|jeu|exercice|outil|robot)(?!\p{L})"
             + @"(?:\s*(?:(?:qui|va|vont|vient\s+de|a|te|le|la|les|en|me|lui|nous|tout\s+seul|lui-m[êe]me|au\s+hasard|pour\s+toi)(?!\p{L})|[tlms]['’]))*\s*"
-            + @"(?:choisi\w*|choisir|affich\w*|d[ée]cid\w*|tir\w*|s[ée]lectionn\w*|g[ée]n[èe]r\w*|met|mettra|mettre|mis|s['’]\s*occup\w*|occup\w*|s['’]\s*en\s+charg\w*|en\s+charg\w*|se\s+charg\w*|charg\w*)(?!\p{L})"
+            + @"(?:choisi\w*|choisir|affich\w*|d[ée]cid\w*|tir\w*|s[ée]lectionn\w*|g[ée]n[èe]r\w*|(?:met|mettra|mettre|mis|mettent|mettait)(?!\p{L})" + ObjetMis
+            + @"|s['’]\s*occup\w*|occup\w*|s['’]\s*en\s+charg\w*|en\s+charg\w*|se\s+charg\w*|charg\w*)(?!\p{L})"
             + @"|(?<!\p{L})(?:ce\s+n['’]\s*est|c['’]\s*est|ce\s+n['’]\s*sera)\s+pas\s+moi\s+qui\s+(?:choisi\w*|d[ée]cid\w*|affich\w*)"
             + @")[^.!?\n]*[.!?]*",
             RegexOptions.IgnoreCase)]
