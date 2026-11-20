@@ -3201,12 +3201,34 @@ namespace SchoolWebApp.Api.Builders.impl
             // UN RÉSULTAT DONNÉ PAR L'ÉLÈVE SE VÉRIFIE AVANT D'ÊTRE JUGÉ — voir
             // `ReponseChiffree` : le 19/09/2026, « six » pour 3 × 2 a été reçu
             // par « Presque ! », sans que le professeur ait rien calculé.
+            CalculAuTableau.Verdict? verdictCalcul = null;
             if (ReponseChiffree.Contient(contenu))
             {
-                // Le contrôle noté garde son rappel tel quel : on n'y touche pas (Camara, 11/11/2026).
+                // LE VERDICT D'UN CALCUL SIMPLE, COMPTÉ PAR LE CODE — Minamba, le 20/11/2026, signalement #29 rouvert
+                // (avec #45, #46) : « 4 + 3 = ? » → « 8 » validé, « 8 - 3 = ? » → « 5 » refusé, « 2 dizaines et 0
+                // unité » refusé pour 20, malgré le rappel. Voir CalculAuTableau. Quand la question ou la réponse ne se
+                // lit pas sans ambiguïté, c'est le rappel d'avant. Pas dans la lecture des nombres (son verdict est
+                // déjà compté), ni pendant un contrôle noté (Camara, 11/11/2026 : on n'y touche pas).
+                verdictCalcul = controleOuvert || enLectureDeNombres
+                    ? null
+                    : CalculAuTableau.Juger(
+                        historique.Where(m => m.Role == "assistant")
+                            .Select(m => m.Contenu)
+                            .Where(c => !string.IsNullOrWhiteSpace(c)
+                                && !c!.TrimStart().StartsWith("[FICHE]", StringComparison.OrdinalIgnoreCase)
+                                && !c.TrimStart().StartsWith("[RAPPORT]", StringComparison.OrdinalIgnoreCase))
+                            .TakeLast(2),
+                        contenu);
+
+                var faitCalcul = verdictCalcul is null ? null : CalculAuTableau.Fait(verdictCalcul);
+                if (faitCalcul is not null)
+                {
+                    _logger.LogInformation("Calcul juge (conversation {ConversationId}) : {Fait}", conversationId, faitCalcul);
+                }
+
                 declencheur += "\n\n" + (controleOuvert
                     ? ReponseChiffree.RappelControle
-                    : ReponseChiffree.RappelPour(contenu));
+                    : faitCalcul ?? ReponseChiffree.RappelPour(contenu));
             }
 
             // ET SON SYMÉTRIQUE : « VAS-Y » N'EST PAS UNE RÉPONSE — voir
@@ -4109,6 +4131,15 @@ namespace SchoolWebApp.Api.Builders.impl
                     _logger.LogWarning(
                         "Ouverture contredite (conversation {ConversationId}) : {Debut}",
                         conversationId,
+                        resultat.TexteComplet.Length > 160 ? resultat.TexteComplet[..160] : resultat.TexteComplet);
+                }
+
+                // LE VERDICT DU CODE A-T-IL SUFFI ? (20/11/2026, signalement #29) — grep « Verdict de calcul contredit ».
+                if (verdictCalcul is not null && CalculAuTableau.Contredit(verdictCalcul, resultat.TexteComplet))
+                {
+                    _logger.LogWarning(
+                        "Verdict de calcul contredit (conversation {ConversationId}, {Jugement} : {Question} -> {Donne}) : {Debut}",
+                        conversationId, verdictCalcul.Jugement, verdictCalcul.Question, verdictCalcul.Donne,
                         resultat.TexteComplet.Length > 160 ? resultat.TexteComplet[..160] : resultat.TexteComplet);
                 }
 
