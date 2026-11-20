@@ -465,10 +465,12 @@ namespace SchoolWebApp.Api.Services.Voix
         // Défaut e3 (Omar, 20/11/2026) : « Regarde le tableau, lis ce nouveau nombre : » restait devant la consigne du code.
         // Le nombre peut porter un adjectif (nouveau, autre, prochain…), le tableau peut venir AVANT le verbe, et « lis-le »
         // ou « lis-moi » suffisent seuls. « Tu lis très bien les nombres » (pluriel, sans tableau) reste.
+        // « dis-le-moi à voix haute » (vu au bout en bout de cette tâche) aussi, mais « dis-le-moi » seul reste (« si tu es
+        // fatigué, dis-le-moi ! »).
         [GeneratedRegex(@"[^.!?\n]*(?:"
             + @"(?<!\p{L})(?:re)?lis-(?:le|la|moi)(?!\p{L})"
-            + @"|\b(?:lis|lire|relis|relire)\b[^.!?\n]*(?:\b(?:voix\s+haute|au\s+tableau|le\s+tableau)\b|" + CeNombre + @")"
-            + @"|(?:\btableau\b|" + CeNombre + @")[^.!?\n]*\b(?:lis|relis)\b"
+            + @"|(?<!\p{L})(?:lis|lire|relis|relire|dis-le(?:-moi)?|dis-moi)(?!\p{L})[^.!?\n]*(?:\b(?:voix\s+haute|au\s+tableau|le\s+tableau)\b|" + CeNombre + @")"
+            + @"|(?:\btableau\b|" + CeNombre + @")[^.!?\n]*(?<!\p{L})(?:lis|relis|dis-le(?:-moi)?)(?!\p{L})"
             + @")[^.!?\n]*[.!:]*", RegexOptions.IgnoreCase)]
         private static partial Regex ConsigneDuProfesseur();
 
