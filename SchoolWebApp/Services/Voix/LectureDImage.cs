@@ -367,11 +367,21 @@ namespace SchoolWebApp.Api.Services.Voix
                 + "tableau (ni [ARDOISE], ni [TABLEAU_EFFACE]), et pas de « qu'as-tu entendu ». Tu ne changes d'exercice que s'il le demande lui-même.]";
         }
 
-        /// <summary>Le fait du verdict, pour le tour suivant du professeur.</summary>
-        public static string FaitVerdict(VerdictSon verdict, Element e)
+        /// <summary>
+        /// Le fait du verdict, pour le tour suivant du professeur. `auClavier` : il a ÉCRIT sa lecture au lieu de la dire
+        /// (signalement #49, 20/11/2026) — même verdict, mais ni « le micro a entendu » ni « le micro peut s'être trompé ».
+        /// </summary>
+        public static string FaitVerdict(VerdictSon verdict, Element e, bool auClavier = false)
         {
             var quoi = e.EstSyllabe ? "la syllabe" : "le mot";
             const string fin = " Ne parle jamais de cet outil ni du micro à l'élève.]";
+
+            if (auClavier && !verdict.SansJugement && !verdict.Juste && !(e.EnAnglais && EstLaTraduction(e.Cible, verdict.Entendu)))
+            {
+                return $"[Fait pour ce tour, qui l'emporte sur le rappel précédent : il devait lire {quoi} « {e.Cible} », et il a écrit "
+                    + $"« {verdict.Entendu} » : ce n'est pas ça. Son écran affiche « On réessaie ». Ne le félicite pas et ne dis pas « bravo » : "
+                    + "encourage-le en une phrase, SANS lui donner la réponse et sans la prononcer. Le code lui remet la même image." + fin;
+            }
 
             if (verdict.SansJugement)
             {
@@ -426,6 +436,29 @@ namespace SchoolWebApp.Api.Services.Voix
         /// <summary>Il a lu le mot entier de l'image : pas une erreur, mais un essai (voir EssaisRates).</summary>
         public static bool EstMotEntier(string? contenu) =>
             contenu is not null && contenu.TrimStart().StartsWith(DebutDuMotEntier, StringComparison.Ordinal);
+
+        /// <summary>
+        /// L'IMAGE QU'IL LIT EN TAPANT SA RÉPONSE — signalement #49 (Adam, 20/11/2026) : ce qu'il écrit au clavier devant
+        /// l'image du tableau est une lecture, jugée comme celle du micro. Rend l'élément montré par le dernier message du
+        /// professeur, ou null quand ce message n'est pas à juger : pas d'image, un contrôle noté ouvert, un message marqué
+        /// par l'écran (« [EXERCICE CHOISI : …] »), un verdict déjà écrit, une demande (changer d'exercice, au revoir) ou
+        /// une phrase (plus de deux mots : « je sais pas lire », une question).
+        /// `historique` : les messages avant le sien, du plus ancien au plus récent.
+        /// </summary>
+        public static Element? ATaperA(IReadOnlyList<(string? Role, string? Contenu)> historique, string? message)
+        {
+            if (string.IsNullOrWhiteSpace(message) || message.Contains('[') || message.Contains('\n')) return null;
+            if (TypeDuMessage(message) is not null || ChangeDExercice(message)) return null;
+            if (ChangementDExercice.Demande(message) || LecteurAuRevoir.DitAuRevoir(message)) return null;
+            if (RegleVerificationSon.MotsDUneReponseCourte(message) is null) return null;
+
+            var duProfesseur = historique.Where(m => m.Role == "assistant").Select(m => m.Contenu).ToList();
+            if (LecteurEvaluation.EstOuvert(duProfesseur)) return null;
+
+            var dernier = duProfesseur.LastOrDefault(c => !string.IsNullOrWhiteSpace(c) && !RegleVerificationSon.EstUneCloture(c)
+                && !c!.TrimStart().StartsWith("[FICHE]", StringComparison.OrdinalIgnoreCase));
+            return Affiche(dernier);
+        }
 
         /// <summary>Ce que garde le message de l'enfant : ce qu'il a lu, pour le professeur et le rapport.</summary>
         public static string TexteDeLEleve(Element e, VerdictSon verdict) =>

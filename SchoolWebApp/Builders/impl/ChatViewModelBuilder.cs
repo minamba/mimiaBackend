@@ -236,6 +236,38 @@ namespace SchoolWebApp.Api.Builders.impl
                 && !Services.Voix.RegleVerificationSon.EstUneCloture(m.Contenu))?.Contenu;
         }
 
+        /// <summary>
+        /// UNE LECTURE EN IMAGES TAPÉE AU CLAVIER, JUGÉE COMME AU MICRO (signalement #49) : le texte gardé (« J'ai lu la syllabe
+        /// son. ») et son verdict, ou null quand ce n'est pas une lecture à juger — pas d'image au tableau, un contrôle noté,
+        /// une demande (changer d'exercice, au revoir), une phrase, un message marqué par l'écran, ou une panne.
+        /// </summary>
+        private async Task<(bool? SonJuste, string Contenu)?> LectureTapeeAsync(
+            int conversationId, string? langue, IReadOnlyList<(string? Role, string? Contenu)> historique, string? contenu, CancellationToken ct)
+        {
+            if (langue is null || string.IsNullOrWhiteSpace(contenu)) return null;
+
+            var aLire = Services.Voix.LectureDImage.ATaperA(historique, contenu);
+            if (aLire is null) return null;
+
+            try
+            {
+                var verdict = await _verificationSon.VerifierLectureAsync(conversationId, aLire, contenu, ct, langue, auClavier: true);
+                if (verdict is null) return null;
+
+                var texte = Services.Voix.LectureDImage.TexteDeLEleve(aLire, verdict);
+                bool? juste = verdict.SansJugement ? null : verdict.Juste;
+                _logger.LogInformation(
+                    "Lecture tapee jugee (conversation {ConversationId}) : {Genre} {Cible}, ecrit {Ecrit}, juste {Juste}.",
+                    conversationId, aLire.Genre, aLire.Cible, verdict.Entendu, juste);
+                return (juste, texte);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogWarning(ex, "Lecture tapee non jugee (conversation {ConversationId}).", conversationId);
+                return null;
+            }
+        }
+
         public async Task<ConversationViewModel?> CreerConversationAsync(CreerConversationRequest model)
         {
             var eleve = await _resolver.ResoudreEleveAsync(model.EleveId);
@@ -476,10 +508,10 @@ namespace SchoolWebApp.Api.Builders.impl
         public IAsyncEnumerable<string> StreamReponseAsync(
             int conversationId, string contenu, IReadOnlyList<int> pieceJointeIds,
             int? secondesRestantes, string? vitesseEcoute, bool? sonJuste, CancellationToken ct,
-            IReadOnlyList<string>? figureIncomprise = null) =>
+            IReadOnlyList<string>? figureIncomprise = null, VerdictDuTour? verdict = null) =>
             StreamTourAsync(conversationId, contenu, accueil: false, ct,
                 secondesRestantes: secondesRestantes, pieceJointeIds: pieceJointeIds,
-                vitesseEcoute: vitesseEcoute, sonJuste: sonJuste, figureIncomprise: figureIncomprise);
+                vitesseEcoute: vitesseEcoute, sonJuste: sonJuste, figureIncomprise: figureIncomprise, verdictDuTour: verdict);
 
         /// <summary>
         /// La sortie signalée par une page qui se ferme, SANS identité.
@@ -2670,7 +2702,8 @@ namespace SchoolWebApp.Api.Builders.impl
             IReadOnlyList<int>? pieceJointeIds = null,
             string? vitesseEcoute = null,
             bool? sonJuste = null,
-            IReadOnlyList<string>? figureIncomprise = null)
+            IReadOnlyList<string>? figureIncomprise = null,
+            VerdictDuTour? verdictDuTour = null)
         {
             var contexte = await _resolver.ResoudreConversationAsync(conversationId)
                 ?? throw new UnauthorizedAccessException(
@@ -2836,10 +2869,31 @@ namespace SchoolWebApp.Api.Builders.impl
                         verdictNombre = Services.Voix.LectureDesNombres.Juger(recentsNombres, contenu);
                         if (verdictNombre is not null)
                         {
+                            // Tapé au clavier : l'écran ne connaît pas encore le verdict, il le reçoit avec la réponse (#49).
+                            if (sonJuste is null) verdictDuTour?.Poser(verdictNombre.Juste, Services.Voix.LectureDesNombres.TexteDeLEleve(verdictNombre));
                             sonJuste ??= verdictNombre.Juste;
                             contenu = Services.Voix.LectureDesNombres.TexteDeLEleve(verdictNombre);
                         }
                     }
+                }
+
+                // LA LECTURE EN IMAGES, TAPÉE AU CLAVIER — signalement #49 (Adam, 20/11/2026) : « son » écrit devant la carte
+                // « poisson » recevait « Bravo… essaie encore », « pa » était félicité, « lit » refusé pour « lit », et la carte ne
+                // changeait jamais. Seul le relais du micro jugeait (EcouteController) : un texte tapé arrivait sans verdict, le
+                // code remontrait la même image et le professeur jugeait seul. Il est jugé ici, comme la lecture des nombres
+                // tapée : même comparaison que le micro (VerifierLectureAsync), même message gardé (« J'ai lu la syllabe son. »),
+                // même compte des essais. Pas une demande (changer d'exercice, au revoir, une phrase) : elle part telle quelle.
+                if (!enLectureDeNombres && sonJuste is null && verdictDuTour is { Juger: true }
+                    && await LectureTapeeAsync(
+                        conversationId,
+                        Services.Voix.RegleVerificationSon.LangueDe(contexte.Eleve.NiveauCycle, contexte.Conversation.MatiereCode),
+                        historique.Select(m => ((string?)m.Role, (string?)m.Contenu)).ToList(),
+                        contenu,
+                        ct) is { } lectureTapee)
+                {
+                    sonJuste = lectureTapee.SonJuste;
+                    contenu = lectureTapee.Contenu;
+                    verdictDuTour.Poser(sonJuste, contenu);
                 }
 
                 var messageEleve = await _conversationService.AddMessageAsync(new DomainMessage

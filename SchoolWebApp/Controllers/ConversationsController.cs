@@ -138,14 +138,39 @@ namespace SchoolWebApp.Api.Controllers
 
             if (await QuotaEpuiseAsync(id)) return;
 
+            // UNE LECTURE TAPÉE EST JUGÉE AU SERVEUR (signalement #49) : son verdict part AVANT la réponse, pour que la
+            // bulle de l'élève dise « Bonne lecture » ou « On réessaie » comme au micro. Seulement si la vérification
+            // des syllabes est allumée, comme le jugement du micro (EcouteController). Il part même si la réponse échoue :
+            // le message de l'élève est déjà enregistré avec lui.
+            var verdict = new VerdictDuTour();
+            var verdictEnvoye = false;
+
             try
             {
+                var reglages = HttpContext.RequestServices.GetRequiredService<SchoolWebApp.Domain.Repositories.IReglageRepository>();
+                verdict = new VerdictDuTour
+                {
+                    Juger = model.SonJuste is null
+                        && await reglages.EstActifAsync(Services.Voix.RegleVerificationSon.Reglage, Services.Voix.RegleVerificationSon.ActifParDefaut, HttpContext.RequestAborted),
+                };
+
                 await foreach (var fragment in _chatBuilder.StreamReponseAsync(
                     id, model.Contenu ?? string.Empty, pieces,
                     model.SecondesRestantes, model.VitesseEcoute, model.SonJuste,
-                    HttpContext.RequestAborted, model.FigureIncomprise))
+                    HttpContext.RequestAborted, model.FigureIncomprise, verdict))
                 {
+                    if (verdict.Pose && !verdictEnvoye)
+                    {
+                        verdictEnvoye = true;
+                        await EcrireEvenementAsync(new { type = "verdict", sonJuste = verdict.SonJuste, contenu = verdict.Contenu });
+                    }
+
                     await EcrireEvenementAsync(new { type = "delta", texte = fragment });
+                }
+
+                if (verdict.Pose && !verdictEnvoye)
+                {
+                    await EcrireEvenementAsync(new { type = "verdict", sonJuste = verdict.SonJuste, contenu = verdict.Contenu });
                 }
 
                 await EcrireEvenementAsync(new { type = "fin" });
@@ -163,6 +188,11 @@ namespace SchoolWebApp.Api.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Erreur pendant le streaming de la conversation {ConversationId}.", id);
+                if (verdict.Pose && !verdictEnvoye)
+                {
+                    await EcrireEvenementAsync(new { type = "verdict", sonJuste = verdict.SonJuste, contenu = verdict.Contenu });
+                }
+
                 await EcrireEvenementAsync(new { type = "erreur", message = "Une erreur est survenue, veuillez réessayer." });
             }
         }
