@@ -115,13 +115,24 @@ namespace SchoolWebApp.Api.Services.Voix
         private static string? DernierDuProfesseur(IReadOnlyList<(string? Role, string? Contenu, bool? SonJuste)> recents) =>
             recents.LastOrDefault(m => m.Role == "assistant" && !EstTechnique(m.Contenu)).Contenu;
 
-        /// <summary>L'élève est-il dans l'exercice à ce tour ? Il le demande, accepte la proposition, ou y était déjà.</summary>
-        public static bool EnCours(IReadOnlyList<(string? Role, string? Contenu, bool? SonJuste)> recents, string? messageDeLEleve)
+        /// <summary>
+        /// L'élève est-il dans l'exercice à ce tour ? Il le demande, demande d'afficher un nombre de sa classe (le
+        /// <paramref name="niveau"/> sert alors), accepte la proposition, ou y était déjà.
+        /// </summary>
+        public static bool EnCours(IReadOnlyList<(string? Role, string? Contenu, bool? SonJuste)> recents, string? messageDeLEleve,
+            string? niveau = null)
         {
             var message = messageDeLEleve ?? string.Empty;
             if (DemandeDeLecture().IsMatch(message)) return true;
             // « Propose-moi un nouvel exercice » (14/11/2026) : la même règle que partout, voir ChangementDExercice.
             if (Arret().IsMatch(message) || ChangementDExercice.Demande(message)) return false;
+
+            // IL DEMANDE D'AFFICHER UN NOMBRE (commentaire de Min's sur le signalement #50, 20/11/2026 : « quand l'élève
+            // demande d'afficher un chiffre, Nora devra afficher l'image correspondante, comme pour les exercices de
+            // comptage où elle affiche les images »). « Affiche le nombre 23 », « écris-moi 7 au tableau », même hors de
+            // la lecture des nombres : le code montre l'IMAGE du nombre (nb-23), au lieu de laisser le professeur l'écrire
+            // à la craie. Seulement un nombre du catalogue de sa classe ou d'une classe en dessous (il a une image).
+            if (NombreDemande(message, niveau) is not null) return true;
 
             var dernier = DernierDuProfesseur(recents);
             if (dernier is null) return false;
@@ -160,10 +171,13 @@ namespace SchoolWebApp.Api.Services.Voix
 
         // ------------------------------------------------------------------ le nombre qu'il demande (signalement #50)
 
-        // « Écris le nombre 23 au tableau », « montre-moi 48 », « affiche le chiffre sept », « mets-moi un autre nombre : 12 ».
+        // « Écris le nombre 23 au tableau », « montre-moi 48 », « affiche le chiffre sept », « mets-moi un autre nombre : 12 »,
+        // « je veux que tu affiches 23 ».
         // Le verbe, puis seulement des petits mots de consigne, puis le nombre. « un » / « une » ne sont des mots de
         // consigne que devant « nombre », « chiffre », « autre » ou « nouveau » (« écris un nombre » ne demande pas « 1 »).
-        [GeneratedRegex(@"(?<!\p{L})(?:[ée]cri(?:s|re|vez)|affiche[rz]?|montre[rz]?|mets|mettre|donne[rz]?|propose[rz]?)(?!\p{L})"
+        // « Je propose 23 », « je mets 23 », « j'écris 23 », « je te donne 23 » : c'est SA réponse, pas une demande
+        // (sinon une réponse à un calcul ouvrirait la lecture des nombres, et une lecture serait prise pour une demande).
+        [GeneratedRegex(@"(?<!\p{L})(?<!\bje\s+(?:te\s+|t['’]\s*)?|\bj['’]\s*)(?:[ée]cri(?:s|re|vez|ves?)|affiche[rsz]?|montre[rsz]?|mets|mettre|mettes?|donne[rz]?|propose[rz]?)(?!\p{L})"
             + @"(?:[-\s,:'’]+(?:moi|nous|le|la|l|ce|cet|au|du|tableau|nombre|chiffre|autre|nouveau|s|il|te|pla[iî]t|stp|maintenant|alors|plut[oô]t|(?:un|une)(?=[-\s]+(?:nombre|chiffre|autre|nouveau)))(?!\p{L}))*"
             + @"[-\s,:'’«""]+(?<suite>[^.!?;\n]{1,60})", RegexOptions.IgnoreCase)]
         private static partial Regex Demande();

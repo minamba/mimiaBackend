@@ -2863,7 +2863,7 @@ namespace SchoolWebApp.Api.Builders.impl
                 {
                     recentsNombres = historique.TakeLast(MessagesPourExerciceDeSons)
                         .Select(m => ((string?)m.Role, (string?)m.Contenu, m.SonJuste)).ToList();
-                    if (Services.Voix.LectureDesNombres.EnCours(recentsNombres, contenu))
+                    if (Services.Voix.LectureDesNombres.EnCours(recentsNombres, contenu, contexte.Eleve.NiveauCode))
                     {
                         enLectureDeNombres = true;
                         verdictNombre = Services.Voix.LectureDesNombres.Juger(recentsNombres, contenu);

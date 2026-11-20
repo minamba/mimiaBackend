@@ -380,6 +380,10 @@ namespace SchoolWebApp.Api.Controllers
                 // « Un autre exercice » n'est pas une lecture du nombre « un » (14/11/2026, voir ChangementDExercice).
                 if (Services.ChangementDExercice.Demande(fragment.Texte)) return fragment;
 
+                // « Écris le nombre vingt-trois » n'est pas une lecture de « 23 » (commentaire de Min's sur le signalement #50) :
+                // c'est une demande d'afficher ce nombre, que le message gère (LectureDesNombres.NombreDemande).
+                if (LectureDesNombres.CanoniqueDemande(fragment.Texte) is not null) return fragment;
+
                 var lu =LectureDesNombres.Canonique(fragment.Texte);
                 if (lu is null) return fragment; // « je sais pas », une question : ce n'est pas une lecture
 
