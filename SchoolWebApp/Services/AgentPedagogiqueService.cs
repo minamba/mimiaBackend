@@ -371,7 +371,7 @@ namespace SchoolWebApp.Api.Services
                 new()
                 {
                     Text = PromptsPedagogiques.Specialite(conversation.AgentSlug)
-                           + await ConstruireBibliothequeAsync(conversation, ct),
+                           + await ConstruireBibliothequeAsync(conversation, eleve, ct),
                     CacheControl = CacheLong(),   // commun à la matière
                 },
 
@@ -764,11 +764,15 @@ namespace SchoolWebApp.Api.Services
         /// mais pas cassé.
         /// </summary>
         private async Task<string> ConstruireBibliothequeAsync(
-            Conversation conversation, CancellationToken ct)
+            Conversation conversation, Eleve eleve, CancellationToken ct)
         {
             try
             {
-                var bloc = await _bibliotheque.ConstruireAsync(conversation.MatiereCode, ct);
+                // LA CLASSE DE L'ÉLÈVE FILTRE LES PLANCHES (signalement #47) : un
+                // CP ne se voit plus proposer une planche de 6e. Le bloc reste en
+                // cache côté Anthropic, mais par matière ET par classe.
+                var bloc = await _bibliotheque.ConstruireAsync(
+                    conversation.MatiereCode, eleve.NiveauCode, ct);
 
                 return string.IsNullOrEmpty(bloc) ? string.Empty : "\n\n" + bloc;
             }
