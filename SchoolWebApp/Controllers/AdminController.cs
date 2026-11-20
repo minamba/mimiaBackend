@@ -2564,9 +2564,9 @@ namespace SchoolWebApp.Api.Controllers
             [FromQuery] string? mode = null,
             CancellationToken ct = default)
         {
-            // L'APERÇU SELON LE MODE (20/11/2026) : une offre (« Offres et promotions ») montre le lien de désinscription
-            // et le pied commercial ; le « Message de diffusion » (information, à tous) n'a ni l'un ni l'autre.
-            var offres = !signature && ModeDiffusion.Lire(mode) == ModeDiffusion.Offres;
+            // L'APERÇU SELON LA CASE « PROMOTION » (20/11/2026) : cochée (`mode=offres`, à tous ou à un parent), il montre
+            // le lien de désinscription et le pied commercial ; décochée, ni l'un ni l'autre.
+            var offres = ModeDiffusion.Lire(mode) == ModeDiffusion.Offres;
 
             var valeurs = new Dictionary<string, string>
             {
@@ -2574,13 +2574,13 @@ namespace SchoolWebApp.Api.Controllers
                 ["titreMessage"] = titre ?? string.Empty,
                 // `{{lien_desinscription}}` montré à sa place dans l'aperçu d'une diffusion (19/11/2026) ; il ne mène nulle part d'ici.
                 ["corpsMessage"] = diffusion.ComposerCorps(texte ?? string.Empty, images?.Count ?? 0,
-                    signature ? null : offres ? LienDesinscriptionApercu() : SansLienDesinscription()),
+                    offres ? LienDesinscriptionApercu() : signature ? null : SansLienDesinscription()),
                 ["blocPiecesJointes"] = diffusion.ComposerPiecesJointes(
                     documents?.Select(d => d.FileName).ToList() ?? []),
                 // LE LIEN DE DÉSABONNEMENT DANS L'APERÇU D'UNE OFFRE : à l'envoi,
                 // chaque parent a le sien ; l'aperçu le montre à sa place (il ne
-                // mène nulle part d'ici). « Écrire à un parent » (signature) et le
-                // « Message de diffusion » n'en ont pas (20/11/2026).
+                // mène nulle part d'ici). Sans la case « Promotion », ni « Écrire à
+                // un parent » ni le « Message de diffusion » n'en ont (20/11/2026).
                 ["mentionPied"] = offres
                     ? diffusion.ComposerMentionPied("#", SchoolWebApp.Domain.Models.CategorieDesabonnement.Diffusion)
                     : diffusion.ComposerMentionPied(),
