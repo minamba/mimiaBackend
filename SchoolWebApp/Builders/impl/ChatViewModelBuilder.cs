@@ -3039,6 +3039,9 @@ namespace SchoolWebApp.Api.Builders.impl
 
             int? dicteeEnAttenteId = null;
 
+            // Une dictée, une correction ou une copie à transcrire ouvre la séance : la lecture des nombres ne reprend pas.
+            var arriveeOccupee = false;
+
             if (retourEnCours)
             {
                 var enAttente = await DicteeEnAttenteAsync(
@@ -3048,6 +3051,7 @@ namespace SchoolWebApp.Api.Builders.impl
                 {
                     declencheur += "\n\n" + attente.Rappel;
                     dicteeEnAttenteId = attente.Id;
+                    arriveeOccupee = true;
                 }
 
                 // Une correction d'évaluation remise faute de temps ouvre, elle
@@ -3055,7 +3059,11 @@ namespace SchoolWebApp.Api.Builders.impl
                 var copieACorriger = await CorrectionEnAttenteAsync(
                     contexte.Eleve.Id, contexte.Conversation.MatiereId, ct);
 
-                if (copieACorriger is not null) declencheur += "\n\n" + copieACorriger;
+                if (copieACorriger is not null)
+                {
+                    declencheur += "\n\n" + copieACorriger;
+                    arriveeOccupee = true;
+                }
 
                 // ET LA COPIE QUI N'EST QU'UNE PHOTO : elle part avec son image,
                 // jointe à ce tour. C'est la plus urgente des trois — les deux
@@ -3068,6 +3076,7 @@ namespace SchoolWebApp.Api.Builders.impl
                 {
                     declencheur += "\n\n" + aTranscrire.Value.Consigne;
                     piecesDuTour.Add(aTranscrire.Value.Photo);
+                    arriveeOccupee = true;
                 }
 
                 // ET LE RAPPEL DE LA MAÎTRISE DE LA LANGUE, en cours normal, pour
@@ -3094,6 +3103,31 @@ namespace SchoolWebApp.Api.Builders.impl
                 if (liste is not null) declencheur += "\n\n" + liste;
             }
 
+            // LA LECTURE DES NOMBRES REPREND AU TOUR D'ARRIVÉE — refus d'Omar sur le retest #51 (21/11/2026), régression du
+            // défaut e8 : l'enfant recharge la page pendant la lecture, le professeur écrit son message de retour, et ce tour
+            // était hors de l'exercice. Sa balise était retirée, l'exercice se fermait : « sept » n'était plus jugé et le
+            // professeur disait « le tableau est vide ». Si son dernier message montrait un nombre, on reste dans l'exercice et
+            // le code remontre ce nombre (voir LectureDesNombres.Reprise). Au retour et à l'annonce « cinq minutes » (le
+            // minuteur qui parle au milieu de la lecture) ; jamais quand une dictée, une correction ou une copie ouvre la
+            // séance, ni pendant un contrôle noté. La conclusion de séance, elle, ferme l'exercice comme avant.
+            Services.Voix.LectureDesNombres.Tour? repriseNombres = null;
+            if (typeAccueil is TypeAccueil.Retour or TypeAccueil.NouvelleSeance or TypeAccueil.FinProche
+                && !arriveeOccupee
+                && Services.Voix.LectureDesNombres.Concerne(contexte.Conversation.AgentSlug, contexte.Eleve.NiveauCode)
+                && !LecteurEvaluation.EstOuvert(historique.Where(m => m.Role == "assistant").Select(m => m.Contenu)))
+            {
+                var recents = historique.TakeLast(MessagesPourExerciceDeSons)
+                    .Select(m => ((string?)m.Role, (string?)m.Contenu, m.SonJuste)).ToList();
+                repriseNombres = Services.Voix.LectureDesNombres.Reprise(recents);
+                if (repriseNombres is not null)
+                {
+                    recentsNombres = recents;
+                    enLectureDeNombres = true;
+                    _logger.LogInformation(
+                        "Lecture des nombres reprise au tour d'arrivee ({Type}, conversation {ConversationId}).", typeAccueil, conversationId);
+                }
+            }
+
             // LE TABLEAU VIENT D'ÊTRE EFFACÉ, ET LE PROFESSEUR DOIT LE SAVOIR.
             //
             // Relevé par Camara le 13/09/2026 : au retour, le tableau est bien
@@ -3109,7 +3143,10 @@ namespace SchoolWebApp.Api.Builders.impl
             // tenu. On la remet donc sous ses yeux au tour même où le code
             // efface le tableau — le seul moment où elle compte, et le seul où
             // l'on sache avec certitude qu'elle est vraie.
-            if (nouvelleArrivee)
+            //
+            // Sauf quand la lecture des nombres reprend (repriseNombres) : la gomme passe, puis le code remontre aussitôt le
+            // nombre ; c'est LectureDesNombres.FaitReprise qui le dit au professeur, plus bas (« le tableau n'est pas vide »).
+            if (nouvelleArrivee && repriseNombres is null)
             {
                 declencheur += "\n\n[LE TABLEAU VIENT D'ÊTRE EFFACÉ : l'élève a un "
                     + "tableau noir sous les yeux. Ce que tu y avais écrit la "
@@ -3127,7 +3164,7 @@ namespace SchoolWebApp.Api.Builders.impl
                     + "pas la réafficher du tout : change d'exercice plutôt que "
                     + "de faire chercher à l'élève ce que personne ne voit.]";
             }
-            else
+            else if (!nouvelleArrivee)
             {
                 // PAS UNE ARRIVÉE, ET POURTANT LA MÊME FAUTE. Le rappel ci-dessus
                 // ne partait qu'au premier message : un professeur qui invente un
@@ -3603,7 +3640,14 @@ namespace SchoolWebApp.Api.Builders.impl
             // LA LECTURE DES NOMBRES (12/11/2026) — voir LectureDesNombres : le code choisit le nombre de ce tour, le
             // professeur ne dit que son bravo ou son encouragement. Trois lectures fausses : on passe, sans la réponse.
             Services.Voix.LectureDesNombres.Tour? nombresDuTour = null;
-            if (enLectureDeNombres)
+            if (repriseNombres is not null)
+            {
+                // Le tour d'arrivée qui reprend la lecture (plus haut) : le même nombre, remontré par le code.
+                nombresDuTour = repriseNombres;
+                declencheur += "\n\n" + Services.Voix.LectureDesNombres.FaitType
+                    + "\n\n" + Services.Voix.LectureDesNombres.FaitReprise;
+            }
+            else if (enLectureDeNombres)
             {
                 nombresDuTour = Services.Voix.LectureDesNombres.AMontrer(
                     contexte.Eleve.NiveauCode, recentsNombres, verdictNombre, $"{conversationId}|{historique.Count}", contenu);
@@ -4194,7 +4238,13 @@ namespace SchoolWebApp.Api.Builders.impl
 
                 // L'historique dit ce que l'élève a vu et entendu : le mot remplacé n'y revient pas.
                 if (filtreMots is not null) contenuPersiste = filtreMots.Corriger(contenuPersiste);
-                if (filtreNombres is not null) contenuPersiste = filtreNombres.Corriger(contenuPersiste);
+                if (filtreNombres is not null)
+                {
+                    // La gomme d'une arrivée (lecture des nombres reprise au retour) reste devant : la réécriture retire tout
+                    // geste de tableau, et sans elle une page rechargée verrait resurgir le tableau d'avant le retour.
+                    var gomme = enTete.Length > 0 && contenuPersiste.StartsWith(enTete, StringComparison.Ordinal) ? enTete : string.Empty;
+                    contenuPersiste = gomme + filtreNombres.Corriger(contenuPersiste[gomme.Length..]);
+                }
 
                 // Hors de l'exercice, une balise de nombre ne reste pas en base : au tour suivant, la lecture des nombres
                 // reprendrait sur ce nombre (le dernier message en montre un), au clavier comme au micro (défaut e8).

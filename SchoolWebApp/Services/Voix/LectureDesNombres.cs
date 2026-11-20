@@ -701,6 +701,8 @@ namespace SchoolWebApp.Api.Services.Voix
                 RegardeSeulement().Replace(ConsigneDuProfesseur().Replace(t, string.Empty), string.Empty), "."), string.Empty));
             propre = Etape(propre, "ecoute", t => PhraseDEcoute().Replace(t, string.Empty));
             if (tour.Demande) propre = Etape(propre, "refus", t => RefusDAfficher().Replace(t, string.Empty));
+            // « Le tableau est vide » (vu par Omar après un rechargement, #51) : pendant la lecture, le nombre est au tableau.
+            propre = Etape(propre, "tableau-vide", t => TableauVide().Replace(t, string.Empty));
             // « C'est le code qui va choisir un nombre pour toi » (signalement #51) : jamais de fonctionnement interne à l'enfant.
             propre = Etape(propre, "jargon", JargonTechnique.Retirer);
 
@@ -758,6 +760,41 @@ namespace SchoolWebApp.Api.Services.Voix
             + "rien au tableau (ni [ARDOISE], ni [FIGURE]). S'il demande une autre activité, tu la fais. Il LIT le nombre au "
             + "tableau, il ne l'entend pas : ne dis jamais « écoute » ni « tu as entendu », dis « regarde ». Ne promets jamais "
             + "qu'un nombre viendra « après » ou « plus tard ». "
+            + JargonTechnique.Regle + "]";
+
+        // ------------------------------------------------------------------ au retour (contrôle d'Omar, 21/11/2026)
+
+        /// <summary>
+        /// LA LECTURE REPREND AU TOUR D'ARRIVÉE — refus d'Omar sur le retest #51 (21/11/2026), régression du défaut e8 :
+        /// l'enfant recharge la page pendant la lecture, et le professeur écrit un message de retour (« Coucou, on se
+        /// retrouve… »). Ce tour était hors de l'exercice : sa balise de nombre était retirée (<see cref="SansBaliseHorsLecture"/>),
+        /// l'exercice se fermait, « sept » n'était plus jugé et le professeur disait « le tableau est vide ». Si son dernier
+        /// message montrait un nombre, le tour d'arrivée RESTE dans l'exercice et le code remontre ce nombre : le même (pas
+        /// de nouveau tirage, les essais faux déjà faits comptent toujours), et la consigne ne dit pas « essaie encore » (il
+        /// n'a rien lu à ce tour). Null s'il n'y avait pas de nombre au tableau.
+        /// </summary>
+        public static Tour? Reprise(IReadOnlyList<(string? Role, string? Contenu, bool? SonJuste)> recents) =>
+            DernierMontre(recents) is { } montre
+                ? new Tour(montre, Redite: true, Premier: false, Abandon: false, SansEssai: true)
+                : null;
+
+        // « Le tableau est vide », « j'ai effacé le tableau », « le tableau est tout propre » : toujours faux pendant la lecture
+        // des nombres, le nombre à lire y est (refus d'Omar sur le retest #51 : « le tableau est vide » après un rechargement).
+        [GeneratedRegex(@"[^.!?\n]*(?:\btableau\b[^.!?\n]*(?<!\p{L})(?:vide|effac\p{L}*|tout\s+propre)(?!\p{L})"
+            + @"|(?<!\p{L})(?:vide|effac\p{L}*)(?!\p{L})[^.!?\n]*\btableau\b"
+            + @"|(?<!\p{L})j['’]ai\s+(?:tout\s+)?effac\p{L}*|\bplus\s+rien\s+(?:au|sur\s+le)\s+tableau\b)[^.!?\n]*[.!]*", RegexOptions.IgnoreCase)]
+        private static partial Regex TableauVide();
+
+        /// <summary>
+        /// Le fait du tour d'arrivée qui reprend la lecture (<see cref="Reprise"/>) : sans lui, le modèle croit le tableau
+        /// effacé (le bloc « LE TABLEAU VIENT D'ÊTRE EFFACÉ » d'un retour) ou propose autre chose.
+        /// </summary>
+        public const string FaitReprise =
+            "[Fait pour ce tour : il revient pendant l'exercice de LECTURE DES NOMBRES, et l'exercice CONTINUE. Le nombre "
+            + "qu'il avait à lire s'affiche DE NOUVEAU au tableau, en image : le tableau n'est pas vide. Dis-lui en une ou deux "
+            + "phrases courtes ce que tu as à lui dire (content de le retrouver, le temps qui reste), SANS lui proposer une autre "
+            + "activité, sans lui demander ce qu'il veut faire et sans lui redemander de lire : la consigne de lecture est ajoutée "
+            + "à la fin de ton message. Ne prononce pas le nombre et n'écris rien au tableau : c'est lui qui le lit. "
             + JargonTechnique.Regle + "]";
 
         /// <summary>
