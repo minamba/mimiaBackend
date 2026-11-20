@@ -78,6 +78,12 @@ namespace SchoolWebApp.Api.Services.Voix
         [GeneratedRegex(@"[^.!?\n]*\b(?:lis|lis-la|lis-le|lire|relis|relis-la|relis-le|relire)\b[^.!?\n]*\b(?:voix\s+haute|en\s+couleur|au\s+tableau|le\s+tableau|cette\s+syllabe|ce\s+mot)\b[^.!?\n]*[.!]*", RegexOptions.IgnoreCase)]
         private static partial Regex ConsigneDuProfesseur();
 
+        // « Pas grave, on réessaie ! Regarde bien le mot. » puis la consigne du code « Regarde bien le mot, et essaie encore
+        // de le lire à voix haute. » : deux fois la même chose (contrôle d'Omar, signalement #49, capture 1-clavier-faux).
+        // Une phrase qui ne fait que regarder le mot, la syllabe, l'image ou le tableau part : la consigne est celle du code.
+        [GeneratedRegex(@"(?<![\p{L}])regarde\s+(?:bien\s+)?(?:le|la|ce|cette|l'|l’)\s*(?:mot|syllabe|image|tableau)(?:\s+(?:en\s+couleur|anglais|au\s+tableau))?\s*(?:[.!]+|(?=\r?\n|$))", RegexOptions.IgnoreCase)]
+        private static partial Regex RegardeSeulement();
+
         [GeneratedRegex(@"\n{3,}")]
         private static partial Regex LignesVides();
 
@@ -317,6 +323,7 @@ namespace SchoolWebApp.Api.Services.Voix
             // SA CONSIGNE DE LECTURE PART AUSSI — capture de Camara, le 07/11/2026 : « Regarde bien la syllabe en couleur, et
             // lis-la encore une fois à voix haute », puis celle du code : deux fois la même chose. La consigne est celle du code.
             propre = ConsigneDuProfesseur().Replace(propre, string.Empty);
+            propre = RegardeSeulement().Replace(propre, string.Empty);
 
             // La cible elle-même, s'il l'a citée (« Lis "jo" ») : la ligne entière part. Citée seulement : « a », « ou », « on »
             // sont aussi des mots de ses phrases.
@@ -380,7 +387,8 @@ namespace SchoolWebApp.Api.Services.Voix
             {
                 return $"[Fait pour ce tour, qui l'emporte sur le rappel précédent : il devait lire {quoi} « {e.Cible} », et il a écrit "
                     + $"« {verdict.Entendu} » : ce n'est pas ça. Son écran affiche « On réessaie ». Ne le félicite pas et ne dis pas « bravo » : "
-                    + "encourage-le en une phrase, SANS lui donner la réponse et sans la prononcer. Le code lui remet la même image." + fin;
+                    + "encourage-le en une phrase, SANS lui donner la réponse et sans la prononcer, et SANS consigne : n'écris ni « regarde bien », "
+                    + "ni « lis », ni « essaie encore de le lire » — le code remet la même image et écrit lui-même la consigne à la fin de ton message." + fin;
             }
 
             if (verdict.SansJugement)
@@ -450,7 +458,7 @@ namespace SchoolWebApp.Api.Services.Voix
             if (string.IsNullOrWhiteSpace(message) || message.Contains('[') || message.Contains('\n')) return null;
             if (TypeDuMessage(message) is not null || ChangeDExercice(message)) return null;
             if (ChangementDExercice.Demande(message) || LecteurAuRevoir.DitAuRevoir(message)) return null;
-            if (RegleVerificationSon.MotsDUneReponseCourte(message) is null) return null;
+            if (RegleVerificationSon.MotsDUneReponseCourte(message) is not { } mots || EstUneDemande(mots)) return null;
 
             var duProfesseur = historique.Where(m => m.Role == "assistant").Select(m => m.Contenu).ToList();
             if (LecteurEvaluation.EstOuvert(duProfesseur)) return null;
@@ -459,6 +467,30 @@ namespace SchoolWebApp.Api.Services.Voix
                 && !c!.TrimStart().StartsWith("[FICHE]", StringComparison.OrdinalIgnoreCase));
             return Affiche(dernier);
         }
+
+        // Mots (déjà normalisés : lettres seules, minuscules) d'une demande ou d'une réaction, pas d'une lecture.
+        private static readonly HashSet<string> MotsDeDemande = new(StringComparer.Ordinal)
+        {
+            "quoi", "aide", "aider", "aidez", "aidemoi", "sais", "sait", "pourquoi", "comment", "répète", "repete", "répéter", "repeter",
+            "pardon", "attends", "attend", "stop", "pause", "encore", "help", "ok", "okay", "oké", "daccord", "merci", "compris", "comprends",
+            "jsp", "chais", "chaispas", "chepa", "saispas", "cestquoi", "euh", "hein", "bof", "oui", "non", "veux",
+        };
+
+        // Seuls, ils ne sonnent comme aucune image du CP : jamais une lecture. Les autres mots de demande, seuls, restent
+        // une tentative (« quoi » pour « coi », « non » pour « non ») — le service n'en retient que ce qui sonne comme la cible.
+        private static readonly HashSet<string> JamaisUneLecture = new(StringComparer.Ordinal)
+        {
+            "ok", "okay", "oké", "daccord", "jsp", "chais", "chaispas", "chepa", "saispas", "cestquoi", "aidemoi", "euh", "hein", "bof",
+            "pourquoi", "help", "merci",
+        };
+
+        /// <summary>
+        /// UNE DEMANDE, PAS UNE LECTURE — contrôle d'Omar (20/11/2026, signalement #49) : « c'est quoi ? », « aide moi », « sais
+        /// pas », « ok » passaient pour une lecture (deux mots au plus) et comptaient comme une lecture FAUSSE. Au clavier il n'y a
+        /// pas de micro qui déforme : deux mots dont un mot de demande, ou un mot qui ne se lit jamais seul, partent au professeur.
+        /// </summary>
+        public static bool EstUneDemande(IReadOnlyList<string> mots) =>
+            mots.Count == 1 ? JamaisUneLecture.Contains(mots[0]) : mots.Any(MotsDeDemande.Contains);
 
         /// <summary>Ce que garde le message de l'enfant : ce qu'il a lu, pour le professeur et le rapport.</summary>
         public static string TexteDeLEleve(Element e, VerdictSon verdict) =>

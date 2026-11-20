@@ -1821,6 +1821,11 @@ namespace SchoolWebApp.Api.Services.Voix
                 else
                 {
                     var juste = await MemeSonQueAsync(mots[^1], aLire.Cible, langue, ct);
+
+                    // Au clavier (contrôle d'Omar, signalement #49) : « oui », « stop », « aide » tapés seuls sont une
+                    // réaction, pas une lecture déformée par le micro. Juste s'ils sonnent comme la cible, sinon pas de verdict.
+                    if (auClavier && !juste) return null;
+
                     var verdictBanal = new VerdictSon(aLire.Cible, juste ? mots[^1] : string.Join(" ", mots), juste);
                     _cache.Set(CleFait(conversationId), LectureDImage.FaitVerdict(verdictBanal, aLire, auClavier), DureeDuFait);
                     return verdictBanal;

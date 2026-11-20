@@ -2870,7 +2870,9 @@ namespace SchoolWebApp.Api.Builders.impl
                         if (verdictNombre is not null)
                         {
                             // Tapé au clavier : l'écran ne connaît pas encore le verdict, il le reçoit avec la réponse (#49).
-                            if (sonJuste is null) verdictDuTour?.Poser(verdictNombre.Juste, Services.Voix.LectureDesNombres.TexteDeLEleve(verdictNombre));
+                            // Seulement quand la vérification des syllabes est allumée (verdictDuTour.Juger), comme la
+                            // lecture en images tapée : réglage éteint, l'écran ne reçoit aucun événement nouveau (Omar).
+                            if (sonJuste is null && verdictDuTour is { Juger: true }) verdictDuTour.Poser(verdictNombre.Juste, Services.Voix.LectureDesNombres.TexteDeLEleve(verdictNombre));
                             sonJuste ??= verdictNombre.Juste;
                             contenu = Services.Voix.LectureDesNombres.TexteDeLEleve(verdictNombre);
                         }
