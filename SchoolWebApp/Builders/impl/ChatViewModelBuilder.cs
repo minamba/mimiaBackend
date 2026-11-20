@@ -3217,7 +3217,7 @@ namespace SchoolWebApp.Api.Builders.impl
                             .Where(c => !string.IsNullOrWhiteSpace(c)
                                 && !c!.TrimStart().StartsWith("[FICHE]", StringComparison.OrdinalIgnoreCase)
                                 && !c.TrimStart().StartsWith("[RAPPORT]", StringComparison.OrdinalIgnoreCase))
-                            .TakeLast(2),
+                            .TakeLast(CalculAuTableau.MessagesRemontes),
                         contenu);
 
                 var faitCalcul = verdictCalcul is null ? null : CalculAuTableau.Fait(verdictCalcul);

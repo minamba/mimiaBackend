@@ -152,7 +152,11 @@ namespace SchoolWebApp.Api.Services
         /// </summary>
         private static Question? DerniereQuestion(IEnumerable<string?> messagesDuProfesseur)
         {
-            foreach (var message in messagesDuProfesseur.Reverse().Take(2))
+            // Les nombres des relances traversées (« Compte : 4, puis encore 3. Combien ça fait ? ») : ils doivent
+            // tous appartenir à la question retrouvée plus haut, sinon on ne sait pas de quoi la relance parle.
+            var nombresDesRelances = new List<decimal>();
+
+            foreach (var message in messagesDuProfesseur.Reverse().Take(MessagesRemontes))
             {
                 if (string.IsNullOrWhiteSpace(message)) continue;
 
@@ -176,24 +180,67 @@ namespace SchoolWebApp.Api.Services
                 if (calculs.Count == 1)
                 {
                     var (expression, resultat) = calculs[0];
-                    return new Question(expression, Ecrire(resultat), null, false);
+                    var operandes = Operandes(expression);
+                    return nombresDesRelances.All(operandes.Contains)
+                        ? new Question(expression, Ecrire(resultat), null, false)
+                        : null;
                 }
 
                 if (decompositions.Count == 1)
                 {
                     var n = decompositions[0];
                     var avecCentaines = n >= 100 || Regex.IsMatch(message, "centaines", RegexOptions.IgnoreCase);
-                    return new Question(null, n.ToString(CultureInfo.InvariantCulture), n, avecCentaines);
+                    return nombresDesRelances.All(x => x == n)
+                        ? new Question(null, n.ToString(CultureInfo.InvariantCulture), n, avecCentaines)
+                        : null;
                 }
 
+                // Un tableau réécrit ou effacé sans qu'on lise de question : l'exercice d'avant n'est plus affiché.
+                if (Regex.IsMatch(message, @"\[(?:ARDOISE|TABLEAU_EFFACE)\]", RegexOptions.IgnoreCase)) return null;
+
                 // Le message le plus récent ne pose rien, ne parle d'aucun nombre : la question d'avant reste ouverte
-                // (« Ce n'est pas encore ça. C'est ton dernier essai. »). Dès qu'il parle d'un nombre ou pose une
-                // question qu'on ne sait pas lire (« Maintenant, calcule 9 - 4. »), on ne remonte plus.
-                if (message.Contains('?') || message.Any(char.IsDigit) || NombresEnLettres.Lire(message).Count > 0) return null;
+                // (« Ce n'est pas encore ça. C'est ton dernier essai. »).
+                var nombres = NombresDuMessage(message);
+                if (!message.Contains('?') && nombres.Count == 0) continue;
+
+                // LA RELANCE DE LA MÊME QUESTION — Minamba, le 20/11/2026, signalement #45 : après « 8 - 3 = ? » au
+                // tableau, Nora a relancé « Non, pas tout à fait Adam… Combien il en reste ? », sans réécrire le calcul.
+                // Le tableau l'affiche toujours (voir EtatDuTableau) : c'est la même question, et c'est justement au
+                // deuxième essai que le professeur recopie son « non » d'avant. Une relance se reconnaît à ses mots
+                // (« il en reste », « ça fait », « en tout », « essaie »…) et ne cite aucun autre nombre que ceux du
+                // calcul. Sinon (« Maintenant, calcule 9 - 4. », « Combien de billes a Paul ? ») : on ne remonte plus.
+                // Une relance ne félicite pas : « Bravo, tu as trouvé le résultat ! Tu en veux un autre ? » clôt la question.
+                if (!RelanceDeCalcul().IsMatch(message) || Felicite().IsMatch(message)) return null;
+                nombresDesRelances.AddRange(nombres);
             }
 
             return null;
         }
+
+        /// <summary>Trois messages : la question, puis les deux relances de la règle des trois essais.</summary>
+        public const int MessagesRemontes = 3;
+
+        [GeneratedRegex(@"\b(?:il\s+en\s+reste|en\s+tout|ça\s+(?:fait|donne)|ca\s+(?:fait|donne)|cela\s+fait|combien\s+(?:font|fait|ça|ca)"
+            + @"|le\s+résultat|essaie|réessaie|recommence|recompte|compte|regarde\s+(?:bien\s+)?(?:le\s+)?tableau|dernier\s+essai"
+            + @"|pas\s+(?:tout\s+à\s+fait|encore|ça)|presque)", RegexOptions.IgnoreCase)]
+        private static partial Regex RelanceDeCalcul();
+
+        [GeneratedRegex(@"\b(?:oui|bravo|exact|exactement|parfait|super|génial|bien\s+joué|c'est\s+(?:ça|juste|bon))\b", RegexOptions.IgnoreCase)]
+        private static partial Regex Felicite();
+
+        private static List<decimal> NombresDuMessage(string message)
+        {
+            var sansBalises = Regex.Replace(message, @"\[[^\]]*\]", " ");
+            return NombreEnChiffres().Matches(sansBalises)
+                .Select(m => decimal.TryParse(m.Value.Replace(',', '.'), NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out var d) ? d : -1m)
+                .Concat(NombresEnLettres.Lire(sansBalises).Select(l => (decimal)l.Valeur))
+                .ToList();
+        }
+
+        private static HashSet<decimal> Operandes(string expression) =>
+            NombreEnChiffres().Matches(expression)
+                .Select(m => decimal.Parse(m.Value.Replace(',', '.'), CultureInfo.InvariantCulture))
+                .ToHashSet();
 
         private static List<(string Expression, decimal Resultat)> Calculs(string message, out bool illisible)
         {
@@ -320,7 +367,26 @@ namespace SchoolWebApp.Api.Services
             // Un résultat négatif (« moins 1 ») ne se lit pas encore : pas de verdict.
             if (attendu.StartsWith('-')) return null;
 
-            // « 4 + 3 = 7 » : c'est ce qui suit le dernier « = » qui répond.
+            // « 4 + 3 = 7 » : c'est ce qui suit le « = » qui répond — à condition que ce soit LE calcul posé.
+            // Minamba, le 20/11/2026, signalement #45 (étape 5) : « tu as dit que 4 + 3 = 8 et 9 - 4 = 7, c'est
+            // vrai ? », alors que le tableau affichait 6 + 2. Ce n'est pas une réponse : c'est une question sur
+            // d'autres calculs, et le 7 n'a rien à voir avec 6 + 2. Plusieurs « = », ou un autre calcul avant le
+            // « = » : pas de verdict.
+            if (reponse.Count(c => c == '=') > 1) return null;
+            if (reponse.Contains('='))
+            {
+                var avant = reponse[..reponse.IndexOf('=')];
+                var calculCite = Regex.Match(avant, ExpressionMotif, RegexOptions.IgnoreCase);
+                if (calculCite.Success)
+                {
+                    if (Evaluer(calculCite.Value)?.Ecrite != expression) return null;
+                }
+                else if (avant.Any(char.IsDigit))
+                {
+                    return null;
+                }
+            }
+
             var dit = reponse.Contains('=') ? reponse[(reponse.LastIndexOf('=') + 1)..] : reponse;
             if (Regex.IsMatch(dit, @"[-−–]\s*\d|\bmoins\b", RegexOptions.IgnoreCase)) return null;
 
