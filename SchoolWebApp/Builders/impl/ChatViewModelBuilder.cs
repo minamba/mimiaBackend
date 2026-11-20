@@ -3481,6 +3481,31 @@ namespace SchoolWebApp.Api.Builders.impl
                 }
             }
 
+            // LES FORMES GÉOMÉTRIQUES (20/11/2026, signalement #48) — voir FormesAuTableau : le tableau sans dessin, le
+            // verdict de « combien de côtés a un carré ? » et les 3 essais sans la réponse sont dits par le code. En maths,
+            // du CP à la 3e, hors contrôle noté et hors exercices qui ont leur propre verdict.
+            FormesAuTableau.Tour? formesDuTour = null;
+            if (!controleOuvert && !enExerciceDeSons && !enLectureDeNombres && !dicteeDeNombres && !change
+                && Services.Voix.LectureDesNombres.Concerne(contexte.Conversation.AgentSlug, contexte.Eleve.NiveauCode))
+            {
+                formesDuTour = FormesAuTableau.Lire(
+                    historique.Where(m => !string.IsNullOrWhiteSpace(m.Contenu)
+                            && (m.Role == "user"
+                                || (m.Role == "assistant"
+                                    && !m.Contenu!.TrimStart().StartsWith("[FICHE]", StringComparison.OrdinalIgnoreCase)
+                                    && !m.Contenu.TrimStart().StartsWith("[RAPPORT]", StringComparison.OrdinalIgnoreCase))))
+                        .TakeLast(16)
+                        .Select(m => (m.Role ?? string.Empty, (string?)m.Contenu))
+                        .ToList(),
+                    contenu);
+                if (formesDuTour is not null)
+                {
+                    var faitFormes = FormesAuTableau.Fait(formesDuTour);
+                    declencheur += "\n\n" + faitFormes;
+                    _logger.LogInformation("Formes (conversation {ConversationId}) : {Fait}", conversationId, faitFormes);
+                }
+            }
+
             // LA LECTURE DES NOMBRES (12/11/2026) — voir LectureDesNombres : le code choisit le nombre de ce tour, le
             // professeur ne dit que son bravo ou son encouragement. Trois lectures fausses : on passe, sans la réponse.
             Services.Voix.LectureDesNombres.Tour? nombresDuTour = null;
@@ -4123,6 +4148,15 @@ namespace SchoolWebApp.Api.Builders.impl
 
                 await ConstaterCorrectionDicteeAsync(
                     conversationId, contexte.Eleve.Id, resultat.TexteComplet, ct);
+
+                // LE FAIT DES FORMES A-T-IL SUFFI ? (20/11/2026, signalement #48) — grep « Reponse de forme donnee trop tot ».
+                if (formesDuTour is not null && FormesAuTableau.DonneeTropTot(formesDuTour, resultat.TexteComplet))
+                {
+                    _logger.LogWarning(
+                        "Reponse de forme donnee trop tot (conversation {ConversationId}, essai {Essai}) : {Debut}",
+                        conversationId, formesDuTour.Essai,
+                        resultat.TexteComplet.Length > 160 ? resultat.TexteComplet[..160] : resultat.TexteComplet);
+                }
 
                 // « PAS TOUT À FAIT ! […] TU AS RAISON » (14/11/2026) — relevé pour savoir si le rappel suffit : grep
                 // « Ouverture contredite » dans docker logs mimia.

@@ -6418,6 +6418,19 @@ namespace SchoolWebApp.Api.Services.Prompts
             Si une figure ne s'exprime pas avec ces instructions, ne la dessine
             pas : décris-la en mots.
 
+            ## LES FORMES DU PRIMAIRE SE MONTRENT
+
+            Une forme (carré, rectangle, triangle, rond) se reconnaît en la
+            VOYANT. Écrire leurs noms au tableau ne montre rien. Chaque forme
+            sur laquelle tu l'interroges est tracée par [FIGURE], une à la
+            fois : « carré ABCD de côté 3 », « rectangle ABCD de longueur 5 et
+            de largeur 3 », « triangle ABC équilatéral », « cercle de centre O
+            de rayon 2 cm ». Ne parle jamais d'une image ou d'un dessin que tu
+            n'as pas tracé : il ne le voit pas. Et s'il se trompe (« 3 côtés »
+            pour un carré), tu ne donnes pas la réponse et tu ne comptes pas à
+            sa place : un indice de méthode (suivre le bord du doigt), et il
+            réessaie, jusqu'à 3 essais.
+
             ## QUI TRACE QUOI
 
             - TU TRACES avec [FIGURE] pour MONTRER : une figure d'énoncé, un
