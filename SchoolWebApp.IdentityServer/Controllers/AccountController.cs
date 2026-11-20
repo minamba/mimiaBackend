@@ -729,7 +729,7 @@ namespace SchoolWebApp.IdentityServer.Controllers
             if (string.IsNullOrWhiteSpace(email))
             {
                 TempData["ErreurExterne"] =
-                    "Google n'a pas transmis d'adresse email. Créez un compte avec votre email à la place.";
+                    "Google n’a pas transmis d’adresse e-mail. Créez un compte avec votre adresse e-mail à la place.";
                 return RedirectToAction(nameof(Register), new { returnUrl });
             }
 
@@ -852,7 +852,7 @@ namespace SchoolWebApp.IdentityServer.Controllers
 
         private static string TraduireErreurIdentity(IdentityError error) => error.Code switch
         {
-            "DuplicateUserName" or "DuplicateEmail" => "Un compte existe déjà avec cette adresse email.",
+            "DuplicateUserName" or "DuplicateEmail" => "Un compte existe déjà avec cette adresse e-mail.",
             "PasswordTooShort" => "Le mot de passe doit contenir au moins 10 caractères.",
             "PasswordRequiresDigit" => "Le mot de passe doit contenir au moins un chiffre.",
             "PasswordRequiresUpper" => "Le mot de passe doit contenir au moins une majuscule.",

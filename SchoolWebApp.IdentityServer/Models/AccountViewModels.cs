@@ -4,7 +4,7 @@ namespace SchoolWebApp.IdentityServer.Models
 {
     public class LoginViewModel
     {
-        [Required(ErrorMessage = "L'adresse email est obligatoire.")]
+        [Required(ErrorMessage = "L’adresse e-mail est obligatoire.")]
         [EmailAddress(ErrorMessage = "Adresse e-mail invalide.")]
         [Display(Name = "Adresse e-mail")]
         public string Email { get; set; } = string.Empty;
@@ -39,7 +39,7 @@ namespace SchoolWebApp.IdentityServer.Models
         [Display(Name = "Nom")]
         public string Nom { get; set; } = string.Empty;
 
-        [Required(ErrorMessage = "L'adresse email est obligatoire.")]
+        [Required(ErrorMessage = "L’adresse e-mail est obligatoire.")]
         [EmailAddress(ErrorMessage = "Adresse e-mail invalide.")]
         [Display(Name = "Adresse e-mail")]
         public string Email { get; set; } = string.Empty;
@@ -60,7 +60,7 @@ namespace SchoolWebApp.IdentityServer.Models
         /// Le compte est celui d'un adulte responsable : obligatoire pour le RGPD
         /// (consentement parental pour les profils enfants de moins de 15 ans).
         /// </summary>
-        [Display(Name = "Je certifie être le parent ou le responsable légal des élèves que j'inscrirai")]
+        [Display(Name = "Je certifie être le parent ou le responsable légal des élèves que j’inscrirai")]
         [Range(typeof(bool), "true", "true", ErrorMessage = "Cette confirmation est obligatoire.")]
         public bool ConfirmeResponsabiliteParentale { get; set; }
 
@@ -84,7 +84,7 @@ namespace SchoolWebApp.IdentityServer.Models
 
     public class ForgotPasswordViewModel
     {
-        [Required(ErrorMessage = "L'adresse email est obligatoire.")]
+        [Required(ErrorMessage = "L’adresse e-mail est obligatoire.")]
         [EmailAddress(ErrorMessage = "Adresse e-mail invalide.")]
         [Display(Name = "Adresse e-mail")]
         public string? Email { get; set; }
