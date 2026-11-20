@@ -324,6 +324,8 @@ namespace SchoolWebApp.Api.Services.Voix
             // lis-la encore une fois à voix haute », puis celle du code : deux fois la même chose. La consigne est celle du code.
             propre = ConsigneDuProfesseur().Replace(propre, string.Empty);
             propre = RegardeSeulement().Replace(propre, string.Empty);
+            // Jamais de fonctionnement interne à l'enfant (« c'est le code qui choisit », signalement #51).
+            propre = JargonTechnique.Retirer(propre);
 
             // La cible elle-même, s'il l'a citée (« Lis "jo" ») : la ligne entière part. Citée seulement : « a », « ou », « on »
             // sont aussi des mots de ses phrases.
@@ -367,11 +369,11 @@ namespace SchoolWebApp.Api.Services.Voix
         {
             var quoi = anglais ? "LIRE à voix haute des mots ANGLAIS en image"
                 : type == Syllabe ? "LIRE à voix haute la syllabe en couleur d'une image" : "LIRE à voix haute des mots";
-            return $"[Fait pour ce tour, qui l'emporte sur les consignes d'écoute : l'élève a choisi de {quoi}. C'est le CODE qui choisit ce qu'il lit, "
-                + "l'affiche au tableau et écrit la consigne à la fin de ton message. Toi, tu écris seulement une ou deux phrases courtes, en français "
-                + "(bravo, encouragement), SANS lui redemander de lire : la consigne est déjà écrite par le code. "
+            return $"[Fait pour ce tour, qui l'emporte sur les consignes d'écoute : l'élève a choisi de {quoi}. Ce qu'il lit s'affiche "
+                + "au tableau, et la consigne de lecture est ajoutée à la fin de ton message. Toi, tu écris seulement une ou deux phrases courtes, en français "
+                + "(bravo, encouragement), SANS lui redemander de lire : la consigne est déjà là. "
                 + "Tu ne dis, n'écris et ne prononces JAMAIS de syllabe ni de mot à lire : aucune balise de voix, rien au "
-                + "tableau (ni [ARDOISE], ni [TABLEAU_EFFACE]), et pas de « qu'as-tu entendu ». Tu ne changes d'exercice que s'il le demande lui-même.]";
+                + "tableau (ni [ARDOISE], ni [TABLEAU_EFFACE]), et pas de « qu'as-tu entendu ». Tu ne changes d'exercice que s'il le demande lui-même. " + JargonTechnique.Regle + "]";
         }
 
         /// <summary>
@@ -381,21 +383,21 @@ namespace SchoolWebApp.Api.Services.Voix
         public static string FaitVerdict(VerdictSon verdict, Element e, bool auClavier = false)
         {
             var quoi = e.EstSyllabe ? "la syllabe" : "le mot";
-            const string fin = " Ne parle jamais de cet outil ni du micro à l'élève.]";
+            const string fin = " Ne parle jamais de cet outil ni du micro à l'élève. " + JargonTechnique.Regle + "]";
 
             if (auClavier && !verdict.SansJugement && !verdict.Juste && !(e.EnAnglais && EstLaTraduction(e.Cible, verdict.Entendu)))
             {
                 return $"[Fait pour ce tour, qui l'emporte sur le rappel précédent : il devait lire {quoi} « {e.Cible} », et il a écrit "
                     + $"« {verdict.Entendu} » : ce n'est pas ça. Son écran affiche « On réessaie ». Ne le félicite pas et ne dis pas « bravo » : "
                     + "encourage-le en une phrase, SANS lui donner la réponse et sans la prononcer, et SANS consigne : n'écris ni « regarde bien », "
-                    + "ni « lis », ni « essaie encore de le lire » — le code remet la même image et écrit lui-même la consigne à la fin de ton message." + fin;
+                    + "ni « lis », ni « essaie encore de le lire » — la même image reste au tableau et la consigne est ajoutée à la fin de ton message." + fin;
             }
 
             if (verdict.SansJugement)
             {
                 return $"[Fait pour ce tour, qui l'emporte sur le rappel précédent : il a lu le mot entier « {verdict.Entendu} » au lieu de la seule "
                     + "syllabe en couleur. Ce n'est pas une erreur : dis-lui gentiment, en une phrase, de ne lire que la partie en couleur. Ne lui dis "
-                    + "pas laquelle : le code lui remet la même image." + fin;
+                    + "pas laquelle : la même image reste au tableau." + fin;
             }
 
             // LE MOT EN FRANÇAIS AU LIEU DE L'ANGLAIS — Camara, le 07/11/2026 : c'est bien le mot, mais en français ; elle
@@ -405,7 +407,7 @@ namespace SchoolWebApp.Api.Services.Voix
                 return $"[Fait pour ce tour, qui l'emporte sur le rappel précédent : il devait lire le mot anglais « {e.Cible} », et il a dit "
                     + $"« {verdict.Entendu} », le même mot en FRANÇAIS. Son écran affiche « On réessaie ». Dis-lui que c'est bien le mot en "
                     + "français, bravo, mais que tu attends qu'il le lise en ANGLAIS, comme il est écrit au tableau. Ne lui donne pas le mot "
-                    + "anglais et ne le prononce pas : le code lui remet la même image." + fin;
+                    + "anglais et ne le prononce pas : la même image reste au tableau." + fin;
             }
 
             if (verdict.Juste)
@@ -414,12 +416,12 @@ namespace SchoolWebApp.Api.Services.Voix
                     ? $" Tu peux ajouter « Comme dans {mot} ! ». N'écris JAMAIS la syllabe seule dans ta phrase : ta voix la lirait mal (« sin » est devenu « sine »)."
                     : string.Empty;
                 return $"[Fait pour ce tour, qui l'emporte sur le rappel précédent : il a bien lu {quoi} « {e.Cible} ». Son écran affiche déjà "
-                    + $"« Bonne lecture » en vert : félicite-le en une phrase.{image} Le code affiche la suite." + fin;
+                    + $"« Bonne lecture » en vert : félicite-le en une phrase.{image} La suite s'affiche ensuite au tableau." + fin;
             }
 
             return $"[Fait pour ce tour, qui l'emporte sur le rappel précédent : il devait lire {quoi} « {e.Cible} », et le micro a entendu "
                 + $"« {verdict.Entendu} ». Son écran affiche « On réessaie ». Encourage-le en une phrase, SANS lui donner la réponse et sans la "
-                + "prononcer : le code lui remet la même image. Le micro peut aussi s'être trompé : ne lui dis pas qu'il a mal lu." + fin;
+                + "prononcer : la même image reste au tableau. Le micro peut aussi s'être trompé : ne lui dis pas qu'il a mal lu." + fin;
         }
 
         /// <summary>Ce qu'il a dit est-il la traduction française du mot anglais (« bateau » pour ship) ?</summary>

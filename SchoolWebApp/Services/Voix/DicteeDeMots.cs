@@ -164,18 +164,18 @@ namespace SchoolWebApp.Api.Services.Voix
                 PhaseDuMot.Reessayer =>
                     $"[Fait pour ce tour, qui l'emporte sur tout le reste : tu as dicté « {etat.Mot} » et il a tapé « {etat.Tape} » : ce n'est PAS encore juste, essai {etat.Essai} sur {EssaisMax}. "
                     + $"Ne dis pas bravo. NE PASSE PAS à un autre mot. N'écris « {etat.Mot} » ni au tableau ni dans ta phrase, ni entier, ni épelé, ni découpé en syllabes. Encourage-le et donne un seul indice sur ce qui change, par exemple une lettre en trop ou le son du milieu, en toutes lettres dans ta phrase, sans balise. "
-                    + $"Le code redira le mot à voix haute à la fin de ton message : termine par « réessaie ».]",
+                    + $"Le mot sera redit à voix haute à la fin de ton message : termine par « réessaie ».]",
                 PhaseDuMot.AuMicro =>
                     $"[Fait pour ce tour, qui l'emporte sur tout le reste : tu as dicté « {etat.Mot} » et il vient de PARLER au micro au lieu de taper : ce n'est pas une réponse écrite, et ça ne compte pas comme un essai. "
                     + $"Ne dis ni bravo, ni que c'est juste, ni que c'est faux, et ne passe pas à un autre mot. N'écris jamais « {etat.Mot} » dans ta phrase. S'il demande de répéter, dis que tu répètes ; sinon, dis-lui de le taper avec le clavier. "
-                    + "Le code redira le mot à voix haute à la fin de ton message.]",
+                    + "Le mot sera redit à voix haute à la fin de ton message.]",
                 PhaseDuMot.AuTableau =>
                     $"[Fait pour ce tour, qui l'emporte sur tout le reste : tu as dicté « {etat.Mot} » et il a tapé « {etat.Tape} » : troisième essai, c'est encore faux. "
                     + $"Encourage-le, dis-lui que tu écris le mot au tableau pour qu'il voie la bonne écriture, et explique en une phrase ce qui change. "
-                    + "NE DICTE PAS de nouveau mot dans ce message. Termine en lui demandant de te dire quand il est prêt pour le mot suivant. Le code écrit le mot au tableau.]",
+                    + "NE DICTE PAS de nouveau mot dans ce message. Termine en lui demandant de te dire quand il est prêt pour le mot suivant. Le mot s'écrit ensuite au tableau.]",
                 _ =>
                     $"[Fait pour ce tour, qui l'emporte sur tout le reste : {(etat.Tape.Length > 0 ? $"il a tapé « {etat.Tape} », c'est juste. Félicite-le en une phrase." : "il a vu le mot au tableau.")} "
-                    + $"Le code efface le tableau. Dicte maintenant UN NOUVEAU mot, jamais « {etat.Mot} », seul sur sa ligne à la fin de ton message, dans {voix}. Rien d'autre après.]",
+                    + $"Le tableau est effacé. Dicte maintenant UN NOUVEAU mot, jamais « {etat.Mot} », seul sur sa ligne à la fin de ton message, dans {voix}. Rien d'autre après.]",
             };
         }
 

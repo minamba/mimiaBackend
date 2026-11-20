@@ -25,7 +25,9 @@ namespace SchoolWebApp.Api.Services.Voix
         public sealed record Element(string Cible, int Rang);
 
         /// <summary>Ce que le code montre à ce tour : l'élément, s'il est redemandé ou nouveau, et s'il vient d'abandonner.</summary>
-        public sealed record Tour(Element Element, bool Redite, bool Premier, bool Abandon, bool Demande = false);
+        /// <remarks><paramref name="HorsCatalogue"/> : le nombre qu'il a demandé et qu'on ne peut pas montrer en image (pas au
+        /// catalogue de sa classe ni d'en dessous) ; le tableau garde alors son nombre (signalement #51).</remarks>
+        public sealed record Tour(Element Element, bool Redite, bool Premier, bool Abandon, bool Demande = false, string? HorsCatalogue = null);
 
         /// <summary>Le verdict du message de l'enfant : ce qu'il devait lire, s'il est juste, et ce qu'il a dit.</summary>
         public sealed record Verdict(Element Montre, bool Juste, string Dit);
@@ -125,7 +127,8 @@ namespace SchoolWebApp.Api.Services.Voix
             var message = messageDeLEleve ?? string.Empty;
             if (DemandeDeLecture().IsMatch(message)) return true;
             // « Propose-moi un nouvel exercice » (14/11/2026) : la même règle que partout, voir ChangementDExercice.
-            if (Arret().IsMatch(message) || ChangementDExercice.Demande(message)) return false;
+            // « Maintenant on fait une addition » (signalement #51) : il nomme une autre activité, l'exercice s'arrête.
+            if (Arret().IsMatch(message) || ChangementDExercice.Demande(message) || DemandeUneAutreActivite(message)) return false;
 
             // IL DEMANDE D'AFFICHER UN NOMBRE (commentaire de Min's sur le signalement #50, 20/11/2026 : « quand l'élève
             // demande d'afficher un chiffre, Nora devra afficher l'image correspondante, comme pour les exercices de
@@ -142,6 +145,24 @@ namespace SchoolWebApp.Api.Services.Voix
             return Proposition().IsMatch(dernier) && Accepte().IsMatch(message) && message.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length <= 8;
         }
 
+        // IL NOMME UNE AUTRE ACTIVITÉ DE MATHS — signalement #51 (Adam, 20/11/2026) : « cinquante-quatre. Maintenant on fait
+        // une addition » → « Oui, cinquante-quatre, bravo », puis le même 54 et « on fait toujours cet exercice ». Ni
+        // « autre exercice » ni « on change » : ChangementDExercice ne le voyait pas. Un verbe qui propose (« on fait »,
+        // « je veux faire », « passons à », « donne-moi »), puis une activité nommée. Pas « on a fait une addition ».
+        [GeneratedRegex(
+            @"(?:(?<!\p{L})(?:on|nous)\s+(?:(?:peut|pourrait|va|veut|pourra)\s+)?(?:fai(?:t|s|re)|refai(?:t|re)|pass(?:e|er)\s+(?:à|a|aux|au)|essai(?:e|er)|commenc(?:e|er))"
+            + @"|(?<!\p{L})(?:je|j['’])\s*(?:veux|voudrais|aimerais|pr[ée]f[èe]re(?:rais)?|peux)\s+(?:faire|refaire|passer\s+(?:à|a|aux|au)|essayer|apprendre)"
+            + @"|(?<!\p{L})(?:faisons|passons\s+(?:à|a|aux|au))"
+            + @"|(?<!\p{L})(?:fais|donne|propose|pose)[- ](?:moi|nous))"
+            + @"\s+(?:une?\s+|des\s+|du\s+|de\s+la\s+|les?\s+|la\s+|l['’]\s*|d['’]\s*)?(?:autres?\s+|nouvel(?:le)?s?\s+|petite?s?\s+)?"
+            + @"(?:additions?|soustractions?|multiplications?|divisions?|calculs?|op[ée]rations?|probl[èe]mes?|g[ée]om[ée]trie|formes?|mesures?|tables?\s+de\s+multiplication)(?!\p{L})",
+            RegexOptions.IgnoreCase)]
+        private static partial Regex AutreActivite();
+
+        /// <summary>Il nomme une autre activité de maths (« on fait une addition ») : la lecture des nombres s'arrête.</summary>
+        public static bool DemandeUneAutreActivite(string? message) =>
+            !string.IsNullOrWhiteSpace(message) && AutreActivite().IsMatch(message);
+
         /// <summary>Le nombre qu'il avait à lire à ce tour (celui du dernier message du professeur), ou null.</summary>
         public static Element? DernierMontre(IReadOnlyList<(string? Role, string? Contenu, bool? SonJuste)> recents) =>
             Affiche(DernierDuProfesseur(recents));
@@ -156,10 +177,26 @@ namespace SchoolWebApp.Api.Services.Voix
             if (montre is null || string.IsNullOrWhiteSpace(messageDeLEleve) || DemandeDeLecture().IsMatch(messageDeLEleve)) return null;
             // « Écris le nombre 23 » n'est pas une lecture du nombre affiché : c'est une demande (signalement #50).
             if (CanoniqueDemande(messageDeLEleve) is not null) return null;
+            // « C'est toi qui choisis le nombre ? Pourquoi pas le 23 ? » (signalement #51, vu en test de bout en bout) :
+            // jugé comme une lecture FAUSSE de 34 (les mots autour du nombre sont ignorés). Une question n'est pas une lecture.
+            if (EstUneQuestion(messageDeLEleve)) return null;
             var lu = Canonique(messageDeLEleve);
             if (lu is null) return null;
             return new Verdict(montre, lu == Normaliser(montre.Cible), messageDeLEleve.Trim());
         }
+
+        // « pourquoi », « comment » : toujours une question. Les autres mots ne comptent qu'avec un point d'interrogation :
+        // « c'est 34 ? » reste une lecture (il hésite), « tu peux mettre le 23 ? » n'en est pas une.
+        [GeneratedRegex(@"(?<!\p{L})(?:pourquoi|comment)(?!\p{L})", RegexOptions.IgnoreCase)]
+        private static partial Regex MotQuestionToujours();
+
+        [GeneratedRegex(@"(?<!\p{L})(?:est[- ]ce|qui|quoi|quel(?:le)?s?|peux|peut|pourrais|choisis|choisit|veux|sais|as|es|on)(?!\p{L})", RegexOptions.IgnoreCase)]
+        private static partial Regex MotQuestion();
+
+        /// <summary>Son message est une question à la maîtresse, pas une lecture du nombre.</summary>
+        public static bool EstUneQuestion(string? message) =>
+            !string.IsNullOrWhiteSpace(message)
+            && (MotQuestionToujours().IsMatch(message) || (message.Contains('?') && MotQuestion().IsMatch(message)));
 
         /// <summary>Ce que garde le message de l'enfant : « J'ai lu le nombre soixante-treize. »</summary>
         public static string TexteDeLEleve(Verdict v) =>
@@ -244,6 +281,15 @@ namespace SchoolWebApp.Api.Services.Voix
                 return new Tour(demande, Redite: precedent?.Cible == demande.Cible, Premier: precedent is null, Abandon: false, Demande: true);
             }
 
+            // IL DEMANDE UN NOMBRE QU'ON NE PEUT PAS MONTRER (signalement #51 : sa demande était ignorée sans un mot, « on fait
+            // toujours cet exercice »). Le tableau garde son nombre, mais le professeur reçoit sa demande (FaitHorsCatalogue)
+            // et la consigne ne dit pas « essaie encore » : il n'a pas encore essayé.
+            var horsCatalogue = verdict is null ? CanoniqueDemande(messageDeLEleve) : null;
+            if (horsCatalogue is not null && precedent is not null)
+            {
+                return new Tour(precedent, Redite: true, Premier: false, Abandon: false, HorsCatalogue: horsCatalogue);
+            }
+
             // Les lectures fausses de suite sur ce nombre, celle de ce tour comprise.
             var abandon = false;
             if (precedent is not null && verdict is { Juste: false })
@@ -277,7 +323,7 @@ namespace SchoolWebApp.Api.Services.Voix
             if (pool.Count == 0) pool = possibles.ToList();
 
             var choisi = pool[Indice(graine, pool.Count)];
-            return new Tour(choisi, Redite: false, Premier: precedent is null, Abandon: abandon);
+            return new Tour(choisi, Redite: false, Premier: precedent is null, Abandon: abandon, HorsCatalogue: horsCatalogue);
         }
 
         // ------------------------------------------------------------------ le message du professeur
@@ -317,6 +363,8 @@ namespace SchoolWebApp.Api.Services.Voix
             propre = ConsigneDuProfesseur().Replace(propre, string.Empty);
             propre = PhraseDEcoute().Replace(propre, string.Empty);
             if (tour.Demande) propre = RefusDAfficher().Replace(propre, string.Empty);
+            // « C'est le code qui va choisir un nombre pour toi » (signalement #51) : jamais de fonctionnement interne à l'enfant.
+            propre = JargonTechnique.Retirer(propre);
 
             // Le nombre à lire lui-même, s'il l'a cité (il ne le connaît pas, mais une redite peut le reprendre) : la ligne part.
             var affiche = Affichage(tour.Element.Cible);
@@ -341,29 +389,42 @@ namespace SchoolWebApp.Api.Services.Voix
         /// faire attendre la nouvelle image jusqu'à la voix : les deux se modifient ensemble.
         /// </summary>
         public static string Consigne(Tour tour) =>
-            tour.Redite ? "Regarde bien le nombre, et essaie encore de le lire à voix haute."
+            tour.HorsCatalogue is not null ? "Regarde le tableau : lis ce nombre à voix haute."
+            : tour.Redite ? "Regarde bien le nombre, et essaie encore de le lire à voix haute."
             : tour.Premier || tour.Demande ? "Regarde le tableau : lis ce nombre à voix haute."
             : "Voici un autre nombre : lis-le à voix haute.";
 
         /// <summary>Le fait de l'exercice, à chaque tour.</summary>
         public const string FaitType =
-            "[Fait pour ce tour : l'élève fait l'exercice de LECTURE DES NOMBRES. C'est le CODE qui choisit le nombre (ou reprend "
-            + "celui que l'élève demande), l'affiche au "
-            + "tableau et écrit la consigne à la fin de ton message. Toi, tu écris seulement une ou deux phrases courtes (bravo, "
-            + "encouragement, un indice de méthode), SANS lui redemander de lire : la consigne est déjà écrite par le code. Tu "
-            + "n'écris et ne prononces JAMAIS le nombre à lire, et tu n'écris rien au tableau (ni [ARDOISE], ni [FIGURE]). Tu ne "
-            + "changes d'exercice que s'il le demande lui-même. Il LIT le nombre au tableau, il ne l'entend pas : ne dis jamais "
-            + "« écoute » ni « tu as entendu », dis « regarde ».]";
+            // Signalement #51 : « C'est le CODE qui choisit le nombre » était recopié tel quel à l'enfant (« c'est le code qui
+            // va choisir un nombre pour toi »). Le fait ne parle plus du code, et donne la règle de JargonTechnique.
+            "[Fait pour ce tour : l'élève fait l'exercice de LECTURE DES NOMBRES. Le nombre (ou celui que l'élève a demandé, "
+            + "quand c'est possible) s'affiche au tableau en image, et la consigne de lecture est ajoutée à la fin de ton message. "
+            + "Toi, tu écris seulement une ou deux phrases courtes (bravo, encouragement, un indice de méthode), SANS lui "
+            + "redemander de lire : la consigne est déjà là. Tu n'écris et ne prononces JAMAIS le nombre à lire, et tu n'écris "
+            + "rien au tableau (ni [ARDOISE], ni [FIGURE]). S'il demande une autre activité, tu la fais. Il LIT le nombre au "
+            + "tableau, il ne l'entend pas : ne dis jamais « écoute » ni « tu as entendu », dis « regarde ». "
+            + JargonTechnique.Regle + "]";
 
         /// <summary>
         /// Le fait d'un nombre qu'il a demandé lui-même (signalement #50) : sans lui, le professeur répondait « je ne choisis
         /// pas moi-même le nombre, c'est l'exercice qui s'en charge » alors que le tableau montrait justement le sien.
         /// </summary>
         public const string FaitDemande =
-            "[Fait pour ce tour : il a demandé lui-même ce nombre, et le code L'AFFICHE BIEN au tableau, en image (le nombre "
+            "[Fait pour ce tour : il a demandé lui-même ce nombre, et il S'AFFICHE BIEN au tableau, en image (le nombre "
             + "qu'il a demandé, pas un autre). Dis-lui en une phrase que c'est parti. Ne dis JAMAIS que tu ne peux pas "
             + "l'afficher, que tu ne choisis pas le nombre ou qu'on continue avec un autre nombre, et ne le prononce pas : "
             + "c'est lui qui le lit.]";
+
+        /// <summary>
+        /// Le fait d'un nombre demandé qu'on ne peut pas montrer en image (signalement #51) : le tableau garde le sien, et
+        /// le professeur répond à sa demande comme un enseignant, au lieu de l'ignorer.
+        /// </summary>
+        public static string FaitHorsCatalogue(string demande) =>
+            $"[Fait pour ce tour : il t'a demandé d'afficher le nombre {Affichage(demande)}, mais celui-là ne s'affiche pas "
+            + "dans cet exercice : le tableau garde le nombre d'avant. Réponds à sa demande en une phrase gentille et simple, "
+            + "comme une maîtresse (« Celui-là, on le lira une autre fois ! »), puis encourage-le à lire celui du tableau. Ne "
+            + "prononce pas le nombre du tableau. " + JargonTechnique.Regle + "]";
 
         // Le refus que le modèle écrit encore parfois devant un nombre demandé (« je ne peux pas te l'afficher pour
         // l'instant », « je ne choisis pas moi-même le nombre ») alors que le tableau le montre : la phrase s'en va.
@@ -375,27 +436,27 @@ namespace SchoolWebApp.Api.Services.Voix
         /// <summary>Le fait du verdict.</summary>
         public static string FaitVerdict(Verdict v, Tour? tour)
         {
-            const string fin = " Ne parle jamais du micro ni de cet outil à l'élève.]";
+            const string fin = " Ne parle jamais du micro ni de cet outil à l'élève. " + JargonTechnique.Regle + "]";
             var cible = Affichage(v.Montre.Cible);
             var lu = Canonique(v.Dit) is { } c ? Affichage(c) : null;
 
             if (v.Juste)
             {
                 return $"[Fait pour ce tour : il a bien lu le nombre {cible}. Son écran affiche déjà « Bonne lecture » : félicite-le en une "
-                    + "phrase. Le code affiche le nombre suivant." + fin;
+                    + "phrase. Le nombre suivant s'affiche ensuite au tableau." + fin;
             }
 
             if (tour is { Abandon: true })
             {
                 return $"[Fait pour ce tour : il devait lire {cible} et a dit « {v.Dit} »{(lu is null ? string.Empty : $" (soit {lu})")}, pour la "
-                    + "troisième fois sans y arriver. Le code passe à un autre nombre. Dis-lui en une phrase que ce n'est pas grave et qu'on "
+                    + "troisième fois sans y arriver. Un autre nombre s'affiche à sa place. Dis-lui en une phrase que ce n'est pas grave et qu'on "
                     + "y reviendra. NE DONNE PAS la réponse et ne la prononce pas." + fin;
             }
 
             return $"[Fait pour ce tour : il devait lire {cible} et a dit « {v.Dit} »{(lu is null ? string.Empty : $" (soit {lu})")}. Son écran "
                 + "affiche « On réessaie ». Encourage-le en une phrase et, si tu vois l'erreur (soixante-dix et quatre-vingts, un zéro "
                 + "oublié, la virgule, le signe moins, le dénominateur), donne un indice de MÉTHODE. NE DONNE JAMAIS la réponse et ne la "
-                + "prononce pas : le code lui remet le même nombre." + fin;
+                + "prononce pas : le même nombre reste au tableau." + fin;
         }
 
         /// <summary>La cible telle qu'on l'écrit pour le professeur : « 12 345 », « 3/4 », « 10^-3 », « 3√2 ».</summary>

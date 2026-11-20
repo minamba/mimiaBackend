@@ -2751,6 +2751,8 @@ namespace SchoolWebApp.Api.Builders.impl
             var enLectureDeNombres = false;
             Services.Voix.LectureDesNombres.Verdict? verdictNombre = null;
             List<(string? Role, string? Contenu, bool? SonJuste)> recentsNombres = [];
+            // Il quitte la lecture des nombres pour une autre activité qu'il nomme (« on fait une addition », #51).
+            var quitteLectureDeNombres = false;
 
             // Vrai quand la dictée interrompue n'a encore laissé aucune trace
             // — l'élève a fermé son onglet au lieu de cliquer « Quitter » : le
@@ -2863,6 +2865,8 @@ namespace SchoolWebApp.Api.Builders.impl
                 {
                     recentsNombres = historique.TakeLast(MessagesPourExerciceDeSons)
                         .Select(m => ((string?)m.Role, (string?)m.Contenu, m.SonJuste)).ToList();
+                    quitteLectureDeNombres = Services.Voix.LectureDesNombres.DernierMontre(recentsNombres) is not null
+                        && Services.Voix.LectureDesNombres.DemandeUneAutreActivite(contenu);
                     if (Services.Voix.LectureDesNombres.EnCours(recentsNombres, contenu, contexte.Eleve.NiveauCode))
                     {
                         enLectureDeNombres = true;
@@ -3450,6 +3454,12 @@ namespace SchoolWebApp.Api.Builders.impl
             var changement = controleOuvert || sonJuste is not null || LecteurAuRevoir.DitAuRevoir(contenu)
                 ? ChangementDExercice.Nature.Aucune
                 : ChangementDExercice.Lire(contenu);
+            // « Maintenant on fait une addition » pendant la lecture des nombres (signalement #51) : c'est une demande de
+            // changement, même sans « autre exercice ». Le professeur reçoit le même fait, et l'ancien exercice est coupé.
+            if (changement == ChangementDExercice.Nature.Aucune && quitteLectureDeNombres && !controleOuvert && sonJuste is null)
+            {
+                changement = ChangementDExercice.Nature.Changer;
+            }
             var change = changement != ChangementDExercice.Nature.Aucune;
             var contenuPourLesSons = change ? ChangementDExercice.PartieQuiChoisit(contenu) : contenu;
             var filSons = ChangementDExercice.Fil(
@@ -3571,6 +3581,7 @@ namespace SchoolWebApp.Api.Builders.impl
                     contexte.Eleve.NiveauCode, recentsNombres, verdictNombre, $"{conversationId}|{historique.Count}", contenu);
                 declencheur += "\n\n" + Services.Voix.LectureDesNombres.FaitType;
                 if (nombresDuTour is { Demande: true }) declencheur += "\n\n" + Services.Voix.LectureDesNombres.FaitDemande;
+                if (nombresDuTour is { HorsCatalogue: { } horsCatalogue }) declencheur += "\n\n" + Services.Voix.LectureDesNombres.FaitHorsCatalogue(horsCatalogue);
                 if (verdictNombre is not null)
                 {
                     declencheur += "\n\n" + Services.Voix.LectureDesNombres.FaitVerdict(verdictNombre, nombresDuTour);
