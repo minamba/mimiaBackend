@@ -3481,6 +3481,11 @@ namespace SchoolWebApp.Api.Builders.impl
             if (change && !(langueDuSon is not null && Services.Voix.LectureDImage.ChangeDExercice(contenuPourLesSons)))
             {
                 declencheur += "\n\n" + ChangementDExercice.Fait(changement);
+                // Un nombre était au tableau : il n'y sera plus (sa balise est retirée hors de l'exercice, défaut e8).
+                if (!enLectureDeNombres && Services.Voix.LectureDesNombres.DernierMontre(recentsNombres) is not null)
+                {
+                    declencheur += "\n\n" + Services.Voix.LectureDesNombres.FaitFinDeLecture;
+                }
                 _logger.LogInformation(
                     "Changement d'exercice demande ({Nature}, conversation {ConversationId}).", changement, conversationId);
             }

@@ -477,7 +477,7 @@ namespace SchoolWebApp.Api.Services.Voix
         // « Regarde le prochain nombre. », « Regarde bien celui qui est au tableau. » : une phrase qui ne fait QUE montrer le
         // nombre double la consigne du code (vu au bout en bout). « Regarde bien le nombre, le chiffre de gauche… » reste.
         [GeneratedRegex(@"(?<=^|[.!?\n])[ \t]*regarde(?:\s+bien)?\s+(?:" + CeNombre + @"|celui\s+qui\s+est\s+(?:au\s+tableau|affich\p{L}*))"
-            + @"(?:\s+(?:qui\s+est\s+)?(?:affich\p{L}*|au\s+tableau|sur\s+le\s+tableau))?(?:\s+maintenant)?[ \t]*(?:[.!:]+|(?=\r?\n|$))",
+            + @"(?:\s+(?:qui\s+est\s+)?(?:affich\p{L}*|au\s+tableau|sur\s+le\s+tableau)){0,2}(?:\s+maintenant)?[ \t]*(?:[.!:]+|(?=\r?\n|$))",
             RegexOptions.IgnoreCase)]
         private static partial Regex RegardeSeulement();
 
@@ -627,6 +627,16 @@ namespace SchoolWebApp.Api.Services.Voix
             + "tableau, il ne l'entend pas : ne dis jamais « écoute » ni « tu as entendu », dis « regarde ». Ne promets jamais "
             + "qu'un nombre viendra « après » ou « plus tard ». "
             + JargonTechnique.Regle + "]";
+
+        /// <summary>
+        /// Le fait d'un changement d'exercice alors qu'un nombre était au tableau (défaut e8, bout en bout de la tâche
+        /// 2026-11-20-2016) : sa balise de nombre est désormais retirée hors de l'exercice, il doit donc savoir que le tableau
+        /// n'en montrera plus, sinon il annonce « lis ce nombre » ou « on y va ! » devant un tableau vide.
+        /// </summary>
+        public const string FaitFinDeLecture =
+            "[Fait pour ce tour : l'exercice de lecture des nombres est terminé, et plus aucun nombre ne s'affiche en image au "
+            + "tableau. Ne lui demande pas de lire « le nombre du tableau ». Si l'activité qu'il demande utilise des nombres "
+            + "(compter, comparer…), écris-les toi-même dans ton message ou au tableau avec [ARDOISE], et commence-la tout de suite.]";
 
         /// <summary>
         /// Le fait d'un nombre qu'il a demandé lui-même (signalement #50) : sans lui, le professeur répondait « je ne choisis
