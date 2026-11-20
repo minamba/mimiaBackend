@@ -202,6 +202,24 @@ namespace SchoolWebApp.Tests
             }
 
             Assert.Equal("Évolution des prix, Sacha", mesEnvois.Single(e => e.Destinataire == nonConsentant.Mail).Sujet);
+
+            // LE RENDU RÉEL dans le gabarit embarqué « diffusion » (20/11/2026). Avec `MIMIA_TEST_RENDU=<dossier>`, le HTML
+            // y est écrit (capture du compte rendu).
+            var aSacha = mesEnvois.Single(e => e.Destinataire == nonConsentant.Mail);
+            var html = await new ServiceEmail(
+                    Microsoft.Extensions.Options.Options.Create(new OptionsEmail()), NullLogger<ServiceEmail>.Instance)
+                .RendreAsync(aSacha.Sujet, "diffusion", aSacha.Valeurs);
+
+            Assert.Contains("Bonjour Sacha", html);
+            Assert.Contains("aucune offre commerciale", html);
+            Assert.DoesNotContain("desabonnement", html, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("{{", html);
+
+            var dossier = Environment.GetEnvironmentVariable("MIMIA_TEST_RENDU");
+            if (!string.IsNullOrWhiteSpace(dossier))
+            {
+                await File.WriteAllTextAsync(Path.Combine(dossier, "information-service.html"), html);
+            }
         }
 
         [Fact]
