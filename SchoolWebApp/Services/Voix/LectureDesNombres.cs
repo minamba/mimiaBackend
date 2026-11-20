@@ -476,7 +476,8 @@ namespace SchoolWebApp.Api.Services.Voix
 
         // « Regarde le prochain nombre. », « Regarde bien celui qui est au tableau. » : une phrase qui ne fait QUE montrer le
         // nombre double la consigne du code (vu au bout en bout). « Regarde bien le nombre, le chiffre de gauche… » reste.
-        [GeneratedRegex(@"(?<=^|[.!?\n])[ \t]*regarde(?:\s+bien)?\s+(?:" + CeNombre + @"|celui\s+qui\s+est\s+(?:au\s+tableau|affich\p{L}*))"
+        [GeneratedRegex(@"(?<=^|[.!?\n])[ \t]*(?:(?:allez|continue|maintenant|et)\s*,?\s*)?regarde(?:\s+bien)?\s+(?:" + CeNombre
+            + @"|le\s+tableau|celui\s+qui\s+est\s+(?:au\s+tableau|affich\p{L}*))"
             + @"(?:\s+(?:qui\s+est\s+)?(?:affich\p{L}*|au\s+tableau|sur\s+le\s+tableau)){0,2}(?:\s+maintenant)?[ \t]*(?:[.!:]+|(?=\r?\n|$))",
             RegexOptions.IgnoreCase)]
         private static partial Regex RegardeSeulement();
