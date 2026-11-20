@@ -2616,48 +2616,11 @@ namespace SchoolWebApp.Api.Controllers
             return Content(html, "text/html");
         }
 
-        /// <summary>
-        /// Lance la diffusion à TOUS les parents.
-        ///
-        /// Rend immédiatement : l'envoi se fait en arrière-plan et l'écran suit
-        /// son avancement. Une requête qui durerait une minute expirerait chez
-        /// le navigateur, l'administrateur recliquerait, et tout le monde
-        /// recevrait deux fois.
-        /// </summary>
-        [HttpPost("diffusion")]
-        [RequestSizeLimit(TailleMaxDiffusion)]
-        [SwaggerResponse(202, "Diffusion lancée.")]
-        [SwaggerResponse(409, "Une diffusion est déjà en cours.")]
-        public async Task<IActionResult> LancerDiffusion(
-            [FromForm] string sujet,
-            [FromForm] string titre,
-            [FromForm] string texte,
-            [FromServices] IDiffusionService diffusion,
-            [FromForm] List<IFormFile>? images = null,
-            [FromForm] List<IFormFile>? documents = null)
-        {
-            if (string.IsNullOrWhiteSpace(sujet) || string.IsNullOrWhiteSpace(texte))
-            {
-                return BadRequest(new { message = "L'objet et le message sont obligatoires." });
-            }
-
-            var lues = await LirePiecesAsync(images, "diffusion");
-            var jointes = await LirePiecesAsync(documents, null);
-
-            if (!diffusion.Lancer(sujet, titre ?? sujet, texte, lues, jointes))
-            {
-                return Conflict(new
-                {
-                    message = "Une diffusion est déjà en cours. Attendez qu'elle se termine.",
-                });
-            }
-
-            _logger.LogWarning(
-                "DIFFUSION LANCEE : « {Sujet} », {Images} image(s), {Docs} document(s).",
-                sujet, lues.Count, jointes.Count);
-
-            return Accepted(new { message = "Diffusion lancée." });
-        }
+        // L'ANCIEN `POST /admin/diffusion` (envoi libre à TOUS, sans template) EST SUPPRIMÉ (20/11/2026, revue d'Omar du
+        // lot v4). L'écran ne s'en servait plus depuis les templates : la diffusion part par
+        // `POST /admin/modeles-mail/{id}/diffusion`, qui porte la case « Promotion » (`mode=offres`) et refuse
+        // `{{lien_desinscription}}` sans elle. Gardée, cette route aurait envoyé à tous sans case ni garde-fou.
+        // L'aperçu (`diffusion/apercu`), le décompte (`diffusion/destinataires`) et le suivi (`diffusion/etat`) restent.
 
         private static Dictionary<string, ValeurVariable> LienDesinscriptionApercu()
         {
@@ -2735,6 +2698,14 @@ namespace SchoolWebApp.Api.Controllers
             if (string.IsNullOrWhiteSpace(sujet) || string.IsNullOrWhiteSpace(texte))
             {
                 return BadRequest(new { message = "L'objet et le message sont obligatoires." });
+            }
+
+            // L'ENVOI LIBRE EST TOUJOURS UNE CORRESPONDANCE (20/11/2026, revue d'Omar du lot v4) : pas de case
+            // « Promotion » ici (une promotion sans template passe par un template créé à la volée, dont l'endpoint
+            // contrôle le consentement). `{{lien_desinscription}}` y est donc refusé, comme partout sans la case.
+            if (DiffusionService.ContientLienDesinscription(sujet, titre, texte))
+            {
+                return BadRequest(new { code = "lien_sans_promotion", message = DiffusionService.RefusLienDansInformation });
             }
 
             // SOUS SON ADRESSE ET AVEC SA SIGNATURE (17/10/2026) : le parent
