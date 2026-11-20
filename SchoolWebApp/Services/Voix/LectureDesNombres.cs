@@ -270,7 +270,8 @@ namespace SchoolWebApp.Api.Services.Voix
         /// <summary>Ce que garde le message de l'enfant : « J'ai lu le nombre soixante-treize. »</summary>
         public static string TexteDeLEleve(Verdict v) =>
             // Déjà écrit par le relais du micro (EcouteController) : on ne l'enveloppe pas une seconde fois.
-            VerdictDeLecture().IsMatch(v.Dit) ? v.Dit.Trim() : $"J'ai lu le nombre {v.Dit.Trim().TrimEnd('.', '!', ' ')}.";
+            // « est-ce que c'est 34 ? » : sans le « ? » final (sinon « …34 ?. »).
+            VerdictDeLecture().IsMatch(v.Dit) ? v.Dit.Trim() : $"J'ai lu le nombre {v.Dit.Trim().TrimEnd('.', '!', '?', ' ', '…')}.";
 
         [GeneratedRegex(@"^\s*j.ai lu le nombre\b", RegexOptions.IgnoreCase)]
         private static partial Regex VerdictDeLecture();
