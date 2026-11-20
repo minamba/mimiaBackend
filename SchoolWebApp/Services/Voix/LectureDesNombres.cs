@@ -462,8 +462,19 @@ namespace SchoolWebApp.Api.Services.Voix
         private static partial Regex Question();
 
         // Sa propre consigne (« Lis ce nombre à voix haute ») : celle du code la remplace.
-        [GeneratedRegex(@"[^.!?\n]*\b(?:lis|lis-le|lire|relis|relis-le|relire)\b[^.!?\n]*\b(?:voix\s+haute|au\s+tableau|le\s+tableau|ce\s+nombre|le\s+nombre)\b[^.!?\n]*[.!]*", RegexOptions.IgnoreCase)]
+        // Défaut e3 (Omar, 20/11/2026) : « Regarde le tableau, lis ce nouveau nombre : » restait devant la consigne du code.
+        // Le nombre peut porter un adjectif (nouveau, autre, prochain…), le tableau peut venir AVANT le verbe, et « lis-le »
+        // ou « lis-moi » suffisent seuls. « Tu lis très bien les nombres » (pluriel, sans tableau) reste.
+        [GeneratedRegex(@"[^.!?\n]*(?:"
+            + @"(?<!\p{L})(?:re)?lis-(?:le|la|moi)(?!\p{L})"
+            + @"|\b(?:lis|lire|relis|relire)\b[^.!?\n]*(?:\b(?:voix\s+haute|au\s+tableau|le\s+tableau)\b|" + CeNombre + @")"
+            + @"|(?:\btableau\b|" + CeNombre + @")[^.!?\n]*\b(?:lis|relis)\b"
+            + @")[^.!?\n]*[.!:]*", RegexOptions.IgnoreCase)]
         private static partial Regex ConsigneDuProfesseur();
+
+        // « ce nombre », « le nouveau nombre », « cet autre nombre », « l'autre nombre », « un nouveau nombre ».
+        private const string CeNombre =
+            @"(?:\b(?:ce|cet|le|un)\s+|\bl['’]\s*)(?:(?:nouveau|nouvel|autre|prochain|petit|grand|beau|deuxi[eè]me|second|dernier|m[eê]me)\s+)?nombre\b";
 
         // « Écoute bien le nombre et dis-le-moi » (signalement #50) : il ne l'entend pas, il le LIT. La phrase s'en va,
         // la consigne du code (« Regarde bien le nombre… ») dit la bonne chose.
@@ -477,25 +488,97 @@ namespace SchoolWebApp.Api.Services.Voix
         /// LE MESSAGE DU PROFESSEUR, REMIS EN ORDRE : sa phrase (bravo, encouragement), la consigne du code, la balise. Ce
         /// qu'il aurait écrit au tableau, ses questions et sa propre consigne s'en vont. Un au revoir reste tel quel.
         /// </summary>
-        public static string Reecrire(string texte, Tour tour)
+        public static string Reecrire(string texte, Tour tour) => Reecrire(texte, tour, null);
+
+        [GeneratedRegex(@"[^.!?\n]+[.!?]*")]
+        private static partial Regex Phrase();
+
+        // ------------------------------------------------------------------ hors de l'exercice (défaut e8)
+
+        [GeneratedRegex(@"\[LECTURE_IMAGE:nombre\][^\[\]]*\[/LECTURE_IMAGE\]", RegexOptions.IgnoreCase)]
+        private static partial Regex BaliseComplete();
+
+        // Une balise ouverte et jamais fermée (fin de réponse) : elle part avec ce qui la suit sur la ligne.
+        [GeneratedRegex(@"\[LECTURE_IMAGE:nombre\][^\[\]\n]*(?:\[/LECTURE_IMAGE\]?)?", RegexOptions.IgnoreCase)]
+        private static partial Regex BaliseOuverte();
+
+        /// <summary>Une balise de nombre, même mal fermée, est-elle dans ce texte ?</summary>
+        public static bool ContientUneBalise(string? texte) => !string.IsNullOrEmpty(texte) && BaliseOuverte().IsMatch(texte);
+
+        /// <summary>Retire les balises de nombre complètes (et, si <paramref name="ouverteAussi"/>, une balise restée ouverte).</summary>
+        public static string SansBaliseComplete(string texte, bool ouverteAussi, out bool retire)
+        {
+            var propre = (ouverteAussi ? BaliseOuverte() : BaliseComplete()).Replace(texte ?? string.Empty, string.Empty);
+            retire = propre.Length != (texte ?? string.Empty).Length;
+            return propre;
+        }
+
+        public static string SansBaliseComplete(string texte) => SansBaliseComplete(texte, false, out _);
+
+        /// <summary>
+        /// HORS DE LA LECTURE DES NOMBRES, la balise d'un nombre ne vient que du modèle qui recopie l'historique : elle part, et
+        /// la consigne qui l'annonçait (« Regarde le tableau, lis ce nombre à voix haute : ») aussi, sinon l'enfant cherche un
+        /// nombre qui n'est pas au tableau. Un texte sans balise revient tel quel, au caractère près.
+        /// </summary>
+        public static string SansBaliseHorsLecture(string texte, out bool retire)
+        {
+            retire = ContientUneBalise(texte);
+            if (!retire) return texte ?? string.Empty;
+
+            var propre = BaliseOuverte().Replace(texte, string.Empty);
+            propre = ConsigneDuProfesseur().Replace(propre, string.Empty);
+            var lignes = propre.Split('\n').Select(l => l.TrimEnd());
+            return LignesVides().Replace(string.Join("\n", lignes), "\n\n").Trim();
+        }
+
+        /// <summary>
+        /// La phrase cite le nombre à lire : en chiffres (« 86 », « 12 345 », jamais dans « 186 » ni « 86,5 »), ou en lettres
+        /// (« quatre-vingt-six ») pour un entier à partir de 10 — en dessous, « un », « deux » sont des mots de tous les jours.
+        /// </summary>
+        public static bool CiteLeNombre(string phrase, Element element)
+        {
+            foreach (var forme in new[] { Affichage(element.Cible), element.Cible }.Distinct())
+            {
+                if (Regex.IsMatch(phrase, @"(?<![\d,])" + Regex.Escape(forme) + @"(?!\d|,\d)")) return true;
+            }
+            return long.TryParse(element.Cible, NumberStyles.None, CultureInfo.InvariantCulture, out var n) && n >= 10
+                && Jetons(phrase).Any(j => j.Sorte == Sorte.Nombre && j.Valeur == element.Cible);
+        }
+
+        /// <summary>Le texte dit quelque chose à l'élève (des lettres, hors tableau et balises).</summary>
+        public static bool AUnePhrase(string? texte) =>
+            Regex.IsMatch(Tableau().Replace(texte ?? string.Empty, " "), @"\p{L}");
+
+        /// <summary>
+        /// Même réécriture ; <paramref name="retraits"/> reçoit le nom de chaque règle qui a retiré quelque chose (« question »,
+        /// « consigne »…), pour le journal : une phrase entièrement retirée doit pouvoir s'expliquer (défaut e5, Omar).
+        /// </summary>
+        public static string Reecrire(string texte, Tour tour, ICollection<string>? retraits)
         {
             if (LectureDImage.ConclutLaSeance(texte)) return texte;
 
-            var propre = Tableau().Replace(texte ?? string.Empty, " ");
-            propre = Voix().Replace(propre, "$2");
-            propre = Question().Replace(propre, string.Empty);
-            propre = ConsigneDuProfesseur().Replace(propre, string.Empty);
-            propre = PhraseDEcoute().Replace(propre, string.Empty);
-            if (tour.Demande) propre = RefusDAfficher().Replace(propre, string.Empty);
-            // « C'est le code qui va choisir un nombre pour toi » (signalement #51) : jamais de fonctionnement interne à l'enfant.
-            propre = JargonTechnique.Retirer(propre);
+            string Etape(string avant, string regle, Func<string, string> retirer)
+            {
+                var apres = retirer(avant);
+                if (retraits is not null && apres != avant) retraits.Add(regle);
+                return apres;
+            }
 
-            // Le nombre à lire lui-même, s'il l'a cité (il ne le connaît pas, mais une redite peut le reprendre) : la ligne part.
-            var affiche = Affichage(tour.Element.Cible);
+            var propre = Etape(texte ?? string.Empty, "tableau", t => Tableau().Replace(t, " "));
+            propre = Voix().Replace(propre, "$2");
+            propre = Etape(propre, "question", t => Question().Replace(t, string.Empty));
+            propre = Etape(propre, "consigne", t => ConsigneDuProfesseur().Replace(t, string.Empty));
+            propre = Etape(propre, "ecoute", t => PhraseDEcoute().Replace(t, string.Empty));
+            if (tour.Demande) propre = Etape(propre, "refus", t => RefusDAfficher().Replace(t, string.Empty));
+            // « C'est le code qui va choisir un nombre pour toi » (signalement #51) : jamais de fonctionnement interne à l'enfant.
+            propre = Etape(propre, "jargon", JargonTechnique.Retirer);
+
+            // Le nombre à lire lui-même, s'il l'a cité (il ne le connaît pas, mais une redite peut le reprendre) : la PHRASE part.
+            // Défaut e5 (Omar, 20/11/2026) : c'était la LIGNE entière. « Oui, 86 c'est bien plus grand que 40 ! Beau
+            // raisonnement. » perdait aussi « Beau raisonnement. », et il ne restait que la consigne du code (journal Debug).
             if (tour.Redite)
             {
-                propre = string.Join("\n", propre.Split('\n').Where(l => !l.Contains(affiche, StringComparison.Ordinal)
-                    && !l.Contains(tour.Element.Cible, StringComparison.Ordinal)));
+                propre = Etape(propre, "nombre", t => Phrase().Replace(t, m => CiteLeNombre(m.Value, tour.Element) ? string.Empty : m.Value));
             }
 
             var lignes = propre.Split('\n').Select(l => Regex.Replace(l, @"[ \t]{2,}", " ").Trim());
@@ -886,6 +969,15 @@ namespace SchoolWebApp.Api.Services.Voix
     {
         private string _tampon = string.Empty;
 
+        /// <summary>Le texte brut du professeur, tel qu'il l'a écrit (pour le journal de TEST seulement).</summary>
+        public string Brut { get; private set; } = string.Empty;
+
+        /// <summary>Les règles qui ont retiré quelque chose de sa réponse.</summary>
+        public List<string> Retraits { get; } = [];
+
+        /// <summary>Il avait écrit une phrase, et il n'en reste rien : seule la consigne du code part (défaut e5, Omar).</summary>
+        public bool PhraseRetiree { get; private set; }
+
         public string Passer(string fragment)
         {
             _tampon += fragment;
@@ -894,11 +986,72 @@ namespace SchoolWebApp.Api.Services.Voix
 
         public string Terminer()
         {
-            var texte = LectureDesNombres.Reecrire(_tampon, tour);
+            Brut = _tampon;
+            var texte = LectureDesNombres.Reecrire(_tampon, tour, Retraits);
+            // Sa seule phrase était sa propre consigne (« Lis ce nombre à voix haute ! ») : c'est voulu, celle du code la remplace.
+            PhraseRetiree = LectureDesNombres.AUnePhrase(_tampon) && !LectureDesNombres.AUnePhrase(SansConsigneNiBalise(texte))
+                && Retraits.Any(r => r is not ("tableau" or "consigne"));
             _tampon = string.Empty;
             return texte;
         }
 
+        private string SansConsigneNiBalise(string texte) =>
+            texte.Replace(LectureDesNombres.Consigne(tour), string.Empty).Replace(LectureDesNombres.Balise(tour.Element), string.Empty);
+
         public string Corriger(string texte) => LectureDesNombres.Reecrire(texte, tour);
+    }
+
+    /// <summary>
+    /// LA BALISE D'UN NOMBRE HORS DE LA LECTURE DES NOMBRES (défaut e8, Omar, 20/11/2026) : après « on compte jusqu'à 100 »,
+    /// l'exercice change, mais le modèle recopie l'historique et écrit lui-même « Regarde le tableau, lis ce nombre à voix
+    /// haute : [LECTURE_IMAGE:nombre]52[/LECTURE_IMAGE] ». L'écran affichait le 52, et au tour suivant la lecture des
+    /// nombres reprenait (le dernier message montrait un nombre). Hors de l'exercice, seul le code pose cette balise : elle
+    /// part, avec la consigne orpheline qui l'annonçait.
+    ///
+    /// Deux allures. JUSTE APRÈS une lecture (un nombre montré dans les derniers messages), la réponse est retenue en
+    /// entier, comme pendant l'exercice, pour que la consigne orpheline parte aussi de l'écran et de la voix. Plus loin, le
+    /// texte coule sans retard : seule une balise en cours d'écriture est retenue, puis retirée. Le texte gardé en base est
+    /// nettoyé dans les deux cas (<see cref="LectureDesNombres.SansBaliseHorsLecture"/>).
+    /// </summary>
+    public sealed class FiltreBaliseNombreHorsLecture(bool retenirTout)
+    {
+        private const string Ouverture = "[LECTURE_IMAGE:nombre]";
+        private string _tampon = string.Empty;
+
+        /// <summary>Une balise a été retirée (pour le journal).</summary>
+        public bool ARetire { get; private set; }
+
+        public string Passer(string fragment)
+        {
+            _tampon += fragment;
+            if (retenirTout) return string.Empty;
+
+            var propre = LectureDesNombres.SansBaliseComplete(_tampon);
+            if (propre.Length != _tampon.Length) ARetire = true;
+            _tampon = propre;
+
+            // Une balise ouverte et pas encore fermée, ou un « [LECT » qui peut en devenir une : retenue à partir de là.
+            var coupe = _tampon.LastIndexOf(Ouverture, StringComparison.OrdinalIgnoreCase);
+            if (coupe < 0)
+            {
+                var crochet = _tampon.LastIndexOf('[');
+                coupe = crochet >= 0 && _tampon.Length - crochet < Ouverture.Length
+                    && Ouverture.StartsWith(_tampon[crochet..], StringComparison.OrdinalIgnoreCase) ? crochet : _tampon.Length;
+            }
+
+            var sortie = _tampon[..coupe];
+            _tampon = _tampon[coupe..];
+            return sortie;
+        }
+
+        public string Terminer()
+        {
+            var texte = retenirTout
+                ? LectureDesNombres.SansBaliseHorsLecture(_tampon, out var retire)
+                : LectureDesNombres.SansBaliseComplete(_tampon, ouverteAussi: true, out retire);
+            ARetire |= retire;
+            _tampon = string.Empty;
+            return texte;
+        }
     }
 }

@@ -3933,6 +3933,15 @@ namespace SchoolWebApp.Api.Builders.impl
             // LA LECTURE DES NOMBRES : la réponse est retenue, puis remise en ordre (sa phrase, la consigne, la balise).
             var filtreNombres = nombresDuTour is null ? null : new Services.Voix.FiltreLectureNombres(nombresDuTour);
 
+            // HORS DE LA LECTURE DES NOMBRES, PAS DE BALISE DE NOMBRE (défaut e8, Omar) : le modèle ne peut la recopier que
+            // d'un historique qui en contient. Juste après l'exercice, sa réponse est retenue en entier (la consigne orpheline
+            // part aussi) ; plus loin, seule une balise en cours d'écriture est retenue — voir FiltreBaliseNombreHorsLecture.
+            var filtreBaliseNombre = nombresDuTour is null
+                && historique.Any(m => m.Role == "assistant" && Services.Voix.LectureDesNombres.ContientUneBalise(m.Contenu))
+                ? new Services.Voix.FiltreBaliseNombreHorsLecture(retenirTout: historique.TakeLast(MessagesPourExerciceDeSons)
+                    .Any(m => m.Role == "assistant" && Services.Voix.LectureDesNombres.ContientUneBalise(m.Contenu)))
+                : null;
+
             await foreach (var fragment in _agent.RepondreAsync(
                 contexte.Eleve, contexte.Conversation, historique, declencheur, bilan,
                 TypeTache.Dialogue, typeAccueil, depuis, secondesRestantes,
@@ -3941,6 +3950,7 @@ namespace SchoolWebApp.Api.Builders.impl
                 var accorde = filtreAccord.Passer(fragment.Texte);
                 if (filtreMots is not null) accorde = filtreMots.Passer(accorde);
                 if (filtreNombres is not null) accorde = filtreNombres.Passer(accorde);
+                if (filtreBaliseNombre is not null) accorde = filtreBaliseNombre.Passer(accorde);
                 if (accorde.Length == 0) continue;
 
                 if (filtreEcoute is null)
@@ -3967,6 +3977,25 @@ namespace SchoolWebApp.Api.Builders.impl
             if (filtreNombres is not null)
             {
                 finAccordee = filtreNombres.Passer(finAccordee) + filtreNombres.Terminer();
+
+                // UNE PHRASE ENTIÈREMENT RETIRÉE (défaut e5, Omar) : il ne restait que la consigne du code. Le journal dit
+                // quelles règles l'ont retirée, sans contenu ; le texte brut ne sort qu'en Debug (base de TEST).
+                if (filtreNombres.PhraseRetiree)
+                {
+                    _logger.LogInformation(
+                        "Lecture des nombres : phrase du professeur entierement retiree ({Regles}) (conversation {ConversationId}).",
+                        string.Join(", ", filtreNombres.Retraits), conversationId);
+                }
+                if (_logger.IsEnabled(LogLevel.Debug))
+                {
+                    _logger.LogDebug("Lecture des nombres, texte brut du professeur (conversation {ConversationId}) : {Brut} || retraits : {Regles}",
+                        conversationId, filtreNombres.Brut.ReplaceLineEndings(" / "), string.Join(", ", filtreNombres.Retraits));
+                }
+            }
+
+            if (filtreBaliseNombre is not null)
+            {
+                finAccordee = filtreBaliseNombre.Passer(finAccordee) + filtreBaliseNombre.Terminer();
             }
 
             if (finAccordee.Length > 0)
@@ -4140,6 +4169,19 @@ namespace SchoolWebApp.Api.Builders.impl
                 // L'historique dit ce que l'élève a vu et entendu : le mot remplacé n'y revient pas.
                 if (filtreMots is not null) contenuPersiste = filtreMots.Corriger(contenuPersiste);
                 if (filtreNombres is not null) contenuPersiste = filtreNombres.Corriger(contenuPersiste);
+
+                // Hors de l'exercice, une balise de nombre ne reste pas en base : au tour suivant, la lecture des nombres
+                // reprendrait sur ce nombre (le dernier message en montre un), au clavier comme au micro (défaut e8).
+                if (nombresDuTour is null)
+                {
+                    contenuPersiste = Services.Voix.LectureDesNombres.SansBaliseHorsLecture(contenuPersiste, out var baliseRetiree);
+                    if (baliseRetiree || filtreBaliseNombre?.ARetire == true)
+                    {
+                        _logger.LogInformation(
+                            "Balise de nombre ecrite hors de la lecture des nombres : retiree (conversation {ConversationId}).",
+                            conversationId);
+                    }
+                }
 
                 // Ses accords aussi — déjà faits dans le flux, refaits ici pour
                 // ce qui n'y passe pas (un bloc écrit par l'application).
