@@ -40,6 +40,15 @@ namespace SchoolWebApp.Domain.Repositories
         Task<IReadOnlyList<DestinataireAutomatique>> GetDestinatairesDiffusionAsync(CancellationToken ct = default);
 
         /// <summary>
+        /// Les parents d'une INFORMATION DE SERVICE (non commerciale, 19/11/2026) : TOUS ceux qui ont une adresse non
+        /// bannie, qu'ils aient consenti aux offres ou non, une adresse comptée une fois. Voir `ModeDiffusion.Service`.
+        /// </summary>
+        Task<IReadOnlyList<DestinataireAutomatique>> GetDestinatairesInformationServiceAsync(CancellationToken ct = default);
+
+        /// <summary>La liste d'un mode de diffusion (`ModeDiffusion`) : la même pour le décompte de l'écran et pour l'envoi.</summary>
+        Task<IReadOnlyList<DestinataireAutomatique>> GetDestinatairesAsync(string mode, CancellationToken ct = default);
+
+        /// <summary>
         /// Les parents d'une cible (`CibleEnvoi`, 17/10/2026), joignables et non
         /// désabonnés de la catégorie (pour les offres : ayant consenti) ; une
         /// adresse sur deux comptes ne compte qu'une fois.

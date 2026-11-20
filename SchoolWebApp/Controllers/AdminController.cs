@@ -2561,15 +2561,19 @@ namespace SchoolWebApp.Api.Controllers
             [FromForm] List<IFormFile>? documents = null,
             [FromQuery] bool signature = false,
             [FromQuery] string? boite = null,
+            [FromQuery] string? mode = null,
             CancellationToken ct = default)
         {
+            // L'APERÇU D'UNE INFORMATION DE SERVICE (19/11/2026) : sa mention de pied, sans lien de désinscription.
+            var service = !signature && ModeDiffusion.Lire(mode) == ModeDiffusion.Service;
+
             var valeurs = new Dictionary<string, string>
             {
                 ["titre"] = sujet ?? string.Empty,
                 ["titreMessage"] = titre ?? string.Empty,
                 // `{{lien_desinscription}}` montré à sa place dans l'aperçu d'une diffusion (19/11/2026) ; il ne mène nulle part d'ici.
                 ["corpsMessage"] = diffusion.ComposerCorps(texte ?? string.Empty, images?.Count ?? 0,
-                    signature ? null : LienDesinscriptionApercu()),
+                    signature ? null : service ? SansLienDesinscription() : LienDesinscriptionApercu()),
                 ["blocPiecesJointes"] = diffusion.ComposerPiecesJointes(
                     documents?.Select(d => d.FileName).ToList() ?? []),
                 // LE LIEN DE DÉSABONNEMENT DANS L'APERÇU D'UNE DIFFUSION (17/10/2026) :
@@ -2578,7 +2582,9 @@ namespace SchoolWebApp.Api.Controllers
                 // n'en a pas : c'est une correspondance, pas une annonce.
                 ["mentionPied"] = signature
                     ? diffusion.ComposerMentionPied()
-                    : diffusion.ComposerMentionPied("#", SchoolWebApp.Domain.Models.CategorieDesabonnement.Diffusion),
+                    : service
+                        ? diffusion.ComposerMentionPiedService()
+                        : diffusion.ComposerMentionPied("#", SchoolWebApp.Domain.Models.CategorieDesabonnement.Diffusion),
             };
 
             // LA SIGNATURE DANS L'APERÇU — Camara, le 17/10/2026 : « on ne voit pas
@@ -2661,16 +2667,29 @@ namespace SchoolWebApp.Api.Controllers
             return variables;
         }
 
+        private static Dictionary<string, ValeurVariable> SansLienDesinscription()
+        {
+            var variables = new Dictionary<string, ValeurVariable>();
+            DiffusionService.RetirerLienDesinscription(variables);
+            return variables;
+        }
+
         /// <summary>
         /// COMBIEN LA RECEVRONT — Min's, le 19/11/2026 : une diffusion ne part plus qu'aux parents qui ont consenti aux
         /// offres par email. Le nombre de comptes ne dit donc plus à combien on écrit : l'écran de confirmation affiche
         /// celui-ci, calculé par la MÊME requête que l'envoi (adresse non bannie, consentement, une adresse comptée une fois).
+        /// `mode=service` : l'information de service, à tous les parents joignables (même requête que son envoi).
         /// </summary>
         [HttpGet("diffusion/destinataires")]
         [SwaggerResponse(200, "Le nombre de parents qui recevraient une diffusion maintenant.")]
+        [SwaggerResponse(400, "Mode d'envoi inconnu.")]
         public async Task<IActionResult> CompterDestinatairesDiffusion(
-            [FromServices] IEnvoiAutomatiqueRepository envois, CancellationToken ct) =>
-            Ok(new { nombre = (await envois.GetDestinatairesDiffusionAsync(ct)).Count });
+            [FromServices] IEnvoiAutomatiqueRepository envois, CancellationToken ct, [FromQuery] string? mode = null)
+        {
+            if (ModeDiffusion.Lire(mode) is not { } modeLu) return BadRequest(new { message = "Mode d'envoi inconnu." });
+
+            return Ok(new { nombre = (await envois.GetDestinatairesAsync(modeLu, ct)).Count, mode = modeLu });
+        }
 
         /// <summary>L'avancement, interrogé par l'écran pendant l'envoi.</summary>
         [HttpGet("diffusion/etat")]

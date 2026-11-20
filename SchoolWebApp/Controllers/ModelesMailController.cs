@@ -432,7 +432,8 @@ namespace SchoolWebApp.Api.Controllers
             [FromServices] IBoitesAdminService boites,
             CancellationToken ct,
             [FromQuery] bool signature = false,
-            [FromQuery(Name = "boite")] string? depuis = null)
+            [FromQuery(Name = "boite")] string? depuis = null,
+            [FromQuery] string? mode = null)
         {
             var detail = await _modeles.GetDetailAsync(id, ct);
             if (detail is null) return NotFound();
@@ -449,14 +450,21 @@ namespace SchoolWebApp.Api.Controllers
             // apparaîtra chez le parent — il ne mène nulle part d'ici.
             var categorie = CategorieDu(detail);
 
+            // L'APERÇU D'UNE INFORMATION DE SERVICE (19/11/2026) montre ce qui partira : sa propre mention de pied, sans
+            // lien de désinscription (`{{lien_desinscription}}` y disparaît).
+            var service = ModeDiffusion.Lire(mode) == ModeDiffusion.Service && detail.Nature == NatureModeleMail.Diffusion;
+
             var exemples = new Dictionary<string, ValeurVariable>(Exemples());
-            if (categorie is not null) DiffusionService.AjouterLienDesinscription(exemples, "#");
+            if (service) DiffusionService.RetirerLienDesinscription(exemples);
+            else if (categorie is not null) DiffusionService.AjouterLienDesinscription(exemples, "#");
 
             var courriel = _composeur.Composer(
                 detail,
                 await _modeles.GetPiecesAsync(id, ct),
                 exemples,
-                categorie is null ? null : _diffusion.ComposerMentionPied("#", categorie));
+                service
+                    ? _diffusion.ComposerMentionPiedService()
+                    : categorie is null ? null : _diffusion.ComposerMentionPied("#", categorie));
 
             // LA SIGNATURE DANS L'APERÇU (17/10/2026) : envoyé à un parent, le
             // template part signé de son nom — l'aperçu le montre aussi.
@@ -493,12 +501,22 @@ namespace SchoolWebApp.Api.Controllers
         [SwaggerResponse(400, "Objet ou message vide, ou courriel automatique.")]
         [SwaggerResponse(404, "Template introuvable.")]
         [SwaggerResponse(409, "Une diffusion est déjà en cours.")]
-        public async Task<IActionResult> Diffuser(int id, CancellationToken ct)
+        public async Task<IActionResult> Diffuser(
+            int id,
+            CancellationToken ct,
+            [FromQuery] string? mode = null,
+            [FromQuery] bool confirmationNonCommerciale = false)
         {
+            // DEUX MODES (19/11/2026) : les offres (par défaut, aux seuls consentants) ou l'INFORMATION DE SERVICE, à
+            // tous. Celle-ci est interdite pour les offres : l'administrateur doit l'avoir confirmé en cochant la case de
+            // l'écran — refusé ici aussi, pour qu'aucun appel direct ne la contourne.
+            var faute = VerifierModeDiffusion(mode, confirmationNonCommerciale, out var modeLu);
+            if (faute is not null) return BadRequest(new { message = faute });
+
             var detail = await _modeles.GetDetailAsync(id, ct);
             if (detail is null) return NotFound();
 
-            var faute = VerifierEnvoi(detail);
+            faute = VerifierEnvoi(detail);
             if (faute is not null) return BadRequest(new { message = faute });
 
             var courriel = _composeur.Composer(detail, await _modeles.GetPiecesAsync(id, ct));
@@ -507,15 +525,18 @@ namespace SchoolWebApp.Api.Controllers
             // `{{prenom}}` pour chaque parent.
             var titre = string.IsNullOrWhiteSpace(detail.Titre) ? detail.Sujet : detail.Titre;
 
-            if (!_diffusion.Lancer(detail.Sujet, titre, detail.Texte, courriel.Images, courriel.Documents))
+            if (!_diffusion.Lancer(detail.Sujet, titre, detail.Texte, courriel.Images, courriel.Documents, modeLu))
             {
                 return Conflict(new { message = "Une diffusion est déjà en cours. Attendez qu'elle se termine." });
             }
 
-            await _modeles.NoterEnvoiAsync(id, DateTime.UtcNow, "Diffusion à tous les parents", ct);
+            var service = modeLu == ModeDiffusion.Service;
+            await _modeles.NoterEnvoiAsync(
+                id, DateTime.UtcNow, service ? "Information de service à tous les parents" : "Diffusion à tous les parents", ct);
 
             _logger.LogWarning(
-                "DIFFUSION LANCEE depuis le template {Id} : « {Sujet} », {Images} image(s), {Docs} document(s).",
+                "{Quoi} LANCEE depuis le template {Id} : « {Sujet} », {Images} image(s), {Docs} document(s).",
+                service ? "INFORMATION DE SERVICE (non commerciale, confirmee par l'admin)" : "DIFFUSION",
                 id, detail.Sujet, courriel.Images.Count, courriel.Documents.Count);
 
             return Accepted(new { message = "Diffusion lancée." });
@@ -746,6 +767,21 @@ namespace SchoolWebApp.Api.Controllers
                          + "et nouveautés par e-mail, et cette adresse ne correspond à aucun parent consentant. Pour une "
                          + "réponse personnelle, écrivez sans template.")
                 : (parent, null);
+        }
+
+        /// <summary>
+        /// Le mode d'une diffusion à tous (`ModeDiffusion`) : inconnu → refus ; information de service → seulement avec
+        /// la confirmation « aucune offre, promotion ou incitation commerciale » cochée par l'administrateur.
+        /// </summary>
+        public static string? VerifierModeDiffusion(string? mode, bool confirmationNonCommerciale, out string modeLu)
+        {
+            modeLu = ModeDiffusion.Lire(mode) ?? string.Empty;
+            if (modeLu.Length == 0) return "Mode d'envoi inconnu.";
+
+            return modeLu == ModeDiffusion.Service && !confirmationNonCommerciale
+                ? "Une information de service ne contient aucune offre, promotion ou incitation commerciale : cochez la "
+                  + "confirmation avant l'envoi. Pour une offre, utilisez « Message de diffusion »."
+                : null;
         }
 
         private static string? VerifierEnvoi(ModeleMailDetail detail)

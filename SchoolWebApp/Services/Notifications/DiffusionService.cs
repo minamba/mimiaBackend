@@ -26,6 +26,9 @@ namespace SchoolWebApp.Api.Services.Notifications
 
         public DateTime? Fin { get; set; }
 
+        /// <summary>`ModeDiffusion` : « offres » (Message de diffusion) ou « service » (information de service).</summary>
+        public string? Mode { get; set; }
+
         /// <summary>Renseigné si la diffusion s'est arrêtée sur une erreur.</summary>
         public string? Erreur { get; set; }
     }
@@ -80,16 +83,23 @@ namespace SchoolWebApp.Api.Services.Notifications
         string ComposerMentionPied(string? lienDesabonnement, string? categorie);
 
         /// <summary>
+        /// La mention d'une INFORMATION DE SERVICE (19/11/2026) : pourquoi le parent la reçoit (il a un compte), qu'elle
+        /// ne contient aucune offre, et sans lien de désinscription commercial.
+        /// </summary>
+        string ComposerMentionPiedService();
+
+        /// <summary>
         /// Lance la diffusion en arrière-plan. Faux si une autre est déjà en
         /// cours — deux diffusions simultanées écriraient deux fois à tout le
-        /// monde.
+        /// monde. `mode` : `ModeDiffusion.Offres` (par défaut) ou `ModeDiffusion.Service`.
         /// </summary>
         bool Lancer(
             string sujet,
             string titre,
             string texte,
             IReadOnlyList<PieceMail> images,
-            IReadOnlyList<PieceMail> documents);
+            IReadOnlyList<PieceMail> documents,
+            string mode = ModeDiffusion.Offres);
     }
 
     /// <summary>
@@ -216,6 +226,7 @@ namespace SchoolWebApp.Api.Services.Notifications
                         Debut = _etat.Debut,
                         Fin = _etat.Fin,
                         Erreur = _etat.Erreur,
+                        Mode = _etat.Mode,
                     };
                 }
             }
@@ -354,6 +365,21 @@ namespace SchoolWebApp.Api.Services.Notifications
                   + "style=\"color:#a5abb8; text-decoration:underline;\">Me désinscrire de ces e-mails</a>";
         }
 
+        public string ComposerMentionPiedService() =>
+            "Vous recevez ce message d’information sur le service Mimia (prix, fonctionnement, règles) parce que vous "
+            + "avez un compte Mimia. Il ne contient aucune offre commerciale. Une question ? Écrivez-nous à "
+            + "<a href=\"mailto:support@mimia.fr\" style=\"color:#a5abb8; text-decoration:underline;\">"
+            + "support@mimia.fr</a>.";
+
+        /// <summary>
+        /// Une information de service ne porte pas de lien de désinscription : `{{lien_desinscription}}` y disparaît
+        /// proprement (mieux vaut un blanc que le marqueur brut chez le parent).
+        /// </summary>
+        public static void RetirerLienDesinscription(IDictionary<string, ValeurVariable> variables)
+        {
+            foreach (var cle in ClesLienDesinscription) variables[cle] = new ValeurVariable(string.Empty);
+        }
+
         /// <summary>
         /// `{{lien_desinscription}}` — Min's, le 19/11/2026 : le lien de désinscription signé, propre au parent, que le
         /// texte d'un courriel commercial peut placer où il veut (en plus du pied, qui le porte toujours). Les deux
@@ -402,8 +428,15 @@ namespace SchoolWebApp.Api.Services.Notifications
             string titre,
             string texte,
             IReadOnlyList<PieceMail> images,
-            IReadOnlyList<PieceMail> documents)
+            IReadOnlyList<PieceMail> documents,
+            string mode = ModeDiffusion.Offres)
         {
+            // Un mode inconnu ne part pas : le contrôleur l'a déjà refusé, ceci est le dernier garde-fou.
+            if (ModeDiffusion.Lire(mode) is not { } modeLu)
+            {
+                throw new ArgumentOutOfRangeException(nameof(mode), mode, "Mode de diffusion inconnu.");
+            }
+
             lock (_verrou)
             {
                 // LE VERROU EST ICI, PAS DANS LE CONTRÔLEUR. Un double clic, deux
@@ -420,11 +453,12 @@ namespace SchoolWebApp.Api.Services.Notifications
                 _etat.Debut = DateTime.UtcNow;
                 _etat.Fin = null;
                 _etat.Erreur = null;
+                _etat.Mode = modeLu;
             }
 
             // `Task.Run` sans attendre : la requête HTTP rend la main tout de
             // suite, et l'écran suit l'avancement en interrogeant `Etat`.
-            _ = Task.Run(() => DiffuserAsync(sujet, titre, texte, images, documents));
+            _ = Task.Run(() => DiffuserAsync(sujet, titre, texte, images, documents, modeLu));
 
             return true;
         }
@@ -434,15 +468,20 @@ namespace SchoolWebApp.Api.Services.Notifications
             string titre,
             string texte,
             IReadOnlyList<PieceMail> images,
-            IReadOnlyList<PieceMail> documents)
+            IReadOnlyList<PieceMail> documents,
+            string mode)
         {
+            // L'INFORMATION DE SERVICE (19/11/2026) : à tous les parents joignables, sans lien de désinscription
+            // commercial, sans en-têtes `List-Unsubscribe`, avec sa propre mention de pied.
+            var service = mode == ModeDiffusion.Service;
+
             try
             {
-                // PAS DE LIEN, PAS D'ENVOI. Une annonce commerciale sans moyen de
+                // PAS DE LIEN, PAS D'ENVOI — pour les OFFRES. Une annonce commerciale sans moyen de
                 // s'en désabonner n'a pas à partir chez trois cents parents ; la
                 // configuration manquante se voit ici, dans l'écran, au lieu de
                 // se découvrir dans les plaintes.
-                if (!_jetons.Disponible)
+                if (!service && !_jetons.Disponible)
                 {
                     const string raison =
                         "Clé de désabonnement absente (Courrier:CleDesabonnement) : la diffusion n'est pas partie.";
@@ -456,7 +495,8 @@ namespace SchoolWebApp.Api.Services.Notifications
                 var envois = portee.ServiceProvider.GetRequiredService<IEnvoiAutomatiqueRepository>();
                 var email = portee.ServiceProvider.GetRequiredService<IServiceEmail>();
 
-                var destinataires = await envois.GetDestinatairesDiffusionAsync();
+                // LA MÊME LISTE QUE LE DÉCOMPTE DE L'ÉCRAN (`GET admin/diffusion/destinataires?mode=…`).
+                var destinataires = await envois.GetDestinatairesAsync(mode);
 
                 lock (_verrou) { _etat.Total = destinataires.Count; }
 
@@ -476,13 +516,16 @@ namespace SchoolWebApp.Api.Services.Notifications
 
                 foreach (var destinataire in destinataires)
                 {
-                    var lienDesinscription = _jetons.Lien(destinataire.ParentId, CategorieDesabonnement.Diffusion);
+                    var lienDesinscription = service
+                        ? null
+                        : _jetons.Lien(destinataire.ParentId, CategorieDesabonnement.Diffusion);
 
                     var variables = new Dictionary<string, ValeurVariable>
                     {
                         ["prenom"] = new(destinataire.Prenom?.Trim() ?? string.Empty),
                     };
-                    AjouterLienDesinscription(variables, lienDesinscription);
+                    if (service) RetirerLienDesinscription(variables);
+                    else AjouterLienDesinscription(variables, lienDesinscription);
 
                     var sujetPersonnel = RemplacerVariables(sujet, variables);
 
@@ -492,7 +535,9 @@ namespace SchoolWebApp.Api.Services.Notifications
                         ["titreMessage"] = RemplacerVariables(titre, variables),
                         ["corpsMessage"] = ComposerCorps(texte, images.Count, variables),
                         ["blocPiecesJointes"] = blocPieces,
-                        ["mentionPied"] = ComposerMentionPied(lienDesinscription, CategorieDesabonnement.Diffusion),
+                        ["mentionPied"] = service
+                            ? ComposerMentionPiedService()
+                            : ComposerMentionPied(lienDesinscription, CategorieDesabonnement.Diffusion),
                     };
 
                     bool envoye;
@@ -506,7 +551,7 @@ namespace SchoolWebApp.Api.Services.Notifications
                             valeurs,
                             images,
                             documents,
-                            _jetons.EnTetes(destinataire.ParentId, CategorieDesabonnement.Diffusion));
+                            service ? null : _jetons.EnTetes(destinataire.ParentId, CategorieDesabonnement.Diffusion));
                     }
                     catch (Exception ex)
                     {
@@ -527,8 +572,8 @@ namespace SchoolWebApp.Api.Services.Notifications
                 }
 
                 _logger.LogWarning(
-                    "Diffusion « {Sujet} » terminee : {Envoyes} envoye(s), {Echecs} echec(s).",
-                    sujet, envoyes, echecs);
+                    "Diffusion ({Mode}) « {Sujet} » terminee : {Envoyes} envoye(s), {Echecs} echec(s).",
+                    mode, sujet, envoyes, echecs);
             }
             catch (Exception ex)
             {

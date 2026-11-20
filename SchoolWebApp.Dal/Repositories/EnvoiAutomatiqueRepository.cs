@@ -136,6 +136,31 @@ namespace SchoolWebApp.Dal.Repositories
                 .ToList();
         }
 
+        public async Task<IReadOnlyList<DestinataireAutomatique>> GetDestinatairesInformationServiceAsync(
+            CancellationToken ct = default)
+        {
+            // L'INFORMATION DE SERVICE VA À TOUS (décision de Min's, 19/11/2026) : le filtre sans catégorie — une
+            // adresse, pas bannie —, SANS le consentement aux offres ni un ancien désabonnement des « annonces » : un
+            // changement de prix ou un incident concerne chaque client, qu'il veuille des offres ou non.
+            var lignes = await Joignables(null)
+                .OrderBy(p => p.Id)
+                .Select(p => new { p.Id, p.Mail, p.Prenom })
+                .ToListAsync(ct);
+
+            return lignes
+                .GroupBy(p => p.Mail!.Trim(), StringComparer.OrdinalIgnoreCase)
+                .Select(g => new DestinataireAutomatique(g.First().Id, g.Key, g.First().Prenom, null, null))
+                .ToList();
+        }
+
+        public Task<IReadOnlyList<DestinataireAutomatique>> GetDestinatairesAsync(string mode, CancellationToken ct = default) =>
+            mode switch
+            {
+                ModeDiffusion.Offres => GetDestinatairesDiffusionAsync(ct),
+                ModeDiffusion.Service => GetDestinatairesInformationServiceAsync(ct),
+                _ => throw new ArgumentOutOfRangeException(nameof(mode), mode, "Mode de diffusion inconnu."),
+            };
+
         public async Task<IReadOnlyList<DestinataireAutomatique>> GetDestinatairesCibleAsync(
             string cible, string categorie, DateTime maintenantUtc, CancellationToken ct = default)
         {

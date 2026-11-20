@@ -131,6 +131,33 @@ namespace SchoolWebApp.Domain.Models
         };
     }
 
+    /// <summary>
+    /// LES DEUX FAÇONS D'ÉCRIRE À TOUS LES PARENTS — décision de Min's, le 19/11/2026.
+    ///
+    /// `Offres` (« Message de diffusion ») : de la prospection, aux seuls parents qui ont consenti aux offres par e-mail,
+    /// avec le lien de désinscription signé, le pied commercial et les en-têtes `List-Unsubscribe`.
+    ///
+    /// `Service` (« Information de service », non commerciale) : ce que tout client doit apprendre — un changement de
+    /// prix (l'annonce promise par l'article 4 des CGV), un incident, un changement de règles ou de la politique de
+    /// confidentialité. Elle part à TOUS les parents joignables (adresse présente, non bannie), consentement aux offres
+    /// ou non, sans lien de désinscription commercial : ce n'est pas une offre. INTERDITE POUR LES OFFRES : l'écran
+    /// l'écrit en toutes lettres et l'envoi exige une confirmation explicite de l'administrateur.
+    /// </summary>
+    public static class ModeDiffusion
+    {
+        public const string Offres = "offres";
+        public const string Service = "service";
+
+        /// <summary>Le mode demandé, normalisé : absent → `Offres` (le comportement d'avant) ; inconnu → null (refus).</summary>
+        public static string? Lire(string? mode)
+        {
+            if (string.IsNullOrWhiteSpace(mode)) return Offres;
+
+            var normalise = mode.Trim().ToLowerInvariant();
+            return normalise is Offres or Service ? normalise : null;
+        }
+    }
+
     public static class StatutEnvoiAutomatique
     {
         /// <summary>Écrit avant d'envoyer : la place est prise, même si l'envoi échoue.</summary>
