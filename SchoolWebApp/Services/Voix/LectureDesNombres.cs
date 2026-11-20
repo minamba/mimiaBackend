@@ -316,6 +316,7 @@ namespace SchoolWebApp.Api.Services.Voix
             propre = Question().Replace(propre, string.Empty);
             propre = ConsigneDuProfesseur().Replace(propre, string.Empty);
             propre = PhraseDEcoute().Replace(propre, string.Empty);
+            if (tour.Demande) propre = RefusDAfficher().Replace(propre, string.Empty);
 
             // Le nombre à lire lui-même, s'il l'a cité (il ne le connaît pas, mais une redite peut le reprendre) : la ligne part.
             var affiche = Affichage(tour.Element.Cible);
@@ -346,7 +347,8 @@ namespace SchoolWebApp.Api.Services.Voix
 
         /// <summary>Le fait de l'exercice, à chaque tour.</summary>
         public const string FaitType =
-            "[Fait pour ce tour : l'élève fait l'exercice de LECTURE DES NOMBRES. C'est le CODE qui choisit le nombre, l'affiche au "
+            "[Fait pour ce tour : l'élève fait l'exercice de LECTURE DES NOMBRES. C'est le CODE qui choisit le nombre (ou reprend "
+            + "celui que l'élève demande), l'affiche au "
             + "tableau et écrit la consigne à la fin de ton message. Toi, tu écris seulement une ou deux phrases courtes (bravo, "
             + "encouragement, un indice de méthode), SANS lui redemander de lire : la consigne est déjà écrite par le code. Tu "
             + "n'écris et ne prononces JAMAIS le nombre à lire, et tu n'écris rien au tableau (ni [ARDOISE], ni [FIGURE]). Tu ne "
@@ -358,8 +360,17 @@ namespace SchoolWebApp.Api.Services.Voix
         /// pas moi-même le nombre, c'est l'exercice qui s'en charge » alors que le tableau montrait justement le sien.
         /// </summary>
         public const string FaitDemande =
-            "[Fait pour ce tour : il a demandé lui-même ce nombre, et le code l'affiche au tableau. Dis-lui en une phrase "
-            + "que c'est parti. Ne dis pas que tu ne choisis pas le nombre, et ne le prononce pas : c'est lui qui le lit.]";
+            "[Fait pour ce tour : il a demandé lui-même ce nombre, et le code L'AFFICHE BIEN au tableau, en image (le nombre "
+            + "qu'il a demandé, pas un autre). Dis-lui en une phrase que c'est parti. Ne dis JAMAIS que tu ne peux pas "
+            + "l'afficher, que tu ne choisis pas le nombre ou qu'on continue avec un autre nombre, et ne le prononce pas : "
+            + "c'est lui qui le lit.]";
+
+        // Le refus que le modèle écrit encore parfois devant un nombre demandé (« je ne peux pas te l'afficher pour
+        // l'instant », « je ne choisis pas moi-même le nombre ») alors que le tableau le montre : la phrase s'en va.
+        [GeneratedRegex(@"[^.!?\n]*\b(?:(?:je\s+)?ne\s+(?:peux|pourrai|sais)\s+pas|impossible)\b[^.!?\n]*\b(?:afficher|montrer|[ée]crire|mettre)\b[^.!?\n]*[.!]*"
+            + @"|[^.!?\n]*\bje\s+ne\s+choisis\s+pas\b[^.!?\n]*[.!]*"
+            + @"|[^.!?\n]*\bon\s+continue\s+(?:plut[oô]t\s+)?avec\s+(?:les|des|un|d.autres?)\s+(?:autres?\s+)?nombres?\b[^.!?\n]*[.!]*", RegexOptions.IgnoreCase)]
+        private static partial Regex RefusDAfficher();
 
         /// <summary>Le fait du verdict.</summary>
         public static string FaitVerdict(Verdict v, Tour? tour)
