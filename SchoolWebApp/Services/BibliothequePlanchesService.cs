@@ -31,8 +31,13 @@ namespace SchoolWebApp.Api.Services
         /// <summary>
         /// Le bloc à insérer dans le prompt, ou une chaîne vide si aucune
         /// planche de cette matière n'a encore de description.
+        ///
+        /// `niveauCodeEleve` (code de la classe : CP, SIXIEME…) retire les
+        /// planches trop au-dessus de la classe de l'élève — signalement #47,
+        /// voir `NiveauxDesPlanches`. Null : aucune planche retirée.
         /// </summary>
-        Task<string> ConstruireAsync(string? matiereCode, CancellationToken ct = default);
+        Task<string> ConstruireAsync(
+            string? matiereCode, string? niveauCodeEleve, CancellationToken ct = default);
 
         /// <summary>
         /// Jette le bloc gardé pour une matière : le prochain qui le demande le
@@ -67,12 +72,16 @@ namespace SchoolWebApp.Api.Services
         }
 
         public async Task<string> ConstruireAsync(
-            string? matiereCode, CancellationToken ct = default)
+            string? matiereCode, string? niveauCodeEleve, CancellationToken ct = default)
         {
             if (string.IsNullOrWhiteSpace(matiereCode)) return string.Empty;
 
             var code = matiereCode.Trim().ToUpperInvariant();
-            var cle = $"planches:bloc:{code}";
+
+            // LE PLAFOND ENTRE DANS LA CLÉ : un CP et un élève de 3e de la même
+            // matière ne reçoivent plus la même liste (signalement #47).
+            var plafond = NiveauxDesPlanches.Plafond(niveauCodeEleve);
+            var cle = CleCache(code, plafond);
 
             if (_cache.TryGetValue<string>(cle, out var enCache) && enCache is not null)
             {
@@ -112,13 +121,20 @@ namespace SchoolWebApp.Api.Services
                 .Where(p => !p.Contenu!.TrimStart().StartsWith(
                     Workers.DescriptionPlanchesWorker.LangueEtrangere,
                     StringComparison.OrdinalIgnoreCase))
+                // TROP AU-DESSUS DE SA CLASSE, LE PROFESSEUR NE LA CONNAÎT PAS
+                // (signalement #47) : un CP s'est vu montrer `math-perimetre-aire`
+                // (6e) et ses formules en π pour une simple comparaison de
+                // longueurs. Les classes inférieures et l'année suivante restent ;
+                // une planche sans niveau aussi. Voir `NiveauxDesPlanches`.
+                .Where(p => NiveauxDesPlanches.EstAnnoncee(p.Niveau, plafond))
                 .OrderBy(p => p.Cle)
                 .ToList();
 
             var bloc = planches.Count == 0
                 ? string.Empty
                 : Rediger(planches.Select(p =>
-                    (p.Cle, p.Niveau, p.Contenu!, avecMuette.Contains(p.Cle))));
+                    (p.Cle, p.Niveau, p.Contenu!, avecMuette.Contains(p.Cle))),
+                    filtreParClasse: plafond is not null);
 
             _cache.Set(cle, bloc, Duree);
 
@@ -129,16 +145,33 @@ namespace SchoolWebApp.Api.Services
         {
             if (string.IsNullOrWhiteSpace(matiereCode)) return;
 
-            _cache.Remove($"planches:bloc:{matiereCode.Trim().ToUpperInvariant()}");
+            OublierMatiere(matiereCode.Trim().ToUpperInvariant());
 
             // Une planche de SVT réimportée change aussi le bloc des matières qui
             // l'empruntent : sans ça, la biologie de ST2S garderait cinq minutes
             // l'ancienne liste de légendes. Quatre matières, quatre suppressions.
             foreach (var emprunteuse in EmpruntsDePlanches.ParMatiere.Keys)
             {
-                _cache.Remove($"planches:bloc:{emprunteuse.ToUpperInvariant()}");
+                OublierMatiere(emprunteuse.ToUpperInvariant());
             }
         }
+
+        /// <summary>
+        /// Une matière a un bloc par plafond de classe (signalement #47) : on
+        /// les jette tous, plus celui « sans filtre ».
+        /// </summary>
+        private void OublierMatiere(string code)
+        {
+            _cache.Remove(CleCache(code, null));
+
+            for (var rang = 1; rang <= NiveauxDesPlanches.RangMax; rang++)
+            {
+                _cache.Remove(CleCache(code, rang));
+            }
+        }
+
+        private static string CleCache(string code, int? plafond) =>
+            $"planches:bloc:{code}:{(plafond is null ? "tout" : plafond.Value.ToString())}";
 
         /// <summary>
         /// Le bloc est AUTOPORTANT, et ce n'est pas un détail de rédaction.
@@ -154,7 +187,8 @@ namespace SchoolWebApp.Api.Services
         /// qu'il ne voit pas ici n'existe pas pour lui, et il dessine.
         /// </summary>
         private static string Rediger(
-            IEnumerable<(string Cle, string? Niveau, string Contenu, bool AMuette)> planches)
+            IEnumerable<(string Cle, string? Niveau, string Contenu, bool AMuette)> planches,
+            bool filtreParClasse)
         {
             // LE NIVEAU EST ÉCRIT À CÔTÉ DE LA CLÉ, et c'est tout l'intérêt de la
             // colonne : sans lui, le professeur choisissait sur le nom de la clé et
@@ -194,11 +228,18 @@ namespace SchoolWebApp.Api.Services
             // d'afficher quoi que ce soit — mais elle ratissait trop large.
             //
             // CE N'EST QU'UNE CONSIGNE, ET UNE CONSIGNE NE VAUT PAS UN FAIT. Le
-            // vrai correctif est de ne PAS ANNONCER les planches d'un autre niveau,
-            // ce qui suppose de connaître celui de l'élève : la bibliothèque est
-            // construite par matière seulement, et le niveau d'une planche n'existe
-            // nulle part en base — il ne vit que dans l'écran d'import. Tant que
-            // c'est le cas, cette consigne est tout ce qu'on a.
+            // vrai correctif était de ne PAS ANNONCER les planches d'un autre
+            // niveau. C'est fait depuis le signalement #47 (20/11/2026) : un CP
+            // s'est vu montrer `math-perimetre-aire` (6e) malgré la mention
+            // « classe : 6e ». Les planches à plus d'un an AU-DESSUS de la classe
+            // de l'élève sont retirées en amont (`NiveauxDesPlanches`) ; celles
+            // des classes inférieures restent, d'où la consigne ci-dessous.
+            var portee = filtreParClasse
+                ? "\n\nCette liste ne garde que les planches de ta classe, des classes\n"
+                  + "précédentes et de l'année suivante : une notion d'une classe plus\n"
+                  + "avancée n'a pas sa planche ici, et c'est voulu."
+                : string.Empty;
+
             return $"""
                 ## LES PLANCHES QUE TU PEUX AFFICHER
 
@@ -213,7 +254,7 @@ namespace SchoolWebApp.Api.Services
                 Voici celles qui existent, avec la liste exacte de leurs légendes,
                 relevée sur l'image elle-même :
 
-                {string.Join("\n", lignes)}
+                {string.Join("\n", lignes)}{portee}
 
                 **N'écris jamais une clé absente de cette liste.** Elle
                 n'afficherait rien du tout, et tu ne le verrais pas. Si le sujet
