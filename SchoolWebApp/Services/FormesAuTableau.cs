@@ -220,11 +220,26 @@ namespace SchoolWebApp.Api.Services
                 + "dessin, d'aucune forme « au tableau » ou « à l'écran » tant que tu ne l'as pas tracée : il ne la voit pas. " + trace;
         }
 
-        /// <summary>L'élève parle-t-il de formes géométriques ?</summary>
+        /// <summary>
+        /// Les formes ne se jugent qu'au PRIMAIRE (CP-CM2), en maths (contrôle d'Omar, 20/11/2026) : les tracés proposés
+        /// sont ceux d'un CP, et au collège « carré », « rond » ou « forme » parlent bien plus souvent d'autre chose.
+        /// </summary>
+        public static bool Concerne(string? agentSlug, string? niveauCode) =>
+            Voix.LectureDesNombres.Concerne(agentSlug, niveauCode) && Voix.LectureDesNombres.Rang(niveauCode) is >= 1 and <= 5;
+
+        // Ce qui n'est pas une forme géométrique (contrôle d'Omar, 20/11/2026) : « je suis en forme », « 5 au carré »,
+        // « 3 centimètres carrés », « un nombre rond », « tourner en rond ».
+        [GeneratedRegex(@"(?<!\p{L})(?:en\s+(?:pleine\s+|bonne\s+|super\s+|grande\s+|tres\s+bonne\s+)?forme|aux?\s+carres?"
+            + @"|(?:nombres?|chiffres?|comptes?)\s+ronds?|en\s+rond|(?:centi|milli|kilo|deci)?metres?\s+carres?|(?:cm|mm|km|dm|m)\s*carres?)(?!\p{L})")]
+        private static partial Regex PasUneForme();
+
+        /// <summary>L'élève parle-t-il de formes géométriques ? Jamais dans un message qui porte un calcul.</summary>
         private static bool ParleDeFormes(string? contenu)
         {
             if (string.IsNullOrWhiteSpace(contenu)) return false;
             var texte = Normaliser(Crochets().Replace(contenu, " "));
+            if (Calcul().IsMatch(texte)) return false;
+            texte = PasUneForme().Replace(texte, " ");
             return Regex.IsMatch(texte, @"(?<!\p{L})(?:formes?|geometri\p{L}*|carres?|triangles?|ronds?|cercles?|rectangles?|losanges?)(?!\p{L})");
         }
 

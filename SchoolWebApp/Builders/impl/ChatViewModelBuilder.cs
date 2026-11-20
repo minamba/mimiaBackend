@@ -3537,10 +3537,10 @@ namespace SchoolWebApp.Api.Builders.impl
 
             // LES FORMES GÉOMÉTRIQUES (20/11/2026, signalement #48) — voir FormesAuTableau : le tableau sans dessin, le
             // verdict de « combien de côtés a un carré ? » et les 3 essais sans la réponse sont dits par le code. En maths,
-            // du CP à la 3e, hors contrôle noté et hors exercices qui ont leur propre verdict.
+            // du CP au CM2 seulement (contrôle d'Omar), hors contrôle noté et hors exercices qui ont leur propre verdict.
             FormesAuTableau.Tour? formesDuTour = null;
             if (!controleOuvert && !enExerciceDeSons && !enLectureDeNombres && !dicteeDeNombres && !change
-                && Services.Voix.LectureDesNombres.Concerne(contexte.Conversation.AgentSlug, contexte.Eleve.NiveauCode))
+                && FormesAuTableau.Concerne(contexte.Conversation.AgentSlug, contexte.Eleve.NiveauCode))
             {
                 formesDuTour = FormesAuTableau.Lire(
                     historique.Where(m => !string.IsNullOrWhiteSpace(m.Contenu)
