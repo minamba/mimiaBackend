@@ -57,9 +57,12 @@ namespace SchoolWebApp.Domain.Models
             Relance => CategorieDesabonnement.Relance,
             Rappels => CategorieDesabonnement.Rappels,
 
-            // Un courriel créé depuis l'écran est une annonce de Mimia : on
-            // s'en désabonne comme d'une diffusion (17/10/2026).
-            _ => CategorieDesabonnement.Diffusion,
+            // UN COURRIEL CRÉÉ DEPUIS L'ÉCRAN EST UNE INFORMATION — décision de
+            // Min's, le 20/11/2026 : il part à TOUTE sa cible, sans filtre de
+            // consentement ni lien de désinscription, comme le « Message de
+            // diffusion ». Seul ce qui part par « Offres et promotions » est
+            // commercial (`ModeDiffusion.Offres`).
+            _ => null,
         };
     }
 
@@ -113,10 +116,11 @@ namespace SchoolWebApp.Domain.Models
         /// <summary>
         /// LES OFFRES ET NOUVEAUTÉS : LA SEULE CATÉGORIE COMMERCIALE — Min's, le 19/11/2026 (art. L34-5 CPCE, RGPD).
         ///
-        /// La diffusion à tous et tout courriel créé depuis l'écran (voir `CodeModeleMail.Categorie`) sont de la
-        /// prospection : ils ne partent qu'aux parents qui ont CONSENTI (`Parent.OffresEmail`), et se désabonner de cette
-        /// catégorie, c'est retirer ce consentement (la date du retrait est gardée). Les autres catégories (avis,
-        /// relances, rappels) restent sur le simple désabonnement ; les bilans et les messages sur le compte ne changent pas.
+        /// Ce qui part par l'onglet « Offres et promotions » (`ModeDiffusion.Offres`) est de la prospection : seulement
+        /// aux parents qui ont CONSENTI (`Parent.OffresEmail`), et se désabonner de cette catégorie, c'est retirer ce
+        /// consentement (la date du retrait est gardée). Le « Message de diffusion » et les courriels créés depuis l'écran
+        /// sont de l'information, à tous (décision de Min's, 20/11/2026). Les autres catégories (avis, relances, rappels)
+        /// restent sur le simple désabonnement ; les bilans et les messages sur le compte ne changent pas.
         /// </summary>
         public static bool EstCommerciale(string? categorie) => categorie == Diffusion;
 
@@ -132,29 +136,28 @@ namespace SchoolWebApp.Domain.Models
     }
 
     /// <summary>
-    /// LES DEUX FAÇONS D'ÉCRIRE À TOUS LES PARENTS — décision de Min's, le 19/11/2026.
+    /// LES DEUX FAÇONS D'ÉCRIRE À TOUS LES PARENTS — décision de Min's, le 20/11/2026 : « message de diffusion, c'est
+    /// pas lié au message de promotion, ce sont des messages d'information sur Mimia que j'envoie à tous les parents ».
     ///
-    /// `Offres` (« Message de diffusion ») : de la prospection, aux seuls parents qui ont consenti aux offres par e-mail,
-    /// avec le lien de désinscription signé, le pied commercial et les en-têtes `List-Unsubscribe`.
+    /// `Information` (onglet « Message de diffusion », par défaut) : à TOUS les parents joignables (adresse présente,
+    /// non bannie), qu'ils aient accepté les offres ou non, sans lien de désinscription ni case à cocher.
     ///
-    /// `Service` (« Information de service », non commerciale) : ce que tout client doit apprendre — un changement de
-    /// prix (l'annonce promise par l'article 4 des CGV), un incident, un changement de règles ou de la politique de
-    /// confidentialité. Elle part à TOUS les parents joignables (adresse présente, non bannie), consentement aux offres
-    /// ou non, sans lien de désinscription commercial : ce n'est pas une offre. INTERDITE POUR LES OFFRES : l'écran
-    /// l'écrit en toutes lettres et l'envoi exige une confirmation explicite de l'administrateur.
+    /// `Offres` (onglet « Offres et promotions ») : de la prospection (art. L34-5 CPCE, RGPD), aux SEULS parents qui ont
+    /// consenti aux offres par e-mail, avec le lien de désinscription signé, le pied commercial et les en-têtes
+    /// `List-Unsubscribe`. C'est par là que partent les promotions (Black Friday…).
     /// </summary>
     public static class ModeDiffusion
     {
+        public const string Information = "information";
         public const string Offres = "offres";
-        public const string Service = "service";
 
-        /// <summary>Le mode demandé, normalisé : absent → `Offres` (le comportement d'avant) ; inconnu → null (refus).</summary>
+        /// <summary>Le mode demandé, normalisé : absent → `Information` (le message de diffusion) ; inconnu → null (refus).</summary>
         public static string? Lire(string? mode)
         {
-            if (string.IsNullOrWhiteSpace(mode)) return Offres;
+            if (string.IsNullOrWhiteSpace(mode)) return Information;
 
             var normalise = mode.Trim().ToLowerInvariant();
-            return normalise is Offres or Service ? normalise : null;
+            return normalise is Information or Offres ? normalise : null;
         }
     }
 

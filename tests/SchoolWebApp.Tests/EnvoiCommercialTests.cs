@@ -13,8 +13,9 @@ using SchoolWebApp.Domain.Repositories;
 namespace SchoolWebApp.Tests
 {
     /// <summary>
-    /// « Envoyer à un parent » un template de l'écran (catégorie commerciale) : seulement à un parent consentant, sans
-    /// copie, avec son prénom, son lien signé, le pied commercial et les en-têtes `List-Unsubscribe`.
+    /// « Envoyer à un parent » un template d'OFFRE (il porte `{{lien_desinscription}}`) : seulement à un parent consentant,
+    /// sans copie, avec son prénom, son lien signé, le pied commercial et les en-têtes `List-Unsubscribe`. Un template sans
+    /// cette variable est une correspondance (20/11/2026) : il part à l'adresse choisie, copies comprises, sans lien.
     /// </summary>
     public class EnvoiCommercialTests : BaseDeTest
     {
@@ -23,8 +24,10 @@ namespace SchoolWebApp.Tests
         private sealed record Envoi(
             IReadOnlyList<string> Destinataires, IDictionary<string, string> Valeurs, IReadOnlyDictionary<string, string>? EnTetes);
 
+        private const string TexteOffre = "Bonjour {{prenom}}, voici notre offre. Pour ne plus la recevoir : {{lien_desinscription}}.";
+
         private (ModelesMailController Controleur, Mock<IServiceEmail> Email, List<Envoi> Envois, Mock<IBoitesAdminService> Boites, Mock<IBannissementRepository> Bannis)
-            Preparer(JetonDesabonnement jetons)
+            Preparer(JetonDesabonnement jetons, string texte = TexteOffre)
         {
             var modeles = new Mock<IModeleMailRepository>();
             modeles.Setup(m => m.GetDetailAsync(IdModele, It.IsAny<CancellationToken>())).ReturnsAsync(new ModeleMailDetail
@@ -34,7 +37,7 @@ namespace SchoolWebApp.Tests
                 Nom = "Offre de test",
                 Sujet = "Bonjour {{prenom}}",
                 Titre = "Notre offre",
-                Texte = "Bonjour {{prenom}}, voici notre offre. Pour ne plus la recevoir : {{lien_desinscription}}.",
+                Texte = texte,
             });
             modeles.Setup(m => m.GetPiecesAsync(IdModele, It.IsAny<CancellationToken>())).ReturnsAsync([]);
 
@@ -156,6 +159,25 @@ namespace SchoolWebApp.Tests
 
             Assert.Contains("sans copie", Message(await EnvoyerAsync(p, Jetons, parent.Mail!, ["autre@exemple.invalid"])));
             Assert.Empty(p.Envois);
+        }
+
+        [Fact]
+        public async Task Template_sans_lien_de_desinscription_une_correspondance_part_a_tout_parent_avec_copie()
+        {
+            // 20/11/2026 : un template n'est plus commercial d'office. Sans `{{lien_desinscription}}`, il part comme un
+            // message personnel : parent non consentant, copie, sans lien ni en-têtes de désinscription.
+            var parent = await CreerParentAsync();
+            var p = Preparer(Jetons, "Bonjour {{prenom}}, voici la réponse à votre question.");
+
+            var r = await EnvoyerAsync(p, Jetons, parent.Mail!, ["autre@exemple.invalid"]);
+
+            Assert.IsType<OkObjectResult>(r);
+            var envoi = Assert.Single(p.Envois);
+            Assert.Equal([parent.Mail!], envoi.Destinataires);
+            Assert.Null(envoi.EnTetes);
+            Assert.DoesNotContain("/desabonnement", envoi.Valeurs["corpsMessage"]);
+            Assert.DoesNotContain("désinscrire", envoi.Valeurs["mentionPied"], StringComparison.OrdinalIgnoreCase);
+            Assert.Null(ModelesMailController.CategorieEnvoiIndividuel(new ModeleMailDetail { Sujet = "a", Texte = "b" }));
         }
 
         [Fact]

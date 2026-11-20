@@ -106,7 +106,7 @@ namespace SchoolWebApp.Api.Services.Notifications
 
             var limite = Math.Max(1, _configuration.GetValue("Courrier:EnvoisAutomatiques:ParPassage", 100));
             var destinataires = parCible
-                ? await _envois.GetDestinatairesCibleAsync(modele.Cible!, categorie!, DateTime.UtcNow, ct)
+                ? await _envois.GetDestinatairesCibleAsync(modele.Cible!, categorie, DateTime.UtcNow, ct)
                 : await DestinatairesAsync(modele.Code!, occurrenceUtc, limite, ct);
 
             if (destinataires.Count == 0) return "Aucun destinataire.";
@@ -246,7 +246,10 @@ namespace SchoolWebApp.Api.Services.Notifications
             };
 
             // `{{lien_desinscription}}` (19/11/2026) : seulement pour un courriel qui a une catégorie de désabonnement.
-            DiffusionService.AjouterLienDesinscription(variables, lienDesinscription);
+            // Sans catégorie (un courriel d'information créé depuis l'écran, 20/11/2026), la variable disparaît : mieux
+            // vaut un blanc que le marqueur brut chez le parent.
+            if (lienDesinscription is null) DiffusionService.RetirerLienDesinscription(variables);
+            else DiffusionService.AjouterLienDesinscription(variables, lienDesinscription);
 
             if (destinataire.DateFinEssai is { } fin)
             {

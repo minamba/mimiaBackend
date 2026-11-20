@@ -11,11 +11,11 @@ using SchoolWebApp.Domain.Repositories;
 namespace SchoolWebApp.Tests
 {
     /// <summary>
-    /// UN COURRIEL PROGRAMMÉ CRÉÉ DEPUIS L'ÉCRAN (catégorie « diffusion », donc commercial) — question d'Omar, 19/11/2026 :
-    /// part-il sans lien quand la clé de désinscription manque ? Non : il est bloqué comme la diffusion, rien ne part et
-    /// rien n'est réservé dans le journal. Avec la clé, il ne part qu'aux consentants, avec lien, pied et en-têtes.
+    /// UN COURRIEL PROGRAMMÉ CRÉÉ DEPUIS L'ÉCRAN EST UNE INFORMATION (décision de Min's, 20/11/2026) : il part à TOUTE sa
+    /// cible, consentement aux offres ou non, sans lien de désinscription ni en-têtes, et même sans clé de désinscription.
+    /// Relances et rappels gardent leur propre désabonnement.
     /// </summary>
-    public class EnvoiProgrammeCommercialTests : BaseDeTest
+    public class EnvoiProgrammeInformationTests : BaseDeTest
     {
         // Un identifiant de modèle qui n'existe pas en base : son code de journal (`MODELE:<id>`) n'appartient qu'à ce test.
         private const int IdModele = 987650;
@@ -47,12 +47,13 @@ namespace SchoolWebApp.Tests
         private static ModeleMailDetail ModeleDeLEcran() => new()
         {
             Id = IdModele,
-            Nature = NatureModeleMail.Diffusion,
-            Code = null, // créé depuis l'écran → catégorie « diffusion »
-            Nom = "Offre programmée de test",
-            Sujet = "Notre offre, {{prenom}}",
-            Titre = "Notre offre",
-            Texte = "Bonjour {{prenom}}, voici notre offre. {{lien_desinscription}}",
+            Nature = NatureModeleMail.Automatique,
+            Code = null, // créé depuis l'écran → information, sans catégorie
+            Nom = "Information programmée de test",
+            Sujet = "Du nouveau, {{prenom}}",
+            Titre = "Du nouveau",
+            // La variable, si elle traîne dans le texte, disparaît : pas de marqueur brut chez le parent.
+            Texte = "Bonjour {{prenom}}, voici les nouveautés de la semaine. {{lien_desinscription}}",
             Cible = CibleEnvoi.Nouveaux,
             Actif = true,
         };
@@ -77,12 +78,6 @@ namespace SchoolWebApp.Tests
             return (service, email, envois);
         }
 
-        private async Task<int> LignesDuJournalAsync()
-        {
-            await using var c = NouveauContexte();
-            return await c.EnvoisAutomatiques.CountAsync(e => e.CodeModele == CodeModeleMail.CodeJournal(null, IdModele));
-        }
-
         private async Task EffacerLeJournalAsync()
         {
             await using var c = NouveauContexte();
@@ -90,38 +85,37 @@ namespace SchoolWebApp.Tests
         }
 
         [Fact]
-        public async Task Sans_cle_de_desinscription_le_courriel_programme_commercial_ne_part_pas()
+        public void Un_courriel_cree_depuis_l_ecran_n_a_pas_de_categorie_relances_et_rappels_gardent_la_leur()
         {
-            await CreerParentAsync(consenti: true);
-            var (service, email, envois) = Preparer(CreerJetons(null));
-
-            var resultat = await service.ExecuterAsync(ModeleDeLEcran(), DateTime.UtcNow);
-
-            Assert.Contains("Clé de désabonnement absente", resultat);
-            Assert.Empty(envois);
-            email.Verify(e => e.OuvrirSession(), Times.Never);
-            Assert.Equal(0, await LignesDuJournalAsync());
+            Assert.Null(CodeModeleMail.Categorie(null));
+            Assert.Equal(CategorieDesabonnement.Relance, CodeModeleMail.Categorie(CodeModeleMail.Relance));
+            Assert.Equal(CategorieDesabonnement.Rappels, CodeModeleMail.Categorie(CodeModeleMail.Rappels));
+            Assert.Equal(CategorieDesabonnement.Avis, CodeModeleMail.Categorie(CodeModeleMail.AvisGeneral));
+            Assert.Null(CodeModeleMail.Categorie(CodeModeleMail.Bilans));
         }
 
-        [Fact]
-        public async Task Avec_la_cle_seulement_aux_consentants_avec_lien_pied_et_en_tetes()
+        [Theory]
+        [InlineData(true)]
+        [InlineData(false)]
+        public async Task Part_a_toute_la_cible_sans_lien_ni_en_tetes_avec_ou_sans_cle(bool avecCle)
         {
             var consentant = await CreerParentAsync(consenti: true, prenom: "Alix");
             var nonConsentant = await CreerParentAsync(prenom: "Sacha");
-            var (service, _, envois) = Preparer(Jetons);
+            var (service, _, envois) = Preparer(avecCle ? Jetons : CreerJetons(null));
 
             try
             {
-                await service.ExecuterAsync(ModeleDeLEcran(), DateTime.UtcNow);
+                var resultat = await service.ExecuterAsync(ModeleDeLEcran(), DateTime.UtcNow);
+                Assert.DoesNotContain("Clé de désabonnement absente", resultat);
 
-                Assert.DoesNotContain(envois, e => e.Destinataire == nonConsentant.Mail);
-
-                var envoi = Assert.Single(envois, e => e.Destinataire == consentant.Mail);
-                Assert.NotNull(envoi.EnTetes);
-                Assert.True(envoi.EnTetes!.ContainsKey("List-Unsubscribe"));
-                Assert.Contains("Me désinscrire", envoi.Valeurs["mentionPied"]);
-                Assert.Contains("/desabonnement?jeton=", envoi.Valeurs["corpsMessage"]);
+                Assert.Contains(envois, e => e.Destinataire == consentant.Mail);
+                var envoi = Assert.Single(envois, e => e.Destinataire == nonConsentant.Mail);
+                Assert.Null(envoi.EnTetes);
+                Assert.Contains("Sacha", envoi.Valeurs["corpsMessage"]);
                 Assert.DoesNotContain("{{lien_desinscription}}", envoi.Valeurs["corpsMessage"]);
+                Assert.DoesNotContain("/desabonnement", envoi.Valeurs["corpsMessage"]);
+                Assert.DoesNotContain("désinscrire", envoi.Valeurs["mentionPied"], StringComparison.OrdinalIgnoreCase);
+                Assert.DoesNotContain("Ne plus recevoir", envoi.Valeurs["mentionPied"]);
             }
             finally
             {

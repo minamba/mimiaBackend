@@ -448,23 +448,25 @@ namespace SchoolWebApp.Api.Controllers
 
             // Le lien de désabonnement apparaît dans l'aperçu là où il
             // apparaîtra chez le parent — il ne mène nulle part d'ici.
-            var categorie = CategorieDu(detail);
-
-            // L'APERÇU D'UNE INFORMATION DE SERVICE (19/11/2026) montre ce qui partira : sa propre mention de pied, sans
-            // lien de désinscription (`{{lien_desinscription}}` y disparaît).
-            var service = ModeDiffusion.Lire(mode) == ModeDiffusion.Service && detail.Nature == NatureModeleMail.Diffusion;
+            //
+            // UN TEMPLATE N'A PAS DE CATÉGORIE À LUI (20/11/2026) : c'est la façon dont il part qui décide. Par « Offres et
+            // promotions » (`mode=offres`), il porte le lien de désinscription et le pied commercial ; comme « Message de
+            // diffusion », ni l'un ni l'autre (`{{lien_desinscription}}` y disparaît). Envoyé à un parent (`signature`),
+            // il suit la règle de l'envoi individuel (`CategorieEnvoiIndividuel`). Un courriel automatique garde celle de
+            // son code (avis, relances, rappels ; aucune pour ceux créés depuis l'écran).
+            var categorie = detail.Nature == NatureModeleMail.Diffusion
+                ? (signature ? CategorieEnvoiIndividuel(detail) : CategorieDiffusion(ModeDiffusion.Lire(mode)))
+                : CodeModeleMail.Categorie(detail.Code);
 
             var exemples = new Dictionary<string, ValeurVariable>(Exemples());
-            if (service) DiffusionService.RetirerLienDesinscription(exemples);
-            else if (categorie is not null) DiffusionService.AjouterLienDesinscription(exemples, "#");
+            if (categorie is null) DiffusionService.RetirerLienDesinscription(exemples);
+            else DiffusionService.AjouterLienDesinscription(exemples, "#");
 
             var courriel = _composeur.Composer(
                 detail,
                 await _modeles.GetPiecesAsync(id, ct),
                 exemples,
-                service
-                    ? _diffusion.ComposerMentionPiedService()
-                    : categorie is null ? null : _diffusion.ComposerMentionPied("#", categorie));
+                categorie is null ? null : _diffusion.ComposerMentionPied("#", categorie));
 
             // LA SIGNATURE DANS L'APERÇU (17/10/2026) : envoyé à un parent, le
             // template part signé de son nom — l'aperçu le montre aussi.
@@ -504,13 +506,11 @@ namespace SchoolWebApp.Api.Controllers
         public async Task<IActionResult> Diffuser(
             int id,
             CancellationToken ct,
-            [FromQuery] string? mode = null,
-            [FromQuery] bool confirmationNonCommerciale = false)
+            [FromQuery] string? mode = null)
         {
-            // DEUX MODES (19/11/2026) : les offres (par défaut, aux seuls consentants) ou l'INFORMATION DE SERVICE, à
-            // tous. Celle-ci est interdite pour les offres : l'administrateur doit l'avoir confirmé en cochant la case de
-            // l'écran — refusé ici aussi, pour qu'aucun appel direct ne la contourne.
-            var faute = VerifierModeDiffusion(mode, confirmationNonCommerciale, out var modeLu);
+            // DEUX MODES (décision de Min's, 20/11/2026) : le « Message de diffusion » (par défaut), une information à TOUS
+            // les parents, sans case à cocher ; ou « Offres et promotions », aux seuls parents qui ont accepté les offres.
+            var faute = VerifierModeDiffusion(mode, out var modeLu);
             if (faute is not null) return BadRequest(new { message = faute });
 
             var detail = await _modeles.GetDetailAsync(id, ct);
@@ -519,12 +519,12 @@ namespace SchoolWebApp.Api.Controllers
             faute = VerifierEnvoi(detail);
             if (faute is not null) return BadRequest(new { message = faute });
 
-            // UNE INFORMATION DE SERVICE QUI CONTIENT `{{lien_desinscription}}` (20/11/2026, revue d'Omar) : c'est un modèle
-            // d'offre réutilisé. Refusé ici, pour qu'aucun appel direct ne la fasse partir à tous les parents.
-            if (modeLu == ModeDiffusion.Service
+            // UN MESSAGE DE DIFFUSION QUI CONTIENT `{{lien_desinscription}}` (20/11/2026, revue d'Omar) : c'est un modèle
+            // d'offre (Black Friday…). Il part par « Offres et promotions », pas à tous les parents.
+            if (modeLu == ModeDiffusion.Information
                 && DiffusionService.ContientLienDesinscription(detail.Sujet, detail.Titre, detail.Texte))
             {
-                return BadRequest(new { message = DiffusionService.RefusLienDansInformationService });
+                return BadRequest(new { message = DiffusionService.RefusLienDansInformation });
             }
 
             var courriel = _composeur.Composer(detail, await _modeles.GetPiecesAsync(id, ct));
@@ -538,13 +538,13 @@ namespace SchoolWebApp.Api.Controllers
                 return Conflict(new { message = "Une diffusion est déjà en cours. Attendez qu'elle se termine." });
             }
 
-            var service = modeLu == ModeDiffusion.Service;
+            var offres = modeLu == ModeDiffusion.Offres;
             await _modeles.NoterEnvoiAsync(
-                id, DateTime.UtcNow, service ? "Information de service à tous les parents" : "Diffusion à tous les parents", ct);
+                id, DateTime.UtcNow, offres ? "Offre aux parents qui acceptent les offres" : "Diffusion à tous les parents", ct);
 
             _logger.LogWarning(
                 "{Quoi} LANCEE depuis le template {Id} : « {Sujet} », {Images} image(s), {Docs} document(s).",
-                service ? "INFORMATION DE SERVICE (non commerciale, confirmee par l'admin)" : "DIFFUSION",
+                offres ? "OFFRE (parents consentants)" : "DIFFUSION (information a tous)",
                 id, detail.Sujet, courriel.Images.Count, courriel.Documents.Count);
 
             return Accepted(new { message = "Diffusion lancée." });
@@ -620,10 +620,11 @@ namespace SchoolWebApp.Api.Controllers
             if (faute is not null) return BadRequest(new { message = faute });
 
             // UNE OFFRE ENVOYÉE À UN SEUL PARENT OBÉIT À LA MÊME RÈGLE QU'UNE OFFRE ENVOYÉE À TOUS (19/11/2026, retour
-            // d'Omar) : un template de catégorie commerciale ne part qu'à un parent inscrit qui a CONSENTI aux offres par
-            // email, jamais à une adresse libre ni en copie, et toujours avec son lien de désinscription signé, le pied
-            // commercial et les en-têtes `List-Unsubscribe` — exactement comme la diffusion.
-            var categorie = CategorieDu(detail);
+            // d'Omar) : un template d'offre — celui qui porte `{{lien_desinscription}}`, voir `CategorieEnvoiIndividuel` —
+            // ne part qu'à un parent inscrit qui a CONSENTI aux offres par email, jamais à une adresse libre ni en copie,
+            // et toujours avec son lien de désinscription signé, le pied commercial et les en-têtes `List-Unsubscribe`.
+            // Tout autre template est une correspondance (20/11/2026 : un template n'est plus commercial d'office).
+            var categorie = CategorieEnvoiIndividuel(detail);
             var commerciale = CategorieDesabonnement.EstCommerciale(categorie);
             var variables = new Dictionary<string, ValeurVariable> { ["prenom"] = new(string.Empty) };
             string? mentionPied = null;
@@ -722,7 +723,9 @@ namespace SchoolWebApp.Api.Controllers
 
             if (nature == NatureModeleMail.Diffusion)
             {
-                return [V("prenom", "Le prénom du parent"), desinscription];
+                // Pour un template, le lien n'existe que dans une offre (« Offres et promotions », 20/11/2026).
+                return [V("prenom", "Le prénom du parent"),
+                        V("lien_desinscription", "Le lien pour se désinscrire — seulement pour une offre (« Offres et promotions »)")];
             }
 
             return code switch
@@ -734,15 +737,28 @@ namespace SchoolWebApp.Api.Controllers
                      V("lienTarifs", "Le lien vers les formules")],
                 CodeModeleMail.AvisEssai or CodeModeleMail.AvisGeneral =>
                     [V("prenom", "Le prénom du parent"), V("lienAvis", "Le lien pour donner son avis"), desinscription],
+
+                // Un courriel d'information créé depuis l'écran (sans code, 20/11/2026) n'a pas de lien de désinscription.
+                null => [V("prenom", "Le prénom du parent")],
                 _ => [V("prenom", "Le prénom du parent"), desinscription],
             };
         }
 
-        /// <summary>La catégorie de désabonnement d'un template : celle de la diffusion pour un template de l'écran.</summary>
-        private static string? CategorieDu(ModeleMailDetail detail) =>
-            detail.Nature == NatureModeleMail.Diffusion
+        /// <summary>
+        /// La catégorie d'une diffusion à tous selon son mode (20/11/2026) : les offres (« Offres et promotions ») sont
+        /// commerciales ; le « Message de diffusion » est une information, sans catégorie (à tous, sans lien).
+        /// </summary>
+        private static string? CategorieDiffusion(string? mode) =>
+            mode == ModeDiffusion.Offres ? CategorieDesabonnement.Diffusion : null;
+
+        /// <summary>
+        /// La catégorie d'un template envoyé à UN parent : un template qui porte `{{lien_desinscription}}` est un modèle
+        /// d'offre, il suit la règle des offres ; tout autre est une correspondance, sans catégorie (20/11/2026).
+        /// </summary>
+        public static string? CategorieEnvoiIndividuel(ModeleMailDetail detail) =>
+            DiffusionService.ContientLienDesinscription(detail.Sujet, detail.Titre, detail.Texte)
                 ? CategorieDesabonnement.Diffusion
-                : CodeModeleMail.Categorie(detail.Code);
+                : null;
 
         /// <summary>
         /// L'ENVOI INDIVIDUEL D'UNE OFFRE (19/11/2026, retour d'Omar) : le parent consentant à qui elle peut partir, ou la
@@ -766,30 +782,25 @@ namespace SchoolWebApp.Api.Controllers
 
             if (copies.Count + cachees.Count > 0)
             {
-                return (null, "Ce template est une offre commerciale : il part au seul parent destinataire, sans copie ni copie cachée.");
+                return (null, "Ce template est une offre (il contient {{lien_desinscription}}) : il part au seul parent destinataire, sans copie ni copie cachée.");
             }
 
             var parent = await envois.GetDestinataireParMailAsync(adresse, categorie, ct);
             return parent is null
-                ? (null, "Ce template est une offre commerciale : il ne part qu’à un parent inscrit qui a accepté les offres "
-                         + "et nouveautés par e-mail, et cette adresse ne correspond à aucun parent consentant. Pour une "
-                         + "réponse personnelle, écrivez sans template.")
+                ? (null, "Ce template est une offre (il contient {{lien_desinscription}}) : il ne part qu’à un parent inscrit "
+                         + "qui a accepté les offres et nouveautés par e-mail, et cette adresse ne correspond à aucun parent "
+                         + "consentant. Pour une réponse personnelle, écrivez sans template ou retirez cette variable.")
                 : (parent, null);
         }
 
         /// <summary>
-        /// Le mode d'une diffusion à tous (`ModeDiffusion`) : inconnu → refus ; information de service → seulement avec
-        /// la confirmation « aucune offre, promotion ou incitation commerciale » cochée par l'administrateur.
+        /// Le mode d'une diffusion à tous (`ModeDiffusion`) : absent → le « Message de diffusion » (information, à tous) ;
+        /// inconnu → refus. Aucune case à cocher (décision de Min's, 20/11/2026).
         /// </summary>
-        public static string? VerifierModeDiffusion(string? mode, bool confirmationNonCommerciale, out string modeLu)
+        public static string? VerifierModeDiffusion(string? mode, out string modeLu)
         {
             modeLu = ModeDiffusion.Lire(mode) ?? string.Empty;
-            if (modeLu.Length == 0) return "Mode d'envoi inconnu.";
-
-            return modeLu == ModeDiffusion.Service && !confirmationNonCommerciale
-                ? "Une information de service ne contient aucune offre, promotion ou incitation commerciale : cochez la "
-                  + "confirmation avant l'envoi. Pour une offre, utilisez « Message de diffusion »."
-                : null;
+            return modeLu.Length == 0 ? "Mode d'envoi inconnu." : null;
         }
 
         private static string? VerifierEnvoi(ModeleMailDetail detail)

@@ -26,7 +26,7 @@ namespace SchoolWebApp.Api.Services.Notifications
 
         public DateTime? Fin { get; set; }
 
-        /// <summary>`ModeDiffusion` : « offres » (Message de diffusion) ou « service » (information de service).</summary>
+        /// <summary>`ModeDiffusion` : « information » (Message de diffusion, à tous) ou « offres » (Offres et promotions).</summary>
         public string? Mode { get; set; }
 
         /// <summary>Renseigné si la diffusion s'est arrêtée sur une erreur.</summary>
@@ -83,15 +83,9 @@ namespace SchoolWebApp.Api.Services.Notifications
         string ComposerMentionPied(string? lienDesabonnement, string? categorie);
 
         /// <summary>
-        /// La mention d'une INFORMATION DE SERVICE (19/11/2026) : pourquoi le parent la reçoit (il a un compte), qu'elle
-        /// ne contient aucune offre, et sans lien de désinscription commercial.
-        /// </summary>
-        string ComposerMentionPiedService();
-
-        /// <summary>
         /// Lance la diffusion en arrière-plan. Faux si une autre est déjà en
         /// cours — deux diffusions simultanées écriraient deux fois à tout le
-        /// monde. `mode` : `ModeDiffusion.Offres` (par défaut) ou `ModeDiffusion.Service`.
+        /// monde. `mode` : `ModeDiffusion.Information` (par défaut, à tous) ou `ModeDiffusion.Offres` (aux consentants).
         /// </summary>
         bool Lancer(
             string sujet,
@@ -99,7 +93,7 @@ namespace SchoolWebApp.Api.Services.Notifications
             string texte,
             IReadOnlyList<PieceMail> images,
             IReadOnlyList<PieceMail> documents,
-            string mode = ModeDiffusion.Offres);
+            string mode = ModeDiffusion.Information);
     }
 
     /// <summary>
@@ -365,14 +359,8 @@ namespace SchoolWebApp.Api.Services.Notifications
                   + "style=\"color:#a5abb8; text-decoration:underline;\">Me désinscrire de ces e-mails</a>";
         }
 
-        public string ComposerMentionPiedService() =>
-            "Vous recevez ce message d’information sur le service Mimia (prix, fonctionnement, règles) parce que vous "
-            + "avez un compte Mimia. Il ne contient aucune offre commerciale. Une question ? Écrivez-nous à "
-            + "<a href=\"mailto:support@mimia.fr\" style=\"color:#a5abb8; text-decoration:underline;\">"
-            + "support@mimia.fr</a>.";
-
         /// <summary>
-        /// Une information de service ne porte pas de lien de désinscription : `{{lien_desinscription}}` y disparaît
+        /// Un message d'information (« Message de diffusion ») ne porte pas de lien de désinscription : `{{lien_desinscription}}` y disparaît
         /// proprement (mieux vaut un blanc que le marqueur brut chez le parent).
         /// </summary>
         public static void RetirerLienDesinscription(IDictionary<string, ValeurVariable> variables)
@@ -394,17 +382,17 @@ namespace SchoolWebApp.Api.Services.Notifications
             @"\{\{\s*(lien_desinscription|liendesinscription)\s*\}\}", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
         /// <summary>
-        /// Vrai si l'un des textes contient `{{lien_desinscription}}` (ou `{{lienDesinscription}}`). Dans une information de
-        /// service, c'est le signe d'un modèle d'offre réutilisé (20/11/2026, revue d'Omar) : l'envoi est refusé.
+        /// Vrai si l'un des textes contient `{{lien_desinscription}}` (ou `{{lienDesinscription}}`) : la marque d'un modèle
+        /// d'OFFRE (20/11/2026, revue d'Omar). Envoyé à tous comme « Message de diffusion », il est refusé (il doit partir
+        /// par « Offres et promotions ») ; envoyé à un parent, il suit la règle des offres (consentement, lien signé).
         /// </summary>
         public static bool ContientLienDesinscription(params string?[] textes) =>
             textes.Any(t => !string.IsNullOrEmpty(t) && MarqueurLienDesinscription.IsMatch(t));
 
         /// <summary>Le message du refus, le même pour l'écran et pour un appel direct.</summary>
-        public const string RefusLienDansInformationService =
-            "Ce texte contient {{lien_desinscription}} : c’est la marque d’une offre commerciale. Une information de service "
-            + "n’a pas de lien de désinscription. Retirez cette variable, ou envoyez ce message comme « Message de diffusion » "
-            + "(offres, aux seuls parents qui les acceptent).";
+        public const string RefusLienDansInformation =
+            "Ce message contient {{lien_desinscription}} : c’est un modèle d’offre. Envoyez-le depuis l’onglet « Offres et "
+            + "promotions » (aux parents qui ont accepté les offres), ou retirez cette variable pour l’envoyer à tous.";
 
         /// <summary>Ajoute la variable du lien de désinscription, si le lien existe (une clé de signature configurée).</summary>
         public static void AjouterLienDesinscription(IDictionary<string, ValeurVariable> variables, string? lien)
@@ -447,7 +435,7 @@ namespace SchoolWebApp.Api.Services.Notifications
             string texte,
             IReadOnlyList<PieceMail> images,
             IReadOnlyList<PieceMail> documents,
-            string mode = ModeDiffusion.Offres)
+            string mode = ModeDiffusion.Information)
         {
             // Un mode inconnu ne part pas : le contrôleur l'a déjà refusé, ceci est le dernier garde-fou.
             if (ModeDiffusion.Lire(mode) is not { } modeLu)
@@ -489,9 +477,10 @@ namespace SchoolWebApp.Api.Services.Notifications
             IReadOnlyList<PieceMail> documents,
             string mode)
         {
-            // L'INFORMATION DE SERVICE (19/11/2026) : à tous les parents joignables, sans lien de désinscription
-            // commercial, sans en-têtes `List-Unsubscribe`, avec sa propre mention de pied.
-            var service = mode == ModeDiffusion.Service;
+            // LE MESSAGE DE DIFFUSION (information, 20/11/2026) : à tous les parents joignables, sans lien de
+            // désinscription, sans en-têtes `List-Unsubscribe`, avec la mention habituelle. Les OFFRES, elles, portent
+            // tout l'appareil commercial.
+            var offres = mode == ModeDiffusion.Offres;
 
             try
             {
@@ -499,7 +488,7 @@ namespace SchoolWebApp.Api.Services.Notifications
                 // s'en désabonner n'a pas à partir chez trois cents parents ; la
                 // configuration manquante se voit ici, dans l'écran, au lieu de
                 // se découvrir dans les plaintes.
-                if (!service && !_jetons.Disponible)
+                if (offres && !_jetons.Disponible)
                 {
                     const string raison =
                         "Clé de désabonnement absente (Courrier:CleDesabonnement) : la diffusion n'est pas partie.";
@@ -534,16 +523,16 @@ namespace SchoolWebApp.Api.Services.Notifications
 
                 foreach (var destinataire in destinataires)
                 {
-                    var lienDesinscription = service
-                        ? null
-                        : _jetons.Lien(destinataire.ParentId, CategorieDesabonnement.Diffusion);
+                    var lienDesinscription = offres
+                        ? _jetons.Lien(destinataire.ParentId, CategorieDesabonnement.Diffusion)
+                        : null;
 
                     var variables = new Dictionary<string, ValeurVariable>
                     {
                         ["prenom"] = new(destinataire.Prenom?.Trim() ?? string.Empty),
                     };
-                    if (service) RetirerLienDesinscription(variables);
-                    else AjouterLienDesinscription(variables, lienDesinscription);
+                    if (offres) AjouterLienDesinscription(variables, lienDesinscription);
+                    else RetirerLienDesinscription(variables);
 
                     var sujetPersonnel = RemplacerVariables(sujet, variables);
 
@@ -553,9 +542,9 @@ namespace SchoolWebApp.Api.Services.Notifications
                         ["titreMessage"] = RemplacerVariables(titre, variables),
                         ["corpsMessage"] = ComposerCorps(texte, images.Count, variables),
                         ["blocPiecesJointes"] = blocPieces,
-                        ["mentionPied"] = service
-                            ? ComposerMentionPiedService()
-                            : ComposerMentionPied(lienDesinscription, CategorieDesabonnement.Diffusion),
+                        ["mentionPied"] = offres
+                            ? ComposerMentionPied(lienDesinscription, CategorieDesabonnement.Diffusion)
+                            : ComposerMentionPied(),
                     };
 
                     bool envoye;
@@ -569,7 +558,7 @@ namespace SchoolWebApp.Api.Services.Notifications
                             valeurs,
                             images,
                             documents,
-                            service ? null : _jetons.EnTetes(destinataire.ParentId, CategorieDesabonnement.Diffusion));
+                            offres ? _jetons.EnTetes(destinataire.ParentId, CategorieDesabonnement.Diffusion) : null);
                     }
                     catch (Exception ex)
                     {

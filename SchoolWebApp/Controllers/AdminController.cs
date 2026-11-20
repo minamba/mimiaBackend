@@ -2564,8 +2564,9 @@ namespace SchoolWebApp.Api.Controllers
             [FromQuery] string? mode = null,
             CancellationToken ct = default)
         {
-            // L'APERÇU D'UNE INFORMATION DE SERVICE (19/11/2026) : sa mention de pied, sans lien de désinscription.
-            var service = !signature && ModeDiffusion.Lire(mode) == ModeDiffusion.Service;
+            // L'APERÇU SELON LE MODE (20/11/2026) : une offre (« Offres et promotions ») montre le lien de désinscription
+            // et le pied commercial ; le « Message de diffusion » (information, à tous) n'a ni l'un ni l'autre.
+            var offres = !signature && ModeDiffusion.Lire(mode) == ModeDiffusion.Offres;
 
             var valeurs = new Dictionary<string, string>
             {
@@ -2573,18 +2574,16 @@ namespace SchoolWebApp.Api.Controllers
                 ["titreMessage"] = titre ?? string.Empty,
                 // `{{lien_desinscription}}` montré à sa place dans l'aperçu d'une diffusion (19/11/2026) ; il ne mène nulle part d'ici.
                 ["corpsMessage"] = diffusion.ComposerCorps(texte ?? string.Empty, images?.Count ?? 0,
-                    signature ? null : service ? SansLienDesinscription() : LienDesinscriptionApercu()),
+                    signature ? null : offres ? LienDesinscriptionApercu() : SansLienDesinscription()),
                 ["blocPiecesJointes"] = diffusion.ComposerPiecesJointes(
                     documents?.Select(d => d.FileName).ToList() ?? []),
-                // LE LIEN DE DÉSABONNEMENT DANS L'APERÇU D'UNE DIFFUSION (17/10/2026) :
-                // à l'envoi, chaque parent a le sien ; l'aperçu le montre à sa place
-                // (il ne mène nulle part d'ici). « Écrire à un parent » (signature)
-                // n'en a pas : c'est une correspondance, pas une annonce.
-                ["mentionPied"] = signature
-                    ? diffusion.ComposerMentionPied()
-                    : service
-                        ? diffusion.ComposerMentionPiedService()
-                        : diffusion.ComposerMentionPied("#", SchoolWebApp.Domain.Models.CategorieDesabonnement.Diffusion),
+                // LE LIEN DE DÉSABONNEMENT DANS L'APERÇU D'UNE OFFRE : à l'envoi,
+                // chaque parent a le sien ; l'aperçu le montre à sa place (il ne
+                // mène nulle part d'ici). « Écrire à un parent » (signature) et le
+                // « Message de diffusion » n'en ont pas (20/11/2026).
+                ["mentionPied"] = offres
+                    ? diffusion.ComposerMentionPied("#", SchoolWebApp.Domain.Models.CategorieDesabonnement.Diffusion)
+                    : diffusion.ComposerMentionPied(),
             };
 
             // LA SIGNATURE DANS L'APERÇU — Camara, le 17/10/2026 : « on ne voit pas
@@ -2675,10 +2674,9 @@ namespace SchoolWebApp.Api.Controllers
         }
 
         /// <summary>
-        /// COMBIEN LA RECEVRONT — Min's, le 19/11/2026 : une diffusion ne part plus qu'aux parents qui ont consenti aux
-        /// offres par email. Le nombre de comptes ne dit donc plus à combien on écrit : l'écran de confirmation affiche
-        /// celui-ci, calculé par la MÊME requête que l'envoi (adresse non bannie, consentement, une adresse comptée une fois).
-        /// `mode=service` : l'information de service, à tous les parents joignables (même requête que son envoi).
+        /// COMBIEN LA RECEVRONT : le nombre que l'écran affiche, calculé par la MÊME requête que l'envoi (adresse non
+        /// bannie, une adresse comptée une fois). Par défaut le « Message de diffusion », à tous les parents joignables ;
+        /// `mode=offres` : « Offres et promotions », aux seuls parents qui ont consenti aux offres (20/11/2026).
         /// </summary>
         [HttpGet("diffusion/destinataires")]
         [SwaggerResponse(200, "Le nombre de parents qui recevraient une diffusion maintenant.")]

@@ -10,14 +10,14 @@ namespace SchoolWebApp.Tests
     public class FiltreEnvoiTests : BaseDeTest
     {
         [Fact]
-        public async Task Diffusion_seulement_aux_parents_consentants_et_non_bannis()
+        public async Task Offres_seulement_aux_parents_consentants_et_non_bannis()
         {
             var consentant = await CreerParentAsync(consenti: true);
             var nonConsentant = await CreerParentAsync();
             var banni = await CreerParentAsync(consenti: true);
             await BannirAsync(banni.Mail!);
 
-            var liste = (await Envois.GetDestinatairesDiffusionAsync()).Select(d => d.ParentId).ToList();
+            var liste = (await Envois.GetDestinatairesOffresAsync()).Select(d => d.ParentId).ToList();
 
             Assert.Contains(consentant.Id, liste);
             Assert.DoesNotContain(nonConsentant.Id, liste);
@@ -64,7 +64,7 @@ namespace SchoolWebApp.Tests
                 await c.SaveChangesAsync();
             }
 
-            var liste = (await Envois.GetDestinatairesDiffusionAsync()).Select(d => d.ParentId).ToList();
+            var liste = (await Envois.GetDestinatairesOffresAsync()).Select(d => d.ParentId).ToList();
 
             Assert.Contains(parent.Id, liste);
         }
@@ -77,10 +77,10 @@ namespace SchoolWebApp.Tests
 
             // L'action ne lit aucun champ du contrôleur : pas besoin de ses dizaines de dépendances.
             var admin = (AdminController)System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject(typeof(AdminController));
-            var reponse = Assert.IsType<OkObjectResult>(await admin.CompterDestinatairesDiffusion(Envois, CancellationToken.None));
+            var reponse = Assert.IsType<OkObjectResult>(await admin.CompterDestinatairesDiffusion(Envois, CancellationToken.None, "offres"));
             var nombre = (int)reponse.Value!.GetType().GetProperty("nombre")!.GetValue(reponse.Value)!;
 
-            Assert.Equal((await Envois.GetDestinatairesDiffusionAsync()).Count, nombre);
+            Assert.Equal((await Envois.GetDestinatairesOffresAsync()).Count, nombre);
         }
 
         [Fact]

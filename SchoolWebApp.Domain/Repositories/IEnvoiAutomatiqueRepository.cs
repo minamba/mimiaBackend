@@ -34,16 +34,16 @@ namespace SchoolWebApp.Domain.Repositories
             DateTime depuisUtc, int limite, CancellationToken ct = default);
 
         /// <summary>
-        /// Les parents d'une diffusion de masse : ceux qui ont une adresse, non
-        /// bannie, et qui ont CONSENTI aux offres par email (19/11/2026).
+        /// Les parents d'une OFFRE envoyée à tous (« Offres et promotions ») : ceux qui ont une adresse, non bannie, et
+        /// qui ont CONSENTI aux offres par email (19/11/2026). Voir `ModeDiffusion.Offres`.
         /// </summary>
-        Task<IReadOnlyList<DestinataireAutomatique>> GetDestinatairesDiffusionAsync(CancellationToken ct = default);
+        Task<IReadOnlyList<DestinataireAutomatique>> GetDestinatairesOffresAsync(CancellationToken ct = default);
 
         /// <summary>
-        /// Les parents d'une INFORMATION DE SERVICE (non commerciale, 19/11/2026) : TOUS ceux qui ont une adresse non
-        /// bannie, qu'ils aient consenti aux offres ou non, une adresse comptée une fois. Voir `ModeDiffusion.Service`.
+        /// Les parents d'un « Message de diffusion » (information, 20/11/2026) : TOUS ceux qui ont une adresse non
+        /// bannie, qu'ils aient consenti aux offres ou non, une adresse comptée une fois. Voir `ModeDiffusion.Information`.
         /// </summary>
-        Task<IReadOnlyList<DestinataireAutomatique>> GetDestinatairesInformationServiceAsync(CancellationToken ct = default);
+        Task<IReadOnlyList<DestinataireAutomatique>> GetDestinatairesInformationAsync(CancellationToken ct = default);
 
         /// <summary>La liste d'un mode de diffusion (`ModeDiffusion`) : la même pour le décompte de l'écran et pour l'envoi.</summary>
         Task<IReadOnlyList<DestinataireAutomatique>> GetDestinatairesAsync(string mode, CancellationToken ct = default);
@@ -51,10 +51,11 @@ namespace SchoolWebApp.Domain.Repositories
         /// <summary>
         /// Les parents d'une cible (`CibleEnvoi`, 17/10/2026), joignables et non
         /// désabonnés de la catégorie (pour les offres : ayant consenti) ; une
-        /// adresse sur deux comptes ne compte qu'une fois.
+        /// adresse sur deux comptes ne compte qu'une fois. Catégorie nulle (un
+        /// courriel d'information créé depuis l'écran) : toute la cible joignable.
         /// </summary>
         Task<IReadOnlyList<DestinataireAutomatique>> GetDestinatairesCibleAsync(
-            string cible, string categorie, DateTime maintenantUtc, CancellationToken ct = default);
+            string cible, string? categorie, DateTime maintenantUtc, CancellationToken ct = default);
 
         /// <summary>
         /// Le parent de cette adresse, s'il est joignable pour la catégorie (pour les offres : s'il a CONSENTI) ; nul

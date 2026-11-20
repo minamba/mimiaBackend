@@ -138,11 +138,11 @@ namespace SchoolWebApp.Dal.Repositories
                 .Select(p => new DestinataireAutomatique(p.Id, p.Mail!, p.Prenom, null, null))
                 .ToListAsync(ct);
 
-        public async Task<IReadOnlyList<DestinataireAutomatique>> GetDestinatairesDiffusionAsync(
+        public async Task<IReadOnlyList<DestinataireAutomatique>> GetDestinatairesOffresAsync(
             CancellationToken ct = default)
         {
-            // Ni les bannis — ils ne reçoivent plus rien du tout —, et SEULEMENT
-            // les parents qui ont consenti aux offres par email (19/11/2026).
+            // « OFFRES ET PROMOTIONS » : ni les bannis — ils ne reçoivent plus rien du
+            // tout —, et SEULEMENT les parents qui ont consenti aux offres par email (19/11/2026).
             var lignes = await Joignables(CategorieDesabonnement.Diffusion)
                 .OrderBy(p => p.Id)
                 .Select(p => new { p.Id, p.Mail, p.Prenom })
@@ -155,12 +155,12 @@ namespace SchoolWebApp.Dal.Repositories
                 .ToList();
         }
 
-        public async Task<IReadOnlyList<DestinataireAutomatique>> GetDestinatairesInformationServiceAsync(
+        public async Task<IReadOnlyList<DestinataireAutomatique>> GetDestinatairesInformationAsync(
             CancellationToken ct = default)
         {
-            // L'INFORMATION DE SERVICE VA À TOUS (décision de Min's, 19/11/2026) : le filtre sans catégorie — une
-            // adresse, pas bannie —, SANS le consentement aux offres ni un ancien désabonnement des « annonces » : un
-            // changement de prix ou un incident concerne chaque client, qu'il veuille des offres ou non.
+            // LE « MESSAGE DE DIFFUSION » VA À TOUS (décision de Min's, 20/11/2026) : le filtre sans catégorie — une
+            // adresse, pas bannie —, SANS le consentement aux offres ni un ancien désabonnement des « annonces » : ce sont
+            // les informations de Mimia que Min's envoie à tous les parents.
             var lignes = await Joignables(null)
                 .OrderBy(p => p.Id)
                 .Select(p => new { p.Id, p.Mail, p.Prenom })
@@ -175,13 +175,13 @@ namespace SchoolWebApp.Dal.Repositories
         public Task<IReadOnlyList<DestinataireAutomatique>> GetDestinatairesAsync(string mode, CancellationToken ct = default) =>
             mode switch
             {
-                ModeDiffusion.Offres => GetDestinatairesDiffusionAsync(ct),
-                ModeDiffusion.Service => GetDestinatairesInformationServiceAsync(ct),
+                ModeDiffusion.Information => GetDestinatairesInformationAsync(ct),
+                ModeDiffusion.Offres => GetDestinatairesOffresAsync(ct),
                 _ => throw new ArgumentOutOfRangeException(nameof(mode), mode, "Mode de diffusion inconnu."),
             };
 
         public async Task<IReadOnlyList<DestinataireAutomatique>> GetDestinatairesCibleAsync(
-            string cible, string categorie, DateTime maintenantUtc, CancellationToken ct = default)
+            string cible, string? categorie, DateTime maintenantUtc, CancellationToken ct = default)
         {
             var requete = Joignables(categorie);
 

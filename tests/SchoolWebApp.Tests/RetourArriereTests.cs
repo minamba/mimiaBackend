@@ -42,7 +42,7 @@ namespace SchoolWebApp.Tests
 
             Assert.True((await RelireAsync(parent.Id)).OffresEmail); // l'ancien code n'y a pas touché
 
-            var diffusion = (await Envois.GetDestinatairesDiffusionAsync()).Select(d => d.ParentId).ToList();
+            var diffusion = (await Envois.GetDestinatairesOffresAsync()).Select(d => d.ParentId).ToList();
             Assert.DoesNotContain(parent.Id, diffusion);
             Assert.Contains(temoin.Id, diffusion);
 
@@ -54,8 +54,8 @@ namespace SchoolWebApp.Tests
             Assert.True(await Envois.EstDesabonneAsync(parent.Id, Offres));
             Assert.False(await Envois.EstDesabonneAsync(temoin.Id, Offres));
 
-            // L'information de service n'est pas une offre : elle part quand même.
-            Assert.Contains(parent.Id, (await Envois.GetDestinatairesInformationServiceAsync()).Select(d => d.ParentId));
+            // Le message de diffusion (information) n'est pas une offre : il part quand même.
+            Assert.Contains(parent.Id, (await Envois.GetDestinatairesInformationAsync()).Select(d => d.ParentId));
         }
 
         [Fact]
@@ -69,7 +69,7 @@ namespace SchoolWebApp.Tests
                 await c.SaveChangesAsync();
             }
 
-            Assert.Contains(parent.Id, (await Envois.GetDestinatairesDiffusionAsync()).Select(d => d.ParentId));
+            Assert.Contains(parent.Id, (await Envois.GetDestinatairesOffresAsync()).Select(d => d.ParentId));
             Assert.False(await Envois.EstDesabonneAsync(parent.Id, Offres));
         }
 
@@ -104,7 +104,7 @@ namespace SchoolWebApp.Tests
             Assert.Equal(SourceConsentement.EspaceParent, relu.OffresEmailSource);
             Assert.True(relu.OffresEmailConsentiLe > relu.OffresEmailRetireLe);
             Assert.False(await Envois.EstDesabonneAsync(parent.Id, Offres));
-            Assert.Contains(parent.Id, (await Envois.GetDestinatairesDiffusionAsync()).Select(d => d.ParentId));
+            Assert.Contains(parent.Id, (await Envois.GetDestinatairesOffresAsync()).Select(d => d.ParentId));
 
             // Le retrait, puis le nouvel accord : toute l'histoire est au journal.
             var journal = await JournalAsync(parent.Id);

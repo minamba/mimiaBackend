@@ -14,11 +14,11 @@ using SchoolWebApp.Domain.Repositories;
 namespace SchoolWebApp.Tests
 {
     /// <summary>
-    /// L'INFORMATION DE SERVICE (décision de Min's, 19/11/2026) : à TOUS les parents joignables, consentement aux offres
-    /// ou non, sans lien de désinscription ; la diffusion des offres, elle, reste aux seuls consentants. Le décompte de
-    /// l'écran est la liste d'envoi, et l'envoi exige la confirmation « aucune offre » de l'administrateur.
+    /// LE « MESSAGE DE DIFFUSION » EST UNE INFORMATION À TOUS (décision de Min's, 20/11/2026) : il part à TOUS les parents
+    /// joignables, consentement aux offres ou non, sans lien de désinscription ni case à cocher. « Offres et promotions »,
+    /// elle, reste aux seuls consentants, avec lien et `List-Unsubscribe`. Le décompte de l'écran est la liste d'envoi.
     /// </summary>
-    public class InformationServiceTests : BaseDeTest
+    public class DiffusionInformationOffresTests : BaseDeTest
     {
         private sealed record Envoi(
             string Destinataire, string Sujet, IDictionary<string, string> Valeurs, IReadOnlyDictionary<string, string>? EnTetes);
@@ -62,6 +62,21 @@ namespace SchoolWebApp.Tests
                 fournisseur.GetRequiredService<IServiceScopeFactory>(), jetons, NullLogger<DiffusionService>.Instance), envois);
         }
 
+        private ModelesMailController Controleur(Mock<IModeleMailRepository> modeles, DiffusionService diffusion) =>
+            new(modeles.Object, new ComposeurModeleMail(diffusion), diffusion,
+                Microsoft.Extensions.Options.Options.Create(new OptionsEmail()), NullLogger<ModelesMailController>.Instance);
+
+        private static Mock<IModeleMailRepository> Modele(int id, string texte, string? titre = null)
+        {
+            var modeles = new Mock<IModeleMailRepository>();
+            modeles.Setup(m => m.GetDetailAsync(id, It.IsAny<CancellationToken>())).ReturnsAsync(new ModeleMailDetail
+            {
+                Id = id, Nature = NatureModeleMail.Diffusion, Sujet = "Nouvelles de Mimia", Titre = titre ?? string.Empty, Texte = texte,
+            });
+            modeles.Setup(m => m.GetPiecesAsync(id, It.IsAny<CancellationToken>())).ReturnsAsync([]);
+            return modeles;
+        }
+
         private static async Task<EtatDiffusion> AttendreFinAsync(DiffusionService service)
         {
             var limite = DateTime.UtcNow.AddSeconds(60);
@@ -86,7 +101,7 @@ namespace SchoolWebApp.Tests
         }
 
         [Fact]
-        public async Task Information_de_service_a_tous_les_joignables_offres_aux_seuls_consentants()
+        public async Task Message_de_diffusion_a_tous_les_joignables_offres_aux_seuls_consentants()
         {
             var consentant = await CreerParentAsync(consenti: true);
             var nonConsentant = await CreerParentAsync();
@@ -99,13 +114,13 @@ namespace SchoolWebApp.Tests
             var sansAdresse = await CreerParentAsync(consenti: true);
             await Contexte.Parents.Where(p => p.Id == sansAdresse.Id).ExecuteUpdateAsync(s => s.SetProperty(p => p.Mail, ""));
 
-            var service = (await Envois.GetDestinatairesAsync(ModeDiffusion.Service)).Select(d => d.ParentId).ToList();
-            Assert.Contains(consentant.Id, service);
-            Assert.Contains(nonConsentant.Id, service);
-            Assert.Contains(ancienDesabonne.Id, service);
-            Assert.Contains(desabonneAvis.Id, service);
-            Assert.DoesNotContain(banni.Id, service);
-            Assert.DoesNotContain(sansAdresse.Id, service);
+            var information = (await Envois.GetDestinatairesAsync(ModeDiffusion.Information)).Select(d => d.ParentId).ToList();
+            Assert.Contains(consentant.Id, information);
+            Assert.Contains(nonConsentant.Id, information);
+            Assert.Contains(ancienDesabonne.Id, information);
+            Assert.Contains(desabonneAvis.Id, information);
+            Assert.DoesNotContain(banni.Id, information);
+            Assert.DoesNotContain(sansAdresse.Id, information);
 
             var offres = (await Envois.GetDestinatairesAsync(ModeDiffusion.Offres)).Select(d => d.ParentId).ToList();
             Assert.Contains(consentant.Id, offres);
@@ -115,8 +130,8 @@ namespace SchoolWebApp.Tests
             Assert.DoesNotContain(banni.Id, offres);
             Assert.DoesNotContain(sansAdresse.Id, offres);
 
-            // Les offres sont un sous-ensemble de l'information de service.
-            Assert.Empty(offres.Except(service));
+            // Les offres sont un sous-ensemble du message de diffusion.
+            Assert.Empty(offres.Except(information));
         }
 
         [Fact]
@@ -128,46 +143,51 @@ namespace SchoolWebApp.Tests
             // L'action ne lit aucun champ du contrôleur : pas besoin de ses dizaines de dépendances.
             var admin = (AdminController)System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject(typeof(AdminController));
 
-            Assert.Equal((await Envois.GetDestinatairesInformationServiceAsync()).Count,
-                Nombre(await admin.CompterDestinatairesDiffusion(Envois, CancellationToken.None, "service")));
-            Assert.Equal((await Envois.GetDestinatairesDiffusionAsync()).Count,
-                Nombre(await admin.CompterDestinatairesDiffusion(Envois, CancellationToken.None, "offres")));
-            Assert.Equal((await Envois.GetDestinatairesDiffusionAsync()).Count,
-                Nombre(await admin.CompterDestinatairesDiffusion(Envois, CancellationToken.None)));
+            var tous = (await Envois.GetDestinatairesInformationAsync()).Count;
+            var consentants = (await Envois.GetDestinatairesOffresAsync()).Count;
+            Assert.True(tous > consentants);
+
+            // PAR DÉFAUT, le décompte est celui du message de diffusion : tous les parents joignables.
+            Assert.Equal(tous, Nombre(await admin.CompterDestinatairesDiffusion(Envois, CancellationToken.None)));
+            Assert.Equal(tous, Nombre(await admin.CompterDestinatairesDiffusion(Envois, CancellationToken.None, "information")));
+            Assert.Equal(consentants, Nombre(await admin.CompterDestinatairesDiffusion(Envois, CancellationToken.None, "offres")));
             Assert.IsType<BadRequestObjectResult>(await admin.CompterDestinatairesDiffusion(Envois, CancellationToken.None, "promo"));
+
+            // L'ancien mode « service » (onglet fusionné dans « Message de diffusion ») n'existe plus.
+            Assert.IsType<BadRequestObjectResult>(await admin.CompterDestinatairesDiffusion(Envois, CancellationToken.None, "service"));
         }
 
         [Theory]
-        [InlineData(null, false, "offres", false)]
-        [InlineData("offres", false, "offres", false)]
-        [InlineData("service", false, "service", true)]
-        [InlineData("SERVICE", true, "service", false)]
-        [InlineData("promo", true, "", true)]
-        public void Le_mode_service_exige_la_confirmation_non_commerciale(
-            string? mode, bool confirmation, string attendu, bool refuse)
+        [InlineData(null, "information", false)]
+        [InlineData("information", "information", false)]
+        [InlineData("OFFRES", "offres", false)]
+        [InlineData("service", "", true)]
+        [InlineData("promo", "", true)]
+        public void Le_mode_se_lit_sans_aucune_confirmation(string? mode, string attendu, bool refuse)
         {
-            var faute = ModelesMailController.VerifierModeDiffusion(mode, confirmation, out var modeLu);
+            var faute = ModelesMailController.VerifierModeDiffusion(mode, out var modeLu);
 
             Assert.Equal(attendu, modeLu);
             Assert.Equal(refuse, faute is not null);
         }
 
         [Fact]
-        public async Task L_envoi_d_un_template_en_service_sans_confirmation_est_refuse_et_rien_ne_part()
+        public async Task Un_template_part_a_tous_sans_mode_ni_case_a_cocher()
         {
-            var modeles = new Mock<IModeleMailRepository>();
+            var consentant = await CreerParentAsync(consenti: true, prenom: "Alix");
+            var nonConsentant = await CreerParentAsync(prenom: "Sacha");
+            var modeles = Modele(5, "Bonjour {{prenom}},\n\nNouvelle matière disponible sur Mimia.");
             var (diffusion, envois) = Diffusion(Jetons);
-            var controleur = new ModelesMailController(
-                modeles.Object, new ComposeurModeleMail(diffusion), diffusion,
-                Microsoft.Extensions.Options.Options.Create(new OptionsEmail()), NullLogger<ModelesMailController>.Instance);
 
-            var reponse = await controleur.Diffuser(1, CancellationToken.None, "service", confirmationNonCommerciale: false);
+            // Exactement l'appel de l'onglet « Message de diffusion » : ni mode, ni confirmation.
+            Assert.IsType<AcceptedResult>(await Controleur(modeles, diffusion).Diffuser(5, CancellationToken.None));
 
-            Assert.IsType<BadRequestObjectResult>(reponse);
-            Assert.False(diffusion.Etat.EnCours);
-            Assert.Null(diffusion.Etat.Mode);
-            Assert.Empty(envois);
-            modeles.Verify(m => m.GetDetailAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
+            var etat = await AttendreFinAsync(diffusion);
+            Assert.Null(etat.Erreur);
+            Assert.Equal(ModeDiffusion.Information, etat.Mode);
+            Assert.Contains(envois, e => e.Destinataire == consentant.Mail);
+            Assert.Contains(envois, e => e.Destinataire == nonConsentant.Mail);
+            modeles.Verify(m => m.NoterEnvoiAsync(5, It.IsAny<DateTime>(), "Diffusion à tous les parents", It.IsAny<CancellationToken>()));
         }
 
         [Theory]
@@ -176,31 +196,23 @@ namespace SchoolWebApp.Tests
         [InlineData("Texte {{ Lien_Desinscription }}", null, true)]
         [InlineData("Nos prix changent le 1er décembre, {{prenom}}.", "Nouveaux prix", false)]
         [InlineData("Le lien de désinscription n'existe pas ici.", null, false)]
-        public async Task Information_de_service_avec_le_lien_de_desinscription_refusee_et_rien_ne_part(
+        public async Task Un_modele_d_offre_envoye_comme_message_de_diffusion_est_renvoye_vers_offres(
             string texte, string? titre, bool refuse)
         {
-            // Revue d'Omar du 20/11/2026 (mineur 5) : `{{lien_desinscription}}` dans une information de service = un
-            // modèle d'offre réutilisé. 400 avec un message clair, même confirmation cochée, et personne ne reçoit rien.
+            // Revue d'Omar du 20/11/2026 (mineur 5) : `{{lien_desinscription}}` = un modèle d'offre (Black Friday…). Envoyé
+            // à TOUS, il est refusé avec un message qui dit où l'envoyer ; personne ne reçoit rien.
             await CreerParentAsync();
-            var modeles = new Mock<IModeleMailRepository>();
-            modeles.Setup(m => m.GetDetailAsync(7, It.IsAny<CancellationToken>())).ReturnsAsync(new ModeleMailDetail
-            {
-                Id = 7, Nature = NatureModeleMail.Diffusion, Sujet = "Information Mimia", Titre = titre ?? string.Empty, Texte = texte,
-            });
-            modeles.Setup(m => m.GetPiecesAsync(7, It.IsAny<CancellationToken>())).ReturnsAsync([]);
+            var modeles = Modele(7, texte, titre);
             var (diffusion, envois) = Diffusion(Jetons);
-            var controleur = new ModelesMailController(
-                modeles.Object, new ComposeurModeleMail(diffusion), diffusion,
-                Microsoft.Extensions.Options.Options.Create(new OptionsEmail()), NullLogger<ModelesMailController>.Instance);
 
-            var reponse = await controleur.Diffuser(7, CancellationToken.None, "service", confirmationNonCommerciale: true);
+            var reponse = await Controleur(modeles, diffusion).Diffuser(7, CancellationToken.None);
 
             if (refuse)
             {
                 var refus = Assert.IsType<BadRequestObjectResult>(reponse);
                 var message = (string)refus.Value!.GetType().GetProperty("message")!.GetValue(refus.Value)!;
                 Assert.Contains("{{lien_desinscription}}", message);
-                Assert.Contains("Message de diffusion", message);
+                Assert.Contains("Offres et promotions", message);
                 Assert.False(diffusion.Etat.EnCours);
                 Assert.Empty(envois);
                 modeles.Verify(m => m.NoterEnvoiAsync(It.IsAny<int>(), It.IsAny<DateTime>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
@@ -215,39 +227,32 @@ namespace SchoolWebApp.Tests
         [Fact]
         public async Task Le_meme_template_part_en_offres_avec_son_lien()
         {
-            // Le refus ne vaut que pour l'information de service : en « Message de diffusion », la variable est à sa place.
-            var modeles = new Mock<IModeleMailRepository>();
-            modeles.Setup(m => m.GetDetailAsync(8, It.IsAny<CancellationToken>())).ReturnsAsync(new ModeleMailDetail
-            {
-                Id = 8, Nature = NatureModeleMail.Diffusion, Sujet = "Offre", Texte = "Profitez-en : {{lien_desinscription}}",
-            });
-            modeles.Setup(m => m.GetPiecesAsync(8, It.IsAny<CancellationToken>())).ReturnsAsync([]);
+            var modeles = Modele(8, "Profitez-en : {{lien_desinscription}}");
             var (diffusion, _) = Diffusion(Jetons);
-            var controleur = new ModelesMailController(
-                modeles.Object, new ComposeurModeleMail(diffusion), diffusion,
-                Microsoft.Extensions.Options.Options.Create(new OptionsEmail()), NullLogger<ModelesMailController>.Instance);
 
-            Assert.IsType<AcceptedResult>(await controleur.Diffuser(8, CancellationToken.None, "offres"));
-            await AttendreFinAsync(diffusion);
+            Assert.IsType<AcceptedResult>(await Controleur(modeles, diffusion).Diffuser(8, CancellationToken.None, "offres"));
+            var etat = await AttendreFinAsync(diffusion);
+            Assert.Equal(ModeDiffusion.Offres, etat.Mode);
+            modeles.Verify(m => m.NoterEnvoiAsync(8, It.IsAny<DateTime>(), "Offre aux parents qui acceptent les offres", It.IsAny<CancellationToken>()));
         }
 
         [Fact]
-        public async Task L_information_de_service_part_aux_non_consentants_sans_lien_ni_en_tetes_meme_sans_cle()
+        public async Task Le_message_de_diffusion_part_aux_non_consentants_sans_lien_ni_en_tetes_meme_sans_cle()
         {
             var consentant = await CreerParentAsync(consenti: true, prenom: "Alix");
             var nonConsentant = await CreerParentAsync(prenom: "Sacha");
 
-            // SANS CLÉ DE DÉSABONNEMENT : une offre ne partirait pas ; une information de service, si.
+            // SANS CLÉ DE DÉSABONNEMENT : une offre ne partirait pas ; un message d'information, si.
             var (diffusion, envois) = Diffusion(CreerJetons(null));
 
             Assert.True(diffusion.Lancer(
-                "Évolution des prix, {{prenom}}", "Nos prix changent",
-                "Bonjour {{prenom}},\n\nNos prix changent le 1er janvier.\n\nLien : {{lien_desinscription}}",
-                [], [], ModeDiffusion.Service));
+                "Du nouveau sur Mimia, {{prenom}}", "Du nouveau",
+                "Bonjour {{prenom}},\n\nLes fiches de révision arrivent.\n\nLien : {{lien_desinscription}}",
+                [], []));
 
             var etat = await AttendreFinAsync(diffusion);
             Assert.Null(etat.Erreur);
-            Assert.Equal(ModeDiffusion.Service, etat.Mode);
+            Assert.Equal(ModeDiffusion.Information, etat.Mode);
 
             var mesEnvois = envois.Where(e => e.Destinataire == consentant.Mail || e.Destinataire == nonConsentant.Mail).ToList();
             Assert.Equal(2, mesEnvois.Count);
@@ -255,42 +260,44 @@ namespace SchoolWebApp.Tests
             foreach (var envoi in mesEnvois)
             {
                 Assert.Null(envoi.EnTetes);
-                Assert.Contains("aucune offre commerciale", envoi.Valeurs["mentionPied"]);
+                Assert.Contains("vous avez un compte Mimia", envoi.Valeurs["mentionPied"]);
+
+                // Ni pied commercial, ni avertissement : l'outil d'information de Min's.
+                Assert.DoesNotContain("offres", envoi.Valeurs["mentionPied"], StringComparison.OrdinalIgnoreCase);
                 Assert.DoesNotContain("désinscrire", envoi.Valeurs["mentionPied"], StringComparison.OrdinalIgnoreCase);
                 Assert.DoesNotContain("Ne plus recevoir", envoi.Valeurs["mentionPied"]);
                 Assert.DoesNotContain("{{lien_desinscription}}", envoi.Valeurs["corpsMessage"]);
                 Assert.DoesNotContain("desabonnement", envoi.Valeurs["corpsMessage"], StringComparison.OrdinalIgnoreCase);
             }
 
-            Assert.Equal("Évolution des prix, Sacha", mesEnvois.Single(e => e.Destinataire == nonConsentant.Mail).Sujet);
+            Assert.Equal("Du nouveau sur Mimia, Sacha", mesEnvois.Single(e => e.Destinataire == nonConsentant.Mail).Sujet);
 
-            // LE RENDU RÉEL dans le gabarit embarqué « diffusion » (20/11/2026). Avec `MIMIA_TEST_RENDU=<dossier>`, le HTML
-            // y est écrit (capture du compte rendu).
+            // LE RENDU RÉEL dans le gabarit embarqué « diffusion ». Avec `MIMIA_TEST_RENDU=<dossier>`, le HTML y est écrit
+            // (capture du compte rendu).
             var aSacha = mesEnvois.Single(e => e.Destinataire == nonConsentant.Mail);
             var html = await new ServiceEmail(
                     Microsoft.Extensions.Options.Options.Create(new OptionsEmail()), NullLogger<ServiceEmail>.Instance)
                 .RendreAsync(aSacha.Sujet, "diffusion", aSacha.Valeurs);
 
             Assert.Contains("Bonjour Sacha", html);
-            Assert.Contains("aucune offre commerciale", html);
             Assert.DoesNotContain("desabonnement", html, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("{{", html);
 
             var dossier = Environment.GetEnvironmentVariable("MIMIA_TEST_RENDU");
             if (!string.IsNullOrWhiteSpace(dossier))
             {
-                await File.WriteAllTextAsync(Path.Combine(dossier, "information-service.html"), html);
+                await File.WriteAllTextAsync(Path.Combine(dossier, "message-de-diffusion.html"), html);
             }
         }
 
         [Fact]
-        public async Task La_diffusion_des_offres_ne_part_qu_aux_consentants_avec_lien_et_en_tetes()
+        public async Task Offres_et_promotions_ne_part_qu_aux_consentants_avec_lien_et_en_tetes()
         {
             var consentant = await CreerParentAsync(consenti: true);
             var nonConsentant = await CreerParentAsync();
             var (diffusion, envois) = Diffusion(Jetons);
 
-            Assert.True(diffusion.Lancer("Notre offre", "Notre offre", "Bonjour {{prenom}} !", [], []));
+            Assert.True(diffusion.Lancer("Notre offre", "Notre offre", "Bonjour {{prenom}} !", [], [], ModeDiffusion.Offres));
 
             var etat = await AttendreFinAsync(diffusion);
             Assert.Null(etat.Erreur);
@@ -303,7 +310,7 @@ namespace SchoolWebApp.Tests
         }
 
         [Fact]
-        public async Task Sans_cle_la_diffusion_des_offres_ne_part_pas()
+        public async Task Sans_cle_offres_et_promotions_ne_part_pas()
         {
             await CreerParentAsync(consenti: true);
             var (diffusion, envois) = Diffusion(CreerJetons(null));
