@@ -477,10 +477,16 @@ namespace SchoolWebApp.Api.Services.Voix
         // « Regarde le prochain nombre. », « Regarde bien celui qui est au tableau. » : une phrase qui ne fait QUE montrer le
         // nombre double la consigne du code (vu au bout en bout). « Regarde bien le nombre, le chiffre de gauche… » reste.
         [GeneratedRegex(@"(?<=^|[.!?\n])[ \t]*(?:(?:allez|continue|maintenant|et)\s*,?\s*)?regarde(?:\s+bien)?\s+(?:" + CeNombre
-            + @"|le\s+tableau|celui\s+qui\s+est\s+(?:au\s+tableau|affich\p{L}*))"
+            + @"|le\s+tableau|celui\s+qui\s+est\s+(?:au\s+tableau|affich\p{L}*))(?:\s+suivant)?"
             + @"(?:\s+(?:qui\s+est\s+)?(?:affich\p{L}*|au\s+tableau|sur\s+le\s+tableau)){0,2}(?:\s+maintenant)?[ \t]*(?:[.!:]+|(?=\r?\n|$))",
             RegexOptions.IgnoreCase)]
         private static partial Regex RegardeSeulement();
+
+        // « Mais on regarde un autre nombre maintenant, regarde le tableau : » (bout en bout final) : la fin de phrase qui
+        // renvoie au tableau, juste avant la consigne du code, part ; le début de la phrase reste, avec un point.
+        [GeneratedRegex(@"[ \t]*,[ \t]*(?:et\s+)?regarde(?:\s+bien)?\s+(?:le\s+tableau|" + CeNombre + @"(?:\s+suivant)?)[ \t]*[.!:]*(?=[ \t]*(?:\r?\n|$))",
+            RegexOptions.IgnoreCase)]
+        private static partial Regex RegardeEnFin();
 
         // « ce nombre », « le nouveau nombre », « cet autre nombre », « l'autre nombre », « un nouveau nombre ».
         private const string CeNombre =
@@ -580,7 +586,8 @@ namespace SchoolWebApp.Api.Services.Voix
             var propre = Etape(texte ?? string.Empty, "tableau", t => Tableau().Replace(t, " "));
             propre = Voix().Replace(propre, "$2");
             propre = Etape(propre, "question", t => Question().Replace(t, string.Empty));
-            propre = Etape(propre, "consigne", t => RegardeSeulement().Replace(ConsigneDuProfesseur().Replace(t, string.Empty), string.Empty));
+            propre = Etape(propre, "consigne", t => RegardeEnFin().Replace(
+                RegardeSeulement().Replace(ConsigneDuProfesseur().Replace(t, string.Empty), string.Empty), "."));
             propre = Etape(propre, "ecoute", t => PhraseDEcoute().Replace(t, string.Empty));
             if (tour.Demande) propre = Etape(propre, "refus", t => RefusDAfficher().Replace(t, string.Empty));
             // « C'est le code qui va choisir un nombre pour toi » (signalement #51) : jamais de fonctionnement interne à l'enfant.
