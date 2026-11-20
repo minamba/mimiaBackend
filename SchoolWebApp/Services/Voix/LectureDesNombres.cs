@@ -474,6 +474,13 @@ namespace SchoolWebApp.Api.Services.Voix
             + @")[^.!?\n]*[.!:]*", RegexOptions.IgnoreCase)]
         private static partial Regex ConsigneDuProfesseur();
 
+        // « Regarde le prochain nombre. », « Regarde bien celui qui est au tableau. » : une phrase qui ne fait QUE montrer le
+        // nombre double la consigne du code (vu au bout en bout). « Regarde bien le nombre, le chiffre de gauche… » reste.
+        [GeneratedRegex(@"(?<=^|[.!?\n])[ \t]*regarde(?:\s+bien)?\s+(?:" + CeNombre + @"|celui\s+qui\s+est\s+(?:au\s+tableau|affich\p{L}*))"
+            + @"(?:\s+(?:qui\s+est\s+)?(?:affich\p{L}*|au\s+tableau|sur\s+le\s+tableau))?(?:\s+maintenant)?[ \t]*(?:[.!:]+|(?=\r?\n|$))",
+            RegexOptions.IgnoreCase)]
+        private static partial Regex RegardeSeulement();
+
         // « ce nombre », « le nouveau nombre », « cet autre nombre », « l'autre nombre », « un nouveau nombre ».
         private const string CeNombre =
             @"(?:\b(?:ce|cet|le|un)\s+|\bl['’]\s*)(?:(?:nouveau|nouvel|autre|prochain|petit|grand|beau|deuxi[eè]me|second|dernier|m[eê]me)\s+)?nombre\b";
@@ -543,8 +550,11 @@ namespace SchoolWebApp.Api.Services.Voix
             {
                 if (Regex.IsMatch(phrase, @"(?<![\d,])" + Regex.Escape(forme) + @"(?!\d|,\d)")) return true;
             }
+            // « Soixante-treize et quarante » : le « et » de « soixante et onze » collait les deux nombres en un seul (vu au
+            // bout en bout) ; on lit aussi la phrase avec chaque « et » comme une coupure (un mot qui n'est pas un nombre), sauf devant « un » et « onze ».
             return long.TryParse(element.Cible, NumberStyles.None, CultureInfo.InvariantCulture, out var n) && n >= 10
-                && Jetons(phrase).Any(j => j.Sorte == Sorte.Nombre && j.Valeur == element.Cible);
+                && new[] { phrase, Regex.Replace(phrase, @"\bet\b(?!\s+(?:un|une|onze)\b)", " puis ", RegexOptions.IgnoreCase) }
+                    .Any(p => Jetons(p).Any(j => j.Sorte == Sorte.Nombre && j.Valeur == element.Cible));
         }
 
         /// <summary>Le texte dit quelque chose à l'élève (des lettres, hors tableau et balises).</summary>
@@ -569,7 +579,7 @@ namespace SchoolWebApp.Api.Services.Voix
             var propre = Etape(texte ?? string.Empty, "tableau", t => Tableau().Replace(t, " "));
             propre = Voix().Replace(propre, "$2");
             propre = Etape(propre, "question", t => Question().Replace(t, string.Empty));
-            propre = Etape(propre, "consigne", t => ConsigneDuProfesseur().Replace(t, string.Empty));
+            propre = Etape(propre, "consigne", t => RegardeSeulement().Replace(ConsigneDuProfesseur().Replace(t, string.Empty), string.Empty));
             propre = Etape(propre, "ecoute", t => PhraseDEcoute().Replace(t, string.Empty));
             if (tour.Demande) propre = Etape(propre, "refus", t => RefusDAfficher().Replace(t, string.Empty));
             // « C'est le code qui va choisir un nombre pour toi » (signalement #51) : jamais de fonctionnement interne à l'enfant.
