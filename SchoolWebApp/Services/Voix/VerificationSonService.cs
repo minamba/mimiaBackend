@@ -1531,8 +1531,10 @@ namespace SchoolWebApp.Api.Services.Voix
         /// <summary>
         /// LA LECTURE EN IMAGES (07/11/2026) : ce qu'il a lu, comparé à ce que montre l'image, exactement comme l'écoute.
         /// Null : pas une réponse (trop long, vide), ou panne.
+        /// `auClavier` (signalement #49, 20/11/2026) : il l'a ÉCRITE. Une panne de la comparaison au son ne laisse pas le tour
+        /// sans verdict : l'écriture tranche (la cible est sous ses yeux, il n'y a pas de micro à excuser).
         /// </summary>
-        Task<VerdictSon?> VerifierLectureAsync(int conversationId, LectureDImage.Element aLire, string? texte, CancellationToken ct, string langue = LanguesDesSons.Francais);
+        Task<VerdictSon?> VerifierLectureAsync(int conversationId, LectureDImage.Element aLire, string? texte, CancellationToken ct, string langue = LanguesDesSons.Francais, bool auClavier = false);
 
         /// <summary>Le fait à joindre à ce tour, une seule fois ; null s'il n'y en a pas.</summary>
         string? PrendreFait(int conversationId);
@@ -1799,7 +1801,7 @@ namespace SchoolWebApp.Api.Services.Voix
             return verdict;
         }
 
-        public async Task<VerdictSon?> VerifierLectureAsync(int conversationId, LectureDImage.Element aLire, string? texte, CancellationToken ct, string langue = LanguesDesSons.Francais)
+        public async Task<VerdictSon?> VerifierLectureAsync(int conversationId, LectureDImage.Element aLire, string? texte, CancellationToken ct, string langue = LanguesDesSons.Francais, bool auClavier = false)
         {
             _cache.Remove(CleFait(conversationId));
 
@@ -1820,7 +1822,7 @@ namespace SchoolWebApp.Api.Services.Voix
                 {
                     var juste = await MemeSonQueAsync(mots[^1], aLire.Cible, langue, ct);
                     var verdictBanal = new VerdictSon(aLire.Cible, juste ? mots[^1] : string.Join(" ", mots), juste);
-                    _cache.Set(CleFait(conversationId), LectureDImage.FaitVerdict(verdictBanal, aLire), DureeDuFait);
+                    _cache.Set(CleFait(conversationId), LectureDImage.FaitVerdict(verdictBanal, aLire, auClavier), DureeDuFait);
                     return verdictBanal;
                 }
             }
@@ -1858,19 +1860,19 @@ namespace SchoolWebApp.Api.Services.Voix
                     catch (OperationCanceledException) when (!ct.IsCancellationRequested)
                     {
                         _logger.LogWarning("Comparaison d'une lecture : pas de reponse sous {Delai} s.", Delai.TotalSeconds);
-                        return null;
+                        if (!auClavier) return null;
                     }
                     catch (Exception ex) when (ex is HttpRequestException or JsonException or InvalidOperationException)
                     {
                         _logger.LogWarning("Comparaison d'une lecture impossible : {Cause}.", ex.GetType().Name);
-                        return null;
+                        if (!auClavier) return null;
                     }
                 }
 
                 verdict = new VerdictSon(aLire.Cible, dit, juste);
             }
 
-            _cache.Set(CleFait(conversationId), LectureDImage.FaitVerdict(verdict, aLire), DureeDuFait);
+            _cache.Set(CleFait(conversationId), LectureDImage.FaitVerdict(verdict, aLire, auClavier), DureeDuFait);
             return verdict;
         }
 

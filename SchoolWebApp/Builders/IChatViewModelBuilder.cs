@@ -34,10 +34,14 @@ namespace SchoolWebApp.Api.Builders
         /// <param name="figureIncomprise">
         /// Les lignes du dernier [FIGURE] du professeur que l'écran n'a pas su dessiner (11/11/2026) — voir LecteurFigure.
         /// </param>
+        /// <param name="verdict">
+        /// Rempli quand le SERVEUR a jugé le message lui-même (une lecture tapée au clavier, signalement #49) : l'appelant
+        /// le renvoie à l'écran avant la réponse, pour que la bulle dise « Bonne lecture » ou « On réessaie » tout de suite.
+        /// </param>
         IAsyncEnumerable<string> StreamReponseAsync(
             int conversationId, string contenu, IReadOnlyList<int> pieceJointeIds,
             int? secondesRestantes, string? vitesseEcoute, bool? sonJuste, CancellationToken ct,
-            IReadOnlyList<string>? figureIncomprise = null);
+            IReadOnlyList<string>? figureIncomprise = null, VerdictDuTour? verdict = null);
 
         /// <summary>
         /// Fait parler l'agent en premier, à l'ouverture de la conversation.
@@ -219,4 +223,28 @@ namespace SchoolWebApp.Api.Builders
     public record ContenuPieceJointe(byte[] Donnees, string TypeMime, string NomFichier);
 
     public record EnTeteScan(string? ProfPrenom, string? Matiere);
+
+    /// <summary>
+    /// LE VERDICT POSÉ PAR LE SERVEUR SUR LE MESSAGE DE L'ÉLÈVE (signalement #49, 20/11/2026) : une lecture tapée au
+    /// clavier est jugée au serveur, l'écran ne la connaît pas encore. `Contenu` est le texte gardé (« J'ai lu la syllabe
+    /// son. »), `SonJuste` le verdict (null : le mot entier lu au lieu de la syllabe, ni juste ni faux).
+    /// </summary>
+    public sealed class VerdictDuTour
+    {
+        /// <summary>La vérification des syllabes est allumée (réglage VERIFICATION_SYLLABES_PRIMAIRE) : on juge ce qui est tapé.</summary>
+        public bool Juger { get; init; }
+
+        public bool Pose { get; private set; }
+
+        public bool? SonJuste { get; private set; }
+
+        public string? Contenu { get; private set; }
+
+        public void Poser(bool? sonJuste, string contenu)
+        {
+            Pose = true;
+            SonJuste = sonJuste;
+            Contenu = contenu;
+        }
+    }
 }
