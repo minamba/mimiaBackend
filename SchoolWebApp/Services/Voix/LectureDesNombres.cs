@@ -27,7 +27,10 @@ namespace SchoolWebApp.Api.Services.Voix
         /// <summary>Ce que le code montre à ce tour : l'élément, s'il est redemandé ou nouveau, et s'il vient d'abandonner.</summary>
         /// <remarks><paramref name="HorsCatalogue"/> : le nombre qu'il a demandé et qu'on ne peut pas montrer en image (pas au
         /// catalogue de sa classe ni d'en dessous) ; le tableau garde alors son nombre (signalement #51).</remarks>
-        public sealed record Tour(Element Element, bool Redite, bool Premier, bool Abandon, bool Demande = false, string? HorsCatalogue = null);
+        /// <remarks><paramref name="SansEssai"/> : il a posé une question au lieu de lire ; il n'a pas encore essayé, la
+        /// consigne ne dit donc pas « essaie encore » (contrôle d'Omar, #50/#51).</remarks>
+        public sealed record Tour(Element Element, bool Redite, bool Premier, bool Abandon, bool Demande = false, string? HorsCatalogue = null,
+            bool SansEssai = false);
 
         /// <summary>Le verdict du message de l'enfant : ce qu'il devait lire, s'il est juste, et ce qu'il a dit.</summary>
         public sealed record Verdict(Element Montre, bool Juste, string Dit);
@@ -149,19 +152,51 @@ namespace SchoolWebApp.Api.Services.Voix
         // une addition » → « Oui, cinquante-quatre, bravo », puis le même 54 et « on fait toujours cet exercice ». Ni
         // « autre exercice » ni « on change » : ChangementDExercice ne le voyait pas. Un verbe qui propose (« on fait »,
         // « je veux faire », « passons à », « donne-moi »), puis une activité nommée. Pas « on a fait une addition ».
+        //
+        // Contrôle d'Omar (#50/#51) : le motif était trop étroit (« je veux une addition », « maintenant une addition »,
+        // « on fait la table de 2 », « on fait les fractions », « on fait une dictée », « on fait du français », « on compte
+        // jusqu'à 100 », « on compare des nombres » restaient en lecture, alors que le fait dit « tu la fais »). Trois
+        // formes : un verbe qui propose + une activité nommée ; « maintenant » + une activité nommée ; « on » / « je veux »
+        // + un verbe d'activité (compter, comparer, calculer…).
         [GeneratedRegex(
-            @"(?:(?<!\p{L})(?:on|nous)\s+(?:(?:peut|pourrait|va|veut|pourra)\s+)?(?:fai(?:t|s|re)|refai(?:t|re)|pass(?:e|er)\s+(?:à|a|aux|au)|essai(?:e|er)|commenc(?:e|er))"
-            + @"|(?<!\p{L})(?:je|j['’])\s*(?:veux|voudrais|aimerais|pr[ée]f[èe]re(?:rais)?|peux)\s+(?:faire|refaire|passer\s+(?:à|a|aux|au)|essayer|apprendre)"
-            + @"|(?<!\p{L})(?:faisons|passons\s+(?:à|a|aux|au))"
+            @"(?:(?:(?<!\p{L})(?:on|nous)\s+(?:(?:peut|pourrait|va|veut|pourra)\s+)?(?:fai(?:t|s|re)|refai(?:t|re)|pass(?:e|er)\s+(?:à|a|aux|au)|essai(?:e|er)|commenc(?:e|er))"
+            + @"|(?<!\p{L})(?:je|j['’])\s*(?:veux|voudrais|aimerais|pr[ée]f[èe]re(?:rais)?|peux)(?:\s+(?:faire|refaire|passer\s+(?:à|a|aux|au)|essayer|apprendre))?"
+            + @"|(?<!\p{L})(?:faisons|passons\s+(?:à|a|aux|au)|maintenant[\s,]*)"
             + @"|(?<!\p{L})(?:fais|donne|propose|pose)[- ](?:moi|nous))"
-            + @"\s+(?:une?\s+|des\s+|du\s+|de\s+la\s+|les?\s+|la\s+|l['’]\s*|d['’]\s*)?(?:autres?\s+|nouvel(?:le)?s?\s+|petite?s?\s+)?"
-            + @"(?:additions?|soustractions?|multiplications?|divisions?|calculs?|op[ée]rations?|probl[èe]mes?|g[ée]om[ée]trie|formes?|mesures?|tables?\s+de\s+multiplication)(?!\p{L})",
+            + @"\s*(?:une?\s+|des\s+|du\s+|de\s+la\s+|les?\s+|la\s+|l['’]\s*|d['’]\s*)?(?:autres?\s+|nouvel(?:le)?s?\s+|petite?s?\s+)?"
+            + @"(?:additions?|soustractions?|multiplications?|divisions?|calculs?|op[ée]rations?|probl[èe]mes?|g[ée]om[ée]trie|formes?|mesures?"
+            + @"|fractions?|tables?\s+(?:de|des|du|d['’])|dict[ée]es?|fran[çc]ais|conjugaison|grammaire|orthographe|anglais|histoire|g[ée]ographie|sciences?"
+            + @"|comparaisons?|monnaie)(?!\p{L})"
+            + @"|(?<!\p{L})(?:(?:on|nous)\s+(?:(?:peut|pourrait|va|veut|pourra)\s+)?|(?:je|j['’])\s*(?:veux|voudrais|aimerais|peux)\s+)"
+            + @"(?:compter?|comparer?|calculer?|ranger?|mesurer?|conjuguer?|dessiner?|r[ée]viser?\s+(?:les|la|le|l['’])\s*(?:tables?|additions?|soustractions?|fractions?))(?!\p{L})"
+            + @"|(?<!\p{L})(?:comptons|comparons|calculons|rangeons|mesurons|conjuguons|dessinons)(?!\p{L}))",
             RegexOptions.IgnoreCase)]
         private static partial Regex AutreActivite();
 
         /// <summary>Il nomme une autre activité de maths (« on fait une addition ») : la lecture des nombres s'arrête.</summary>
         public static bool DemandeUneAutreActivite(string? message) =>
             !string.IsNullOrWhiteSpace(message) && AutreActivite().IsMatch(message);
+
+        // Les mots qui relient sa lecture à sa demande : « vingt-huit. Maintenant on fait une addition ».
+        [GeneratedRegex(@"(?:[\s,.;:!…-]|(?<!\p{L})(?:maintenant|et|alors|puis|apr[èe]s|bon|ok|d['’]accord|euh)(?!\p{L}))*$", RegexOptions.IgnoreCase)]
+        private static partial Regex Liaison();
+
+        /// <summary>
+        /// SA LECTURE, PUIS SA DEMANDE — contrôle d'Omar (#50/#51) : « vingt-huit. Maintenant on fait une addition » est une
+        /// lecture de 28 ET une demande d'addition. La lecture est jugée (« Bonne lecture »), puis on change d'exercice.
+        /// Renvoie la partie à juger (tout le message s'il ne nomme pas d'autre activité) et la demande qui suit (ou null).
+        /// </summary>
+        public static (string Lecture, string? Suite) Couper(string? message)
+        {
+            var texte = message ?? string.Empty;
+            var activite = AutreActivite().Match(texte);
+            if (!activite.Success) return (texte, null);
+            var avant = texte[..activite.Index];
+            var liaison = Liaison().Match(avant);
+            var fin = liaison.Success ? liaison.Index : avant.Length;
+            var suite = texte[fin..].TrimStart(' ', ',', '.', ';', ':', '!', '…', '-', '\n', '\t');
+            return (texte[..fin].Trim(), suite.Length == 0 ? null : char.ToUpperInvariant(suite[0]) + suite[1..]);
+        }
 
         /// <summary>Le nombre qu'il avait à lire à ce tour (celui du dernier message du professeur), ou null.</summary>
         public static Element? DernierMontre(IReadOnlyList<(string? Role, string? Contenu, bool? SonJuste)> recents) =>
@@ -171,18 +206,27 @@ namespace SchoolWebApp.Api.Services.Voix
         /// LE VERDICT DE SON MESSAGE : null s'il n'y a pas de nombre à lire, ou si ce qu'il dit n'est pas une lecture
         /// (« je sais pas », une question) — l'image reste, l'essai n'est pas compté.
         /// </summary>
-        public static Verdict? Juger(IReadOnlyList<(string? Role, string? Contenu, bool? SonJuste)> recents, string? messageDeLEleve)
+        public static Verdict? Juger(IReadOnlyList<(string? Role, string? Contenu, bool? SonJuste)> recents, string? messageDeLEleve) =>
+            JugerContre(DernierMontre(recents), messageDeLEleve);
+
+        /// <summary>
+        /// LE VERDICT CONTRE LE NOMBRE AFFICHÉ — le même pour le clavier (ChatViewModelBuilder) et pour le micro
+        /// (EcouteController) : une demande, une question ou « je sais pas » ne sont pas des lectures. S'il nomme ensuite une
+        /// autre activité, seule sa lecture est jugée (<see cref="Couper"/>).
+        /// </summary>
+        public static Verdict? JugerContre(Element? montre, string? messageDeLEleve)
         {
-            var montre = DernierMontre(recents);
             if (montre is null || string.IsNullOrWhiteSpace(messageDeLEleve) || DemandeDeLecture().IsMatch(messageDeLEleve)) return null;
+            var (lecture, _) = Couper(messageDeLEleve);
+            if (string.IsNullOrWhiteSpace(lecture)) return null;
             // « Écris le nombre 23 » n'est pas une lecture du nombre affiché : c'est une demande (signalement #50).
-            if (CanoniqueDemande(messageDeLEleve) is not null) return null;
+            if (CanoniqueDemande(lecture) is not null) return null;
             // « C'est toi qui choisis le nombre ? Pourquoi pas le 23 ? » (signalement #51, vu en test de bout en bout) :
             // jugé comme une lecture FAUSSE de 34 (les mots autour du nombre sont ignorés). Une question n'est pas une lecture.
-            if (EstUneQuestion(messageDeLEleve)) return null;
-            var lu = Canonique(messageDeLEleve);
+            if (EstUneQuestion(lecture)) return null;
+            var lu = Canonique(lecture);
             if (lu is null) return null;
-            return new Verdict(montre, lu == Normaliser(montre.Cible), messageDeLEleve.Trim());
+            return new Verdict(montre, lu == Normaliser(montre.Cible), lecture.Trim());
         }
 
         // « pourquoi », « comment » : toujours une question. Les autres mots ne comptent qu'avec un point d'interrogation :
@@ -193,9 +237,34 @@ namespace SchoolWebApp.Api.Services.Voix
         [GeneratedRegex(@"(?<!\p{L})(?:est[- ]ce|qui|quoi|quel(?:le)?s?|peux|peut|pourrais|choisis|choisit|veux|sais|as|es|on)(?!\p{L})", RegexOptions.IgnoreCase)]
         private static partial Regex MotQuestion();
 
+        // LA LECTURE HÉSITANTE — contrôle d'Omar (régression #28/#49) : « est-ce que c'est trente-quatre ? », « on dirait
+        // trente-quatre ? », « je sais ! trente-quatre ? », « tu veux dire trente-quatre ? » sont des LECTURES (il propose
+        // un nombre en hésitant), pas des questions à la maîtresse. Ces mots-là ôtés, il ne reste que le nombre.
+        [GeneratedRegex(@"(?<!\p{L})(?:est[- ]ce\s+qu(?:e|['’])|on\s+dirait(?:\s+que)?|je\s+(?:sais|crois|pense)(?:\s+que)?|j['’]\s*(?:crois|pense)(?:\s+que)?"
+            + @"|tu\s+veux\s+dire|c['’]\s*est\s+(?:ça|ca)|c['’]\s*est|ce\s+serait|ça\s+fait|ca\s+fait|ça\s+se\s+lit|ca\s+se\s+lit|peut[- ][êe]tre"
+            + @"|euh+|heu+|hum+|hm+|bah|ben|alors|ah|oh|bon|hein|voil[àa]|oui|le\s+nombre|nombre|ma[iî]tresse|nora)(?!\p{L})", RegexOptions.IgnoreCase)]
+        private static partial Regex MotsDHesitation();
+
+        // Ce qu'une lecture peut contenir en plus des mots de nombre : « virgule », « sur », « au carré », « racine de »…
+        private static bool MotDeLecture(string mot) =>
+            EstMotNombre(mot) || Denominateur(mot) is not null
+            || mot is "et" or "zero" or "virgule" or "moins" or "plus" or "sur" or "puissance" or "exposant" or "carre" or "carree"
+                or "cube" or "fois" or "racine" or "de" or "tout" or "le" or "au" or "x";
+
+        /// <summary>Son message n'est qu'un nombre, dit en hésitant (« on dirait trente-quatre ? ») : c'est une lecture.</summary>
+        public static bool EstUneLectureHesitante(string? message)
+        {
+            if (string.IsNullOrWhiteSpace(message)) return false;
+            var reste = MotsDHesitation().Replace(message, " ");
+            if (Canonique(reste) is null) return false;
+            var simple = Regex.Replace(SansAccents(reste.ToLowerInvariant()), @"(?<=[a-z])-(?=[a-z])", " ");
+            return Regex.Matches(simple, "[a-z]+").All(m => MotDeLecture(m.Value));
+        }
+
         /// <summary>Son message est une question à la maîtresse, pas une lecture du nombre.</summary>
         public static bool EstUneQuestion(string? message) =>
             !string.IsNullOrWhiteSpace(message)
+            && !EstUneLectureHesitante(message)
             && (MotQuestionToujours().IsMatch(message) || (message.Contains('?') && MotQuestion().IsMatch(message)));
 
         /// <summary>Ce que garde le message de l'enfant : « J'ai lu le nombre soixante-treize. »</summary>
@@ -206,6 +275,18 @@ namespace SchoolWebApp.Api.Services.Voix
         [GeneratedRegex(@"^\s*j.ai lu le nombre\b", RegexOptions.IgnoreCase)]
         private static partial Regex VerdictDeLecture();
 
+        /// <summary>
+        /// Le message gardé quand il a lu PUIS demandé autre chose (contrôle d'Omar, #50/#51) : « J'ai lu le nombre
+        /// vingt-huit. Maintenant on fait une addition » — le verdict reste, et le professeur lit sa demande.
+        /// </summary>
+        public static string TexteAvecLaSuite(Verdict v, string? message)
+        {
+            var texte = TexteDeLEleve(v).TrimEnd();
+            if (Couper(message).Suite is not { } suite) return texte;
+            if (texte.Length > 0 && !".!?".Contains(texte[^1])) texte += ".";
+            return $"{texte} {suite}";
+        }
+
         // ------------------------------------------------------------------ le nombre qu'il demande (signalement #50)
 
         // « Écris le nombre 23 au tableau », « montre-moi 48 », « affiche le chiffre sept », « mets-moi un autre nombre : 12 »,
@@ -214,7 +295,9 @@ namespace SchoolWebApp.Api.Services.Voix
         // consigne que devant « nombre », « chiffre », « autre » ou « nouveau » (« écris un nombre » ne demande pas « 1 »).
         // « Je propose 23 », « je mets 23 », « j'écris 23 », « je te donne 23 » : c'est SA réponse, pas une demande
         // (sinon une réponse à un calcul ouvrirait la lecture des nombres, et une lecture serait prise pour une demande).
-        [GeneratedRegex(@"(?<!\p{L})(?<!\bje\s+(?:te\s+|t['’]\s*)?|\bj['’]\s*)(?:[ée]cri(?:s|re|vez|ves?)|affiche[rsz]?|montre[rsz]?|mets|mettre|mettes?|donne[rz]?|propose[rz]?)(?!\p{L})"
+        // « Pourquoi pas le 23 ? » (contrôle d'Omar, #50/#51) : une DEMANDE aussi — Nora promettait « le 23 viendra après »
+        // (faux) ; la règle de Min's (#50) est d'afficher le nombre demandé.
+        [GeneratedRegex(@"(?<!\p{L})(?<!\bje\s+(?:te\s+|t['’]\s*)?|\bj['’]\s*)(?:[ée]cri(?:s|re|vez|ves?)|affiche[rsz]?|montre[rsz]?|mets|mettre|mettes?|donne[rz]?|propose[rz]?|pourquoi\s+pas)(?!\p{L})"
             + @"(?:[-\s,:'’]+(?:moi|nous|le|la|l|ce|cet|au|du|tableau|nombre|chiffre|autre|nouveau|s|il|te|pla[iî]t|stp|maintenant|alors|plut[oô]t|(?:un|une)(?=[-\s]+(?:nombre|chiffre|autre|nouveau)))(?!\p{L}))*"
             + @"[-\s,:'’«""]+(?<suite>[^.!?;\n]{1,60})", RegexOptions.IgnoreCase)]
         private static partial Regex Demande();
@@ -314,7 +397,9 @@ namespace SchoolWebApp.Api.Services.Voix
 
             if (precedent is not null && verdict is not { Juste: true } && !abandon)
             {
-                return new Tour(precedent, Redite: true, Premier: false, Abandon: false);
+                // Une question au lieu d'une lecture : il n'a pas essayé, la consigne ne dit pas « essaie encore » (Omar).
+                return new Tour(precedent, Redite: true, Premier: false, Abandon: false,
+                    SansEssai: verdict is null && EstUneQuestion(messageDeLEleve));
             }
 
             var dejaVus = recents.Select(m => Affiche(m.Contenu)?.Cible).Where(c => c is not null).ToHashSet();
@@ -389,9 +474,11 @@ namespace SchoolWebApp.Api.Services.Voix
         /// faire attendre la nouvelle image jusqu'à la voix : les deux se modifient ensemble.
         /// </summary>
         public static string Consigne(Tour tour) =>
-            tour.HorsCatalogue is not null ? "Regarde le tableau : lis ce nombre à voix haute."
+            // Un nombre demandé (même celui qui est déjà au tableau), hors catalogue, ou après une question : il n'a pas encore
+            // essayé de le lire, donc jamais « essaie encore » (contrôle d'Omar, #50/#51).
+            tour.HorsCatalogue is not null || tour.SansEssai || tour.Demande ? "Regarde le tableau : lis ce nombre à voix haute."
             : tour.Redite ? "Regarde bien le nombre, et essaie encore de le lire à voix haute."
-            : tour.Premier || tour.Demande ? "Regarde le tableau : lis ce nombre à voix haute."
+            : tour.Premier ? "Regarde le tableau : lis ce nombre à voix haute."
             : "Voici un autre nombre : lis-le à voix haute.";
 
         /// <summary>Le fait de l'exercice, à chaque tour.</summary>
@@ -403,7 +490,8 @@ namespace SchoolWebApp.Api.Services.Voix
             + "Toi, tu écris seulement une ou deux phrases courtes (bravo, encouragement, un indice de méthode), SANS lui "
             + "redemander de lire : la consigne est déjà là. Tu n'écris et ne prononces JAMAIS le nombre à lire, et tu n'écris "
             + "rien au tableau (ni [ARDOISE], ni [FIGURE]). S'il demande une autre activité, tu la fais. Il LIT le nombre au "
-            + "tableau, il ne l'entend pas : ne dis jamais « écoute » ni « tu as entendu », dis « regarde ». "
+            + "tableau, il ne l'entend pas : ne dis jamais « écoute » ni « tu as entendu », dis « regarde ». Ne promets jamais "
+            + "qu'un nombre viendra « après » ou « plus tard ». "
             + JargonTechnique.Regle + "]";
 
         /// <summary>
@@ -457,6 +545,23 @@ namespace SchoolWebApp.Api.Services.Voix
                 + "affiche « On réessaie ». Encourage-le en une phrase et, si tu vois l'erreur (soixante-dix et quatre-vingts, un zéro "
                 + "oublié, la virgule, le signe moins, le dénominateur), donne un indice de MÉTHODE. NE DONNE JAMAIS la réponse et ne la "
                 + "prononce pas : le même nombre reste au tableau." + fin;
+        }
+
+        /// <summary>
+        /// Le fait du verdict quand il a lu PUIS demandé une autre activité (« vingt-huit. Maintenant on fait une addition »,
+        /// contrôle d'Omar #50/#51) : on juge sa lecture et on change d'exercice. Aucun nouveau nombre ne s'affiche.
+        /// </summary>
+        public static string FaitVerdictPuisChangement(Verdict v)
+        {
+            const string fin = " Ne parle jamais du micro ni de cet outil à l'élève. " + JargonTechnique.Regle + "]";
+            var cible = Affichage(v.Montre.Cible);
+            var lu = Canonique(v.Dit) is { } c ? Affichage(c) : null;
+            return v.Juste
+                ? $"[Fait pour ce tour : il a bien lu le nombre {cible}. Son écran affiche déjà « Bonne lecture » : félicite-le en une "
+                    + "phrase, puis commence TOUT DE SUITE l'activité qu'il demande. Aucun nouveau nombre ne s'affiche au tableau." + fin
+                : $"[Fait pour ce tour : il devait lire {cible} et a dit « {v.Dit} »{(lu is null ? string.Empty : $" (soit {lu})")}. Son écran "
+                    + "affiche « On réessaie ». Dis-lui en une phrase gentille que ce n'était pas tout à fait ça, SANS donner la réponse ni la "
+                    + "prononcer, puis commence TOUT DE SUITE l'activité qu'il demande. Aucun nouveau nombre ne s'affiche au tableau." + fin;
         }
 
         /// <summary>La cible telle qu'on l'écrit pour le professeur : « 12 345 », « 3/4 », « 10^-3 », « 3√2 ».</summary>

@@ -2867,18 +2867,21 @@ namespace SchoolWebApp.Api.Builders.impl
                         .Select(m => ((string?)m.Role, (string?)m.Contenu, m.SonJuste)).ToList();
                     quitteLectureDeNombres = Services.Voix.LectureDesNombres.DernierMontre(recentsNombres) is not null
                         && Services.Voix.LectureDesNombres.DemandeUneAutreActivite(contenu);
-                    if (Services.Voix.LectureDesNombres.EnCours(recentsNombres, contenu, contexte.Eleve.NiveauCode))
+                    // « vingt-huit. Maintenant on fait une addition » (contrôle d'Omar, #50/#51) : sa LECTURE est jugée
+                    // (« Bonne lecture »), PUIS on change d'exercice — au clavier comme au micro (le relais a déjà jugé).
+                    if (quitteLectureDeNombres || Services.Voix.LectureDesNombres.EnCours(recentsNombres, contenu, contexte.Eleve.NiveauCode))
                     {
-                        enLectureDeNombres = true;
+                        enLectureDeNombres = !quitteLectureDeNombres;
                         verdictNombre = Services.Voix.LectureDesNombres.Juger(recentsNombres, contenu);
                         if (verdictNombre is not null)
                         {
+                            var texteGarde = Services.Voix.LectureDesNombres.TexteAvecLaSuite(verdictNombre, contenu);
                             // Tapé au clavier : l'écran ne connaît pas encore le verdict, il le reçoit avec la réponse (#49).
                             // Seulement quand la vérification des syllabes est allumée (verdictDuTour.Juger), comme la
                             // lecture en images tapée : réglage éteint, l'écran ne reçoit aucun événement nouveau (Omar).
-                            if (sonJuste is null && verdictDuTour is { Juger: true }) verdictDuTour.Poser(verdictNombre.Juste, Services.Voix.LectureDesNombres.TexteDeLEleve(verdictNombre));
+                            if (sonJuste is null && verdictDuTour is { Juger: true }) verdictDuTour.Poser(verdictNombre.Juste, texteGarde);
                             sonJuste ??= verdictNombre.Juste;
-                            contenu = Services.Voix.LectureDesNombres.TexteDeLEleve(verdictNombre);
+                            contenu = texteGarde;
                         }
                     }
                 }
@@ -3456,7 +3459,9 @@ namespace SchoolWebApp.Api.Builders.impl
                 : ChangementDExercice.Lire(contenu);
             // « Maintenant on fait une addition » pendant la lecture des nombres (signalement #51) : c'est une demande de
             // changement, même sans « autre exercice ». Le professeur reçoit le même fait, et l'ancien exercice est coupé.
-            if (changement == ChangementDExercice.Nature.Aucune && quitteLectureDeNombres && !controleOuvert && sonJuste is null)
+            // Même quand sa lecture vient d'être jugée (« vingt-huit, maintenant on fait une addition », au micro ou tapé :
+            // contrôle d'Omar) — le verdict reste, le changement se pose aussi.
+            if (changement == ChangementDExercice.Nature.Aucune && quitteLectureDeNombres && !controleOuvert)
             {
                 changement = ChangementDExercice.Nature.Changer;
             }
@@ -3586,6 +3591,11 @@ namespace SchoolWebApp.Api.Builders.impl
                 {
                     declencheur += "\n\n" + Services.Voix.LectureDesNombres.FaitVerdict(verdictNombre, nombresDuTour);
                 }
+            }
+            else if (quitteLectureDeNombres && verdictNombre is not null)
+            {
+                // Il a lu, puis demandé une autre activité : le verdict de sa lecture, puis l'activité (contrôle d'Omar).
+                declencheur += "\n\n" + Services.Voix.LectureDesNombres.FaitVerdictPuisChangement(verdictNombre);
             }
 
             if (langueDuSon is not null)

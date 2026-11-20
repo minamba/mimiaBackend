@@ -380,18 +380,21 @@ namespace SchoolWebApp.Api.Controllers
                 // « Un autre exercice » n'est pas une lecture du nombre « un » (14/11/2026, voir ChangementDExercice).
                 if (Services.ChangementDExercice.Demande(fragment.Texte)) return fragment;
 
-                // « Écris le nombre vingt-trois » n'est pas une lecture de « 23 » (commentaire de Min's sur le signalement #50) :
-                // c'est une demande d'afficher ce nombre, que le message gère (LectureDesNombres.NombreDemande).
-                if (LectureDesNombres.CanoniqueDemande(fragment.Texte) is not null) return fragment;
-
-                var lu =LectureDesNombres.Canonique(fragment.Texte);
-                if (lu is null) return fragment; // « je sais pas », une question : ce n'est pas une lecture
+                // LE MÊME JUGE QU'AU CLAVIER (contrôle d'Omar, #50/#51) — LectureDesNombres.JugerContre :
+                // - « Écris le nombre vingt-trois », « pourquoi pas le vingt-trois » : une demande d'afficher ce nombre (#50),
+                //   que le message gère (LectureDesNombres.NombreDemande) ;
+                // - « c'est toi qui choisis le nombre, pourquoi pas… » : une question, pas une lecture fausse ;
+                // - « vingt-huit maintenant on fait une addition » : seule sa lecture (28) est jugée, sa demande reste dans le
+                //   texte (« J'ai lu le nombre vingt-huit. Maintenant on fait une addition ») et le message change d'exercice.
+                // « Je sais pas » : pas de nombre, pas de verdict.
+                var verdict = LectureDesNombres.JugerContre(aLire, fragment.Texte);
+                if (verdict is null) return fragment;
 
                 return fragment with
                 {
-                    Texte = LectureDesNombres.TexteDeLEleve(new LectureDesNombres.Verdict(aLire, false, fragment.Texte)),
+                    Texte = LectureDesNombres.TexteAvecLaSuite(verdict, fragment.Texte),
                     Son = true,
-                    Juste = lu == LectureDesNombres.Normaliser(aLire.Cible),
+                    Juste = verdict.Juste,
                 };
             }
             catch (Exception ex) when (ex is not OperationCanceledException)

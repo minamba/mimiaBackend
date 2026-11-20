@@ -20,14 +20,22 @@ namespace SchoolWebApp.Api.Services.Voix
             + "d'« application », de « programme » ni de qui choisit, et ne dis jamais que ce n'est pas toi qui choisis.";
 
         // « c'est le code qui choisit », « l'application va t'afficher », « le programme a choisi », « l'ordinateur
-        // choisit ». Pas « code secret » ni « code d'accès » (des mots d'enfant), ni « au programme du CP » (ce n'est pas
-        // le fonctionnement interne) : « programme » seulement suivi d'un verbe qui agit.
+        // choisit », « c'est l'exercice qui choisit le nombre », « la machine choisit », « le site va t'afficher »,
+        // « ce n'est pas moi qui choisis, c'est le jeu ».
+        //
+        // CONTRÔLE D'OMAR (#50/#51) : le filet retirait aussi des phrases de classe (« le code du coffre », « le code de
+        // la route », « code postal », « au CM1, le programme change », « le programme te montre… », « l'algorithme de
+        // l'addition posée », « l'ordinateur compte en binaire », « l'application des règles »). Désormais, un de ces
+        // mots ne compte que SUJET d'un verbe qui agit sur l'exercice (choisir, afficher, décider, tirer au sort,
+        // sélectionner, générer, mettre, s'occuper / se charger de) — jamais « change », « montre » ni « compte ».
         [GeneratedRegex(
             @"[^.!?\n]*(?:"
-            + @"(?<!\p{L})(?:le|du|au|un|ce|mon|notre|son)\s+code(?!\p{L})(?!\s+(?:secret|d['’]\s*acc[eè]s|de\s+la\s+porte))"
-            + @"|(?<!\p{L})l['’]\s*(?:application|appli|algorithme|ordinateur)(?!\p{L})"
-            + @"|(?<!\p{L})(?:le|ce)\s+(?:programme|logiciel|syst[èe]me)\s+(?:qui\s+|va\s+|vient\s+de\s+|a\s+|t['’]\s*|te\s+|le\s+|la\s+|l['’]\s*)*(?:choisi\w*|affich\w*|montr\w*|d[ée]cid\w*|chang\w*|met\w*|mis|pass\w*|tir\w*|s['’]\s*occup\w*|g[èe]r\w*)"
-            + @")[^.!?\n]*[.!]*",
+            + @"(?:(?<!\p{L})(?:le|la|un|une|ce|cet|cette|mon|ma|notre|son|sa|du|au)\s+|(?<!\p{L})l['’]\s*)"
+            + @"(?:code|algorithme|ordinateur|application|appli|programme|logiciel|syst[èe]me|machine|site|jeu|exercice|outil|robot)(?!\p{L})"
+            + @"(?:\s*(?:(?:qui|va|vont|vient\s+de|a|te|le|la|les|en|me|lui|nous|tout\s+seul|lui-m[êe]me|au\s+hasard|pour\s+toi)(?!\p{L})|[tlms]['’]))*\s*"
+            + @"(?:choisi\w*|choisir|affich\w*|d[ée]cid\w*|tir\w*|s[ée]lectionn\w*|g[ée]n[èe]r\w*|met|mettra|mettre|mis|s['’]\s*occup\w*|occup\w*|s['’]\s*en\s+charg\w*|en\s+charg\w*|se\s+charg\w*|charg\w*)(?!\p{L})"
+            + @"|(?<!\p{L})(?:ce\s+n['’]\s*est|c['’]\s*est|ce\s+n['’]\s*sera)\s+pas\s+moi\s+qui\s+(?:choisi\w*|d[ée]cid\w*|affich\w*)"
+            + @")[^.!?\n]*[.!?]*",
             RegexOptions.IgnoreCase)]
         private static partial Regex PhraseTechnique();
 
