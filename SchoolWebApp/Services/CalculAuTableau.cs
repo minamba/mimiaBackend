@@ -175,7 +175,28 @@ namespace SchoolWebApp.Api.Services
         /// décomposition attendue est l'ordinaire (2 dizaines et 0 unité) ou une autre que le tableau impose
         /// (« 20 = 1 dizaine + ? unités » attend 10 unités).
         /// </summary>
-        private sealed record DecompositionPosee(int N, Dictionary<char, int> Attendues, HashSet<char> Demandes, bool Ordinaire, string Enonce);
+        private sealed record DecompositionPosee(int N, Dictionary<char, int> Attendues, HashSet<char> Demandes, bool Ordinaire, string Enonce)
+        {
+            /// <summary>Le rang demandé vient d'une relance en mots (« Combien d'unités restent ? »), pas d'une case vide.</summary>
+            public bool RangDeRelance { get; init; }
+        }
+
+        [GeneratedRegex(@"combien\s+(?:de\s+|d'|d’)(?<x>\p{L}+)", RegexOptions.IgnoreCase)]
+        private static partial Regex CombienDe();
+
+        private static bool EstUnRang(string mot) => Regex.IsMatch(mot, @"^(?:centaines?|dizaines?|unit[ée]s?)$", RegexOptions.IgnoreCase);
+
+        // « ça fait combien d'unités », « en tout », « dans 2 dizaines, il y a combien d'unités ? », « une dizaine, c'est
+        // 10 unités » : on demande de CONVERTIR un rang en un autre, pas la case du tableau.
+        [GeneratedRegex(@"\b(?:ça|ca|cela)\s+(?:fait|font|donne)\b|\ben\s+tout\b"
+            + @"|\bdans\s+(?:\d{1,4}|une?|[\p{L}-]+)\s+(?:centaines?|dizaines?)\b"
+            + @"|\b(?:centaines?|dizaines?)\s*,?\s*(?:c'est|c’est|vaut|valent|font|fait|égale|égalent)\s+(?:\d|combien)", RegexOptions.IgnoreCase)]
+        private static partial Regex Conversion();
+
+        // « j'ai 7 ans », « attends 2 minutes », « c'est quoi 7 ? » : un nombre dans une phrase qui ne répond pas
+        // (contrôle d'Omar, 20/11/2026). « 7 ? » tout court reste une réponse hésitante.
+        [GeneratedRegex(@"(?<!\p{L})(?:ans?|minutes?|heures?|secondes?|quoi|pourquoi|comment|attends?|attendez|pause)(?!\p{L})", RegexOptions.IgnoreCase)]
+        private static partial Regex PasUneReponse();
 
         /// <summary>
         /// La question du message le plus récent qui en pose une. Un message sans « ? » (« Ce n'est pas encore ça.
@@ -229,7 +250,7 @@ namespace SchoolWebApp.Api.Services
                     if (rangDeLaRelance is char rang && rang != '\0')
                     {
                         if (!d.Attendues.ContainsKey(rang)) return null;
-                        d = d with { Demandes = new HashSet<char> { rang } };
+                        d = d with { Demandes = new HashSet<char> { rang }, RangDeRelance = true };
                     }
 
                     return new Question(null, d.N.ToString(CultureInfo.InvariantCulture), d);
@@ -252,6 +273,18 @@ namespace SchoolWebApp.Api.Services
                 // Une relance ne félicite pas : « Bravo, tu as trouvé le résultat ! Tu en veux un autre ? » clôt la question.
                 var rangs = RangDemande().Matches(message).Select(m => char.ToLowerInvariant(m.Groups["u"].Value[0])).Distinct().ToList();
                 if (!(RelanceDeCalcul().IsMatch(message) || rangs.Count > 0) || Felicite().IsMatch(message)) return null;
+
+                // UNE RELANCE QUI POSE UNE SOUS-QUESTION — contrôle d'Omar, 20/11/2026 : « Pas encore. Lève 8 doigts.
+                // Combien de doigts tu as levés ? » après « 8 - 3 = ? ». L'élève répond 8, juste à CETTE question, et le
+                // code le jugeait FAUX sur le calcul. Comme FormesAuTableau.EstRelance : « combien de/d' <nom> » (autre
+                // qu'un rang) est une autre question, on ne remonte plus.
+                if (CombienDe().Matches(message).Any(m => !EstUnRang(m.Groups["x"].Value))) return null;
+
+                // UNE RELANCE QUI CONVERTIT — contrôle d'Omar : « Une dizaine, c'est 10 unités. Alors 2 dizaines, ça fait
+                // combien d'unités ? » attend 20 (le nombre d'unités), pas le chiffre des unités (0). Un rang demandé avec
+                // « ça fait », « ça donne », « en tout » n'est pas la case du tableau : pas de verdict.
+                if (rangs.Count > 0 && Conversion().IsMatch(message)) return null;
+
                 nombresDesRelances.AddRange(nombres);
 
                 // Signalement #46 : seule la relance la plus récente dit ce qu'on attend maintenant.
@@ -532,6 +565,7 @@ namespace SchoolWebApp.Api.Services
         {
             // Un nombre négatif (« moins 1 ») ne se lit pas encore : pas de verdict.
             if (Regex.IsMatch(dit, @"[-−–]\s*\d|\bmoins\b", RegexOptions.IgnoreCase)) return null;
+            if (PasUneReponse().IsMatch(dit)) return null;
 
             var valeurs = NombreEnChiffres().Matches(dit)
                 .Select(m => decimal.TryParse(m.Value.Replace(',', '.'), NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out var d) ? d : (decimal?)null)
@@ -571,6 +605,11 @@ namespace SchoolWebApp.Api.Services
                 if (seul is null || seul.Value != Math.Floor(seul.Value) || seul.Value > 9999) return null;
 
                 var rang = d.Demandes.Single();
+
+                // Rang venu d'une relance en mots : « 20 » pour « combien d'unités ? » est le nombre d'unités de 20, une
+                // lecture juste de la question (contrôle d'Omar). On ne le juge pas faux.
+                if (d.RangDeRelance && (int)seul.Value != d.Attendues[rang] && seul.Value * Poids(rang) == d.N) return null;
+
                 var attenduDuRang = new Dictionary<char, int> { [rang] = d.Attendues[rang] };
                 var donneDuRang = new Dictionary<char, int> { [rang] = (int)seul.Value };
                 return new Verdict(d.Enonce, Decrire(attenduDuRang), Decrire(donneDuRang),
@@ -594,7 +633,8 @@ namespace SchoolWebApp.Api.Services
 
             // Le bon nombre, autrement décomposé : « essaie avec le moins d'unités possible » n'a de sens que si on
             // attendait la décomposition ordinaire. Sinon (« 20 = 1 dizaine + ? unités »), on ne tranche pas.
-            if (total == d.N) return d.Ordinaire ? new Verdict(d.Enonce, attendu, donne, Jugement.AutreDecomposition) : null;
+            // Après une relance en mots (« combien d'unités ? »), « 20 unités » répond aussi : on ne tranche pas.
+            if (total == d.N) return d.Ordinaire && !d.RangDeRelance ? new Verdict(d.Enonce, attendu, donne, Jugement.AutreDecomposition) : null;
 
             return new Verdict(d.Enonce, attendu, donne, Jugement.Faux);
         }
