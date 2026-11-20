@@ -120,6 +120,21 @@ namespace SchoolWebApp.Api.Builders.impl
         /// <summary>Les syllabes du CP vérifiées sur la voix (04/11/2026).</summary>
         private readonly Services.Voix.IVerificationSonService _verificationSon;
 
+        /// <summary>
+        /// Le texte brut du professeur (lecture des nombres) peut aller au journal Debug pour un diagnostic — JAMAIS en
+        /// production, et seulement si `Diagnostic:LectureDesNombresTexteBrut` vaut true (false par défaut). Même alors, le
+        /// prénom de l'enfant est masqué (refus d'Omar, 3bc3b0b : seul le niveau de log le coupait).
+        /// </summary>
+        private readonly bool _texteBrutAuJournal;
+
+        /// <summary>La clé de configuration qui ouvre le journal du texte brut (hors production).</summary>
+        public const string CleTexteBrutAuJournal = "Diagnostic:LectureDesNombresTexteBrut";
+
+        /// <summary>Le journal du texte brut est-il permis ? Faux en production, quoi que dise la configuration.</summary>
+        public static bool TexteBrutAuJournalPermis(IConfiguration? configuration, IHostEnvironment? environnement) =>
+            environnement is not null && !environnement.IsProduction()
+            && configuration is not null && configuration.GetValue(CleTexteBrutAuJournal, false);
+
         public ChatViewModelBuilder(
             IMapper mapper,
             IChatContexteResolver resolver,
@@ -148,8 +163,11 @@ namespace SchoolWebApp.Api.Builders.impl
             IEleveRepository eleves,
             IRapportOrientationRepository rapportsOrientation,
             Services.Voix.IVerificationSonService verificationSon,
-            Services.Paiement.AccesForfaitService acces)
+            Services.Paiement.AccesForfaitService acces,
+            IConfiguration configuration,
+            IHostEnvironment environnement)
         {
+            _texteBrutAuJournal = TexteBrutAuJournalPermis(configuration, environnement);
             _acces = acces ?? throw new ArgumentNullException(nameof(acces));
             _verificationSon = verificationSon ?? throw new ArgumentNullException(nameof(verificationSon));
             _eleves = eleves ?? throw new ArgumentNullException(nameof(eleves));
@@ -3984,17 +4002,20 @@ namespace SchoolWebApp.Api.Builders.impl
                 finAccordee = filtreNombres.Passer(finAccordee) + filtreNombres.Terminer();
 
                 // UNE PHRASE ENTIÈREMENT RETIRÉE (défaut e5, Omar) : il ne restait que la consigne du code. Le journal dit
-                // quelles règles l'ont retirée, sans contenu ; le texte brut ne sort qu'en Debug (base de TEST).
+                // quelles règles l'ont retirée, sans contenu. Le texte brut : seulement hors production, drapeau de
+                // configuration allumé, niveau Debug, et prénom de l'enfant masqué (voir _texteBrutAuJournal).
                 if (filtreNombres.PhraseRetiree)
                 {
                     _logger.LogInformation(
                         "Lecture des nombres : phrase du professeur entierement retiree ({Regles}) (conversation {ConversationId}).",
                         string.Join(", ", filtreNombres.Retraits), conversationId);
                 }
-                if (_logger.IsEnabled(LogLevel.Debug))
+                if (_texteBrutAuJournal && _logger.IsEnabled(LogLevel.Debug))
                 {
                     _logger.LogDebug("Lecture des nombres, texte brut du professeur (conversation {ConversationId}) : {Brut} || retraits : {Regles}",
-                        conversationId, filtreNombres.Brut.ReplaceLineEndings(" / "), string.Join(", ", filtreNombres.Retraits));
+                        conversationId,
+                        Services.Voix.LectureDesNombres.SansPrenom(filtreNombres.Brut, contexte.Eleve.Prenom).ReplaceLineEndings(" / "),
+                        string.Join(", ", filtreNombres.Retraits));
                 }
             }
 

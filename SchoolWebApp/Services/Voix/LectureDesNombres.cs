@@ -580,6 +580,29 @@ namespace SchoolWebApp.Api.Services.Voix
                     .Any(p => Jetons(p).Any(j => j.Sorte == Sorte.Nombre && j.Valeur == element.Cible));
         }
 
+        /// <summary>
+        /// POUR LE JOURNAL DE DIAGNOSTIC SEULEMENT (refus d'Omar, 3bc3b0b) : le texte brut du professeur appelle l'enfant par son
+        /// prénom. Le prénom (en entier, et chaque partie d'un prénom composé dès 2 lettres) devient « [prénom] », sans tenir
+        /// compte de la casse, et jamais à l'intérieur d'un autre mot (« Léo » ne touche pas « Léonard »… ni l'inverse).
+        /// </summary>
+        public static string SansPrenom(string? texte, string? prenom)
+        {
+            var propre = texte ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(prenom) || propre.Length == 0) return propre;
+
+            var formes = new[] { prenom.Trim() }
+                .Concat(prenom.Split(new[] { '-', ' ', '\'', '’' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                .Where(f => f.Length >= 2)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderByDescending(f => f.Length);
+            foreach (var forme in formes)
+            {
+                propre = Regex.Replace(propre, @"(?<![\p{L}\p{N}])" + Regex.Escape(forme) + @"(?![\p{L}\p{N}])", "[prénom]",
+                    RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+            }
+            return propre;
+        }
+
         /// <summary>Le texte dit quelque chose à l'élève (des lettres, hors tableau et balises).</summary>
         public static bool AUnePhrase(string? texte) =>
             Regex.IsMatch(Tableau().Replace(texte ?? string.Empty, " "), @"\p{L}");
