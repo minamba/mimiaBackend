@@ -3228,6 +3228,12 @@ namespace SchoolWebApp.Dal.Migrations
                         .HasColumnType("nvarchar(120)")
                         .HasColumnName("nom");
 
+                    b.Property<bool>("Promotion")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false)
+                        .HasColumnName("promotion");
+
                     b.Property<string>("Sujet")
                         .IsRequired()
                         .HasMaxLength(150)

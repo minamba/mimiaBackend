@@ -13,9 +13,10 @@ using SchoolWebApp.Domain.Repositories;
 namespace SchoolWebApp.Tests
 {
     /// <summary>
-    /// « Envoyer à un parent » un template d'OFFRE (il porte `{{lien_desinscription}}`) : seulement à un parent consentant,
-    /// sans copie, avec son prénom, son lien signé, le pied commercial et les en-têtes `List-Unsubscribe`. Un template sans
-    /// cette variable est une correspondance (20/11/2026) : il part à l'adresse choisie, copies comprises, sans lien.
+    /// « Envoyer à un parent » un template AVEC LA CASE « PROMOTION » COCHÉE (décision finale de Min's, 20/11/2026) :
+    /// seulement à un parent consentant, sans copie, avec son prénom, son lien signé, le pied commercial et les en-têtes
+    /// `List-Unsubscribe`. Case décochée (par défaut) : une correspondance, à l'adresse choisie, copies comprises, sans
+    /// lien ni contrôle de consentement — sauf si le texte porte `{{lien_desinscription}}` (refusé : c'est une offre).
     /// </summary>
     public class EnvoiCommercialTests : BaseDeTest
     {
@@ -71,9 +72,9 @@ namespace SchoolWebApp.Tests
 
         private Task<IActionResult> EnvoyerAsync(
             (ModelesMailController Controleur, Mock<IServiceEmail> Email, List<Envoi> Envois, Mock<IBoitesAdminService> Boites, Mock<IBannissementRepository> Bannis) p,
-            JetonDesabonnement jetons, string destinataire, List<string>? cc = null) =>
+            JetonDesabonnement jetons, string destinataire, List<string>? cc = null, bool promotion = true) =>
             p.Controleur.EnvoyerAUnParent(
-                IdModele, new ModelesMailController.EnvoiParentRequest { Destinataire = destinataire, Cc = cc },
+                IdModele, new ModelesMailController.EnvoiParentRequest { Destinataire = destinataire, Cc = cc, Promotion = promotion },
                 p.Email.Object, p.Bannis.Object, p.Boites.Object, Envois, jetons, CancellationToken.None);
 
         private static string Message(IActionResult r)
@@ -162,14 +163,14 @@ namespace SchoolWebApp.Tests
         }
 
         [Fact]
-        public async Task Template_sans_lien_de_desinscription_une_correspondance_part_a_tout_parent_avec_copie()
+        public async Task Case_decochee_une_correspondance_part_a_tout_parent_avec_copie()
         {
-            // 20/11/2026 : un template n'est plus commercial d'office. Sans `{{lien_desinscription}}`, il part comme un
-            // message personnel : parent non consentant, copie, sans lien ni en-têtes de désinscription.
+            // 20/11/2026 : case « Promotion » décochée (par défaut), le template part comme un message personnel : parent
+            // non consentant, copie, sans lien ni en-têtes de désinscription.
             var parent = await CreerParentAsync();
             var p = Preparer(Jetons, "Bonjour {{prenom}}, voici la réponse à votre question.");
 
-            var r = await EnvoyerAsync(p, Jetons, parent.Mail!, ["autre@exemple.invalid"]);
+            var r = await EnvoyerAsync(p, Jetons, parent.Mail!, ["autre@exemple.invalid"], promotion: false);
 
             Assert.IsType<OkObjectResult>(r);
             var envoi = Assert.Single(p.Envois);
@@ -177,7 +178,48 @@ namespace SchoolWebApp.Tests
             Assert.Null(envoi.EnTetes);
             Assert.DoesNotContain("/desabonnement", envoi.Valeurs["corpsMessage"]);
             Assert.DoesNotContain("désinscrire", envoi.Valeurs["mentionPied"], StringComparison.OrdinalIgnoreCase);
-            Assert.Null(ModelesMailController.CategorieEnvoiIndividuel(new ModeleMailDetail { Sujet = "a", Texte = "b" }));
+            Assert.Null(ModelesMailController.CategorieEnvoiIndividuel(false));
+            Assert.Equal(CategorieDesabonnement.Diffusion, ModelesMailController.CategorieEnvoiIndividuel(true));
+            p.Email.Verify(e => e.DiffuserAsync(
+                It.IsAny<IReadOnlyList<string>>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IDictionary<string, string>>(),
+                It.IsAny<IReadOnlyList<PieceMail>?>(), It.IsAny<IReadOnlyList<PieceMail>?>(), It.IsAny<IProgress<int>?>(),
+                It.IsAny<CancellationToken>(), It.IsAny<Expediteur?>(),
+                It.Is<IReadOnlyList<string>?>(c => c != null && c.Contains("autre@exemple.invalid")),
+                It.IsAny<IReadOnlyList<string>?>(), It.IsAny<IReadOnlyDictionary<string, string>?>()), Times.Once);
+        }
+
+        [Fact]
+        public async Task Case_cochee_sans_la_variable_reste_une_offre_parent_non_consentant_refuse()
+        {
+            // C'est la case qui décide, pas le texte : cochée, même sans `{{lien_desinscription}}` dans le message, l'envoi
+            // ne part qu'à un parent consentant (le lien est de toute façon dans le pied).
+            var nonConsentant = await CreerParentAsync();
+            var consentant = await CreerParentAsync(consenti: true, prenom: "Lina");
+            var p = Preparer(Jetons, "Bonjour {{prenom}}, -20 % ce week-end.");
+
+            Assert.Contains("aucun parent consentant", Message(await EnvoyerAsync(p, Jetons, nonConsentant.Mail!)));
+            Assert.Empty(p.Envois);
+
+            Assert.IsType<OkObjectResult>(await EnvoyerAsync(p, Jetons, consentant.Mail!));
+            var envoi = Assert.Single(p.Envois);
+            Assert.NotNull(envoi.EnTetes);
+            Assert.Contains("/desabonnement?jeton=", envoi.Valeurs["mentionPied"]);
+        }
+
+        [Fact]
+        public async Task Variable_du_lien_sans_la_case_refusee_rien_ne_part()
+        {
+            // Un modèle d'offre (il porte `{{lien_desinscription}}`) envoyé case décochée : refusé, même à un parent
+            // consentant — cocher « Promotion » ou retirer la variable.
+            var consentant = await CreerParentAsync(consenti: true);
+            var p = Preparer(Jetons);
+
+            var r = await EnvoyerAsync(p, Jetons, consentant.Mail!, promotion: false);
+
+            var refus = Assert.IsType<BadRequestObjectResult>(r);
+            Assert.Equal("lien_sans_promotion", (string)refus.Value!.GetType().GetProperty("code")!.GetValue(refus.Value)!);
+            Assert.Contains("Cochez « Promotion »", Message(r));
+            Assert.Empty(p.Envois);
         }
 
         [Fact]

@@ -97,7 +97,17 @@ namespace SchoolWebApp.Api.Services.Notifications
                 return "Objet ou message vide : rien n’a été envoyé.";
             }
 
-            var categorie = CodeModeleMail.Categorie(modele.Code);
+            // LA CASE « PROMOTION » D'UN COURRIEL CRÉÉ DEPUIS L'ÉCRAN (20/11/2026) : cochée, c'est une offre — aux seuls
+            // parents de la cible qui ont accepté les offres, avec le lien pour se désinscrire ; décochée, une information
+            // à toute la cible. Un texte qui porte `{{lien_desinscription}}` sans la case ne part pas (il a pu être ajouté
+            // après la programmation) : mieux vaut un envoi manqué, visible dans l'écran, qu'une offre à tous.
+            var categorie = CodeModeleMail.Categorie(modele.Code, modele.Promotion);
+
+            if (CodeModeleMail.PorteCasePromotion(modele.Code) && categorie is null
+                && DiffusionService.ContientLienDesinscription(modele.Sujet, modele.Titre, modele.Texte))
+            {
+                return "Contient {{lien_desinscription}} sans la case « Promotion » : rien n’a été envoyé.";
+            }
 
             if (categorie is not null && !_jetons.Disponible)
             {

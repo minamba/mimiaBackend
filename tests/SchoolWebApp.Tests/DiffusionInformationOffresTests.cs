@@ -14,9 +14,10 @@ using SchoolWebApp.Domain.Repositories;
 namespace SchoolWebApp.Tests
 {
     /// <summary>
-    /// LE « MESSAGE DE DIFFUSION » EST UNE INFORMATION À TOUS (décision de Min's, 20/11/2026) : il part à TOUS les parents
-    /// joignables, consentement aux offres ou non, sans lien de désinscription ni case à cocher. « Offres et promotions »,
-    /// elle, reste aux seuls consentants, avec lien et `List-Unsubscribe`. Le décompte de l'écran est la liste d'envoi.
+    /// LE « MESSAGE DE DIFFUSION » EST UNE INFORMATION À TOUS (décision de Min's, 20/11/2026) : par défaut il part à TOUS
+    /// les parents joignables, consentement aux offres ou non, sans lien de désinscription. Avec la case « Promotion »
+    /// cochée (`mode=offres`), il ne part qu'aux seuls consentants, avec lien et `List-Unsubscribe`. Le décompte de
+    /// l'écran est la liste d'envoi.
     /// </summary>
     public class DiffusionInformationOffresTests : BaseDeTest
     {
@@ -212,7 +213,7 @@ namespace SchoolWebApp.Tests
                 var refus = Assert.IsType<BadRequestObjectResult>(reponse);
                 var message = (string)refus.Value!.GetType().GetProperty("message")!.GetValue(refus.Value)!;
                 Assert.Contains("{{lien_desinscription}}", message);
-                Assert.Contains("Offres et promotions", message);
+                Assert.Contains("Cochez « Promotion »", message);
                 Assert.False(diffusion.Etat.EnCours);
                 Assert.Empty(envois);
                 modeles.Verify(m => m.NoterEnvoiAsync(It.IsAny<int>(), It.IsAny<DateTime>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
@@ -233,7 +234,7 @@ namespace SchoolWebApp.Tests
             Assert.IsType<AcceptedResult>(await Controleur(modeles, diffusion).Diffuser(8, CancellationToken.None, "offres"));
             var etat = await AttendreFinAsync(diffusion);
             Assert.Equal(ModeDiffusion.Offres, etat.Mode);
-            modeles.Verify(m => m.NoterEnvoiAsync(8, It.IsAny<DateTime>(), "Offre aux parents qui acceptent les offres", It.IsAny<CancellationToken>()));
+            modeles.Verify(m => m.NoterEnvoiAsync(8, It.IsAny<DateTime>(), "Promotion aux parents qui acceptent les offres", It.IsAny<CancellationToken>()));
         }
 
         [Fact]

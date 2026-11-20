@@ -69,6 +69,15 @@ namespace SchoolWebApp.Dal.Entities
         /// </summary>
         public string? Cible { get; set; }
 
+        /// <summary>
+        /// LA CASE « PROMOTION » D'UN COURRIEL PROGRAMMÉ CRÉÉ DEPUIS L'ÉCRAN —
+        /// Min's, le 20/11/2026. Cochée : une offre, qui ne part qu'aux parents
+        /// de la cible qui ont accepté les offres, avec le lien pour se
+        /// désinscrire. Décochée (par défaut) : une information, à toute la cible.
+        /// Sans effet sur les courriels reliés à un code (avis, relances…).
+        /// </summary>
+        public bool Promotion { get; set; }
+
         /// <summary>Programmé ? Éteint, le planificateur ne l'envoie jamais.</summary>
         public bool Actif { get; set; }
 

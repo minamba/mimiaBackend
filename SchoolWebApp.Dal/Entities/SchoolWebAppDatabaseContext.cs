@@ -1999,6 +1999,7 @@ namespace SchoolWebApp.Dal.Entities
                 entity.Property(e => e.JourSemaine).HasColumnName("jour_semaine");
                 entity.Property(e => e.JourMois).HasColumnName("jour_mois");
                 entity.Property(e => e.Cible).HasMaxLength(20).HasColumnName("cible");
+                entity.Property(e => e.Promotion).HasDefaultValue(false).HasColumnName("promotion");
                 entity.Property(e => e.Actif).HasDefaultValue(false).HasColumnName("actif");
                 entity.Property(e => e.DerniereOccurrence).HasColumnName("derniere_occurrence");
                 entity.Property(e => e.DernierEnvoiLe).HasColumnName("dernier_envoi_le");

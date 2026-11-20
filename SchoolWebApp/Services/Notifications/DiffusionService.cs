@@ -391,8 +391,8 @@ namespace SchoolWebApp.Api.Services.Notifications
 
         /// <summary>Le message du refus, le même pour l'écran et pour un appel direct.</summary>
         public const string RefusLienDansInformation =
-            "Ce message contient {{lien_desinscription}} : c’est un modèle d’offre. Envoyez-le depuis l’onglet « Offres et "
-            + "promotions » (aux parents qui ont accepté les offres), ou retirez cette variable pour l’envoyer à tous.";
+            "Ce message contient {{lien_desinscription}} : c’est une offre. Cochez « Promotion » (seuls les parents qui ont "
+            + "accepté les offres la recevront), ou retirez cette variable pour l’envoyer comme une information.";
 
         /// <summary>Ajoute la variable du lien de désinscription, si le lien existe (une clé de signature configurée).</summary>
         public static void AjouterLienDesinscription(IDictionary<string, ValeurVariable> variables, string? lien)

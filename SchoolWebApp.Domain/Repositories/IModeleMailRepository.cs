@@ -116,6 +116,7 @@ namespace SchoolWebApp.Domain.Repositories
             bool actif,
             DateTime? derniereOccurrence,
             string? cible,
+            bool promotion = false,
             CancellationToken ct = default);
 
         /// <summary>

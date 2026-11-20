@@ -275,6 +275,16 @@ namespace SchoolWebApp.Api.Controllers
                 cible = requete.Cible;
             }
 
+            // LA CASE « PROMOTION » (20/11/2026) : seulement pour un courriel créé depuis l'écran. Décochée, il part à
+            // toute sa cible ; cochée, aux seuls parents de la cible qui ont accepté les offres, avec le lien pour se
+            // désinscrire. Un texte qui porte `{{lien_desinscription}}` ne se programme pas sans elle.
+            var promotion = CodeModeleMail.PorteCasePromotion(detail.Code) && requete.Promotion;
+            if (requete.Actif && CodeModeleMail.PorteCasePromotion(detail.Code) && !promotion
+                && DiffusionService.ContientLienDesinscription(detail.Sujet, detail.Titre, detail.Texte))
+            {
+                return BadRequest(new { message = DiffusionService.RefusLienDansInformation });
+            }
+
             if (!FrequenceEnvoi.EstConnue(requete.Frequence) || requete.Frequence == FrequenceEnvoi.Aucune)
             {
                 return BadRequest(new { message = "Choisissez une fréquence : chaque jour, chaque semaine ou chaque mois." });
@@ -314,12 +324,14 @@ namespace SchoolWebApp.Api.Controllers
                 requete.Actif,
                 Planification.OccurrencePrecedente(DateTime.UtcNow, regle),
                 cible,
+                promotion,
                 ct);
 
             _logger.LogWarning(
-                "Courriel automatique {Code} {Etat} : {Frequence} a {Heure} (jour {JourSemaine}/{JourMois}), cible {Cible}.",
+                "Courriel automatique {Code} {Etat} : {Frequence} a {Heure} (jour {JourSemaine}/{JourMois}), cible {Cible}{Promotion}.",
                 CodeModeleMail.CodeJournal(detail.Code, detail.Id), requete.Actif ? "PROGRAMME" : "deprogramme",
-                regle.Frequence, requete.Heure, regle.JourSemaine, regle.JourMois, cible ?? "-");
+                regle.Frequence, requete.Heure, regle.JourSemaine, regle.JourMois, cible ?? "-",
+                promotion ? " (PROMOTION : parents consentants)" : "");
 
             var aJour = await _modeles.GetDetailAsync(id, ct);
             return Ok(DecrireDetail(aJour!));
@@ -433,7 +445,8 @@ namespace SchoolWebApp.Api.Controllers
             CancellationToken ct,
             [FromQuery] bool signature = false,
             [FromQuery(Name = "boite")] string? depuis = null,
-            [FromQuery] string? mode = null)
+            [FromQuery] string? mode = null,
+            [FromQuery] bool promotion = false)
         {
             var detail = await _modeles.GetDetailAsync(id, ct);
             if (detail is null) return NotFound();
@@ -449,14 +462,14 @@ namespace SchoolWebApp.Api.Controllers
             // Le lien de désabonnement apparaît dans l'aperçu là où il
             // apparaîtra chez le parent — il ne mène nulle part d'ici.
             //
-            // UN TEMPLATE N'A PAS DE CATÉGORIE À LUI (20/11/2026) : c'est la façon dont il part qui décide. Par « Offres et
-            // promotions » (`mode=offres`), il porte le lien de désinscription et le pied commercial ; comme « Message de
-            // diffusion », ni l'un ni l'autre (`{{lien_desinscription}}` y disparaît). Envoyé à un parent (`signature`),
-            // il suit la règle de l'envoi individuel (`CategorieEnvoiIndividuel`). Un courriel automatique garde celle de
-            // son code (avis, relances, rappels ; aucune pour ceux créés depuis l'écran).
+            // UN TEMPLATE N'A PAS DE CATÉGORIE À LUI (20/11/2026) : c'est la case « Promotion » qui décide. Cochée
+            // (`mode=offres` pour une diffusion, `promotion=true` envoyé à un parent), il porte le lien de désinscription
+            // et le pied commercial ; décochée, ni l'un ni l'autre (`{{lien_desinscription}}` y disparaît). Un courriel
+            // automatique garde la catégorie de son code (avis, relances, rappels) ; créé depuis l'écran, celle de sa
+            // case « Promotion » enregistrée.
             var categorie = detail.Nature == NatureModeleMail.Diffusion
-                ? (signature ? CategorieEnvoiIndividuel(detail) : CategorieDiffusion(ModeDiffusion.Lire(mode)))
-                : CodeModeleMail.Categorie(detail.Code);
+                ? (signature ? CategorieEnvoiIndividuel(promotion) : CategorieDiffusion(ModeDiffusion.Lire(mode)))
+                : CodeModeleMail.Categorie(detail.Code, detail.Promotion);
 
             var exemples = new Dictionary<string, ValeurVariable>(Exemples());
             if (categorie is null) DiffusionService.RetirerLienDesinscription(exemples);
@@ -508,8 +521,9 @@ namespace SchoolWebApp.Api.Controllers
             CancellationToken ct,
             [FromQuery] string? mode = null)
         {
-            // DEUX MODES (décision de Min's, 20/11/2026) : le « Message de diffusion » (par défaut), une information à TOUS
-            // les parents, sans case à cocher ; ou « Offres et promotions », aux seuls parents qui ont accepté les offres.
+            // LA CASE « PROMOTION » (décision finale de Min's, 20/11/2026) : décochée (par défaut, `mode` absent ou
+            // « information »), une information à TOUS les parents ; cochée (`mode=offres`), une offre aux seuls parents
+            // qui ont accepté les offres, avec le lien pour se désinscrire.
             var faute = VerifierModeDiffusion(mode, out var modeLu);
             if (faute is not null) return BadRequest(new { message = faute });
 
@@ -519,8 +533,8 @@ namespace SchoolWebApp.Api.Controllers
             faute = VerifierEnvoi(detail);
             if (faute is not null) return BadRequest(new { message = faute });
 
-            // UN MESSAGE DE DIFFUSION QUI CONTIENT `{{lien_desinscription}}` (20/11/2026, revue d'Omar) : c'est un modèle
-            // d'offre (Black Friday…). Il part par « Offres et promotions », pas à tous les parents.
+            // UN MESSAGE DE DIFFUSION QUI CONTIENT `{{lien_desinscription}}` SANS LA CASE « PROMOTION » (20/11/2026, revue
+            // d'Omar) : c'est un modèle d'offre (Black Friday…). Il ne part pas à tous les parents.
             if (modeLu == ModeDiffusion.Information
                 && DiffusionService.ContientLienDesinscription(detail.Sujet, detail.Titre, detail.Texte))
             {
@@ -540,11 +554,11 @@ namespace SchoolWebApp.Api.Controllers
 
             var offres = modeLu == ModeDiffusion.Offres;
             await _modeles.NoterEnvoiAsync(
-                id, DateTime.UtcNow, offres ? "Offre aux parents qui acceptent les offres" : "Diffusion à tous les parents", ct);
+                id, DateTime.UtcNow, offres ? "Promotion aux parents qui acceptent les offres" : "Diffusion à tous les parents", ct);
 
             _logger.LogWarning(
                 "{Quoi} LANCEE depuis le template {Id} : « {Sujet} », {Images} image(s), {Docs} document(s).",
-                offres ? "OFFRE (parents consentants)" : "DIFFUSION (information a tous)",
+                offres ? "PROMOTION (parents consentants)" : "DIFFUSION (information a tous)",
                 id, detail.Sujet, courriel.Images.Count, courriel.Documents.Count);
 
             return Accepted(new { message = "Diffusion lancée." });
@@ -619,12 +633,21 @@ namespace SchoolWebApp.Api.Controllers
             var faute = VerifierEnvoi(detail);
             if (faute is not null) return BadRequest(new { message = faute });
 
-            // UNE OFFRE ENVOYÉE À UN SEUL PARENT OBÉIT À LA MÊME RÈGLE QU'UNE OFFRE ENVOYÉE À TOUS (19/11/2026, retour
-            // d'Omar) : un template d'offre — celui qui porte `{{lien_desinscription}}`, voir `CategorieEnvoiIndividuel` —
-            // ne part qu'à un parent inscrit qui a CONSENTI aux offres par email, jamais à une adresse libre ni en copie,
-            // et toujours avec son lien de désinscription signé, le pied commercial et les en-têtes `List-Unsubscribe`.
-            // Tout autre template est une correspondance (20/11/2026 : un template n'est plus commercial d'office).
-            var categorie = CategorieEnvoiIndividuel(detail);
+            // LA CASE « PROMOTION » (décision finale de Min's, 20/11/2026). Décochée (par défaut) : une correspondance, au
+            // parent choisi, sans contrôle de consentement ni lien de désinscription. Cochée : UNE OFFRE ENVOYÉE À UN SEUL
+            // PARENT OBÉIT À LA MÊME RÈGLE QU'UNE OFFRE ENVOYÉE À TOUS (19/11/2026, retour d'Omar) — elle ne part qu'à un
+            // parent inscrit qui a CONSENTI aux offres par email, jamais à une adresse libre ni en copie, et toujours avec
+            // son lien de désinscription signé, le pied commercial et les en-têtes `List-Unsubscribe`.
+            var promotion = requete?.Promotion == true;
+
+            // `{{lien_desinscription}}` SANS LA CASE : un modèle d'offre envoyé comme une correspondance. Refusé, comme pour
+            // la diffusion à tous : cocher « Promotion » ou retirer la variable.
+            if (!promotion && DiffusionService.ContientLienDesinscription(detail.Sujet, detail.Titre, detail.Texte))
+            {
+                return BadRequest(new { code = "lien_sans_promotion", message = DiffusionService.RefusLienDansInformation });
+            }
+
+            var categorie = CategorieEnvoiIndividuel(promotion);
             var commerciale = CategorieDesabonnement.EstCommerciale(categorie);
             var variables = new Dictionary<string, ValeurVariable> { ["prenom"] = new(string.Empty) };
             string? mentionPied = null;
@@ -676,7 +699,7 @@ namespace SchoolWebApp.Api.Controllers
 
             // L'adresse n'est pas recopiée dans le résultat affiché : la liste
             // des templates n'a pas à devenir un carnet d'adresses.
-            await _modeles.NoterEnvoiAsync(id, DateTime.UtcNow, "Envoyé à un parent", ct);
+            await _modeles.NoterEnvoiAsync(id, DateTime.UtcNow, promotion ? "Promotion envoyée à un parent" : "Envoyé à un parent", ct);
 
             // Une copie dans « Messages envoyés » de sa boîte (17/10/2026).
             var copieDeposee = await boite.Boite.DeposerCopieAsync(
@@ -720,12 +743,12 @@ namespace SchoolWebApp.Api.Controllers
             // `{{lien_desinscription}}` (19/11/2026) : le lien signé propre au parent, pour un courriel qui a une
             // catégorie de désabonnement. Le pied le porte déjà ; la variable le place aussi dans le texte.
             var desinscription = V("lien_desinscription", "Le lien pour se désinscrire (déjà présent en pied du courriel)");
+            var promotionSeulement = V("lien_desinscription", "Le lien pour se désinscrire — seulement si « Promotion » est cochée");
 
             if (nature == NatureModeleMail.Diffusion)
             {
-                // Pour un template, le lien n'existe que dans une offre (« Offres et promotions », 20/11/2026).
-                return [V("prenom", "Le prénom du parent"),
-                        V("lien_desinscription", "Le lien pour se désinscrire — seulement pour une offre (« Offres et promotions »)")];
+                // Pour un template, le lien n'existe que dans une promotion (case « Promotion » cochée, 20/11/2026).
+                return [V("prenom", "Le prénom du parent"), promotionSeulement];
             }
 
             return code switch
@@ -738,27 +761,25 @@ namespace SchoolWebApp.Api.Controllers
                 CodeModeleMail.AvisEssai or CodeModeleMail.AvisGeneral =>
                     [V("prenom", "Le prénom du parent"), V("lienAvis", "Le lien pour donner son avis"), desinscription],
 
-                // Un courriel d'information créé depuis l'écran (sans code, 20/11/2026) n'a pas de lien de désinscription.
-                null => [V("prenom", "Le prénom du parent")],
+                // Un courriel créé depuis l'écran (sans code) : le lien seulement avec sa case « Promotion » (20/11/2026).
+                null => [V("prenom", "Le prénom du parent"), promotionSeulement],
                 _ => [V("prenom", "Le prénom du parent"), desinscription],
             };
         }
 
         /// <summary>
-        /// La catégorie d'une diffusion à tous selon son mode (20/11/2026) : les offres (« Offres et promotions ») sont
-        /// commerciales ; le « Message de diffusion » est une information, sans catégorie (à tous, sans lien).
+        /// La catégorie d'une diffusion à tous selon son mode (20/11/2026) : case « Promotion » cochée (`offres`), c'est
+        /// commercial ; décochée, une information, sans catégorie (à tous, sans lien).
         /// </summary>
         private static string? CategorieDiffusion(string? mode) =>
             mode == ModeDiffusion.Offres ? CategorieDesabonnement.Diffusion : null;
 
         /// <summary>
-        /// La catégorie d'un template envoyé à UN parent : un template qui porte `{{lien_desinscription}}` est un modèle
-        /// d'offre, il suit la règle des offres ; tout autre est une correspondance, sans catégorie (20/11/2026).
+        /// La catégorie d'un template envoyé à UN parent (20/11/2026) : case « Promotion » cochée, il suit la règle des
+        /// offres ; décochée, c'est une correspondance, sans catégorie.
         /// </summary>
-        public static string? CategorieEnvoiIndividuel(ModeleMailDetail detail) =>
-            DiffusionService.ContientLienDesinscription(detail.Sujet, detail.Titre, detail.Texte)
-                ? CategorieDesabonnement.Diffusion
-                : null;
+        public static string? CategorieEnvoiIndividuel(bool promotion) =>
+            promotion ? CategorieDesabonnement.Diffusion : null;
 
         /// <summary>
         /// L'ENVOI INDIVIDUEL D'UNE OFFRE (19/11/2026, retour d'Omar) : le parent consentant à qui elle peut partir, ou la
@@ -782,14 +803,14 @@ namespace SchoolWebApp.Api.Controllers
 
             if (copies.Count + cachees.Count > 0)
             {
-                return (null, "Ce template est une offre (il contient {{lien_desinscription}}) : il part au seul parent destinataire, sans copie ni copie cachée.");
+                return (null, "Une promotion part au seul parent destinataire, sans copie ni copie cachée.");
             }
 
             var parent = await envois.GetDestinataireParMailAsync(adresse, categorie, ct);
             return parent is null
-                ? (null, "Ce template est une offre (il contient {{lien_desinscription}}) : il ne part qu’à un parent inscrit "
-                         + "qui a accepté les offres et nouveautés par e-mail, et cette adresse ne correspond à aucun parent "
-                         + "consentant. Pour une réponse personnelle, écrivez sans template ou retirez cette variable.")
+                ? (null, "Une promotion ne part qu’à un parent inscrit qui a accepté les offres et nouveautés par e-mail, et "
+                         + "cette adresse ne correspond à aucun parent consentant. Pour une réponse personnelle, décochez "
+                         + "« Promotion ».")
                 : (parent, null);
         }
 
@@ -927,6 +948,7 @@ namespace SchoolWebApp.Api.Controllers
             m.JourSemaine,
             m.JourMois,
             m.Cible,
+            m.Promotion,
             m.Actif,
             reglesADefinir = SansRegle(m),
             parCible = ParCible(m),
@@ -956,6 +978,7 @@ namespace SchoolWebApp.Api.Controllers
             d.JourSemaine,
             d.JourMois,
             d.Cible,
+            d.Promotion,
             d.Actif,
             reglesADefinir = SansRegle(d),
             parCible = ParCible(d),
@@ -1005,6 +1028,9 @@ namespace SchoolWebApp.Api.Controllers
             public List<string>? Cc { get; set; }
 
             public List<string>? Cci { get; set; }
+
+            /// <summary>La case « Promotion » (20/11/2026) : une offre, au seul parent qui a accepté les offres.</summary>
+            public bool Promotion { get; set; }
         }
 
         public class PlanificationRequest
@@ -1020,6 +1046,12 @@ namespace SchoolWebApp.Api.Controllers
 
             /// <summary>À qui il part, pour un courriel par cible — voir `CibleEnvoi`.</summary>
             public string? Cible { get; set; }
+
+            /// <summary>
+            /// La case « Promotion » d'un courriel créé depuis l'écran (20/11/2026) : une offre, aux seuls parents de la
+            /// cible qui ont accepté les offres. Ignorée pour un courriel relié à un code.
+            /// </summary>
+            public bool Promotion { get; set; }
 
             public int? JourMois { get; set; }
         }

@@ -57,13 +57,25 @@ namespace SchoolWebApp.Domain.Models
             Relance => CategorieDesabonnement.Relance,
             Rappels => CategorieDesabonnement.Rappels,
 
-            // UN COURRIEL CRÉÉ DEPUIS L'ÉCRAN EST UNE INFORMATION — décision de
-            // Min's, le 20/11/2026 : il part à TOUTE sa cible, sans filtre de
-            // consentement ni lien de désinscription, comme le « Message de
-            // diffusion ». Seul ce qui part par « Offres et promotions » est
-            // commercial (`ModeDiffusion.Offres`).
+            // UN COURRIEL CRÉÉ DEPUIS L'ÉCRAN EST, PAR DÉFAUT, UNE INFORMATION —
+            // décision de Min's, le 20/11/2026 : il part à TOUTE sa cible, sans
+            // filtre de consentement ni lien de désinscription, comme le
+            // « Message de diffusion ». Sa case « Promotion » cochée en fait une
+            // offre : voir la surcharge `Categorie(code, promotion)`.
             _ => null,
         };
+
+        /// <summary>
+        /// La catégorie d'un courriel automatique, case « Promotion » comprise (20/11/2026) : un courriel créé depuis
+        /// l'écran (sans code) dont la case est cochée est une OFFRE — catégorie commerciale, aux seuls parents de la
+        /// cible qui ont accepté les offres, avec le lien pour se désinscrire. La case est sans effet sur un courriel
+        /// relié à un code (bilans, fin d'essai, avis, relances, rappels) : il garde sa catégorie.
+        /// </summary>
+        public static string? Categorie(string? code, bool promotion) =>
+            code is null && promotion ? CategorieDesabonnement.Diffusion : Categorie(code);
+
+        /// <summary>Un courriel créé depuis l'écran (sans code) : le seul à porter la case « Promotion ».</summary>
+        public static bool PorteCasePromotion(string? code) => code is null;
     }
 
     /// <summary>
@@ -116,11 +128,12 @@ namespace SchoolWebApp.Domain.Models
         /// <summary>
         /// LES OFFRES ET NOUVEAUTÉS : LA SEULE CATÉGORIE COMMERCIALE — Min's, le 19/11/2026 (art. L34-5 CPCE, RGPD).
         ///
-        /// Ce qui part par l'onglet « Offres et promotions » (`ModeDiffusion.Offres`) est de la prospection : seulement
-        /// aux parents qui ont CONSENTI (`Parent.OffresEmail`), et se désabonner de cette catégorie, c'est retirer ce
-        /// consentement (la date du retrait est gardée). Le « Message de diffusion » et les courriels créés depuis l'écran
-        /// sont de l'information, à tous (décision de Min's, 20/11/2026). Les autres catégories (avis, relances, rappels)
-        /// restent sur le simple désabonnement ; les bilans et les messages sur le compte ne changent pas.
+        /// Ce qui part avec la case « Promotion » cochée (message de diffusion `ModeDiffusion.Offres`, courriel programmé
+        /// créé depuis l'écran, envoi à un parent) est de la prospection : seulement aux parents qui ont CONSENTI
+        /// (`Parent.OffresEmail`), et se désabonner de cette catégorie, c'est retirer ce consentement (la date du retrait
+        /// est gardée). Case décochée (par défaut), c'est de l'information, à tous (décision de Min's, 20/11/2026). Les
+        /// autres catégories (avis, relances, rappels) restent sur le simple désabonnement ; les bilans et les messages
+        /// sur le compte ne changent pas.
         /// </summary>
         public static bool EstCommerciale(string? categorie) => categorie == Diffusion;
 
@@ -136,15 +149,16 @@ namespace SchoolWebApp.Domain.Models
     }
 
     /// <summary>
-    /// LES DEUX FAÇONS D'ÉCRIRE À TOUS LES PARENTS — décision de Min's, le 20/11/2026 : « message de diffusion, c'est
-    /// pas lié au message de promotion, ce sont des messages d'information sur Mimia que j'envoie à tous les parents ».
+    /// LES DEUX FAÇONS D'ENVOYER UN « MESSAGE DE DIFFUSION » — décision finale de Min's, le 20/11/2026 : « mets un
+    /// bouton à cocher promotion : quand il est coché, ça envoie uniquement aux personnes ayant accepté. Comme ça on
+    /// garde la même structure que maintenant. »
     ///
-    /// `Information` (onglet « Message de diffusion », par défaut) : à TOUS les parents joignables (adresse présente,
-    /// non bannie), qu'ils aient accepté les offres ou non, sans lien de désinscription ni case à cocher.
+    /// `Information` (case « Promotion » décochée, par défaut) : à TOUS les parents joignables (adresse présente, non
+    /// bannie), qu'ils aient accepté les offres ou non, sans lien de désinscription commercial.
     ///
-    /// `Offres` (onglet « Offres et promotions ») : de la prospection (art. L34-5 CPCE, RGPD), aux SEULS parents qui ont
+    /// `Offres` (case « Promotion » cochée) : de la prospection (art. L34-5 CPCE, RGPD), aux SEULS parents qui ont
     /// consenti aux offres par e-mail, avec le lien de désinscription signé, le pied commercial et les en-têtes
-    /// `List-Unsubscribe`. C'est par là que partent les promotions (Black Friday…).
+    /// `List-Unsubscribe`. C'est ainsi que partent les promotions (Black Friday…).
     /// </summary>
     public static class ModeDiffusion
     {

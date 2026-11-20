@@ -64,6 +64,12 @@ namespace SchoolWebApp.Domain.Models
         /// <summary>À qui il part, pour un courriel programmé par cible — voir `CibleEnvoi`.</summary>
         public string? Cible { get; set; }
 
+        /// <summary>
+        /// La case « Promotion » (20/11/2026) d'un courriel programmé créé depuis l'écran : une offre, aux seuls parents
+        /// de la cible qui ont accepté les offres. Voir `CodeModeleMail.Categorie(code, promotion)`.
+        /// </summary>
+        public bool Promotion { get; set; }
+
         public bool Actif { get; set; }
 
         public DateTime? DerniereOccurrence { get; set; }
