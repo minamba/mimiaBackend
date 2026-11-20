@@ -29,8 +29,10 @@ namespace SchoolWebApp.Api.Services.Voix
         /// catalogue de sa classe ni d'en dessous) ; le tableau garde alors son nombre (signalement #51).</remarks>
         /// <remarks><paramref name="SansEssai"/> : il a posé une question au lieu de lire ; il n'a pas encore essayé, la
         /// consigne ne dit donc pas « essaie encore » (contrôle d'Omar, #50/#51).</remarks>
+        /// <remarks><paramref name="Avant"/> : pour un nombre demandé, celui que le tableau montrait jusque-là (null s'il n'y en
+        /// avait pas). Le nombre demandé le REMPLACE : le professeur ne doit plus en parler (retest d'Adam, #51, 21/11/2026).</remarks>
         public sealed record Tour(Element Element, bool Redite, bool Premier, bool Abandon, bool Demande = false, string? HorsCatalogue = null,
-            bool SansEssai = false);
+            bool SansEssai = false, Element? Avant = null);
 
         /// <summary>Le verdict du message de l'enfant : ce qu'il devait lire, s'il est juste, et ce qu'il a dit.</summary>
         public sealed record Verdict(Element Montre, bool Juste, string Dit);
@@ -338,36 +340,97 @@ namespace SchoolWebApp.Api.Services.Voix
             + @"[-\s,:'’«""]+(?<suite>[^.!?;\n]{1,60})", RegexOptions.IgnoreCase)]
         private static partial Regex Demande();
 
-        [GeneratedRegex(@"^(?:au|aux|sur|a|et|s'il|s’il|stp|svp|pour|que|qu|je|j|tableau|en|dans|ici|maintenant|merci|alors|puis|stp|please)\b", RegexOptions.IgnoreCase)]
+        // « … 34 affiche-le » (au micro, sans virgule) : un verbe d'affichage peut suivre le nombre demandé.
+        [GeneratedRegex(@"^(?:au|aux|sur|a|et|s'il|s’il|stp|svp|pour|que|qu|je|j|tableau|en|dans|ici|maintenant|merci|alors|puis|stp|please|affiche|montre|mets|ecris|donne)\b", RegexOptions.IgnoreCase)]
         private static partial Regex MotApresLeNombre();
 
+        // IL DIT QUEL NOMBRE IL PRÉFÈRE — retest d'Adam (#51, 21/11/2026) : « Je préfère le 34, affiche-le s'il te plaît. »,
+        // devant 82, était jugé comme une lecture FAUSSE de 82 (le verbe « affiche » venait APRÈS le nombre, Demande() ne le
+        // voyait pas, et Canonique() ignore les mots autour du 34). « je préfère / je veux / je voudrais / j'aimerais / je
+        // choisis / je prends (le) N », « on prend / on fait / on lit (le) N », « et si on prenait le N ». Pas « plutôt » seul :
+        // « non, plutôt trente-quatre » corrige sa LECTURE. Pas « je préfère dire / lire… » : c'est encore sa lecture.
+        // Ces formes ne font pas entrer dans la lecture des nombres (comme « pourquoi pas N », voir EnCours) : pendant un
+        // calcul, « je prends 8 » reste sa réponse.
+        [GeneratedRegex(@"(?<!\p{L})(?:je|j['’])\s*(?:pr[ée]f[èe]re(?:rais)?|veux|voudrais|aimerais|choisis|prends)(?!\p{L})"
+            + @"|(?<!\p{L})(?:on|nous)\s+(?:(?:peut|pourrait|va)\s+)?(?:prend(?:re)?|prenons|fai(?:t|re)|li(?:t|re))(?!\p{L})"
+            + @"|(?<!\p{L})(?:et\s+)?si\s+on\s+(?:prenait|faisait|lisait)(?!\p{L})", RegexOptions.IgnoreCase)]
+        private static partial Regex Preference();
+
+        // « Le 34, affiche-le », « trente-quatre, montre-le-moi » : le verbe vient APRÈS le nombre, avec un pronom.
+        [GeneratedRegex(@"(?<!\p{L})(?:affiche|montre|mets|[ée]cris|donne|propose)[- ](?:le|la|l['’])(?:[- ](?:moi|nous))?(?!\p{L})", RegexOptions.IgnoreCase)]
+        private static partial Regex VerbeApresLeNombre();
+
         /// <summary>Le nombre qu'il demande d'afficher, en écriture canonique (« 23 »), ou null.</summary>
-        /// <param name="pourquoiPas">Faux : « pourquoi pas 8 ? » n'est pas une demande (hors de la lecture, voir EnCours).</param>
+        /// <param name="pourquoiPas">Faux : « pourquoi pas 8 ? », « je préfère 8 » ne sont pas des demandes (hors de la lecture,
+        /// voir EnCours).</param>
         public static string? CanoniqueDemande(string? message, bool pourquoiPas = true)
         {
             if (string.IsNullOrWhiteSpace(message) || VerdictDeLecture().IsMatch(message)) return null;
             foreach (Match m in Demande().Matches(message))
             {
                 if (!pourquoiPas && m.Groups["pourquoi"].Success) continue;
-                // Seulement le nombre qui suit, mot à mot : « 23 au tableau et je te le lis » → « 23 ».
-                var mots = new List<string>();
-                string? apres = null;
-                foreach (var brut in m.Groups["suite"].Value.Split(' ', StringSplitOptions.RemoveEmptyEntries))
-                {
-                    var mot = brut.Trim('«', '»', '"', '“', '”', ',');
-                    var simple = SansAccents(mot.ToLowerInvariant());
-                    var estNombre = Regex.IsMatch(mot, @"^\(?[+-]?\d[\d,./^x()−-]*$")
-                        || simple.Split('-', StringSplitOptions.RemoveEmptyEntries).All(p => EstMotNombre(p) || p is "et" or "zero" or "virgule");
-                    if (!estNombre || simple.Length == 0) { apres = simple; break; }
-                    mots.Add(mot);
-                }
-                while (mots.Count > 0 && SansAccents(mots[^1].ToLowerInvariant()) is "et" or "virgule") mots.RemoveAt(mots.Count - 1);
-                if (mots.Count == 0) continue;
-                // « Donne-moi deux exemples », « montre-moi un indice » : un nom suit, ce n'est pas un nombre à afficher.
-                if (apres is not null && !MotApresLeNombre().IsMatch(apres)) continue;
-                if (Canonique(string.Join(' ', mots)) is { } lu) return lu;
+                if (NombreQuiSuit(m.Groups["suite"].Value) is { } lu) return lu;
+            }
+
+            // « Le 34, affiche-le s'il te plaît » : le nombre juste AVANT le verbe (au plus quelques mots de liaison entre).
+            foreach (Match m in VerbeApresLeNombre().Matches(message))
+            {
+                if (NombreQuiPrecede(message[..m.Index]) is { } lu) return lu;
+            }
+
+            if (!pourquoiPas) return null;
+            foreach (Match m in Preference().Matches(message))
+            {
+                var suite = message[(m.Index + m.Length)..];
+                // « je préfère dire… », « on lit des nombres » : pas un nombre choisi.
+                var mots = Regex.Match(suite, @"^[\s,:'’]*(?:(?:le|la|l|ce|cet|plut[oô]t|alors|maintenant|nombre|chiffre)(?:[\s,:'’]+|(?=\d)))*(?<suite>[^.!?;\n]{1,60})", RegexOptions.IgnoreCase);
+                if (!mots.Success) continue;
+                if (NombreQuiSuit(mots.Groups["suite"].Value) is { } lu) return lu;
             }
             return null;
+        }
+
+        /// <summary>Le nombre au début de ce texte, mot à mot (« 23 au tableau et je te le lis » → « 23 »), ou null.</summary>
+        private static string? NombreQuiSuit(string texte)
+        {
+            var mots = new List<string>();
+            string? apres = null;
+            foreach (var brut in texte.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+            {
+                var mot = brut.Trim('«', '»', '"', '“', '”', ',');
+                var simple = SansAccents(mot.ToLowerInvariant());
+                var estNombre = Regex.IsMatch(mot, @"^\(?[+-]?\d[\d,./^x()−-]*$")
+                    || simple.Split('-', StringSplitOptions.RemoveEmptyEntries).All(p => EstMotNombre(p) || p is "et" or "zero" or "virgule");
+                if (!estNombre || simple.Length == 0) { apres = simple; break; }
+                mots.Add(mot);
+                // « Je préfère le 34, affiche-le » : la virgule ferme le nombre.
+                if (brut.EndsWith(',')) break;
+            }
+            while (mots.Count > 0 && SansAccents(mots[^1].ToLowerInvariant()) is "et" or "virgule") mots.RemoveAt(mots.Count - 1);
+            if (mots.Count == 0) return null;
+            // « Donne-moi deux exemples », « montre-moi un indice » : un nom suit, ce n'est pas un nombre à afficher.
+            if (apres is not null && !MotApresLeNombre().IsMatch(apres)) return null;
+            return Canonique(string.Join(' ', mots));
+        }
+
+        /// <summary>Le nombre à la fin de ce texte (« Je préfère le 34, » → « 34 »), ou null.</summary>
+        private static string? NombreQuiPrecede(string texte)
+        {
+            // Les mots de liaison entre le nombre et le verbe : « le 34, alors affiche-le », « le 34 et montre-le ».
+            var fin = Regex.Replace(texte, @"(?:[\s,.;:!…-]|(?<!\p{L})(?:et|alors|donc|maintenant|stp|svp|s['’]il\s+te\s+pla[iî]t)(?!\p{L}))*$", string.Empty,
+                RegexOptions.IgnoreCase);
+            var mots = new List<string>();
+            foreach (var brut in fin.Split(' ', StringSplitOptions.RemoveEmptyEntries).Reverse())
+            {
+                var mot = brut.Trim('«', '»', '"', '“', '”', ',');
+                var simple = SansAccents(mot.ToLowerInvariant());
+                var estNombre = Regex.IsMatch(mot, @"^\(?[+-]?\d[\d,./^x()−-]*$")
+                    || simple.Split('-', StringSplitOptions.RemoveEmptyEntries).All(p => EstMotNombre(p) || p is "et" or "zero" or "virgule");
+                if (!estNombre || simple.Length == 0 || brut.EndsWith(',')) break;
+                mots.Insert(0, mot);
+            }
+            while (mots.Count > 0 && SansAccents(mots[0].ToLowerInvariant()) is "et" or "virgule") mots.RemoveAt(0);
+            return mots.Count == 0 ? null : Canonique(string.Join(' ', mots));
         }
 
         /// <summary>Le nombre demandé, s'il est au catalogue de sa classe ou d'une classe en dessous ; null sinon.</summary>
@@ -399,7 +462,8 @@ namespace SchoolWebApp.Api.Services.Voix
             // nombre demandé est celui du tour, s'il est au catalogue de sa classe ou d'une classe en dessous.
             if (verdict is null && NombreDemande(messageDeLEleve, niveau) is { } demande)
             {
-                return new Tour(demande, Redite: precedent?.Cible == demande.Cible, Premier: precedent is null, Abandon: false, Demande: true);
+                return new Tour(demande, Redite: precedent?.Cible == demande.Cible, Premier: precedent is null, Abandon: false, Demande: true,
+                    Avant: precedent);
             }
 
             // IL DEMANDE UN NOMBRE QU'ON NE PEUT PAS MONTRER (signalement #51 : sa demande était ignorée sans un mot, « on fait
@@ -640,6 +704,16 @@ namespace SchoolWebApp.Api.Services.Voix
                 propre = Etape(propre, "nombre", t => Phrase().Replace(t, m => CiteLeNombre(m.Value, tour.Element) ? string.Empty : m.Value));
             }
 
+            // LE NOMBRE DEMANDÉ REMPLACE CELUI DU TABLEAU (retest d'Adam, #51, 21/11/2026) : « C'est 35 qui s'affiche
+            // maintenant » (35 n'y est plus), « On est déjà sur le 23 » (il vient d'arriver). La phrase qui cite l'ancien nombre ou
+            // le nombre demandé (c'est lui qui le lit), ou qui prétend qu'on y était déjà, part ; la consigne du code dit
+            // « voici le nombre que tu as demandé ».
+            if (tour is { Demande: true, Redite: false, Avant: { } avant })
+            {
+                propre = Etape(propre, "contredit", t => Phrase().Replace(ContreditLeTableau().Replace(t, string.Empty),
+                    m => CiteLeNombre(m.Value, avant) || CiteLeNombre(m.Value, tour.Element) ? string.Empty : m.Value));
+            }
+
             var lignes = propre.Split('\n').Select(l => Regex.Replace(l, @"[ \t]{2,}", " ").Trim());
             var corps = LignesVides().Replace(string.Join("\n", lignes), "\n\n").Trim();
 
@@ -655,9 +729,12 @@ namespace SchoolWebApp.Api.Services.Voix
         /// faire attendre la nouvelle image jusqu'à la voix : les deux se modifient ensemble.
         /// </summary>
         public static string Consigne(Tour tour) =>
+            // Un nombre demandé qui REMPLACE celui du tableau (retest d'Adam, #51, 21/11/2026) : la consigne du code dit
+            // elle-même que le tableau montre SA demande (le professeur disait « C'est 35 qui s'affiche maintenant » devant 23).
+            tour.Demande && !tour.Redite && tour.Avant is not null ? "Regarde le tableau : voici le nombre que tu as demandé, lis-le à voix haute."
             // Un nombre demandé (même celui qui est déjà au tableau), hors catalogue, ou après une question : il n'a pas encore
             // essayé de le lire, donc jamais « essaie encore » (contrôle d'Omar, #50/#51).
-            tour.HorsCatalogue is not null || tour.SansEssai || tour.Demande ? "Regarde le tableau : lis ce nombre à voix haute."
+            : tour.HorsCatalogue is not null || tour.SansEssai || tour.Demande ? "Regarde le tableau : lis ce nombre à voix haute."
             : tour.Redite ? "Regarde bien le nombre, et essaie encore de le lire à voix haute."
             : tour.Premier ? "Regarde le tableau : lis ce nombre à voix haute."
             : "Voici un autre nombre : lis-le à voix haute.";
@@ -694,6 +771,36 @@ namespace SchoolWebApp.Api.Services.Voix
             + "qu'il a demandé, pas un autre). Dis-lui en une phrase que c'est parti. Ne dis JAMAIS que tu ne peux pas "
             + "l'afficher, que tu ne choisis pas le nombre ou qu'on continue avec un autre nombre, et ne le prononce pas : "
             + "c'est lui qui le lit.]";
+
+        /// <summary>
+        /// Le fait d'un nombre demandé, selon le tableau d'avant — retest d'Adam (#51, 21/11/2026) : 35 au tableau, « Pourquoi
+        /// pas le 23 ? », le tableau passait à 23 et le professeur disait « C'est 35 qui s'affiche maintenant » ou « On est
+        /// déjà sur le 23 » (il voyait encore 35 dans l'historique). Le fait dit maintenant ce qui a CHANGÉ au tableau.
+        /// </summary>
+        public static string FaitDemandeDe(Tour tour)
+        {
+            if (tour.Redite)
+            {
+                return "[Fait pour ce tour : le nombre qu'il demande est DÉJÀ celui du tableau, en image. Dis-lui en une phrase que "
+                    + "oui, c'est bien celui-là, et ne le prononce pas : c'est lui qui le lit.]";
+            }
+            if (tour.Avant is { } avant)
+            {
+                return $"[Fait pour ce tour : il a demandé le nombre {Affichage(tour.Element.Cible)}. Le tableau montrait jusqu'ici "
+                    + $"{Affichage(avant.Cible)} : ce nombre-là a DISPARU, et le tableau montre MAINTENANT, en image, le nombre qu'il a "
+                    + "demandé. Dis-lui juste en une phrase que tu es d'accord (« D'accord ! », « Bonne idée ! ») : la consigne du "
+                    + "code dit déjà que c'est son nombre. Ne parle plus de l'ancien nombre, ne dis pas qu'on y était déjà ni qu'un "
+                    + "autre nombre s'affiche, ne dis JAMAIS que tu ne peux pas l'afficher, et ne prononce aucun des deux nombres : "
+                    + "c'est lui qui lit.]";
+            }
+            return FaitDemande;
+        }
+
+        // « On est déjà sur le 23 », « il est déjà au tableau », « c'est un autre nombre qui s'affiche » : faux quand le nombre
+        // demandé vient de remplacer celui du tableau (retest d'Adam, #51). « Tu lis déjà très bien ! » reste.
+        [GeneratedRegex(@"[^.!?\n]*(?:(?<!\p{L})d[ée]j[àa](?!\p{L})[^.!?\n]*(?:\bsur\s+(?:le|ce|celui)\b|\btableau\b|\baffich|\b[ée]cran\b|(?<!\p{L})l[àa](?!\p{L})|\bcelui)"
+            + @"|\b(?:un\s+)?autre\s+nombre\b[^.!?\n]*\baffich|\baffich\p{L}*\b[^.!?\n]*\b(?:un\s+)?autre\s+nombre\b)[^.!?\n]*[.!]*", RegexOptions.IgnoreCase)]
+        private static partial Regex ContreditLeTableau();
 
         /// <summary>
         /// Le fait d'un nombre demandé qu'on ne peut pas montrer en image (signalement #51) : le tableau garde le sien, et
