@@ -568,6 +568,14 @@ namespace SchoolWebApp.Api.Services.Voix
             RegexOptions.IgnoreCase)]
         private static partial Regex RegardeEnFin();
 
+        // « Encore un nombre à lire. » (capture t18 du retest d'Adam, #51), « Regarde le tableau, voici un nouveau nombre à
+        // lire. » (bout en bout de cette tâche) : une phrase qui ne fait qu'ANNONCER le nombre suivant double la consigne du
+        // code (« Voici un autre nombre : lis-le à voix haute. »). « Encore un nombre à lire et on fait une pause » reste.
+        [GeneratedRegex(@"(?<=^|[.!?\n])[ \t]*(?:(?:allez|et|maintenant|regarde(?:\s+bien)?\s+le\s+tableau)\s*,?\s*)?(?:voici|voil[àa]|encore|place\s+[àa])\s+"
+            + @"(?:un|le|ton)\s+(?:(?:nouveau|autre|prochain|petit)\s+)?nombre(?:\s+(?:[àa]\s+lire|pour\s+toi|suivant))*[ \t]*(?:[.!:]+|(?=\r?\n|$))",
+            RegexOptions.IgnoreCase)]
+        private static partial Regex AnnonceSeulement();
+
         // « ce nombre », « le nouveau nombre », « cet autre nombre », « l'autre nombre », « un nouveau nombre ».
         private const string CeNombre =
             @"(?:\b(?:ce|cet|le|un)\s+|\bl['’]\s*)(?:(?:nouveau|nouvel|autre|prochain|petit|grand|beau|deuxi[eè]me|second|dernier|m[eê]me)\s+)?nombre\b";
@@ -689,8 +697,8 @@ namespace SchoolWebApp.Api.Services.Voix
             var propre = Etape(texte ?? string.Empty, "tableau", t => Tableau().Replace(t, " "));
             propre = Voix().Replace(propre, "$2");
             propre = Etape(propre, "question", t => Question().Replace(t, string.Empty));
-            propre = Etape(propre, "consigne", t => RegardeEnFin().Replace(
-                RegardeSeulement().Replace(ConsigneDuProfesseur().Replace(t, string.Empty), string.Empty), "."));
+            propre = Etape(propre, "consigne", t => AnnonceSeulement().Replace(RegardeEnFin().Replace(
+                RegardeSeulement().Replace(ConsigneDuProfesseur().Replace(t, string.Empty), string.Empty), "."), string.Empty));
             propre = Etape(propre, "ecoute", t => PhraseDEcoute().Replace(t, string.Empty));
             if (tour.Demande) propre = Etape(propre, "refus", t => RefusDAfficher().Replace(t, string.Empty));
             // « C'est le code qui va choisir un nombre pour toi » (signalement #51) : jamais de fonctionnement interne à l'enfant.
