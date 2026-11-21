@@ -750,6 +750,9 @@ namespace SchoolWebApp.Api.Services.Voix
             if (tour.Redite)
             {
                 propre = Etape(propre, "nombre", t => Phrase().Replace(t, m => CiteLeNombre(m.Value, tour.Element) ? string.Empty : m.Value));
+                // Signalement #52 : un indice FAUX sur les chiffres du nombre (« plus grand que cinq, donc ça commence par
+                // soixante » devant 58) est remplacé par l'indice exact, calculé par le code.
+                propre = Etape(propre, "indice-faux", t => SansIndiceFaux(t, tour.Element));
             }
 
             // LE NOMBRE DEMANDÉ REMPLACE CELUI DU TABLEAU (retest d'Adam, #51, 21/11/2026) : « C'est 35 qui s'affiche
@@ -1007,6 +1010,14 @@ namespace SchoolWebApp.Api.Services.Voix
                 return $"[Fait pour ce tour : il devait lire {cible} et a dit « {v.Dit} »{(lu is null ? string.Empty : $" (soit {lu})")}, pour la "
                     + "troisième fois sans y arriver. Un autre nombre s'affiche à sa place. Dis-lui en une phrase que ce n'est pas grave et qu'on "
                     + "y reviendra. NE DONNE PAS la réponse et ne la prononce pas." + fin;
+            }
+
+            // Signalement #52 : l'indice sur les chiffres est CALCULÉ ici (le professeur inventait « plus grand que cinq » devant 58).
+            if (IndiceExact(v.Montre.Cible, Canonique(v.Dit)) is { } indice)
+            {
+                return $"[Fait pour ce tour : il devait lire {cible} et a dit « {v.Dit} »{(lu is null ? string.Empty : $" (soit {lu})")}. Son écran "
+                    + "affiche « On réessaie ». Encourage-le en une phrase, puis donne l'indice ci-dessous. NE DONNE JAMAIS la réponse et "
+                    + "ne la prononce pas : le même nombre reste au tableau. " + ConsigneDIndice(indice) + fin;
             }
 
             return $"[Fait pour ce tour : il devait lire {cible} et a dit « {v.Dit} »{(lu is null ? string.Empty : $" (soit {lu})")}. Son écran "
