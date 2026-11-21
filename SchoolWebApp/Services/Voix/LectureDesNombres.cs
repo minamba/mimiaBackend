@@ -116,8 +116,8 @@ namespace SchoolWebApp.Api.Services.Voix
         //  1. (tu veux / on / qu'on / envie de / ça te dit de) (re)lire DES / D'AUTRES / QUELQUES / UN NOUVEAU nombre(s) ;
         //     le sujet est collé au verbe, donc « que je (te) relise » (le professeur relit) ne compte pas ;
         //  2. « un nouveau nombre à lire ? », « d'autres nombres à lire ? » ;
-        //  3. (on continue / on repart sur / on reprend / tu veux faire) la lecture des nombres ? (phrasés du modèle vus en
-        //     bout en bout) ;
+        //  3. (on continue / on repart sur / on refait / tu veux faire) la/une lecture de(s) nombre(s) ? (phrasés du modèle vus
+        //     en bout en bout : « On repart sur la lecture des nombres ? », « On refait une lecture de nombre ? ») ;
         // jamais des chiffres « du calcul / de ton calcul / de l'énoncé… » (PasDUnCalcul), et la question doit être dans la
         // MÊME phrase (plus de « … lecture des nombres ! Combien font 5 + 3 ? »).
         private const string PasDUnCalcul = @"(?!\s+(?:du|des|de\s+|d['’]|dans\s+)\s*(?:(?:ton|ta|tes|le|la|les|l['’]|ce|cette|cet|mon|ma|son|sa)\s*)?"
@@ -131,7 +131,7 @@ namespace SchoolWebApp.Api.Services.Voix
             // 2. un nouveau nombre / d'autres nombres + à (re)lire
             + @"|(?<!\p{L})(?:(?:encore\s+)?un\s+(?:autre|nouveau)\s+nombre|d['’]autres\s+(?:nombres|chiffres)|de\s+nouveaux\s+(?:nombres|chiffres)|des\s+nombres|quelques\s+nombres)\s+(?:à|a)\s+(?:re)?lire(?!\p{L})[^.!?\n]*\?"
             // 3. on continue / on repart sur… la lecture des nombres
-            + @"|(?<!\p{L})(?:continue|continuer|reprend|reprendre|repart|repartir|refait|refaire|fait|faire|recommence|recommencer)\s+(?:sur\s+|avec\s+)?(?:la|une|ta)\s+lecture\s+(?:des|de)\s+(?:nombres|chiffres)(?!\p{L})" + PasDUnCalcul + @"[^.!?\n]*\?",
+            + @"|(?<!\p{L})(?:continue|continuer|reprend|reprendre|repart|repartir|refait|refaire|fait|faire|recommence|recommencer)\s+(?:sur\s+|avec\s+)?(?:la|une|ta)\s+lecture\s+(?:des|de)\s+(?:nombres?|chiffres?)(?!\p{L})" + PasDUnCalcul + @"[^.!?\n]*\?",
             RegexOptions.IgnoreCase)]
         private static partial Regex Proposition();
 
