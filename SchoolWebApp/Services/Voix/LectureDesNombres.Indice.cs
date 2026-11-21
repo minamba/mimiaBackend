@@ -50,13 +50,15 @@ namespace SchoolWebApp.Api.Services.Voix
             int d = n / 10, u = n % 10;
 
             // Le début qu'il a lu est le bon (même chiffre des dizaines) : c'est la fin qu'il faut regarder.
+            //
+            // CONTRÔLE D'OMAR (#52) : « le début est bon, le dernier chiffre est un 8 » devant 58, c'est presque lui donner
+            // « cinquante-huit ». On lui fait REGARDER le chiffre, sans le nommer. Sauf 70-79 et 90-99 : là, le chiffre écrit
+            // n'est pas celui qu'on entend (78 = soixante-DIX-HUIT), et c'est justement ce qu'il faut lui expliquer.
             if (lu is >= 10 and <= 99 && lu / 10 == d)
             {
                 if (d is 7 or 9)
                     return $"Le début est bon. Regarde bien le dernier chiffre : c'est un {u}, et après « {MotsDesDizaines[d]} » on compte à partir de dix.";
-                return u == 0
-                    ? "Le début est bon. Regarde bien le dernier chiffre : c'est un 0, il n'y a pas d'unités en plus."
-                    : $"Le début est bon. Regarde bien le dernier chiffre : c'est un {u}.";
+                return "Le début est bon. Regarde bien le dernier chiffre, celui de droite.";
             }
 
             return d switch
@@ -90,6 +92,13 @@ namespace SchoolWebApp.Api.Services.Voix
         [GeneratedRegex(@"\bchiffres?\b(?<avant>[^.!?\n]*?)\b(?<op>plus\s+(?:grands?|gros|petits?)\s+que|sup[ée]rieurs?\s+[àa]|inf[ée]rieurs?\s+[àa])\s+(?:le\s+)?(?<k>\d+|\p{L}+(?:-\p{L}+)*)",
             RegexOptions.IgnoreCase)]
         private static partial Regex ComparaisonDeChiffre();
+
+        // CONTRÔLE D'OMAR (#52) : « Le chiffre 8 est plus grand que 5, bravo. » devant 58 était jugée fausse (on comparait
+        // le PREMIER chiffre, 5). Quand la phrase NOMME le chiffre juste après « chiffre » (« le chiffre 8 est… », « le
+        // chiffre « huit », il est… »), c'est CE chiffre qu'on compare. Appliqué au groupe « avant » de ComparaisonDeChiffre.
+        [GeneratedRegex(@"^\s*[«""“'’]?\s*(?<n>\d|z[ée]ro|un|deux|trois|quatre|cinq|six|sept|huit|neuf)\s*[»""”'’]?\s*,?\s*(?:(?:il|qui)\s+)?(?:est|c['’]\s*est)?(?:\s+(?:bien|beaucoup|vraiment|un\s+peu))?\s*$",
+            RegexOptions.IgnoreCase)]
+        private static partial Regex ChiffreNomme();
 
         // « le premier chiffre est un 6 », « le chiffre des dizaines, c'est le cinq », « le dernier chiffre est 3 ».
         [GeneratedRegex(@"\b(?<pos>premier\s+chiffre|1er\s+chiffre|chiffre\s+de\s+gauche|dernier\s+chiffre|chiffre\s+de\s+droite|deuxi[eè]me\s+chiffre|second\s+chiffre|chiffre\s+des\s+(?:dizaines|unit[ée]s|centaines))\s*,?\s*(?:est|c['’]est)\s+(?:(?:un|une|le)\s+)?(?<k>\d+|\p{L}+)(?![\p{L}\d])",
@@ -136,11 +145,18 @@ namespace SchoolWebApp.Api.Services.Voix
             {
                 // « plus grand que 50 » parle du nombre entier, pas d'un chiffre : on ne juge que les comparaisons à un chiffre.
                 if (Valeur(m.Groups["k"].Value) is not long k || k > 9) continue;
+                var plusGrandQue = !Regex.IsMatch(m.Groups["op"].Value, @"petit|inf", RegexOptions.IgnoreCase);
+                if (ChiffreNomme().Match(m.Groups["avant"].Value) is { Success: true } nomme
+                    && Valeur(nomme.Groups["n"].Value) is long c)
+                {
+                    // « le chiffre 8 est plus grand que 5 » : vrai quel que soit le nombre au tableau.
+                    if (plusGrandQue ? c <= k : c >= k) return true;
+                    continue;
+                }
                 var duBout = Regex.IsMatch(m.Groups["avant"].Value + " " + phrase[..m.Index], @"\b(?:dernier|droite|unit[ée]s?)\b", RegexOptions.IgnoreCase)
                     && !Regex.IsMatch(m.Groups["avant"].Value, @"\b(?:premier|gauche|dizaines?|centaines?)\b", RegexOptions.IgnoreCase);
                 var chiffre = duBout ? Dernier() : Premier();
-                var plusGrand = !Regex.IsMatch(m.Groups["op"].Value, @"petit|inf", RegexOptions.IgnoreCase);
-                if (plusGrand ? chiffre <= k : chiffre >= k) return true;
+                if (plusGrandQue ? chiffre <= k : chiffre >= k) return true;
             }
 
             foreach (Match m in ChiffreAffirme().Matches(phrase))
@@ -206,6 +222,8 @@ namespace SchoolWebApp.Api.Services.Voix
             $"INDICE EXACT, VÉRIFIÉ : « {indice} » Si tu donnes un indice sur les chiffres, donne CELUI-LÀ (avec tes mots si tu veux, "
             + "sans rien changer aux chiffres ni aux mots de nombre). N'invente AUCUNE autre règle sur les chiffres : jamais « plus "
             + "grand que », « plus petit que », « gros chiffre », et ne dis pas par quel mot le nombre commence si ce n'est pas "
-            + "celui de cet indice.";
+            + "celui de cet indice."
+            // Contrôle d'Omar (#52) : quand l'indice fait regarder un chiffre sans le nommer, le professeur ne le nomme pas non plus.
+            + (indice.Any(char.IsDigit) ? string.Empty : " Ne dis pas quel est ce chiffre : c'est à lui de le regarder et de le lire.");
     }
 }
