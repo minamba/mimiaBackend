@@ -120,18 +120,27 @@ namespace SchoolWebApp.Api.Services.Voix
         //     en bout en bout : « On repart sur la lecture des nombres ? », « On refait une lecture de nombre ? ») ;
         // jamais des chiffres « du calcul / de ton calcul / de l'énoncé… » (PasDUnCalcul), et la question doit être dans la
         // MÊME phrase (plus de « … lecture des nombres ! Combien font 5 + 3 ? »).
+        // FORME 3 AU PASSÉ (contrôle d'Omar sur f4f26ab, 21/11/2026) : « On a fait la lecture des nombres tout à l'heure,
+        // tu te souviens ? », « Tu as aimé faire la lecture des nombres ? », « Tu as bien fait la lecture des nombres hier ? »
+        // ouvraient la lecture sur un « oui ». La forme 3 exige maintenant, comme la forme 1, un sujet qui PROPOSE collé au
+        // verbe (on / qu'on / tu veux / ça te dit de / envie de…) : « on a fait », « tu as (bien) fait », « tu as aimé faire »
+        // (auxiliaire a / as / ai / avons / avez entre le sujet et le verbe) ne passent donc plus ; « eu / avais envie de »
+        // (passé) non plus.
+        private const string Sujet = @"(?<!\p{L})(?:tu\s+veux(?:\s+bien)?|veux-tu|tu\s+voudrais|voudrais-tu|qu['’]on|on(?:\s+(?:va|peut|pourrait))?"
+            + @"|(?<!(?<!\p{L})(?:eu|avais|avait|aviez|avions)\s+)(?:tu\s+as\s+|t['’]as\s+)?envie\s+de|(?:ça|ca)\s+te\s+dit\s+de|pr[êe]te?\s+(?:à|a))";
+
         private const string PasDUnCalcul = @"(?!\s+(?:du|des|de\s+|d['’]|dans\s+)\s*(?:(?:ton|ta|tes|le|la|les|l['’]|ce|cette|cet|mon|ma|son|sa)\s*)?"
             + @"(?:calculs?|énoncés?|enonces?|opérations?|operations?|problèmes?|problemes?|consignes?|additions?|soustractions?|multiplications?|divisions?|leçons?|lecons?|textes?|histoires?|exercices?)(?!\p{L}))";
 
         [GeneratedRegex(
             // 1. sujet + (re)lire + des/d'autres… + nombres
-            @"(?<!\p{L})(?:tu\s+veux(?:\s+bien)?|veux-tu|tu\s+voudrais|voudrais-tu|qu['’]on|on(?:\s+(?:va|peut|pourrait))?|(?:tu\s+as\s+|t['’]as\s+)?envie\s+de|(?:ça|ca)\s+te\s+dit\s+de|pr[êe]te?\s+(?:à|a))"
+            Sujet
             + @"\s+(?:(?:continuer|continue|recommencer|recommence)\s+(?:à|a)\s+)?(?:re)?(?:lire|lise|lisions|lit|lis)(?!\p{L})"
             + @"\s+(?:encore\s+)?(?:des|d['’]autres|quelques|de\s+nouveaux|un\s+(?:autre|nouveau))\s+(?:nombres?|chiffres?)(?!\p{L})" + PasDUnCalcul + @"[^.!?\n]*\?"
             // 2. un nouveau nombre / d'autres nombres + à (re)lire
             + @"|(?<!\p{L})(?:(?:encore\s+)?un\s+(?:autre|nouveau)\s+nombre|d['’]autres\s+(?:nombres|chiffres)|de\s+nouveaux\s+(?:nombres|chiffres)|des\s+nombres|quelques\s+nombres)\s+(?:à|a)\s+(?:re)?lire(?!\p{L})[^.!?\n]*\?"
-            // 3. on continue / on repart sur… la lecture des nombres
-            + @"|(?<!\p{L})(?:continue|continuer|reprend|reprendre|repart|repartir|refait|refaire|fait|faire|recommence|recommencer)\s+(?:sur\s+|avec\s+)?(?:la|une|ta)\s+lecture\s+(?:des|de)\s+(?:nombres?|chiffres?)(?!\p{L})" + PasDUnCalcul + @"[^.!?\n]*\?",
+            // 3. sujet qui propose + continue / repart sur / refait… la lecture des nombres (jamais au passé : voir Sujet)
+            + "|" + Sujet + @"\s+(?:continue|continuer|reprend|reprendre|reprenne|repart|repartir|refait|refaire|refasse|fait|faire|fasse|recommence|recommencer)\s+(?:sur\s+|avec\s+)?(?:la|une|ta)\s+lecture\s+(?:des|de)\s+(?:nombres?|chiffres?)(?!\p{L})" + PasDUnCalcul + @"[^.!?\n]*\?",
             RegexOptions.IgnoreCase)]
         private static partial Regex Proposition();
 
