@@ -72,11 +72,15 @@ namespace SchoolWebApp.Api.Services
             "zigzag", "grog", "gag", "gang", "gong", "erg", "iceberg", "joug", "whig", "bug", "tag", "hamburger", "gag",
         };
 
-        /// <summary>Un mot de la même famille où la lettre muette s'entend — seulement ceux dont on est sûr.</summary>
+        /// <summary>
+        /// Un mot de la même famille où la lettre muette S'ENTEND, avec son propre son — seulement ceux dont on est
+        /// sûr. Pas de « loup » → « louve » (on entend un v, pas un p), ni « rang » → « ranger » (un j, pas un g) :
+        /// sans mot sûr, le fait n'en donne pas.
+        /// </summary>
         private static readonly Dictionary<string, string> Famille = new(StringComparer.Ordinal)
         {
             ["chat"] = "chaton", ["rat"] = "raton", ["petit"] = "petite", ["grand"] = "grande", ["gros"] = "grosse",
-            ["lait"] = "laitier", ["dent"] = "dentiste", ["loup"] = "louve", ["bord"] = "border", ["vert"] = "verte",
+            ["lait"] = "laitier", ["dent"] = "dentiste", ["bord"] = "border", ["vert"] = "verte",
             ["gris"] = "grise", ["sport"] = "sportif", ["tard"] = "tarder", ["retard"] = "retarder", ["chaud"] = "chaude",
             ["froid"] = "froide", ["long"] = "longue", ["dos"] = "dossier", ["camp"] = "camper", ["galop"] = "galoper",
             ["bras"] = "brassard", ["gras"] = "grasse", ["bas"] = "basse", ["haut"] = "haute", ["fort"] = "forte",
@@ -87,7 +91,7 @@ namespace SchoolWebApp.Api.Services
             ["tapis"] = "tapisser", ["drap"] = "draper", ["climat"] = "climatiseur", ["lit"] = "literie",
             ["trot"] = "trotter", ["front"] = "frontal", ["goût"] = "goûter", ["regard"] = "regarder", ["port"] = "porter",
             ["accord"] = "accorder", ["marchand"] = "marchande", ["cuit"] = "cuite", ["nuit"] = "nuitée",
-            ["sang"] = "sanguin", ["rang"] = "ranger", ["vent"] = "venteux", ["souris"] = "souriceau",
+            ["sang"] = "sanguin", ["vent"] = "venteux",
             ["gourmand"] = "gourmande", ["mont"] = "montagne", ["muet"] = "muette", ["sot"] = "sotte",
             ["idiot"] = "idiote",
         };
