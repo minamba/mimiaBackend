@@ -313,9 +313,20 @@ namespace SchoolWebApp.Api.Services.Voix
 
                 // LA PREMIÈRE LECTURE PEUT AVOIR INVENTÉ AVANT D'ÊTRE RELUE : dans ce cas, c'est là qu'on coupe.
                 var suiteAvant = DebutDeLaSuite(attendus, entendus.Take(position).ToList());
-                var coupeSecondes = suiteAvant is int rangSuite
+                var coupeVisee = suiteAvant is int rangSuite
                     ? DebutDuSilenceAvant(fin, entendus[rangSuite].Debut)
                     : DebutDuSilenceAvant(fin, OuCouper(entendus[position].Debut, secondesDejaTransmises, retenues));
+
+                // JAMAIS AVANT LA FIN DE LA PREMIÈRE LECTURE — voir CoupeSure (signalement #30 rouvert, 21/11/2026).
+                if (CoupeSure(fin, entendus, suiteAvant ?? position, coupeVisee) is not double coupeSecondes)
+                {
+                    // AUCUN CONTENU DANS LE JOURNAL : des mesures seulement.
+                    _logger.LogWarning(
+                        "Redite Gemini laissee : la coupe tombait avant la fin du texte ({Visee:F1} s visees sur {Total:F1}), aucun silence sur apres.",
+                        coupeVisee, retenues);
+                    return fin;
+                }
+
                 var coupeOctets = (long)(coupeSecondes * OctetsParSeconde) & ~1L;
 
                 _logger.LogWarning(
@@ -560,9 +571,15 @@ namespace SchoolWebApp.Api.Services.Voix
             return entendus.Count(e => attendus.Any(a => Proches(a, e.Mot))) / (double)entendus.Count;
         }
 
-        private static bool Proches(string a, string b)
+        /// <summary>
+        /// Deux mots qui ne diffèrent que d'une lettre : une transcription imparfaite. PAS DEUX NOMBRES — signalement
+        /// #30 rouvert (21/11/2026) : « 73 » et « 74 » passaient pour le même mot, et la fin du texte (« on dit 74 »)
+        /// pouvait se lire sur le « 73 » qui la précède. Un chiffre de plus ou de moins, c'est un autre nombre.
+        /// </summary>
+        internal static bool Proches(string a, string b)
         {
             if (a == b) return true;
+            if (a.Any(char.IsAsciiDigit) || b.Any(char.IsAsciiDigit)) return false;
             if (Math.Abs(a.Length - b.Length) > 1) return false;
             return Distance(a, b) <= 1;
         }
@@ -600,16 +617,154 @@ namespace SchoolWebApp.Api.Services.Voix
         /// silence franc (180 ms) qui suit cette durée — la pause du point d'interrogation. Sans ce silence, null : on ne coupe
         /// pas, et la répétition passe. Une question entendue deux fois vaut mieux qu'une question jamais posée.
         /// </summary>
-        public static double? CoupeDeLaSuite(byte[] fin, IReadOnlyList<MotTranscrit> entendus, int suite)
+        public static double? CoupeDeLaSuite(byte[] fin, IReadOnlyList<MotTranscrit> entendus, int suite) =>
+            CoupeSure(fin, entendus, suite, DebutDuSilenceAvant(fin, entendus[suite].Debut));
+
+        /// <summary>
+        /// UNE COUPE NE TOMBE JAMAIS AVANT LA FIN DU TEXTE, NI DANS UN MOT — signalement #30 rouvert par Adam le
+        /// 21/11/2026 : « Oui, c'est bien 74 ! Après 73, on dit 74. » est arrivé en 3,96 s sans « on dit 74 ». Le son
+        /// finit PILE au début d'un silence, sans le blanc final que la voix laisse toujours : c'est une coupe de la
+        /// garde, au silence de la virgule. Deux faiblesses, communes aux deux coupes (redite et suite inventée) :
+        ///
+        ///   - <see cref="DebutDuSilenceAvant"/> part de l'instant donné par la transcription ; quand celle-ci situe la
+        ///     répétition trop tôt (déjà vu le 11/11), cet instant tombe DANS la fin du texte, et la remontée s'arrête au
+        ///     premier creux venu : la virgule, voire un creux de 20 ms au milieu d'un mot ;
+        ///   - la borne du 11/11 comptait la durée PAR MOT, à parts égales. Un nombre écrit en chiffres est un seul mot
+        ///     transcrit mais se dit long (« 74 », c'est « soixante-quatorze ») : le texte de Nora, plein de nombres,
+        ///     durait bien plus que sa part, et la borne laissait passer la coupe.
+        ///
+        /// LA RÈGLE. La coupe n'est gardée que si elle tombe après <see cref="PlancherDuTexte"/> ET au début d'un vrai
+        /// silence (<see cref="SilenceDeCoupe"/>). Sinon, on la reporte au premier silence franc qui suit le plancher —
+        /// la pause du point final. Sans ce silence : null, on ne coupe pas. Une phrase entendue deux fois vaut mieux
+        /// qu'une phrase jamais finie (Camara, 11/11/2026).
+        /// </summary>
+        /// <param name="rangCoupe">Le rang, dans les mots entendus, du premier mot qu'on retire.</param>
+        /// <param name="coupe">L'instant visé, en secondes dans la retenue.</param>
+        internal static double? CoupeSure(byte[] fin, IReadOnlyList<MotTranscrit> entendus, int rangCoupe, double coupe)
         {
             var secondes = fin.Length / (double)OctetsParSeconde;
-            var coupe = DebutDuSilenceAvant(fin, entendus[suite].Debut);
+            var plancher = PlancherDuTexte(secondes, entendus, rangCoupe);
 
-            var parMot = secondes / Math.Max(1, entendus.Count);
-            var minimum = suite * parMot * 0.8;
-            if (coupe >= minimum) return coupe;
+            if (coupe >= plancher && SuiviDUnSilence(fin, coupe)) return coupe;
 
-            return PremierSilenceApres(fin, minimum) is double apres && apres < secondes - 0.1 ? apres : null;
+            return PremierSilenceApres(fin, Math.Max(coupe, plancher)) is double apres && apres < secondes - 0.1 ? apres : null;
+        }
+
+        /// <summary>
+        /// L'instant, dans la retenue, avant lequel le texte n'a pas pu finir — le plus tardif de trois repères :
+        ///   - le dernier mot du texte entendu a commencé (et dure au moins un dixième de seconde) ;
+        ///   - les mots du texte ont eu leur part de la durée, à parts égales (la borne du 11/11) ;
+        ///   - et leur part À LA LONGUEUR DITE, les nombres comptés en toutes lettres (<see cref="LongueurDite"/>).
+        /// Les deux parts à 80 %, pour la marge : elles supposent un débit égal, et l'invention ou la redite se dit
+        /// parfois plus vite.
+        /// </summary>
+        internal static double PlancherDuTexte(double secondes, IReadOnlyList<MotTranscrit> entendus, int rangCoupe)
+        {
+            if (rangCoupe <= 0 || entendus.Count == 0) return 0;
+            rangCoupe = Math.Min(rangCoupe, entendus.Count);
+
+            var dernierMot = entendus[rangCoupe - 1].Debut + 0.1;
+            var parMot = secondes * rangCoupe / entendus.Count * 0.8;
+
+            double avant = 0, total = 0;
+            for (var i = 0; i < entendus.Count; i++)
+            {
+                var poids = LongueurDite(entendus[i].Mot);
+                total += poids;
+                if (i < rangCoupe) avant += poids;
+            }
+
+            var parLongueur = total > 0 ? secondes * avant / total * 0.8 : 0;
+
+            return Math.Max(dernierMot, Math.Max(parMot, parLongueur));
+        }
+
+        /// <summary>
+        /// Un vrai silence après l'instant : 120 ms au moins. Les creux d'un mot durent 20 à 60 ms (mesurés sur le son
+        /// d'Adam du 21/11/2026) ; la pause d'une virgule ou d'un point, bien plus.
+        /// </summary>
+        private const int SilenceDeCoupe = 6;
+
+        private static bool SuiviDUnSilence(byte[] pcm, double secondes)
+        {
+            const int trame = 24000 / 50; // 20 ms
+            var trames = pcm.Length / 2 / trame;
+            var debut = (int)Math.Round(secondes * 50);
+
+            // La fin du son : rien ne suit, rien ne se perd.
+            if (debut >= trames) return true;
+
+            for (var t = debut; t < Math.Min(trames, debut + SilenceDeCoupe); t++)
+            {
+                if (!TrameSilencieuse(pcm, t)) return false;
+            }
+
+            return true;
+        }
+
+        private static bool TrameSilencieuse(byte[] pcm, int t)
+        {
+            const int trame = 24000 / 50;
+            const double seuil = 300;
+
+            double energie = 0;
+            for (var i = 0; i < trame; i++)
+            {
+                var e = BitConverter.ToInt16(pcm, (t * trame + i) * 2);
+                energie += (double)e * e;
+            }
+
+            return Math.Sqrt(energie / trame) < seuil;
+        }
+
+        /// <summary>
+        /// La longueur d'un mot transcrit TEL QU'IL SE DIT : ses lettres, et pour un nombre en chiffres, les lettres de
+        /// son nom (« 74 » → « soixantequatorze », 16). La transcription écrit les nombres en chiffres.
+        /// </summary>
+        internal static int LongueurDite(string mot)
+        {
+            if (mot.Length > 0 && mot.Length <= 6 && mot.All(char.IsAsciiDigit) && int.TryParse(mot, out var n))
+            {
+                return NomDuNombre(n).Count(char.IsLetter);
+            }
+
+            return Math.Max(1, mot.Length);
+        }
+
+        private static readonly string[] Unites =
+        [
+            "zéro", "un", "deux", "trois", "quatre", "cinq", "six", "sept", "huit", "neuf", "dix",
+            "onze", "douze", "treize", "quatorze", "quinze", "seize", "dix-sept", "dix-huit", "dix-neuf",
+        ];
+
+        private static readonly string[] Dizaines = ["", "", "vingt", "trente", "quarante", "cinquante", "soixante", "soixante", "quatre-vingt", "quatre-vingt"];
+
+        /// <summary>Le nom d'un entier de 0 à 999 999, en français de France (sans les traits d'union du « et »).</summary>
+        internal static string NomDuNombre(int n)
+        {
+            if (n < 20) return Unites[n];
+
+            if (n < 100)
+            {
+                var d = n / 10;
+                var reste = d is 7 or 9 ? n % 10 + 10 : n % 10;
+                if (reste == 0) return d == 8 ? "quatre-vingts" : Dizaines[d];
+                if (reste is 1 or 11 && d < 8) return $"{Dizaines[d]} et {Unites[reste]}";
+                return $"{Dizaines[d]}-{Unites[reste]}";
+            }
+
+            if (n < 1000)
+            {
+                var c = n / 100;
+                var reste = n % 100;
+                var cent = c == 1 ? "cent" : $"{Unites[c]} cent{(reste == 0 ? "s" : "")}";
+                return reste == 0 ? cent : $"{cent} {NomDuNombre(reste)}";
+            }
+
+            var milliers = n / 1000;
+            var fin = n % 1000;
+            var mille = milliers == 1 ? "mille" : $"{NomDuNombre(milliers)} mille";
+            return fin == 0 ? mille : $"{mille} {NomDuNombre(fin)}";
         }
 
         /// <summary>
