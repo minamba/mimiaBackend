@@ -3609,7 +3609,9 @@ namespace SchoolWebApp.Api.Builders.impl
             // Une réponse jugée par le micro n'est jamais une demande. Pas pendant un contrôle noté : on n'y touche pas.
             var changement = controleOuvert || sonJuste is not null || LecteurAuRevoir.DitAuRevoir(contenu)
                 ? ChangementDExercice.Nature.Aucune
-                : ChangementDExercice.Lire(contenu);
+                // L'activité qu'il nomme n'est pas un changement si c'est déjà celle en cours (contrôle d'Omar, #55/#56).
+                : ChangementDExercice.Lire(contenu, historique.TakeLast(ChangementDExercice.MessagesDeLActiviteEnCours)
+                    .Select(m => ((string)m.Role, (string?)m.Contenu, m.SonJuste)).ToList());
             // « Maintenant on fait une addition » pendant la lecture des nombres (signalement #51) : c'est une demande de
             // changement, même sans « autre exercice ». Le professeur reçoit le même fait, et l'ancien exercice est coupé.
             // Même quand sa lecture vient d'être jugée (« vingt-huit, maintenant on fait une addition », au micro ou tapé :
