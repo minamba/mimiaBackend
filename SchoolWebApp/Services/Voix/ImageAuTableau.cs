@@ -110,7 +110,9 @@ namespace SchoolWebApp.Api.Services.Voix
         /// « sine » par la voix ; « il peut pas dire n'importe quoi ». Hors de sa balise de voix (qui joue la prise d'Adrien),
         /// une syllabe isolée se lit au hasard. Une citation courte devant « comme dans » s'en va : « Comme dans singe ! ».
         /// </summary>
-        public static string SansSyllabeCitee(string texte)
+        /// <param name="seulementCommeDans">En anglais (retest KO #57) : seule la citation devant « comme dans » part ; un mot
+        /// français cité ailleurs (« un », la traduction) reste.</param>
+        public static string SansSyllabeCitee(string texte, bool seulementCommeDans = false)
         {
             var sansCommeDans = SyllabeCitee().Replace(texte ?? string.Empty, m =>
             {
@@ -118,6 +120,7 @@ namespace SchoolWebApp.Api.Services.Voix
                 var debutDePhrase = avant.Length == 0 || ".!?…\n:".Contains(avant[^1]);
                 return debutDePhrase ? "Comme dans" : "comme dans";
             });
+            if (seulementCommeDans) return sansCommeDans;
 
             // ET PARTOUT AILLEURS — capture de Camara, le 07/11/2026 : « Pas grave, « can » reviendra une autre fois », lu
             // « cane ». Une syllabe de la méthode citée seule devient « cette syllabe » ; un vrai mot cité reste.

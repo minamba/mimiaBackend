@@ -1219,7 +1219,11 @@ namespace SchoolWebApp.Api.Services.Voix
             var morceaux = new List<string>();
             // « « Sin », comme dans singe ! » : la syllabe seule se lit mal hors de sa balise (voir ImageAuTableau.SansSyllabeCitee).
             // « Comme dans… » : le mot de l'image ou rien, en français (en anglais, « le a de cat » annonce le son).
-            var relu = ImageAuTableau.SansSyllabeCitee(LignesVides().Replace(corps, "\n\n").Trim());
+            // EN ANGLAIS, UN MOT FRANÇAIS CITÉ RESTE (retest KO #57, 21/11/2026) : « Tu m'as dit le mot en français, « un » »
+            // devenait « …en français, cette syllabe » (« un » est une syllabe de la méthode de lecture). Ce masque protège la
+            // voix d'une syllabe isolée du cours de FRANÇAIS ; en anglais, le mot cité est la traduction, il se lit bien (seule
+            // la citation devant « comme dans » part encore).
+            var relu = ImageAuTableau.SansSyllabeCitee(LignesVides().Replace(corps, "\n\n").Trim(), seulementCommeDans: langue != LanguesDesSons.Francais);
             if (langue == LanguesDesSons.Francais) relu = ImageAuTableau.CommeDans(relu, motDeLImage);
             if (relu is { Length: > 0 } reste) morceaux.Add(reste);
             if (annonce is not null) morceaux.Add(annonce);
