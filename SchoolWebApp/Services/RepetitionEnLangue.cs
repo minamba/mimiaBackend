@@ -123,7 +123,9 @@ namespace SchoolWebApp.Api.Services
         /// juge rien.
         /// </summary>
         [GeneratedRegex(
-            @"veut\s+dire\s+quoi|que\s+(?:ça|ca|cela)\s+veut\s+dire|qu['’]est[- ]ce\s+que\s+(?:ça|ca|c['’]est|cela)|c['’]est\s+quoi"
+            // « c'est pile ce que ça veut dire, bravo ! » est une AFFIRMATION, pas une question sur le sens (bout en bout de la
+            // tâche 1600 : le juge se taisait, et l'essai suivant n'était plus compté).
+            @"veut\s+dire\s+quoi|(?<!c['’]est\s+(?:\p{L}+\s+){0,2}ce\s+)que\s+(?:ça|ca|cela)\s+veut\s+dire|qu['’]est[- ]ce\s+que\s+(?:ça|ca|c['’]est|cela)|c['’]est\s+quoi"
             + @"|que\s+signifie|ça\s+signifie\s+quoi|en\s+français\s*\?|traduis|traduire|\bdis[- ]?(?:le|la|moi)?\s+en\s+français|comment\s+(?:on\s+dit|dit[- ]on|tu\s+dis)[^?]*\ben\s+français"
             + @"|quel(?:le)?\s+couleur|quel\s+(?:animal|nombre|chiffre|mot)",
             RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
