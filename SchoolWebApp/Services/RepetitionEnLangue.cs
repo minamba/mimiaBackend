@@ -237,6 +237,45 @@ namespace SchoolWebApp.Api.Services
             return null;
         }
 
+        /// <summary>
+        /// LE MÊME JUGE, POUR LE MICRO — retest KO #57 (Adam, 21/11/2026, 18h20 et 18h21) : « [EN]Blue[/EN]. Qu'as-tu
+        /// entendu ? », il DIT « bleu » : verdict du relais <c>{"texte":"J'ai entendu le mot bleu.","juste":true}</c>, et
+        /// « Bravo Adam, bien entendu « Blue » ! ». Au clavier, « Bleu! » était refusé. La différence : au micro, après
+        /// l'écriture, le relais compare les SONS — et la prononciation ANGLAISE demandée pour « bleu » (lu comme un mot
+        /// anglais) tombe sur celle de « blue ». Toute traduction française qui se lit comme le mot anglais passe ainsi
+        /// (bleu/blue, et les mêmes risques pour zèbre/zebra, tigre/tiger…). Le son ne peut pas trancher : c'est le code qui
+        /// reconnaît la traduction, AVANT le son, avec les mêmes garde-fous que <see cref="Juger"/> : rien si c'est un essai
+        /// dans la langue (le mot, ou une lettre près : « blu »), rien si le mot est le même dans les deux langues
+        /// (« orange », « violet », « rose »), rien si sa réponse contient autre chose que la traduction.
+        ///
+        /// <paramref name="langue"/> : la langue des sons (« en »), ou la balise (« EN »). <paramref name="attendu"/> : le
+        /// mot dit par le professeur. <paramref name="messagesDuProfesseur"/> : ses derniers messages (« ça veut dire un »).
+        /// Rend la traduction française reconnue, ou null.
+        /// </summary>
+        public static string? TraductionDite(string? langue, string? attendu, string? dit, IReadOnlyList<string?> messagesDuProfesseur)
+        {
+            if (string.IsNullOrWhiteSpace(langue) || string.IsNullOrWhiteSpace(attendu) || string.IsNullOrWhiteSpace(dit)) return null;
+            var balise = langue.Trim().ToUpperInvariant();
+            if (balise == "FR" || !Langues.ContainsKey(balise)) return null;
+
+            var motsDits = Mots(dit);
+            if (motsDits.Count is 0 or > MotsMax) return null;
+            var contenuDit = SansRemplissage(motsDits);
+
+            var mot = ConsigneEnTete().Replace(attendu.Trim(), string.Empty).Trim().TrimEnd('!', '.', '?', ',', ';', ':').Trim();
+            if (mot.Length == 0 || EssaiDansLaLangue(motsDits, mot)) return null;
+
+            foreach (var (francais, fiable) in Traductions(balise, mot, mot, messagesDuProfesseur))
+            {
+                if (!fiable && Mots(francais).All(Remplissage)) continue;
+                var contenuFr = SansRemplissage(Mots(francais));
+                if (contenuFr.Count == 0 || contenuFr.SequenceEqual(MotsDeLaCible(mot))) continue; // même mot dans les deux langues
+                if (contenuFr.ToHashSet().SetEquals(contenuDit)) return francais.Trim();
+            }
+
+            return null;
+        }
+
         /// <summary>Le fait donné au professeur à ce tour.</summary>
         public static string Fait(Tour tour) => tour.Nature switch
         {

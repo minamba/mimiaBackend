@@ -1057,12 +1057,24 @@ namespace SchoolWebApp.Api.Services.Voix
             return a.Length > b.Length && a.EndsWith(b, StringComparison.Ordinal) && a[..^b.Length] is "mo" or "mos" or "mot";
         }
 
-        public static string FaitEcoute(VerdictSon verdict, bool syllabe = false)
+        public static string FaitEcoute(VerdictSon verdict, bool syllabe = false, string? francais = null)
         {
             var nom = syllabe ? "cette syllabe" : "ce mot";
             var autre = syllabe ? "une nouvelle syllabe" : "un nouveau mot";
             const string bon = "Bonne écoute";
             const string faux = "Mauvaise écoute";
+
+            // LE MOT FRANÇAIS (retest KO #57, 21/11/2026) : la même consigne qu'au clavier (RepetitionEnLangue.Fait), sans
+            // « Oui » ni « Bravo », et le même mot redit.
+            if (!verdict.Juste && francais is not null)
+            {
+                return $"[Fait pour ce tour, qui l'emporte sur le rappel précédent : tu as dit « {verdict.Attendu} » et il a répondu "
+                    + $"« {verdict.Entendu} » : c'est le mot en FRANÇAIS (« {francais} »), pas le mot qu'il a entendu. Son écran affiche "
+                    + $"« {faux} ». Ce n'est pas la réponse : ne commence ni par « Oui », ni par « Parfait », ni par « Bravo », et ne dis "
+                    + "pas que c'est juste. Sans le gronder, dis-lui que ça, c'est le mot en français — il en a bien compris le sens —, "
+                    + $"puis redis LE MÊME MOT « {verdict.Attendu} » dans ta balise de voix et redemande ce qu'il a entendu. NE PASSE PAS à "
+                    + "un autre mot à ce tour. Ne parle jamais de cet outil à l'élève.]";
+            }
 
             return verdict.Juste
                 ? $"[Fait pour ce tour, qui l'emporte sur le rappel précédent : il a bien entendu « {verdict.Attendu} ». Son écran affiche déjà « {bon} » en vert : valide-le en une phrase et dis {autre} dans ta balise de voix. Ne parle jamais de cet outil à l'élève.]"
@@ -1843,8 +1855,15 @@ namespace SchoolWebApp.Api.Services.Voix
 
             var juste = RegleVerificationSon.MemeMotEntendu(dit, mot);
 
+            // LE MOT FRANÇAIS N'EST PAS LE MOT ENTENDU, MÊME S'IL SE LIT PAREIL — retest KO #57 (Adam, 21/11/2026, 18h20) :
+            // « bleu » dit pour « Blue » était jugé JUSTE au son (la prononciation anglaise de « bleu » est celle de « blue »).
+            // Au clavier, il était refusé. Le même juge que le clavier passe donc AVANT le son : voir RepetitionEnLangue.TraductionDite.
+            var francais = juste || langue == LanguesDesSons.Francais
+                ? null
+                : RepetitionEnLangue.TraductionDite(langue, mot, dit, [paroleDuProfesseur]);
+
             // COMPARÉ AU SON, ENSUITE — la règle de Camara : « riz » écrit « ris » par le micro est une bonne écoute.
-            if (!juste && !string.IsNullOrWhiteSpace(_options.ApiKey))
+            if (!juste && francais is null && !string.IsNullOrWhiteSpace(_options.ApiKey))
             {
                 using var delai = CancellationTokenSource.CreateLinkedTokenSource(ct);
                 delai.CancelAfter(Delai);
@@ -1872,7 +1891,12 @@ namespace SchoolWebApp.Api.Services.Voix
             var verdict = new VerdictSon(mot, dit, juste);
             var syllabe = typeDEcoute == RegleVerificationSon.Syllabe
                 || (typeDEcoute is null && RegleVerificationSon.EstEcouteDeSyllabe(mot, paroleDuProfesseur, texte));
-            _cache.Set(CleFait(conversationId), RegleVerificationSon.FaitEcoute(verdict, syllabe), DureeDuFait);
+            _cache.Set(CleFait(conversationId), RegleVerificationSon.FaitEcoute(verdict, syllabe, francais), DureeDuFait);
+            if (francais is not null)
+            {
+                _logger.LogInformation("Ecoute : mot francais reconnu au micro ({Langue}, attendu « {Attendu} », traduction « {Francais} », conversation {ConversationId}).", langue, mot, francais, conversationId);
+            }
+
             return verdict;
         }
 
