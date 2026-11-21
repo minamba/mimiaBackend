@@ -3476,10 +3476,17 @@ namespace SchoolWebApp.Api.Services.Prompts
         ///
         /// ELLE NE PORTE QUE SUR LA FORME (leçon de <see cref="RegleDesIndices"/> : une règle qui ne dit pas à quoi elle
         /// s'applique s'étend à tout) : elle ne fait poser ni plus ni moins de questions.
+        ///
+        /// MESURÉE AU BOUT EN BOUT (21/11/2026, suite des nombres, CP) : la forme coupée la plus fréquente n'est pas
+        /// « ça vient ? » mais la question SANS VERBE (« Et après 74 ? », « Et le nombre d'après ? »), surtout quand une
+        /// question coupée figure déjà plus haut dans la conversation (le professeur imite ses propres tournures). Avec le
+        /// seul exemple de Min's, 2 questions coupées sur 12 restaient (5 sur 12 sans la règle) : d'où « avec son verbe »,
+        /// le second contre-exemple, et « même si une question plus haut était coupée ».
         /// </summary>
         public const string RegleDesQuestionsCompletes =
-            "[TES QUESTIONS — chaque question que tu poses est une phrase correcte et entière (ex. « Et après 74, "
-            + "qu'est-ce qui vient ? », jamais « Et après 74, ça vient ? »). Ce rappel porte sur la FORME de tes "
+            "[TES QUESTIONS — chaque question que tu poses est une phrase correcte et entière, avec son verbe (ex. "
+            + "« Et après 74, qu'est-ce qui vient ? », jamais « Et après 74, ça vient ? » ni « Et après 74 ? »), même "
+            + "si une question plus haut dans la conversation était coupée. Ce rappel porte sur la FORME de tes "
             + "questions, pas sur leur nombre.]";
 
         public static string MarqueurEvaluationEnCours() =>
