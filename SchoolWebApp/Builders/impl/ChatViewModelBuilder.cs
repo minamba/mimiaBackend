@@ -3175,6 +3175,18 @@ namespace SchoolWebApp.Api.Builders.impl
                 declencheur += EtatDuTableau(historique);
             }
 
+            // LA LECTURE DES NOMBRES NE REPREND PAS, ET LE PROFESSEUR DOIT LE SAVOIR (contrôle d'Omar sur 44fd5c6, tâche
+            // 0140) : une nouvelle séance, ou un retour après « Quitter » / une séance conclue, repart à zéro. Vu au bout en
+            // bout : sans ce fait, le professeur voit le nombre dans son historique et dit « Regarde bien le tableau » ou
+            // « On repart sur le nombre qu'on regardait ? » devant un tableau vide (la balise qu'il recopie est retirée).
+            if (nouvelleArrivee && repriseNombres is null
+                && Services.Voix.LectureDesNombres.Concerne(contexte.Conversation.AgentSlug, contexte.Eleve.NiveauCode)
+                && Services.Voix.LectureDesNombres.DernierMontre(historique.TakeLast(MessagesPourExerciceDeSons)
+                    .Select(m => ((string?)m.Role, (string?)m.Contenu, m.SonJuste)).ToList()) is not null)
+            {
+                declencheur += "\n\n" + Services.Voix.LectureDesNombres.FaitLectureTerminee;
+            }
+
             // AU MOMENT DE CONCLURE, LE CONTRÔLE REVIENT SOUS SES YEUX.
             //
             // Relevé par Camara le 13/09/2026 : l'élève entre par le cours

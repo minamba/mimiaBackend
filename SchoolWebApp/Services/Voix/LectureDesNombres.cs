@@ -840,6 +840,18 @@ namespace SchoolWebApp.Api.Services.Voix
             + JargonTechnique.Regle + "]";
 
         /// <summary>
+        /// Le fait d'une arrivée où la lecture NE reprend PAS alors qu'un nombre était au tableau (nouvelle séance, retour
+        /// après « Quitter » ou une séance conclue : contrôle d'Omar sur 44fd5c6, tâche 0140). Sans lui, le professeur
+        /// disait « Regarde bien le tableau » ou « On repart sur le nombre qu'on regardait ? » devant un tableau vide.
+        /// </summary>
+        public const string FaitLectureTerminee =
+            "[Fait pour ce tour : la lecture des nombres de la dernière fois est TERMINÉE. Aucun nombre n'est affiché au "
+            + "tableau, et l'ancien nombre ne reviendra pas. Ne lui demande pas de regarder ni de lire un nombre au tableau, "
+            + "ne reprends pas cet ancien nombre et ne le réécris pas dans [ARDOISE]. Accueille-le, puis propose-lui une "
+            + "activité ou demande-lui ce qu'il veut faire : s'il veut relire des nombres, un nouveau nombre s'affichera. "
+            + JargonTechnique.Regle + "]";
+
+        /// <summary>
         /// Le fait d'un changement d'exercice alors qu'un nombre était au tableau (défaut e8, bout en bout de la tâche
         /// 2026-11-20-2016) : sa balise de nombre est désormais retirée hors de l'exercice, il doit donc savoir que le tableau
         /// n'en montrera plus, sinon il annonce « lis ce nombre » ou « on y va ! » devant un tableau vide.
