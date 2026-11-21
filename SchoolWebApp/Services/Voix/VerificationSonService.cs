@@ -1285,7 +1285,12 @@ namespace SchoolWebApp.Api.Services.Voix
 
         /// <summary>« À toi de le dire à voix haute ! », « À toi de me dire le mot ! », « À toi de le redire maintenant ! » : la phrase entière.</summary>
         [GeneratedRegex(
-            @"(?<=^|[.!?…\n])[^\S\n]*(?:(?:et\s+)?maintenant,?\s+)?à\s+toi\s+(?:de\s+(?:me\s+)?(?:l[ea]\s+|l['’])(?:re)?(?:dire|répéter|repeter)|de\s+me\s+(?:re)?dire\s+(?:le|ce)\s+mot)\b[^.!?…\n]*[.!?…]*",
+            @"(?<=^|[.!?…\n])[^\S\n]*(?:(?:et|alors|mais),?\s+)?(?:maintenant,?\s+)?(?:"
+            + @"à\s+toi\s+(?:de\s+(?:me\s+)?(?:l[ea]\s+|l['’])(?:re)?(?:dire|répéter|repeter)|de\s+me\s+(?:re)?dire\s+(?:le|ce)\s+mot)\b[^.!?…\n]*[.!?…]*"
+            // « Tu me le redis ? », « Tu peux le répéter comme moi ? », « Répète après moi, comme moi. » (e2e du 22/11/2026).
+            + @"|tu\s+(?:me\s+)?l[ea]\s+(?:re)?dis\b[^.!?…\n]*\?+"
+            + @"|tu\s+peux\s+(?:me\s+)?l[ea]\s+(?:re)?(?:dire|répéter|repeter)\b[^.!?…\n]*[.!?…]+"
+            + @"|répète(?:-l[ea])?\s+(?:après|comme)\s+moi\b[^.!?…\n]*[.!?…]*)",
             RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
         private static partial Regex PhraseADireAvantLeSon();
 
