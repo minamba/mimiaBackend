@@ -52,7 +52,7 @@ namespace SchoolWebApp.Api.Services
             + "finis pas, pas de « une dernière avant », tu ne lui demandes ni pourquoi ni s'il est sûr, aucun reproche. S'il a "
             + "dit ce qu'il veut faire, tu le fais ; sinon tu choisis toi-même un exercice DIFFÉRENT du précédent et tu le "
             + "commences dans ce message. Tu ne reviens pas à l'ancien exercice, ni à la fin de ce message ni aux suivants, "
-            + "sauf s'il le redemande lui-même.]";
+            + "sauf s'il le redemande lui-même." + JamaisPlusTard + "]";
 
         public const string FaitArreter =
             "[Fait pour ce tour, qui l'emporte sur tous les rappels d'exercice : l'élève veut ARRÊTER l'exercice en cours. C'est "
@@ -65,7 +65,66 @@ namespace SchoolWebApp.Api.Services
             "[Rappel : il a demandé il y a peu à changer d'exercice. Tu restes sur ce qu'il fait maintenant. Tu ne reviens pas "
             + "de toi-même à l'exercice d'avant et tu n'insistes jamais pour le reprendre : c'est lui qui décide.]";
 
+        /// <summary>
+        /// CE QU'IL DEMANDE SE FAIT MAINTENANT — signalement #56 (Adam, 21/11/2026) : « On fera du vocabulaire la prochaine
+        /// fois. Pour l'instant, je te propose nos petits jeux de syllabes et de mots. » Pour tous les professeurs.
+        /// </summary>
+        public const string JamaisPlusTard =
+            " Jamais « on fera ça la prochaine fois » ni « pour l'instant, je te propose… » : ce qu'il demande, tu le fais maintenant.";
+
+        /// <summary>
+        /// UNE HISTOIRE ET SES QUESTIONS — signalement #55 (Adam, 21/11/2026) : deux phrases lues, aucune question, puis UNE
+        /// seule question au bout de trois relances, et une réponse hors de l'histoire laissée sans correction. Les mots qui
+        /// chargent les consignes de langue (DetecteurExercicesLangue) sont évités, comme dans les autres faits.
+        /// </summary>
+        public const string FaitHistoire =
+            "[Fait pour ce tour : ce qu'il demande, c'est une HISTOIRE avec des questions. S'il parle de celle que vous venez "
+            + "d'écouter ou de lire, tu poses tes questions sur ELLE, sans en raconter une autre. Sinon tu la commences dans CE "
+            + "message : tu l'annonces en une phrase (« Écoute bien cette petite histoire. »), puis une histoire courte et simple de son âge "
+            + "(3 à 6 phrases au CP), lue dans ta balise de voix comme une écoute, jamais écrite dans ta bulle ni au tableau, puis "
+            + "ta PREMIÈRE question sur ce qui s'y passe (qui, quoi, où, pourquoi). Ensuite tu poses 2 ou 3 questions en tout, UNE "
+            + "à la fois, avant de passer à autre chose." + RegleDesReponsesDHistoire + "]";
+
+        public const string RappelHistoire =
+            "[Rappel : il a demandé une histoire avec des questions. Tant que tu n'as pas posé 2 ou 3 questions sur elle, UNE à la "
+            + "fois, tu restes sur l'histoire : tu ne repars pas de toi-même vers un autre exercice et tu n'annonces pas une "
+            + "question sans la poser." + RegleDesReponsesDHistoire + " S'il demande lui-même autre chose, tu le suis.]";
+
+        private const string RegleDesReponsesDHistoire =
+            " Une réponse juste : tu le félicites et tu poses la question suivante. Une réponse fausse, ou qui raconte autre chose "
+            + "que l'histoire, ne se valide jamais, même gentiment (pas de « quelle belle histoire », pas de « on garde ça pour une "
+            + "prochaine fois ») : tu lui dis simplement que ce n'est pas ce qui se passe dans l'histoire, tu lui relis dans ta "
+            + "balise de voix la seule phrase qui donne la réponse, et tu reposes la même question.";
+
+        /// <summary>
+        /// DU VOCABULAIRE, PAS UN EXERCICE DE SONS — signalement #56 (Adam, 21/11/2026) : après la définition de « potager »,
+        /// « écoute bien ce mot et redis-le-moi », puis « Voici le premier mot. pantalon. Qu'as-tu entendu ? ». Le seul jeu
+        /// qu'il connaissait était celui des sons.
+        /// </summary>
+        public const string FaitVocabulaire =
+            "[Fait pour ce tour : ce qu'il demande, c'est du VOCABULAIRE. Tu commences dans CE message une activité de "
+            + "vocabulaire de sa classe : au CP, les mots d'un thème qu'il connaît (la cuisine, les animaux, l'école), une "
+            + "famille de mots (jardin, jardinier, jardiner), ce que veut dire un mot, puis l'employer dans une phrase à lui. "
+            + "Une question à la fois. Ce n'est PAS un exercice de sons : tu ne lui fais pas répéter un mot que tu prononces, "
+            + "pas de « redis-le-moi », pas de « qu'as-tu entendu », pas de mot seul dans ta balise de voix.]";
+
         public static string Fait(Nature nature) => nature == Nature.Arreter ? FaitArreter : FaitChanger;
+
+        /// <summary>
+        /// Le fait du changement, suivi de celui de l'activité qu'il nomme (une histoire, du vocabulaire) : le professeur
+        /// sait non seulement qu'il change, mais ce qu'il doit faire à la place, et que ça se fait maintenant.
+        /// </summary>
+        public static string Fait(Nature nature, string? messageDeLEleve)
+        {
+            var fait = Fait(nature);
+            var dit = EntreCrochets().Replace(messageDeLEleve ?? string.Empty, " ");
+            var activite = ActiviteNommee().Matches(dit).LastOrDefault();
+            if (activite is null) return fait;
+
+            return Histoire().IsMatch(activite.Value) ? fait + "\n\n" + FaitHistoire
+                : Vocabulaire().IsMatch(activite.Value) ? fait + "\n\n" + FaitVocabulaire
+                : fait;
+        }
 
         // ------------------------------------------------------------------ ce que dit l'enfant
 
@@ -89,6 +148,49 @@ namespace SchoolWebApp.Api.Services
         // « on fait autre chose », « je veux passer à autre chose ». Pas « j'ai entendu autre chose » : il faut le verbe.
         [GeneratedRegex(@"\b(?:fai\w*|pass\w*|veux|voudrais|aimerais|pr[ée]f[èe]re\w*|propose\w*|donne\w*|essa\w*)\b[^.?!\n]{0,25}\bautre\s+chose\b|^\W*autre\s+chose\W*$", RegexOptions.IgnoreCase)]
         private static partial Regex AutreChose();
+
+        // UNE AUTRE ACTIVITÉ, NOMMÉE — signalements #55 et #56 (Adam, 21/11/2026) : « Je voudrais écouter une petite histoire
+        // et répondre à des questions dessus », « je voudrais apprendre des mots nouveaux, du vocabulaire. On peut faire un jeu
+        // de vocabulaire ? ». Ce n'était pas une demande de changement : en pleine lecture en images, le code gardait
+        // l'exercice des syllabes, retirait les questions du professeur (LectureDImage.Reecrire) et ajoutait « Regarde bien la
+        // syllabe en couleur… » à la fin de son histoire ; « des mots » passait même pour le choix de l'écoute des mots.
+        // Un sujet qui demande (je veux / on peut / tu me / raconte-moi / maintenant), un verbe d'activité facultatif
+        // (faire, écouter, lire, apprendre, raconter…), puis l'activité : une histoire ou un conte (UNE / DES : « l'histoire »
+        // est celle qu'on écoute déjà, la réécouter n'est pas changer), du vocabulaire, des mots nouveaux, de la grammaire,
+        // de la conjugaison, de l'orthographe, une poésie, une rédaction, de la compréhension — éventuellement dans « un jeu
+        // de / un exercice de / une activité sur ». Une négation entre le sujet et l'activité (« je veux pas faire de
+        // grammaire ») ne correspond pas : rien n'y est permis entre les deux.
+        private const string SujetQuiDemande =
+            @"(?<!\p{L})(?:(?:je|j['’])\s*(?:veux|voudrais|aimerais|pr[ée]f[èe]re(?:rais)?|peux)(?:\s+bien)?"
+            + @"|(?:on|nous)(?:\s+(?:peut|pourrait|va|veut|pourra))?"
+            + @"|tu\s+(?:(?:peux|veux|pourrais|voudrais)\s+)?(?:me|m['’]|nous)"
+            + @"|peux[- ]tu(?:\s+(?:me|nous)|\s*m['’])?"
+            + @"|(?:raconte|lis|dis|fais|donne|propose|apprends|pose)[- ](?:moi|nous)"
+            + @"|maintenant|passons\s+(?:à|a|au|aux))";
+
+        private const string VerbeDActivite =
+            @"(?:\s*(?:fai(?:re|t|s)|refaire|[ée]cout(?:er|e|es)|entendre|lire|li[st]|apprendre|travailler|jouer(?:\s+(?:à|a|au|aux))?"
+            + @"|racont(?:er|e|es)|d[ée]couvrir|[ée]tudier|r[ée]viser|pass(?:e|er)\s+(?:à|a|au|aux)|commencer|essayer|avoir))?";
+
+        private const string ActiviteDeLangue =
+            @"(?:(?:une?|des|d['’])\s*(?:(?:petite?|autre|nouvelle|nouveau|belle|beau|courte?|vraie?)s?\s+)?(?:histoires?|contes?)"
+            + @"|(?:des\s+|de\s+)?(?:mots\s+nouveaux|nouveaux\s+mots)"
+            + @"|(?:(?:une?|des)\s+(?:petite?s?\s+)?(?:jeux?|exercices?|exos?|activit[ée]s?)\s+(?:de|d['’]|sur)\s*(?:la\s+|le\s+|l['’]\s*|les\s+)?"
+            + @"|du\s+|de\s+la\s+|de\s+l['’]\s*|la\s+|le\s+|l['’]\s*|un\s+peu\s+de\s+|de\s+|d['’]\s*|(?:une?|des)\s+(?:(?:petite?|autre|nouvelle|nouveau|belle|beau)s?\s+)?)?"
+            + @"(?:vocabulaire|grammaire|conjugaison|orthographe|po[ée]sies?|po[èe]mes?|r[ée]dactions?|compr[ée]hension))(?!\p{L})";
+
+        [GeneratedRegex(SujetQuiDemande + VerbeDActivite + @"\s*" + ActiviteDeLangue, RegexOptions.IgnoreCase)]
+        private static partial Regex ActiviteNommee();
+
+        [GeneratedRegex(@"histoires?|contes?|compr[ée]hension", RegexOptions.IgnoreCase)]
+        private static partial Regex Histoire();
+
+        [GeneratedRegex(@"vocabulaire|mots\s+nouveaux|nouveaux\s+mots", RegexOptions.IgnoreCase)]
+        private static partial Regex Vocabulaire();
+
+        /// <summary>Nomme-t-il une autre activité (une histoire, du vocabulaire, de la grammaire…) ? Voir ActiviteNommee.</summary>
+        public static bool NommeUneActivite(string? messageDeLEleve) =>
+            !string.IsNullOrWhiteSpace(messageDeLEleve) && ActiviteNommee().IsMatch(EntreCrochets().Replace(messageDeLEleve, " "));
 
         // « j'en ai marre », « je veux plus faire ça », « j'ai plus envie », « on arrête », « arrête cet exercice ». Jamais
         // « stop » ni « arrête » seuls : ce sont aussi des mots qu'on lui fait lire. Ni « je veux plus d'exercices » :
@@ -121,7 +223,7 @@ namespace SchoolWebApp.Api.Services
             if (ReponseALExercice().IsMatch(dit) || Plainte().IsMatch(dit) || Refus().IsMatch(dit)) return Nature.Aucune;
 
             if (ChangeDe().IsMatch(dit) || ChangeToutCourt().IsMatch(dit) || AutreExercice().IsMatch(dit)
-                || DonneUnExercice().IsMatch(dit) || AutreChose().IsMatch(dit))
+                || DonneUnExercice().IsMatch(dit) || AutreChose().IsMatch(dit) || ActiviteNommee().IsMatch(dit))
             {
                 return Nature.Changer;
             }
@@ -150,7 +252,9 @@ namespace SchoolWebApp.Api.Services
 
             var gardees = Propositions().Split(EntreCrochets().Replace(messageDeLEleve!, " "))
                 .Select(p => p.Trim())
-                .Where(p => p.Length > 0 && !Lassitude().IsMatch(p) && !Rejet().IsMatch(p))
+                // L'activité qu'il nomme (« je voudrais apprendre des mots nouveaux ») n'est pas un exercice de sons : elle
+                // ne choisit rien pour eux (« des mots » y passait pour le choix de l'écoute des mots, signalement #56).
+                .Where(p => p.Length > 0 && !Lassitude().IsMatch(p) && !Rejet().IsMatch(p) && !ActiviteNommee().IsMatch(p))
                 .ToList();
 
             // LE BOUTON DE LA CARTE DIT À VOIX HAUTE (« lire ! ») : l'écran joint la phrase du bouton dans un fait entre
@@ -209,5 +313,23 @@ namespace SchoolWebApp.Api.Services
         /// <summary>A-t-il demandé à changer dans les derniers messages de l'historique (sans celui de ce tour) ?</summary>
         public static bool DemandeRecente(IReadOnlyList<(string Role, string? Contenu, bool? SonJuste)> historique) =>
             DerniereDemande(historique.Skip(Math.Max(0, historique.Count - MessagesDeSuite)).ToList()) >= 0;
+
+        /// <summary>Le rappel de l'histoire suit sa demande pendant ces messages de l'historique (l'histoire et trois questions).</summary>
+        public const int MessagesDHistoire = 8;
+
+        /// <summary>
+        /// L'HISTOIRE QU'IL A DEMANDÉE EST-ELLE EN COURS ? Sa dernière demande, dans les derniers messages de l'historique
+        /// (sans celui de ce tour), nomme une histoire ou de la compréhension — signalement #55 : après UNE question, le
+        /// professeur repartait sur la grammaire. Une demande plus récente (« on change ») l'emporte : on la suit.
+        /// </summary>
+        public static bool HistoireEnCours(IReadOnlyList<(string Role, string? Contenu, bool? SonJuste)> historique)
+        {
+            var derniers = historique.Skip(Math.Max(0, historique.Count - MessagesDHistoire)).ToList();
+            var i = DerniereDemande(derniers);
+            if (i < 0) return false;
+
+            var activite = ActiviteNommee().Matches(EntreCrochets().Replace(derniers[i].Contenu ?? string.Empty, " ")).LastOrDefault();
+            return activite is not null && Histoire().IsMatch(activite.Value);
+        }
     }
 }
