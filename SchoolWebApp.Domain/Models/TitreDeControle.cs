@@ -95,8 +95,13 @@ namespace SchoolWebApp.Domain.Models
             var cleActuel = Cle(actuel);
             if (Cle(propre).StartsWith(cleActuel, StringComparison.Ordinal)) return propre;
 
-            return $"{actuel.TrimEnd(' ', ':', '-', '–', '—', '.')} : {propre}";
+            // ESPACE INSÉCABLE AVANT LES DEUX-POINTS : sur une carte étroite, le
+            // titre se coupait juste avant « : », qui commençait la ligne suivante.
+            return $"{actuel.TrimEnd(' ', ' ', ':', '-', '–', '—', '.')}{Insecable}: {propre}";
         }
+
+        /// <summary>L'espace insécable posée devant les deux-points du titre complété.</summary>
+        public const char Insecable = ' ';
 
         /// <summary>Le texte en minuscules, sans accents ni ponctuation, pour comparer deux titres.</summary>
         private static string Cle(string texte)
