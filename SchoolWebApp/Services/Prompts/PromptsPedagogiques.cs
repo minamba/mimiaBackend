@@ -3444,14 +3444,22 @@ namespace SchoolWebApp.Api.Services.Prompts
         /// REDITE À CHAQUE TOUR, PAS ÉCRITE DANS LE NOYAU, pour la même raison que <see cref="RegleDesTroisEssais"/> : le
         /// Noyau ne se touche pas (Camara, 19/09/2026), et une règle lue une fois tout en haut ne vaut pas un rappel au
         /// tour même. Pas pendant un contrôle noté : il n'y a pas d'indice à donner.
+        ///
+        /// LIMITÉE AUX INDICES (preuve demandée par Omar, 21/11/2026) : au bout en bout, avec la première version, deux
+        /// tirages sur huit à « C'est quoi un verbe ? » (CM1) répondaient « je vais te faire chercher un peu avant de te
+        /// donner une règle toute faite », au lieu de la définition donnée huit fois sur huit sans la règle. « Fais
+        /// observer » ne doit jamais remplacer une LEÇON DEMANDÉE : la règle le dit maintenant en toutes lettres.
         /// </summary>
         public const string RegleDesIndices =
-            "[TES INDICES — pour tous les exercices : n'énonce JAMAIS une règle ou une propriété dont tu n'es pas sûr "
+            "[TES INDICES — après une erreur, ou quand l'élève bloque sur une question que tu lui as posée, dans tous les "
+            + "exercices : n'énonce JAMAIS une règle ou une propriété dont tu n'es pas sûr "
             + "(sur les chiffres, les nombres, les sons, l'orthographe, la grammaire, une figure, un calcul…). Un indice faux "
             + "est pire que pas d'indice : l'enfant retient la règle qu'on lui donne. Fais OBSERVER plutôt qu'affirmer : "
             + "« regarde le premier chiffre », « écoute le début du mot », « suis le bord avec ton doigt », plutôt qu'une règle "
-            + "du genre « c'est plus grand que…, donc… ». Si ce tour te donne un INDICE EXACT, VÉRIFIÉ, c'est celui-là que tu "
-            + "donnes, et les consignes de ce tour passent avant ce rappel.]";
+            + "inventée du genre « c'est plus grand que…, donc… ». Si ce tour te donne un INDICE EXACT, VÉRIFIÉ, c'est celui-là "
+            + "que tu donnes, et les consignes de ce tour passent avant ce rappel. CE RAPPEL NE VAUT QUE POUR LES INDICES : "
+            + "quand l'élève te DEMANDE une leçon ou une explication (« explique-moi… », « c'est quoi… »), tu lui énonces la "
+            + "règle ou la définition du cours, juste et en entier ; faire observer ne remplace jamais une leçon demandée.]";
 
         public static string MarqueurEvaluationEnCours() =>
             "[CONTRÔLE EN COURS — tu n'es pas en train de faire cours.\n"
