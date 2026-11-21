@@ -279,7 +279,7 @@ namespace SchoolWebApp.Api.Services
         /// </summary>
         private static string EnChiffres(string texte)
         {
-            foreach (var lu in NombresEnLettres.Lire(texte).DistinctBy(l => l.Dit.ToLowerInvariant()))
+            foreach (var lu in NombresEnLettres.Lire(VirgulesQuiSeparent(texte)).DistinctBy(l => l.Dit.ToLowerInvariant()))
             {
                 if (lu.Valeur > SuiteMaximum) continue;
                 var motif = @"(?<![\p{L}-])" + Regex.Escape(lu.Dit).Replace(@"\ ", @"\s+") + @"(?![\p{L}-])";
@@ -288,9 +288,22 @@ namespace SchoolWebApp.Api.Services
             return texte;
         }
 
+        /// <summary>
+        /// UNE SUITE EN LETTRES — bout en bout du 21/11 (#53) : la relance de Nora « On recompte ensemble :
+        /// soixante-douze, soixante-treize, soixante-quatorze... et après ? » était lue comme UN seul nombre (219) :
+        /// <see cref="NombresEnLettres"/> ne ferme pas un nombre sur une virgule (comme le front, on n'y touche pas).
+        /// Dans une suite, la virgule sépare toujours deux nombres : pour la lecture seulement, celle qui suit un mot
+        /// devient « ; », qui ferme le nombre. Vaut aussi pour l'élève : « soixante-treize, soixante-quatorze » = 73
+        /// puis 74 (73 est cité par la question, il reste 74), pas 147. « 2,5 » (chiffres) n'est pas touché.
+        /// Même chose pour « soixante-quatorze… » : « … » collé n'est pas une ponctuation pour ce lecteur, et le mot
+        /// n'était pas lu du tout ; on le décolle.
+        /// </summary>
+        private static string VirgulesQuiSeparent(string texte) =>
+            Regex.Replace(Regex.Replace(texte, @"(?<=\p{L}),", ";"), @"(?<=\p{L})(?=…|\.{2,})", " ");
+
         private static Verdict? JugerSuite(SuitePosee s, string reponse)
         {
-            var valeurs = Valeurs(reponse);
+            var valeurs = Valeurs(VirgulesQuiSeparent(reponse));
             if (valeurs is null || valeurs.Count == 0) return null;
 
             // « Après 73, c'est 74 » : le 73 vient de la question ; il reste la réponse.
