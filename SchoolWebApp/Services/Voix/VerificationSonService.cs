@@ -1077,11 +1077,31 @@ namespace SchoolWebApp.Api.Services.Voix
         /// LE MOT À ÉCOUTER NE S'AFFICHE PAS, ET LA CONSIGNE EST DONNÉE. Si la conversation ne l'a jamais portée, le code
         /// la place devant le mot. Les balises placées en pleine phrase laissaient un trou : « tu as bien entendu  ! ».
         /// </summary>
-        public static string EcouteDesMots(string texte, IEnumerable<string> recents, string entier, string langue = LanguesDesSons.Francais, string? niveau = null, string? messageDeLEleve = null, string? motGarde = null, string? abandonne = null, string? motDeLImage = null)
+        public static string EcouteDesMots(string texte, IEnumerable<string> recents, string entier, string langue = LanguesDesSons.Francais, string? niveau = null, string? messageDeLEleve = null, string? motGarde = null, string? abandonne = null, string? motDeLImage = null, RedireLeMot redire = RedireLeMot.Non)
         {
             var propre = DicteeDeMots.MotALaFin(DicteeDeMots.MasquerMotDicte(DicteeDeMots.GarderSeulementLaDerniereVoix(texte, motGarde)));
             var liste = recents as IReadOnlyList<string> ?? recents.ToList();
             var dit = DicteeDeMots.MotDit(propre);
+
+            // APRÈS UN REFUS, LE MÊME MOT — retest KO #57 (Adam, 21/11/2026, 15h05) : « Un! » pour « one » est refusé, puis
+            // « Voici le prochain mot. Dog » : l'enfant ne peut jamais redire le bon mot, et « One! » tapé ensuite tombe sur
+            // « dog ». Même chose après « Orange! » hors sujet. Le fait « redis-le » (FaitEcoute, RepetitionEnLangue.Fait) ne
+            // suffisait pas : c'est le code qui garde le mot. Toujours : le code a lui-même refusé (verdict du micro faux,
+            // mot français reconnu). Si refus : rien n'est jugé, le professeur a refusé dans sa phrase sans rien valider.
+            // Jamais quand le mot est abandonné (trois essais : EssaisRates) — l'appelant ne le demande pas alors.
+            var dernierDicte = DernierMotDicte(liste);
+            if (redire != RedireLeMot.Non && dit is not null && dernierDicte is not null
+                && SansAccents(dit) != SansAccents(dernierDicte)
+                && (abandonne is null || SansAccents(dernierDicte) != SansAccents(abandonne))
+                && (redire == RedireLeMot.Toujours || RefusSansValidation(PassageDeVoix().Replace(propre, " "))))
+            {
+                var nouveau = dit;
+                propre = PassageDeVoix().Replace(propre, m => m.Value.Contains(nouveau, StringComparison.OrdinalIgnoreCase)
+                    ? m.Value.Replace(nouveau, dernierDicte, StringComparison.OrdinalIgnoreCase)
+                    : m.Value);
+                propre = PhraseDePassage().Replace(propre, string.Empty);
+                dit = DicteeDeMots.MotDit(propre);
+            }
 
             // LA DEMANDE DE CE TOUR COMPTE TOUT DE SUITE — Camara, le 05/11/2026 : « je voudrais faire un exercice sur les
             // mots » et Adrien dicte « fa ». L'historique est lu avant d'enregistrer le message de l'enfant : sans lui, le
@@ -1221,6 +1241,57 @@ namespace SchoolWebApp.Api.Services.Voix
         private static partial Regex RediteDeLAnnonce();
 
         public const string QuestionApresLeSon = "Qu'as-tu entendu ?";
+
+        /// <summary>Garder le mot dicté au tour d'avant (retest KO #57) : voir EcouteDesMots.</summary>
+        public enum RedireLeMot
+        {
+            /// <summary>Le professeur dicte ce qu'il veut (réponse juste, abandon, changement d'exercice).</summary>
+            Non,
+
+            /// <summary>Rien n'est jugé : le mot reste seulement si sa phrase refuse sans rien valider.</summary>
+            SiRefus,
+
+            /// <summary>Le code a refusé (verdict faux, mot français reconnu) : le mot reste.</summary>
+            Toujours,
+        }
+
+        /// <summary>Le dernier mot dicté dans une balise de voix, du plus récent au plus ancien ; null s'il n'y en a pas.</summary>
+        public static string? DernierMotDicte(IReadOnlyList<string> recents)
+        {
+            for (var i = recents.Count - 1; i >= 0; i--)
+            {
+                if (recents[i] is not { } r || !PassageDeVoix().IsMatch(r)) continue;
+                if (DicteeDeMots.MotDit(r) is { } mot) return mot;
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Sa phrase refuse (« Pas encore tout à fait », « Presque », « c'est le mot en français », « Non, ») et ne valide
+        /// rien (« Bravo », « Oui », « Bonne écoute », « c'est ça »). Les deux à la fois : on ne tranche pas, le mot est libre.
+        /// </summary>
+        public static bool RefusSansValidation(string? texte) =>
+            !string.IsNullOrWhiteSpace(texte) && PhraseDeRefus().IsMatch(texte) && !PhraseDeValidation().IsMatch(texte);
+
+        [GeneratedRegex(
+            @"(?:^|[.!?…\n]\s*)non\b|\bpas\s+encore\b|\bpresque\b|\bpas\s+tout\s+[àa]\s+fait\b"
+            + @"|\bpas\s+(?:vraiment\s+)?(?:le\s+bon|la\s+bonne|ça|ca|celui-?là|ce\s+mot|le\s+mot)\b|\bessaie\s+encore\b|\br[ée]essa(?:ie|yons)\b|\bmauvaise\s+écoute\b"
+            + @"|\b(?:mot|réponse)\s+(?:en\s+)?français\b|\ben\s+français\b|\bpas\s+(?:tout\s+)?(?:juste|exact|bon)\b",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+        private static partial Regex PhraseDeRefus();
+
+        [GeneratedRegex(
+            @"\bbravo\b|\bbien\s+entendu\b|\bbonne\s+écoute\b|\bparfait\b|\bsuper\b|\bexactement\b|\bc['’]est\s+(?:ça|ca|juste|exact|gagné)\b"
+            + @"|\bgénial\b|\bexcellent\b|\btrès\s+bien\b|\btu\s+as\s+(?:trouvé|raison|réussi)\b|\bbien\s+joué\b|\bwell\s+done\b|\bgreat\b|(?:^|[.!?…\n]\s*)oui\b",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+        private static partial Regex PhraseDeValidation();
+
+        /// <summary>« On continue avec un autre mot. », « On passe au mot suivant. » : la phrase entière, quand le mot reste.</summary>
+        [GeneratedRegex(
+            @"(?<=^|[.!?…\n])[^.!?…\n]*(?:\b(?:un\s+)?(?:autre|nouveau)\s+mot\b|\bmot\s+suivant\b|\bprochain\s+mot\b|\bon\s+(?:continue|passe|change)\b|\bpassons\b)[^.!?…\n]*[.!?…]?",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+        private static partial Regex PhraseDePassage();
 
         /// <summary>« Tu diras : j'ai entendu la syllabe, puis… » : la phrase entière, où qu'elle soit.</summary>
         [GeneratedRegex(@"[^.!?…\n]*\btu\s+(?:diras|dis|vas\s+dire|peux\s+dire|me\s+diras|me\s+dis)\b[^.!?…\n]*\bj.ai\s+entendu\b[^.!?…\n]*[.!?…]?", RegexOptions.IgnoreCase)]
@@ -1548,7 +1619,7 @@ namespace SchoolWebApp.Api.Services.Voix
         Task<bool> DemandeDeSonAsync(string? paroleDuProfesseur, CancellationToken ct, string langue = LanguesDesSons.Francais, bool enExercice = true);
 
         /// <summary>Le filtre d'une réponse dans un exercice de sons : la liste blanche, et la réponse cachée quand l'enfant doit l'écrire.</summary>
-        Task<FiltreMotsVerifies?> FiltrePourAsync(string langue, IReadOnlyList<string> messagesRecents, int graine, CancellationToken ct, bool supportConnu = true, bool photoAttendue = false, EtatDuMot? etat = null, bool retenirTout = false, string? niveau = null, string? messageDeLEleve = null, string? motGarde = null, string? abandonne = null, LectureDImage.Tour? lecture = null, string? poserLeChoix = null, string? motDeLImage = null);
+        Task<FiltreMotsVerifies?> FiltrePourAsync(string langue, IReadOnlyList<string> messagesRecents, int graine, CancellationToken ct, bool supportConnu = true, bool photoAttendue = false, EtatDuMot? etat = null, bool retenirTout = false, string? niveau = null, string? messageDeLEleve = null, string? motGarde = null, string? abandonne = null, LectureDImage.Tour? lecture = null, string? poserLeChoix = null, string? motDeLImage = null, RegleVerificationSon.RedireLeMot redire = RegleVerificationSon.RedireLeMot.Non);
     }
 
     public sealed class VerificationSonService : IVerificationSonService
@@ -1903,12 +1974,12 @@ namespace SchoolWebApp.Api.Services.Voix
             }
         }
 
-        public async Task<FiltreMotsVerifies?> FiltrePourAsync(string langue, IReadOnlyList<string> messagesRecents, int graine, CancellationToken ct, bool supportConnu = true, bool photoAttendue = false, EtatDuMot? etat = null, bool retenirTout = false, string? niveau = null, string? messageDeLEleve = null, string? motGarde = null, string? abandonne = null, LectureDImage.Tour? lecture = null, string? poserLeChoix = null, string? motDeLImage = null)
+        public async Task<FiltreMotsVerifies?> FiltrePourAsync(string langue, IReadOnlyList<string> messagesRecents, int graine, CancellationToken ct, bool supportConnu = true, bool photoAttendue = false, EtatDuMot? etat = null, bool retenirTout = false, string? niveau = null, string? messageDeLEleve = null, string? motGarde = null, string? abandonne = null, LectureDImage.Tour? lecture = null, string? poserLeChoix = null, string? motDeLImage = null, RegleVerificationSon.RedireLeMot redire = RegleVerificationSon.RedireLeMot.Non)
         {
             // INTERRUPTEUR ÉTEINT, LA LISTE NE S'APPLIQUE PAS, MAIS LA RÉPONSE RESTE CACHÉE : le signalement
             // vient de la production, où il l'est. Une liste vide ne remplace aucun mot.
             IReadOnlyList<string> fiables = await _fiabilite.ActifAsync(ct) ? await _fiabilite.ListeAsync(langue, ct) : [];
-            return new FiltreMotsVerifies(langue, fiables, messagesRecents, graine, supportConnu, photoAttendue, etat, retenirTout, niveau, messageDeLEleve, motGarde, abandonne, lecture, poserLeChoix, motDeLImage);
+            return new FiltreMotsVerifies(langue, fiables, messagesRecents, graine, supportConnu, photoAttendue, etat, retenirTout, niveau, messageDeLEleve, motGarde, abandonne, lecture, poserLeChoix, motDeLImage, redire);
         }
 
         public async Task<bool> DemandeDeSonAsync(string? paroleDuProfesseur, CancellationToken ct, string langue = LanguesDesSons.Francais, bool enExercice = true)
