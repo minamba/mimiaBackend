@@ -23,7 +23,11 @@ namespace SchoolWebApp.Api.Services
         public enum Jugement { Juste, Faux, Incomplet, AutreDecomposition }
 
         /// <summary>La question lue, la valeur attendue, ce que l'élève a donné et le verdict.</summary>
-        public sealed record Verdict(string Question, string Attendu, string Donne, Jugement Jugement);
+        public sealed record Verdict(string Question, string Attendu, string Donne, Jugement Jugement)
+        {
+            /// <summary>Un indice calculé à donner sur une réponse fausse (suite des nombres, #53) ; null sinon.</summary>
+            public string? Indice { get; init; }
+        }
 
         // Un nombre : entier ou décimal à virgule (« 2,3 »). Neuf chiffres au plus : pas de débordement.
         private const string NombreMotif = @"\d{1,9}(?:,\d{1,6})?";
@@ -108,6 +112,8 @@ namespace SchoolWebApp.Api.Services
             var question = DerniereQuestion(messagesDuProfesseur);
             if (question is null) return null;
 
+            if (question.Value.Suite is { } suite) return JugerSuite(suite, reponse);
+
             return question.Value.Decomposition is { } decomposition
                 ? JugerDecomposition(decomposition, reponse)
                 : JugerCalcul(question.Value.Expression!, question.Value.Resultat, reponse);
@@ -128,7 +134,8 @@ namespace SchoolWebApp.Api.Services
                 $"[Vérifié par l'application : la question posée était « {v.Question} », et la bonne réponse est "
                 + $"{v.Attendu}, pas {v.Donne}. L'élève a répondu « {v.Donne} » : c'est FAUX. Ne dis surtout pas que "
                 + "c'est juste, ne le félicite pas, et n'écris ni ne dis jamais une égalité fausse. Dis-lui que ce "
-                + "n'est pas encore ça et aide-le à retrouver le résultat sans le lui donner tout de suite (règle des trois essais).]",
+                + "n'est pas encore ça et aide-le à retrouver le résultat sans le lui donner tout de suite (règle des trois essais)."
+                + (v.Indice is null ? "" : " " + v.Indice) + "]",
             Jugement.Incomplet =>
                 $"[Vérifié par l'application : la question posée était « {v.Question} », et la bonne réponse est "
                 + $"{v.Attendu}. L'élève a répondu « {v.Donne} » : ce qu'il a dit est JUSTE, mais il manque une "
@@ -167,7 +174,7 @@ namespace SchoolWebApp.Api.Services
 
         // ───────────── La question ─────────────
 
-        private readonly record struct Question(string? Expression, string Resultat, DecompositionPosee? Decomposition);
+        private readonly record struct Question(string? Expression, string Resultat, DecompositionPosee? Decomposition, SuitePosee? Suite = null);
 
         /// <summary>
         /// Une décomposition à donner : le nombre, la valeur attendue de chaque rang (c, d, u), les rangs qu'on demande
@@ -225,7 +232,24 @@ namespace SchoolWebApp.Api.Services
                 var decompositions = Decompositions(message);
                 if (decompositions is null) return null;
 
-                if (calculs.Count + decompositions.Count > 1) return null;
+                // Signalement #53 : « Après 73, qu'est-ce que tu dis ? », « 71, 72, 73… ? ».
+                var suites = Suites(message);
+                if (suites is null) return null;
+
+                if (calculs.Count + decompositions.Count + suites.Count > 1) return null;
+
+                if (suites.Count == 1)
+                {
+                    // Une relance « combien d'unités ? » ne parle pas d'une suite.
+                    if (rangDeLaRelance != '\0') return null;
+
+                    // Une relance ne cite que les nombres de la suite (« Compte avec moi : 71, 72, 73… »), son pas, 1 ou 10.
+                    var s = suites[0];
+                    var permis = s.Cites.Select(c => (decimal)c).Append(1).Append(10).ToHashSet();
+                    return nombresDesRelances.All(permis.Contains)
+                        ? new Question(null, s.Attendu.ToString(CultureInfo.InvariantCulture), null, s)
+                        : null;
+                }
 
                 if (calculs.Count == 1)
                 {
@@ -563,7 +587,11 @@ namespace SchoolWebApp.Api.Services
         }
 
         /// <summary>La seule valeur que porte la réponse (« 7 », « sept », « c'est 7 je crois »), sinon null.</summary>
-        private static decimal? ValeurUnique(string dit)
+        private static decimal? ValeurUnique(string dit) =>
+            Valeurs(dit) is { Count: 1 } une ? une[0] : null;
+
+        /// <summary>Les valeurs que porte la réponse, sans doublon ; null si elle ne se lit pas comme une réponse.</summary>
+        private static List<decimal>? Valeurs(string dit)
         {
             // Un nombre négatif (« moins 1 ») ne se lit pas encore : pas de verdict.
             if (Regex.IsMatch(dit, @"[-−–]\s*\d|\bmoins\b", RegexOptions.IgnoreCase)) return null;
@@ -574,12 +602,10 @@ namespace SchoolWebApp.Api.Services
                 .ToList();
             if (valeurs.Any(v => v is null)) return null;
 
-            var toutes = valeurs.Select(v => v!.Value)
+            return valeurs.Select(v => v!.Value)
                 .Concat(NombresEnLettres.Lire(dit).Select(l => (decimal)l.Valeur))
                 .Distinct()
                 .ToList();
-
-            return toutes.Count == 1 ? toutes[0] : null;
         }
 
         // ───────────── La décomposition ─────────────

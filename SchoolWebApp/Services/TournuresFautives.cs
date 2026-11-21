@@ -36,9 +36,20 @@ namespace SchoolWebApp.Api.Services
             @"\b(?<je>[Jj]e)\s+(?<a>te|vous)\s+réécoute(?=\s+(?:l['’]|le\s|la\s|les\s|ce\s|cet\s|cette\s|ces\s|ton\s|ta\s|tes\s|un\s|une\s|tout\s|toute\s))")]
         private static partial Regex AvecComplement();
 
+        /// <summary>
+        /// LA QUESTION DE LA SUITE SANS SON SUJET — Minamba, le 21/11/2026, signalement #53 (point mineur d'Adam) :
+        /// « Et après 74, ça vient ? », à l'écrit comme à l'oral, au lieu de « qu'est-ce qui vient ? ». C'est le
+        /// modèle qui l'écrit ainsi (aucun filtre ne retire de mots ici), et il se recopie. Règle étroite : seulement
+        /// juste après « après / avant » + trois mots au plus et une virgule, et seulement devant le « ? ».
+        /// </summary>
+        [GeneratedRegex(@"(?<=(?<!\p{L})(?:[Aa]près|[Aa]vant)(?:\s+[\p{L}\d'’-]+){1,3}\s*,\s*)ça\s+vient(?=\s*\?)")]
+        private static partial Regex CaVient();
+
         public static string Corriger(string? texte)
         {
             if (string.IsNullOrEmpty(texte)) return texte ?? string.Empty;
+
+            if (texte.Contains("ça vient", StringComparison.Ordinal)) texte = CaVient().Replace(texte, "qu'est-ce qui vient");
             if (!texte.Contains("réécoute", StringComparison.Ordinal)) return texte;
 
             var corrige = AvecPronom().Replace(texte, "${je} ${a} ${quoi} fais réécouter");
