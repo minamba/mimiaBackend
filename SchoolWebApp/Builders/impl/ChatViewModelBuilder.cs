@@ -3597,6 +3597,18 @@ namespace SchoolWebApp.Api.Builders.impl
                 declencheur += "\n\n" + PromptsPedagogiques.RegleDesIndices;
             }
 
+            // TOUTE QUESTION EST UNE PHRASE CORRECTE ET ENTIÈRE — Min's, le 21/11/2026, voir
+            // `PromptsPedagogiques.RegleDesQuestionsCompletes`. Commune à TOUS les professeurs, à chaque tour (arrivée,
+            // sons et lecture compris), dans le tour et pas dans le Noyau : le préfixe en cache ne change pas. Pas pendant
+            // un contrôle noté. Le journal (Debug, sans contenu) dit à chaque tour si elle est partie.
+            if (!controleOuvert)
+            {
+                declencheur += "\n\n" + PromptsPedagogiques.RegleDesQuestionsCompletes;
+            }
+            _logger.LogDebug(
+                "Regle des questions completes (conversation {ConversationId}) : {Presente} (controle ouvert : {Controle}, accueil : {Accueil}).",
+                conversationId, !controleOuvert, controleOuvert, typeAccueil);
+
             // LE TON DES TRACES ÉCRITES (13/11/2026) — voir PromptsPedagogiques.TonDesTracesEcrites. Aux tours où une
             // remarque ou un compte rendu s'écrit : pendant un contrôle (la remarque notée), dans une séance qui prépare un
             // contrôle ou une épreuve (le verdict « prêt »), et quand l'élève dit au revoir (le compte rendu).
