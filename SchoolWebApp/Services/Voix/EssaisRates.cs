@@ -94,9 +94,19 @@ namespace SchoolWebApp.Api.Services.Voix
             return son is not null && fois >= limite ? new Abandon(son, fois) : null;
         }
 
-        public static string Fait(Abandon abandon, bool syllabe) =>
+        /// <summary>
+        /// `francais` : son dernier essai était la TRADUCTION française du mot entendu (« deux » pour two, contrôle d'Omar sur le
+        /// #57 v2, 21/11/2026) ; avant de passer, le professeur réexplique ce qui était attendu (règle des trois essais :
+        /// réexplication, puis passage), sans redire le mot abandonné.
+        /// </summary>
+        public static string Fait(Abandon abandon, bool syllabe, string? francais = null) =>
             $"[Fait pour ce tour, qui l'emporte sur tous les faits précédents : c'est son {abandon.Essais}e essai raté sur « {abandon.Son} ». "
-            + "NE LE LUI REDEMANDE PAS. Dis-lui, chaleureusement et en une phrase, que ce n'est pas grave, que vous y reviendrez un peu plus "
+            + "NE LE LUI REDEMANDE PAS. "
+            + (francais is null ? string.Empty
+                : $"Il a répondu « {francais} », le mot en FRANÇAIS : ne dis pas que c'est juste. Sans le gronder, réexplique-lui d'abord en "
+                  + "une phrase que ça, c'est le sens du mot en français, et qu'ici il fallait redire le mot tel qu'il l'a entendu, dans "
+                  + "la langue du cours. ")
+            + "Dis-lui, chaleureusement et en une phrase, que ce n'est pas grave, que vous y reviendrez un peu plus "
             + $"tard, puis passe {(syllabe ? "à la syllabe suivante" : "au mot suivant")}, une autre que « {abandon.Son} ». Ne lui dis pas combien d'essais il a faits, "
             + $"et n'écris pas « {abandon.Son} » dans ta phrase : ta voix le lirait mal.]";
 

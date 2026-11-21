@@ -286,6 +286,42 @@ namespace SchoolWebApp.Api.Builders.impl
             }
         }
 
+        /// <summary>
+        /// L'ÉCOUTE DES MOTS TAPÉE AU CLAVIER, JUGÉE COMME AU MICRO — contrôle d'Omar sur le #57 v2, accord de Min's (21/11/2026) :
+        /// voir RegleVerificationSon.EstUneEcouteTapee. Mêmes conditions et même service que le relais du micro
+        /// (EcouteController.AvecLaVoixAsync) : le dernier message du professeur dicte un mot à écouter, l'exercice de sons est
+        /// en cours, et la réponse est une tentative. Rend le texte gardé (« J'ai entendu le mot two. ») et son verdict, ou null
+        /// — pas une écoute, une demande, une image à lire (c'est la lecture tapée, #49), une panne.
+        /// </summary>
+        private async Task<(bool SonJuste, string Contenu)?> EcouteTapeeAsync(
+            int conversationId, string? langue, IReadOnlyList<string?> messagesDuProfesseur, string? contenu, CancellationToken ct)
+        {
+            if (langue is null || !Services.Voix.RegleVerificationSon.EstUneEcouteTapee(contenu)) return null;
+            if (LecteurEvaluation.EstOuvert(messagesDuProfesseur)) return null;
+
+            try
+            {
+                var parole = await DerniereParoleDuProfesseurAsync(conversationId);
+                if (Services.Voix.LectureDImage.Affiche(parole) is not null) return null;
+                if (!Services.Voix.RegleVerificationSon.EstEcouteDeMot(parole, await EnEcouteDeMotsAsync(conversationId))) return null;
+                if (!await EnExerciceDeSonsAsync(conversationId)) return null;
+
+                var typeDEcoute = await TypeDEcouteAsync(conversationId);
+                var verdict = await _verificationSon.VerifierEcouteAsync(conversationId, parole!, contenu, ct, langue, typeDEcoute);
+                if (verdict is null) return null;
+
+                _logger.LogInformation(
+                    "Ecoute tapee jugee (conversation {ConversationId}) : attendu {Attendu}, ecrit {Ecrit}, juste {Juste}.",
+                    conversationId, verdict.Attendu, verdict.Entendu, verdict.Juste);
+                return (verdict.Juste, Services.Voix.RegleVerificationSon.TexteDEcoute(verdict, typeDEcoute, parole, contenu));
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogWarning(ex, "Ecoute tapee non jugee (conversation {ConversationId}).", conversationId);
+                return null;
+            }
+        }
+
         public async Task<ConversationViewModel?> CreerConversationAsync(CreerConversationRequest model)
         {
             var eleve = await _resolver.ResoudreEleveAsync(model.EleveId);
@@ -2856,6 +2892,8 @@ namespace SchoolWebApp.Api.Builders.impl
             List<(string? Role, string? Contenu, bool? SonJuste)> recentsNombres = [];
             // Il quitte la lecture des nombres pour une autre activité qu'il nomme (« on fait une addition », #51).
             var quitteLectureDeNombres = false;
+            // Sa répétition en langue tapée, jugée avant d'être enregistrée (la traduction au lieu du mot) — voir plus bas.
+            RepetitionEnLangue.Tour? repetitionTapee = null;
 
             // Vrai quand la dictée interrompue n'a encore laissé aucune trace
             // — l'élève a fermé son onglet au lieu de cliquer « Quitter » : le
@@ -3007,6 +3045,50 @@ namespace SchoolWebApp.Api.Builders.impl
                     sonJuste = lectureTapee.SonJuste;
                     contenu = lectureTapee.Contenu;
                     verdictDuTour.Poser(sonJuste, contenu);
+                }
+
+                // L'ÉCOUTE DES MOTS ET LA RÉPÉTITION EN LANGUE, TAPÉES AU CLAVIER — contrôle d'Omar sur le #57 v2, accord de Min's
+                // (21/11/2026, 16 h : « oui faut modifier l'écran pour compter 3 essais au lieu de 5 »). Une traduction tapée
+                // (« Deux! » pour Two, « Bleu! » pour Blue) n'avait aucun verdict : rien à l'écran, aucun essai compté, et le
+                // même mot pouvait revenir cinq fois. Elle est jugée ici, comme la lecture tapée (#49) : le verdict part avant la
+                // réponse, la bulle dit « Mauvaise écoute » ou « On réessaie », et l'essai compte pour la règle des trois essais.
+                // Mêmes conditions que le micro et la lecture tapée : vérification des sons allumée, pas déjà jugé, pas en
+                // lecture des nombres. Portée GÉNÉRIQUE : l'écoute des mots en français et en anglais, et tous les professeurs
+                // de langue pour la répétition (RepetitionEnLangue).
+                if (!enLectureDeNombres && sonJuste is null && verdictDuTour is { Juger: true, Pose: false })
+                {
+                    var langueDesSons = Services.Voix.RegleVerificationSon.LangueDe(contexte.Eleve.NiveauCycle, contexte.Conversation.MatiereCode);
+                    var duProfesseur = historique.Where(m => m.Role == "assistant").Select(m => (string?)m.Contenu).ToList();
+
+                    // L'écoute des mots, en exercice de sons : le même juge que le micro.
+                    if (await EcouteTapeeAsync(conversationId, langueDesSons, duProfesseur, contenu, ct) is { } ecouteDuClavier)
+                    {
+                        sonJuste = ecouteDuClavier.SonJuste;
+                        contenu = ecouteDuClavier.Contenu;
+                        verdictDuTour.Poser(sonJuste, contenu);
+                    }
+
+                    // « Tu répètes ? » hors de l'exercice de sons : seule la TRADUCTION française est reconnue (juge prudent), donc
+                    // seul un verdict FAUX est posé. Le message gardé porte la marque « J'ai répété : » (voir
+                    // RepetitionEnLangue.MarqueDeLaReponse) : sans elle, ce verdict ouvrirait un exercice de sons aux tours suivants.
+                    else if (RepetitionEnLangue.Concerne(contexte.Conversation.AgentSlug)
+                        && !LecteurAuRevoir.DitAuRevoir(contenu)
+                        && ChangementDExercice.Lire(contenu) == ChangementDExercice.Nature.Aucune
+                        && !LecteurEvaluation.EstOuvert(duProfesseur)
+                        && !(langueDesSons is not null && await EnExerciceDeSonsAsync(conversationId))
+                        && RepetitionEnLangue.Juger(
+                            contexte.Conversation.AgentSlug,
+                            duProfesseur.Where(c => !RepetitionEnLangue.EstTechnique(c)).TakeLast(RepetitionEnLangue.MessagesLus).ToList(),
+                            contenu) is { } repetition)
+                    {
+                        repetitionTapee = repetition;
+                        sonJuste = false;
+                        contenu = RepetitionEnLangue.TexteDeLEleve(contenu!);
+                        verdictDuTour.Poser(sonJuste, contenu);
+                        _logger.LogInformation(
+                            "Repetition en langue tapee jugee (conversation {ConversationId}) : attendu « {Attendu} », traduction « {Francais} », juste False.",
+                            conversationId, repetition.Attendu, repetition.Francais);
+                    }
                 }
 
                 var messageEleve = await _conversationService.AddMessageAsync(new DomainMessage
@@ -3783,20 +3865,30 @@ namespace SchoolWebApp.Api.Builders.impl
                 .ToList();
             var ecouteTapee = enExerciceDeSons && sonJuste is null
                 && Services.Voix.RegleVerificationSon.DemandeCeQuIlAEntendu(messagesDuProfPourLaLangue.LastOrDefault() ?? string.Empty);
-            if (!controleOuvert && (!enExerciceDeSons || ecouteTapee) && !change
-                && RepetitionEnLangue.Concerne(contexte.Conversation.AgentSlug))
+            // TAPÉE ET DÉJÀ JUGÉE avant d'être enregistrée (verdict « On réessaie » à l'écran, plus haut) : le même tour, et
+            // l'essai COMPTE — au troisième raté de suite sur le même mot, réexplication puis passage (règle des trois essais,
+            // contrôle d'Omar sur le #57 v2). Sans verdict (vérification des sons éteinte), le fait seul, comme avant.
+            if (repetitionTapee is not null
+                || (!controleOuvert && (!enExerciceDeSons || ecouteTapee) && !change
+                    && RepetitionEnLangue.Concerne(contexte.Conversation.AgentSlug)))
             {
-                var repetition = RepetitionEnLangue.Juger(
+                var repetition = repetitionTapee ?? RepetitionEnLangue.Juger(
                     contexte.Conversation.AgentSlug,
                     messagesDuProfPourLaLangue,
                     contenu);
                 repetitionEnLangue = repetition;
                 if (repetition is not null)
                 {
-                    declencheur += "\n\n" + RepetitionEnLangue.Fait(repetition);
+                    var essais = repetitionTapee is null ? 1 : RepetitionEnLangue.EssaisDeSuite(
+                        contexte.Conversation.AgentSlug,
+                        historique.Select(m => ((string?)m.Role, (string?)m.Contenu, m.SonJuste)).ToList(),
+                        repetition);
+                    declencheur += "\n\n" + (essais >= RepetitionEnLangue.EssaisMax
+                        ? RepetitionEnLangue.FaitDernierEssai(repetition)
+                        : RepetitionEnLangue.Fait(repetition));
                     _logger.LogInformation(
-                        "Repetition en langue : reponse en francais reconnue ({Nature}, {Balise}, attendu « {Attendu} », traduction « {Francais} », conversation {ConversationId}).",
-                        repetition.Nature, repetition.Balise, repetition.Attendu, repetition.Francais, conversationId);
+                        "Repetition en langue : reponse en francais reconnue ({Nature}, {Balise}, attendu « {Attendu} », traduction « {Francais} », essai {Essai}, conversation {ConversationId}).",
+                        repetition.Nature, repetition.Balise, repetition.Attendu, repetition.Francais, essais, conversationId);
                 }
             }
 
@@ -3940,9 +4032,16 @@ namespace SchoolWebApp.Api.Builders.impl
                     {
                         var typeDuTour = Services.Voix.RegleVerificationSon.TypeDEcoute(
                             filSons.Select(m => m.Contenu).Append(contenuPourLesSons));
+                        // Son dernier essai était la traduction française du mot (« J'ai entendu le mot deux. » pour two, au
+                        // micro ou tapé) : réexpliquer avant de passer (contrôle d'Omar sur le #57 v2).
+                        var francaisAbandon = sonJuste == false
+                            ? RepetitionEnLangue.TraductionDite(langueDuSon, abandon.Son,
+                                Services.Voix.RegleVerificationSon.ReponseDEcoute(contenu), messagesDuProfPourLaLangue)
+                            : null;
                         declencheur += "\n\n" + Services.Voix.EssaisRates.Fait(abandon,
                             typeDuTour is Services.Voix.RegleVerificationSon.Syllabe or Services.Voix.LectureDImage.Syllabe
-                            || (typeDuTour is null && Services.Voix.BanqueDeSons.Contient(abandon.Son)));
+                            || (typeDuTour is null && Services.Voix.BanqueDeSons.Contient(abandon.Son)),
+                            francaisAbandon);
                     }
 
                     // LA LECTURE EN IMAGES — Camara, le 07/11/2026 : « l'inverse de l'exercice des syllabes et des mots ».

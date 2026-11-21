@@ -721,7 +721,10 @@ namespace SchoolWebApp.Api.Services.Voix
         public static bool EnExerciceDeSons(IEnumerable<(string? Contenu, bool? SonJuste)> messagesRecents)
         {
             var messages = messagesRecents.ToList();
-            return messages.Any(m => m.SonJuste is not null) || EnExerciceDeSons(messages.Select(m => m.Contenu));
+            // SAUF LA RÉPÉTITION EN LANGUE TAPÉE (21/11/2026, voir RepetitionEnLangue.MarqueDeLaReponse) : son verdict est posé
+            // HORS de tout exercice de sons, il ne doit pas en ouvrir un.
+            return messages.Any(m => m.SonJuste is not null && !RepetitionEnLangue.EstUneReponseJugee(m.Contenu))
+                || EnExerciceDeSons(messages.Select(m => m.Contenu));
         }
 
         /// <summary>
@@ -1079,6 +1082,38 @@ namespace SchoolWebApp.Api.Services.Voix
             return verdict.Juste
                 ? $"[Fait pour ce tour, qui l'emporte sur le rappel précédent : il a bien entendu « {verdict.Attendu} ». Son écran affiche déjà « {bon} » en vert : valide-le en une phrase et dis {autre} dans ta balise de voix. Ne parle jamais de cet outil à l'élève.]"
                 : $"[Fait pour ce tour, qui l'emporte sur le rappel précédent : tu as dit « {verdict.Attendu} » et il dit avoir entendu « {verdict.Entendu} ». Son écran affiche « {faux} ». Encourage-le, n'écris pas {nom}, ne passe pas à autre chose : redis-la dans ta balise de voix et redemande ce qu'il a entendu. Ne parle jamais de cet outil à l'élève.]".Replace("redis-la", syllabe ? "redis-la" : "redis-le");
+        }
+
+        /// <summary>
+        /// Ce qui s'enregistre à la place de sa réponse d'écoute jugée : « J'ai entendu le mot two. » (ou « la syllabe »). Le
+        /// MÊME texte au micro (EcouteController) et au clavier (ChatViewModelBuilder) : c'est ce début que l'écran lit pour
+        /// écrire « Bonne écoute » ou « Mauvaise écoute », et le compte des essais relit le mot dans la balise du professeur.
+        /// </summary>
+        public static string TexteDEcoute(VerdictSon ecoute, string? typeDEcoute, string? parole, string? texte) =>
+            typeDEcoute == Syllabe || (typeDEcoute is null && EstEcouteDeSyllabe(ecoute.Attendu, parole, texte))
+                ? $"J'ai entendu la syllabe {ecoute.Entendu}."
+                : $"J'ai entendu le mot {ecoute.Entendu}.";
+
+        [GeneratedRegex(@"^\s*j\W?\s*ai\s+entendu\s", RegexOptions.IgnoreCase)]
+        private static partial Regex DebutJaiEntendu();
+
+        /// <summary>
+        /// L'ÉCOUTE DES MOTS, TAPÉE AU CLAVIER — contrôle d'Omar sur le #57 v2, accord de Min's (21/11/2026, 16 h : « oui faut
+        /// modifier l'écran pour compter 3 essais au lieu de 5 »). Seul le relais du micro jugeait l'écoute : une réponse tapée
+        /// n'avait ni verdict à l'écran ni essai compté (« Deux! » pour Two, cinq fois de suite, jusqu'au filet des cinq
+        /// dictées). Ce qu'il tape est maintenant jugé au serveur par le même service que le micro (VerifierEcouteAsync).
+        ///
+        /// Est-ce une TENTATIVE à juger ? Oui : un ou deux mots (« Deux! », « two ? »), ou « j'ai entendu le mot … ». Non : une
+        /// demande (« je sais pas », « tu peux répéter ? », « c'est quoi ? », « ok »), un changement d'exercice, un au revoir,
+        /// un message marqué par l'écran (« [EXERCICE CHOISI : …] »), plusieurs lignes. Comme la lecture tapée (#49) : au
+        /// clavier, rien ne déforme, une demande part telle quelle au professeur et ne compte pas.
+        /// </summary>
+        public static bool EstUneEcouteTapee(string? message)
+        {
+            if (string.IsNullOrWhiteSpace(message) || message.Contains('[') || message.Contains('\n')) return false;
+            if (ChangementDExercice.Demande(message) || LectureDImage.ChangeDExercice(message) || LecteurAuRevoir.DitAuRevoir(message)) return false;
+            if (DebutJaiEntendu().IsMatch(message)) return message.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).Length <= 7;
+            return MotsDUneReponseCourte(message) is { } mots && !LectureDImage.EstUneDemande(mots);
         }
 
         /// <summary>La réponse attend que l'enfant dise ce qu'il a entendu, à l'oral, sans écrire.</summary>
