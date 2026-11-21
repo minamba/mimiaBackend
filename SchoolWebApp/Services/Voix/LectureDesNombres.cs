@@ -101,11 +101,15 @@ namespace SchoolWebApp.Api.Services.Voix
         // ------------------------------------------------------------------ entrer, rester, sortir
 
         // « Je veux lire des nombres », « on lit des chiffres », « la lecture des nombres ».
-        [GeneratedRegex(@"\b(?:lire|lis|lisons|lit|lecture)\b[^.?!\n]{0,30}\b(?:nombres?|chiffres?)\b|\b(?:nombres?|chiffres?)\b[^.?!\n]{0,20}\b(?:à|a)\s+lire\b", RegexOptions.IgnoreCase)]
+        // « On RElit des nombres », « je veux RElire des nombres » (retest d'Adam, #51, 21/11/2026) : après « Quitter », le
+        // professeur propose « Tu veux relire des nombres ? » (FaitLectureTerminee) ; « relit » n'était pas reconnu (le \b
+        // devant « lit » ne passe pas après « re »), le code n'ouvrait pas l'exercice et le tableau restait vide.
+        [GeneratedRegex(@"(?<!\p{L})(?:re)?(?:lire|lis|lisons|lisez|lit|lecture)(?!\p{L})[^.?!\n]{0,30}\b(?:nombres?|chiffres?)\b|\b(?:nombres?|chiffres?)\b[^.?!\n]{0,20}\b(?:à|a)\s+(?:re)?lire\b", RegexOptions.IgnoreCase)]
         private static partial Regex DemandeDeLecture();
 
-        // La proposition du professeur : « Tu veux qu'on lise des nombres ? »
-        [GeneratedRegex(@"\b(?:lire|lise|lisions|lecture)\b[^?\n]{0,30}\bnombres?\b[^?\n]*\?", RegexOptions.IgnoreCase)]
+        // La proposition du professeur : « Tu veux qu'on lise des nombres ? », « Tu veux relire des nombres ? », et dans
+        // l'autre sens « On repart avec un nouveau nombre à lire ? » (vu au bout en bout du retest d'Adam, #51).
+        [GeneratedRegex(@"(?<!\p{L})(?:re)?(?:lire|lise|lisions|lecture)(?!\p{L})[^?\n]{0,30}\b(?:nombres?|chiffres?)\b[^?\n]*\?|\b(?:nombres?|chiffres?)\b[^?\n]{0,20}\b(?:à|a)\s+(?:re)?lire\b[^?\n]*\?", RegexOptions.IgnoreCase)]
         private static partial Regex Proposition();
 
         [GeneratedRegex(@"^\s*(?:oui|ouais|ouai|d'accord|dac|ok|okay|vas-y|vas y|allez|go|on y va|carr[ée]ment|volontiers|avec plaisir|je veux bien|bien s[uû]r)\b", RegexOptions.IgnoreCase)]
@@ -501,8 +505,10 @@ namespace SchoolWebApp.Api.Services.Voix
             {
                 // Une question au lieu d'une lecture : il n'a pas essayé, la consigne ne dit pas « essaie encore » (Omar).
                 // Une remarque de méthode sans lecture (« on va comparer avec quarante ») non plus (Omar, v3).
+                // « On relit des nombres » non plus (retest d'Adam, #51, 21/11/2026) : il demande l'exercice, il n'a rien lu.
                 return new Tour(precedent, Redite: true, Premier: false, Abandon: false,
-                    SansEssai: verdict is null && (EstUneQuestion(messageDeLEleve) || FaitUneRemarqueDeMethode(messageDeLEleve)));
+                    SansEssai: verdict is null && (EstUneQuestion(messageDeLEleve) || FaitUneRemarqueDeMethode(messageDeLEleve)
+                        || DemandeDeLecture().IsMatch(messageDeLEleve ?? string.Empty)));
             }
 
             var dejaVus = recents.Select(m => Affiche(m.Contenu)?.Cible).Where(c => c is not null).ToHashSet();
@@ -867,6 +873,22 @@ namespace SchoolWebApp.Api.Services.Voix
             + "ne reprends pas cet ancien nombre et ne le réécris pas dans [ARDOISE]. Accueille-le, puis propose-lui une "
             + "activité ou demande-lui ce qu'il veut faire : s'il veut relire des nombres, un nouveau nombre s'affichera. "
             + JargonTechnique.Regle + "]";
+
+        /// <summary>
+        /// Le fait d'une arrivée sans reprise quand l'historique montre des nombres de la lecture, mais pas dans le dernier
+        /// message du professeur (retest d'Adam, #51, 21/11/2026) : relancé 22 s après « Quitter », le professeur disait « On
+        /// repart sur le 23, tu me le lis ? » devant un tableau vide (23 venait de plus haut dans l'historique). Il ne pousse
+        /// pas à changer d'activité (une autre activité peut être en cours) : il dit seulement l'état réel du tableau.
+        /// </summary>
+        public const string FaitAucunNombreAffiche =
+            "[Fait pour ce tour : aucun nombre de la lecture des nombres n'est affiché au tableau. Ne parle d'aucun nombre "
+            + "comme s'il était affiché, ne lui demande pas de lire un nombre au tableau et ne reprends pas un ancien nombre de "
+            + "l'historique : s'il veut lire des nombres, un nouveau nombre s'affichera. "
+            + JargonTechnique.Regle + "]";
+
+        /// <summary>Un nombre de la lecture apparaît-il dans un message du professeur de cet historique ?</summary>
+        public static bool AMontreDesNombres(IEnumerable<(string? Role, string? Contenu)> historique) =>
+            historique.Any(m => m.Role == "assistant" && ContientUneBalise(m.Contenu));
 
         /// <summary>
         /// Le fait d'un changement d'exercice alors qu'un nombre était au tableau (défaut e8, bout en bout de la tâche

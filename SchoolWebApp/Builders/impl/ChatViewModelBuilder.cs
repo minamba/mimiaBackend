@@ -3188,11 +3188,20 @@ namespace SchoolWebApp.Api.Builders.impl
             // bout : sans ce fait, le professeur voit le nombre dans son historique et dit « Regarde bien le tableau » ou
             // « On repart sur le nombre qu'on regardait ? » devant un tableau vide (la balise qu'il recopie est retirée).
             if (nouvelleArrivee && repriseNombres is null
-                && Services.Voix.LectureDesNombres.Concerne(contexte.Conversation.AgentSlug, contexte.Eleve.NiveauCode)
-                && Services.Voix.LectureDesNombres.DernierMontre(historique.TakeLast(MessagesPourExerciceDeSons)
-                    .Select(m => ((string?)m.Role, (string?)m.Contenu, m.SonJuste)).ToList()) is not null)
+                && Services.Voix.LectureDesNombres.Concerne(contexte.Conversation.AgentSlug, contexte.Eleve.NiveauCode))
             {
-                declencheur += "\n\n" + Services.Voix.LectureDesNombres.FaitLectureTerminee;
+                if (Services.Voix.LectureDesNombres.DernierMontre(historique.TakeLast(MessagesPourExerciceDeSons)
+                    .Select(m => ((string?)m.Role, (string?)m.Contenu, m.SonJuste)).ToList()) is not null)
+                {
+                    declencheur += "\n\n" + Services.Voix.LectureDesNombres.FaitLectureTerminee;
+                }
+                // Des nombres plus haut dans l'historique, mais pas dans son dernier message (retest d'Adam, #51, 21/11/2026 :
+                // « On repart sur le 23, tu me le lis ? » devant un tableau vide, relancé 22 s après « Quitter ») : il doit
+                // savoir qu'aucun n'est affiché.
+                else if (Services.Voix.LectureDesNombres.AMontreDesNombres(historique.Select(m => ((string?)m.Role, (string?)m.Contenu))))
+                {
+                    declencheur += "\n\n" + Services.Voix.LectureDesNombres.FaitAucunNombreAffiche;
+                }
             }
 
             // AU MOMENT DE CONCLURE, LE CONTRÔLE REVIENT SOUS SES YEUX.
