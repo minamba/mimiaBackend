@@ -268,26 +268,26 @@ namespace SchoolWebApp.Api.Services.Voix
                     // PAS DE REDITE, MAIS PEUT-ÊTRE UNE SUITE INVENTÉE : voir DebutDeLaSuite.
                     if (DebutDeLaSuite(attendus, entendus) is int suite)
                     {
-                        // JAMAIS AVANT LA FIN DU TEXTE — voir CoupeDeLaSuite. Sans coupe sûre, la suite reste.
-                        if (CoupeDeLaSuite(fin, entendus, suite) is not double secondesSuite)
+                        // JAMAIS AVANT LA FIN DU TEXTE — voir CoupeDeLaSuite. Sans rien à retirer après la fin estimée
+                        // du texte, la suite reste.
+                        if (CoupeDeLaSuite(fin, entendus, suite) is not Coupe coupeDeSuite)
                         {
-                            _logger.LogInformation(
-                                "Suite inventee par Gemini laissee : la coupe tombait avant la fin du texte ({Mots} mots apres la fin).",
-                                entendus.Count - suite);
+                            _logger.LogWarning(
+                                "Suite inventee par Gemini laissee : la fin estimee du texte touche la fin du son ({Mots} mots apres la fin, {Total:F1} s retenues).",
+                                entendus.Count - suite, fin.Length / (double)OctetsParSeconde);
                             return fin;
                         }
 
-                        var coupeSuite = (long)(secondesSuite * OctetsParSeconde) & ~1L;
+                        var gardeeSuite = Couper(fin, coupeDeSuite);
 
                         // AUCUN CONTENU DANS LE JOURNAL : des mesures seulement.
                         _logger.LogWarning(
                             "Suite inventee par Gemini coupee : {Mots} mots apres la fin du texte, {Retire:F1} s de son retirees sur {Total:F1}.",
                             entendus.Count - suite,
-                            (fin.Length - coupeSuite) / (double)OctetsParSeconde,
+                            (fin.Length - gardeeSuite.Length) / (double)OctetsParSeconde,
                             fin.Length / (double)OctetsParSeconde);
 
-                        CentiemesRetires = (int)((fin.Length - Math.Max(0, coupeSuite)) * 100L / OctetsParSeconde);
-                        return new ReadOnlyMemory<byte>(fin, 0, (int)Math.Max(0, coupeSuite));
+                        return gardeeSuite;
                     }
 
                     // UNE FIN QUI NE RESSEMBLE PAS AU TEXTE — 14/11/2026, « des professeurs parlent anglais » (Yann, en
@@ -318,26 +318,25 @@ namespace SchoolWebApp.Api.Services.Voix
                     : DebutDuSilenceAvant(fin, OuCouper(entendus[position].Debut, secondesDejaTransmises, retenues));
 
                 // JAMAIS AVANT LA FIN DE LA PREMIÈRE LECTURE — voir CoupeSure (signalement #30 rouvert, 21/11/2026).
-                if (CoupeSure(fin, entendus, suiteAvant ?? position, coupeVisee) is not double coupeSecondes)
+                // Null seulement si la fin estimée du texte touche la fin du son : rien à retirer sans risque.
+                if (CoupeSure(fin, entendus, suiteAvant ?? position, coupeVisee) is not Coupe coupeDeRedite)
                 {
-                    // AUCUN CONTENU DANS LE JOURNAL : des mesures seulement.
+                    // AUCUN CONTENU DANS LE JOURNAL : des mesures seulement. Ligne gardée pour compter ces cas (Adam, Omar).
                     _logger.LogWarning(
-                        "Redite Gemini laissee : la coupe tombait avant la fin du texte ({Visee:F1} s visees sur {Total:F1}), aucun silence sur apres.",
+                        "Redite Gemini laissee : la fin estimee du texte touche la fin du son ({Visee:F1} s visees sur {Total:F1}).",
                         coupeVisee, retenues);
                     return fin;
                 }
 
-                var coupeOctets = (long)(coupeSecondes * OctetsParSeconde) & ~1L;
+                var gardee = Couper(fin, coupeDeRedite);
 
                 _logger.LogWarning(
                     "Redite Gemini coupee : le texte ({Attendus} mots) revient entier dans la fin retenue "
                     + "({Entendus} mots) a partir de {Seconde:F1} s ; {Retire:F1} s de son retirees sur {Total:F1}.",
                     attendus.Count, entendus.Count, entendus[position].Debut,
-                    (fin.Length - coupeOctets) / (double)OctetsParSeconde, fin.Length / (double)OctetsParSeconde);
+                    (fin.Length - gardee.Length) / (double)OctetsParSeconde, fin.Length / (double)OctetsParSeconde);
 
-                CentiemesRetires = (int)((fin.Length - Math.Max(0, coupeOctets)) * 100L / OctetsParSeconde);
-
-                return new ReadOnlyMemory<byte>(fin, 0, (int)Math.Max(0, coupeOctets));
+                return gardee;
             }
             catch (OperationCanceledException) when (!ct.IsCancellationRequested)
             {
@@ -614,11 +613,33 @@ namespace SchoolWebApp.Api.Services.Voix
         ///
         /// LA BORNE : ce qu'on garde doit pouvoir contenir les mots du texte qu'on a entendus, à la vitesse de cette
         /// voix (80 % de la durée moyenne d'un mot, pour la marge). Si la coupe tombe avant, on la reporte au premier
-        /// silence franc (180 ms) qui suit cette durée — la pause du point d'interrogation. Sans ce silence, null : on ne coupe
-        /// pas, et la répétition passe. Une question entendue deux fois vaut mieux qu'une question jamais posée.
+        /// silence franc (180 ms) qui suit cette durée — la pause du point d'interrogation. Sans ce silence, on ne coupait
+        /// pas ; depuis le 21/11/2026 (Min's), on coupe après la fin estimée du texte, avec un fondu : voir <see cref="CoupeSure"/>.
         /// </summary>
-        public static double? CoupeDeLaSuite(byte[] fin, IReadOnlyList<MotTranscrit> entendus, int suite) =>
+        internal static Coupe? CoupeDeLaSuite(byte[] fin, IReadOnlyList<MotTranscrit> entendus, int suite) =>
             CoupeSure(fin, entendus, suite, DebutDuSilenceAvant(fin, entendus[suite].Debut));
+
+        /// <summary>
+        /// Applique la coupe : le fondu de sortie si elle tombe hors d'un silence (et la ligne de journal qui permet de
+        /// compter ces coupes), puis la longueur gardée. <paramref name="fin"/> est la copie de la retenue : on peut y écrire.
+        /// </summary>
+        private ReadOnlyMemory<byte> Couper(byte[] fin, Coupe coupe)
+        {
+            var octets = (int)Math.Clamp((long)(coupe.Secondes * OctetsParSeconde) & ~1L, 0, fin.Length);
+
+            if (coupe.Fondu && octets > 0)
+            {
+                FondreLaSortie(fin, octets);
+
+                // AUCUN CONTENU DANS LE JOURNAL : des mesures seulement.
+                _logger.LogWarning(
+                    "Coupe sans silence franc : au point le plus calme apres la fin estimee du texte, a {Coupe:F2} s sur {Total:F1}, fondu de {Fondu} ms.",
+                    coupe.Secondes, fin.Length / (double)OctetsParSeconde, (int)(FonduDeSortie * 1000));
+            }
+
+            CentiemesRetires = (int)((fin.Length - octets) * 100L / OctetsParSeconde);
+            return new ReadOnlyMemory<byte>(fin, 0, octets);
+        }
 
         /// <summary>
         /// UNE COUPE NE TOMBE JAMAIS AVANT LA FIN DU TEXTE, NI DANS UN MOT — signalement #30 rouvert par Adam le
@@ -635,19 +656,117 @@ namespace SchoolWebApp.Api.Services.Voix
         ///
         /// LA RÈGLE. La coupe n'est gardée que si elle tombe après <see cref="PlancherDuTexte"/> ET au début d'un vrai
         /// silence (<see cref="SilenceDeCoupe"/>). Sinon, on la reporte au premier silence franc qui suit le plancher —
-        /// la pause du point final. Sans ce silence : null, on ne coupe pas. Une phrase entendue deux fois vaut mieux
-        /// qu'une phrase jamais finie (Camara, 11/11/2026).
+        /// la pause du point final — s'il arrive avant la fin de la fenêtre qui suit <see cref="FinEstimeeDuTexte"/>.
+        ///
+        /// LE DERNIER RECOURS N'EST PLUS « NE PAS COUPER » — Min's, le 21/11/2026 : « la répétition des phrases c'est
+        /// gênant si ça passe souvent ; si on a mis la coupure c'est pour éviter toutes ces répétitions ». Quand Gemini
+        /// enchaîne la redite (ou la suite) sans silence franc, on coupe APRÈS LA FIN ESTIMÉE DU TEXTE, au point le plus
+        /// calme d'une petite fenêtre, avec un fondu de sortie court (<see cref="FonduDeSortie"/>) pour ne pas entendre de
+        /// clic. La phrase reste entière, la redite part. Null seulement si la fin estimée du texte touche la fin du son :
+        /// il n'y a alors rien à retirer sans risque.
+        ///
+        /// POURQUOI LE SILENCE FRANC EST BORNÉ À LA FENÊTRE : sans borne, quand la redite suit le texte sans pause, le
+        /// premier silence franc trouvé était celui DE LA REDITE (« … 74 ! | Après 73… ») : on en entendait la moitié.
         /// </summary>
         /// <param name="rangCoupe">Le rang, dans les mots entendus, du premier mot qu'on retire.</param>
         /// <param name="coupe">L'instant visé, en secondes dans la retenue.</param>
-        internal static double? CoupeSure(byte[] fin, IReadOnlyList<MotTranscrit> entendus, int rangCoupe, double coupe)
+        internal static Coupe? CoupeSure(byte[] fin, IReadOnlyList<MotTranscrit> entendus, int rangCoupe, double coupe)
         {
             var secondes = fin.Length / (double)OctetsParSeconde;
             var plancher = PlancherDuTexte(secondes, entendus, rangCoupe);
 
-            if (coupe >= plancher && SuiviDUnSilence(fin, coupe)) return coupe;
+            if (coupe >= plancher && SuiviDUnSilence(fin, coupe)) return new Coupe(coupe, false);
 
-            return PremierSilenceApres(fin, Math.Max(coupe, plancher)) is double apres && apres < secondes - 0.1 ? apres : null;
+            var finEstimee = FinEstimeeDuTexte(secondes, entendus, rangCoupe, plancher);
+            var limite = Math.Min(finEstimee + FenetreDeCoupe, secondes - 0.1);
+
+            if (PremierSilenceApres(fin, Math.Max(coupe, plancher)) is double apres && apres <= limite) return new Coupe(apres, false);
+
+            return PointLePlusCalme(fin, finEstimee, limite) is double calme ? new Coupe(calme, true) : null;
+        }
+
+        /// <summary>Une coupe : l'instant (secondes dans la retenue), et s'il faut un fondu (coupe hors d'un silence).</summary>
+        internal readonly record struct Coupe(double Secondes, bool Fondu);
+
+        /// <summary>Ce qu'on ajoute à l'estimation de la fin du texte avant de chercher où couper sans silence.</summary>
+        private const double MargeDeFin = 0.20;
+
+        /// <summary>La fenêtre, après la fin estimée du texte, où l'on cherche le point le plus calme.</summary>
+        private const double FenetreDeCoupe = 0.30;
+
+        /// <summary>Le fondu de sortie d'une coupe hors d'un silence : assez court pour ne rien manger, assez long pour éviter le clic.</summary>
+        internal const double FonduDeSortie = 0.04;
+
+        /// <summary>
+        /// L'instant où le texte est FINI, au plus tard raisonnable — pas une borne basse comme <see cref="PlancherDuTexte"/> :
+        /// le plus tardif du plancher et de la part du son due aux mots du texte À LA LONGUEUR DITE, SANS la marge de 80 %,
+        /// plus <see cref="MargeDeFin"/>. Cette part ne lit que les RANGS des mots, pas leurs horodatages : une
+        /// transcription qui situe tout une seconde trop tôt (cas d'Adam) ne la tire pas en arrière. (Essayé puis retiré :
+        /// « début du dernier mot + sa longueur au débit de la retenue » ; ce débit compte les pauses, l'estimation
+        /// tombait 0,5 s après la fin réelle et laissait entendre le début de la redite.)
+        /// </summary>
+        internal static double FinEstimeeDuTexte(double secondes, IReadOnlyList<MotTranscrit> entendus, int rangCoupe, double plancher)
+        {
+            if (rangCoupe <= 0 || entendus.Count == 0) return plancher;
+            rangCoupe = Math.Min(rangCoupe, entendus.Count);
+
+            double avant = 0, total = 0;
+            for (var i = 0; i < entendus.Count; i++)
+            {
+                var poids = LongueurDite(entendus[i].Mot);
+                total += poids;
+                if (i < rangCoupe) avant += poids;
+            }
+
+            var parLongueur = total > 0 ? secondes * avant / total : 0;
+
+            return Math.Max(plancher, parLongueur) + MargeDeFin;
+        }
+
+        /// <summary>
+        /// La fin de la trame de 20 ms la plus calme entre <paramref name="de"/> et <paramref name="a"/> (la première à
+        /// égalité) ; null si la fenêtre est vide (la fin estimée du texte touche la fin du son).
+        /// </summary>
+        private static double? PointLePlusCalme(byte[] pcm, double de, double a)
+        {
+            const int trame = 24000 / 50; // 20 ms
+            var trames = pcm.Length / 2 / trame;
+            var premiere = (int)Math.Ceiling(de * 50);
+            var derniere = Math.Min(trames - 1, (int)Math.Floor(a * 50) - 1);
+
+            if (premiere > derniere) return null;
+
+            var meilleure = premiere;
+            var plusBasse = double.MaxValue;
+            for (var t = premiere; t <= derniere; t++)
+            {
+                var energie = EnergieDeTrame(pcm, t);
+                if (energie < plusBasse)
+                {
+                    plusBasse = energie;
+                    meilleure = t;
+                }
+            }
+
+            return (meilleure + 1) / 50d;
+        }
+
+        /// <summary>Un fondu linéaire sur les <see cref="FonduDeSortie"/> dernières secondes de <paramref name="longueur"/> octets.</summary>
+        internal static void FondreLaSortie(byte[] pcm, int longueur)
+        {
+            var echantillons = longueur / 2;
+            var fondu = Math.Min(echantillons, (int)(FonduDeSortie * 24000));
+            var depart = echantillons - fondu;
+
+            for (var i = 0; i < fondu; i++)
+            {
+                var gain = (fondu - 1 - i) / (double)fondu;
+                var position = (depart + i) * 2;
+                var e = BitConverter.ToInt16(pcm, position);
+                var fondue = (short)Math.Round(e * gain);
+                pcm[position] = (byte)(fondue & 0xFF);
+                pcm[position + 1] = (byte)((fondue >> 8) & 0xFF);
+            }
         }
 
         /// <summary>
@@ -702,10 +821,12 @@ namespace SchoolWebApp.Api.Services.Voix
             return true;
         }
 
-        private static bool TrameSilencieuse(byte[] pcm, int t)
+        private static bool TrameSilencieuse(byte[] pcm, int t) => EnergieDeTrame(pcm, t) < 300;
+
+        /// <summary>L'énergie (moyenne quadratique) de la trame de 20 ms de rang <paramref name="t"/>.</summary>
+        private static double EnergieDeTrame(byte[] pcm, int t)
         {
             const int trame = 24000 / 50;
-            const double seuil = 300;
 
             double energie = 0;
             for (var i = 0; i < trame; i++)
@@ -714,7 +835,7 @@ namespace SchoolWebApp.Api.Services.Voix
                 energie += (double)e * e;
             }
 
-            return Math.Sqrt(energie / trame) < seuil;
+            return Math.Sqrt(energie / trame);
         }
 
         /// <summary>
