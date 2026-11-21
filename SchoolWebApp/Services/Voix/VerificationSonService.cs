@@ -1352,7 +1352,10 @@ namespace SchoolWebApp.Api.Services.Voix
         /// Une annonce seule dans sa phrase : « Voici la syllabe. », « Voici le prochain mot : », « Je te la redis. », et la forme
         /// courte « Voici la prochaine. » (Camara, capture du 07/11/2026 : elle restait, et l'annonce du code suivait — en double).
         /// </summary>
-        [GeneratedRegex(@"(?<=^|[.!?…\n]\s*)\s*(?:voici\s+(?:la|le)\s+(?:(?:prochaine|première|premiere|nouvelle|prochain|premier|nouveau)(?:\s+(?:syllabe|mot)|(?=\s*(?:[.!:…\n]|$)))|syllabe|mot)|je\s+te\s+l[ae]\s+redis)\s*[.!:…]?", RegexOptions.IgnoreCase)]
+        // « Je te le redis en anglais. » : la phrase avec son complément SANS CONTENU (tâche 1600, 21/11/2026, bout en bout) —
+        // seul « Je te le redis » partait, et il restait « c'est pas grave !en anglais. ». Le code remet sa propre annonce
+        // juste avant le son. Un autre complément (un indice : « …, écoute bien le début ») reste, comme avant.
+        [GeneratedRegex(@"(?<=^|[.!?…\n]\s*)\s*(?:voici\s+(?:la|le)\s+(?:(?:prochaine|première|premiere|nouvelle|prochain|premier|nouveau)(?:\s+(?:syllabe|mot)|(?=\s*(?:[.!:…\n]|$)))|syllabe|mot)|je\s+te\s+l[ae]\s+redis(?:\s*,?\s+(?:en\s+(?:anglais|français|francais|espagnol|allemand|italien)|encore(?:\s+une\s+fois)?|une\s+(?:autre|dernière|derniere|nouvelle)\s+fois|une\s+fois\s+de\s+plus|tout\s+de\s+suite|maintenant|lentement|doucement|bien\s+lentement|pour\s+toi))*)\s*[.!:…]?", RegexOptions.IgnoreCase)]
         private static partial Regex PhraseDAnnonce();
 
         [GeneratedRegex(@"\bvoici\s+la\s+(?:(?:prochaine|première|premiere|nouvelle)\s+)?syllabe\b|\bje\s+te\s+la\s+redis\b", RegexOptions.IgnoreCase)]
