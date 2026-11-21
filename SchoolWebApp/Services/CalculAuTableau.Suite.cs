@@ -46,14 +46,16 @@ namespace SchoolWebApp.Api.Services
         private static string Recompte(IEnumerable<int> nombres) =>
             "« " + string.Join(", ", nombres.Where(x => x >= 0).Select(x => x.ToString(CultureInfo.InvariantCulture))) + "… »";
 
-        private static string Cran(int pas) => Math.Abs(pas) == 1 ? "" : (pas > 0 ? $" (on avance de {pas} en {pas})" : $" (on recule de {-pas} en {-pas})");
+        // Signalement #60 : le cran est dit aussi quand il vaut 1. Sans lui, devant « 71, …, 80 » au tableau, Nora a
+        // inventé « on compte par dizaines maintenant, 70, 80… » (ce qui mène à 90, pas à 81).
+        private static string Cran(int pas) => pas > 0 ? $" (on avance de {pas} en {pas})" : $" (on recule de {-pas} en {-pas})";
 
         /// <summary>Au-delà, ce n'est plus la suite des nombres d'école.</summary>
         private const int SuiteMaximum = 9999;
 
         // « …après 73 », « …avant le nombre 80 », « …suit 73 », « …précède 80 », « …le suivant de 73 ». Le nombre ne
         // doit pas être suivi d'un nom : « après 3 essais », « avant 10 minutes » ne parlent pas de la suite.
-        private const string ApresLeNombre = @"(?!\d|,\d)(?=\s*(?:[,?:;!…]|$)|\s+(?:qu|on|ça|ca|c['’]|il|tu|quel|quoi|vient|viennent|arrive|dis|dit|je|que|dans|si|quand|en|alors)(?!\p{L}))";
+        private const string ApresLeNombre = @"(?!\d|[,.]\d)(?=\s*(?:[,?:;!…]|\.(?!\d)|$)|\s+(?:qu|on|ça|ca|c['’]|il|tu|quel|quoi|vient|viennent|arrive|dis|dit|je|que|dans|si|quand|en|alors)(?!\p{L}))";
 
         [GeneratedRegex(@"(?<!\p{L})(?<sens>après|apres|avant)\s+(?:le\s+(?:nombre\s+)?)?(?<n>\d{1,4})" + ApresLeNombre, RegexOptions.IgnoreCase)]
         private static partial Regex ApresOuAvant();
@@ -68,6 +70,19 @@ namespace SchoolWebApp.Api.Services
         /// <summary>« 71, 72, 73… », « 10, 20, ?, 40 », « 2 ; 4 ; 6 ; ___ ». Trois éléments au moins.</summary>
         [GeneratedRegex(@"(?<![\d,])(?:\d{1,4}|\?|_+|…)(?:\s*[,;]\s*(?:\d{1,4}|\?|_+|…)){2,}(?:\s*…)?(?![\d,])")]
         private static partial Regex SuiteEcrite();
+
+        /// <summary>
+        /// LA QUESTION POSÉE SANS « ? » — signalement #60 (Adam, 21/11) : après « je sais pas », Nora a reposé la
+        /// question en consigne, « Dis-moi le nombre juste après 80. », avec la suite réécrite au tableau. Sans « ? »,
+        /// rien n'était lu, et le « 80 » de l'élève est parti sans verdict (indice inventé « par dizaines »). Une
+        /// consigne qui COMMENCE par un verbe de demande suivi de « le nombre » / « ce qui vient » / « quel nombre »
+        /// est une question ; « Après 73, on dit 74. » reste une phrase qui affirme.
+        /// </summary>
+        [GeneratedRegex(@"^\W*(?:\p{L}+\s*,\s*)?(?:(?:et|alors|maintenant)\s*,?\s+)?(?:dis|donne|écris|ecris|trouve|cherche)(?:-moi|-nous)?\s+(?:le\s+nombre|ce\s+qui\s+vient|quel\s+nombre)(?!\p{L})",
+            RegexOptions.IgnoreCase)]
+        private static partial Regex DemandeALImperatif();
+
+        private static bool EstPosee(string phrase) => phrase.TrimEnd().EndsWith('?') || DemandeALImperatif().IsMatch(phrase);
 
         /// <summary>Les mots qui disent qu'on parle de la suite des nombres.</summary>
         [GeneratedRegex(@"(?<!\p{L})(?:vient|viennent|arrive|arrivent|suit|suivent|suivant|ensuite|après|apres|dis|dit|dire|il\s+y\s+a|quel\s+nombre|qu['’]est-ce\s+qui|manque|continue|précède|precede|précédent|avant)(?!\p{L})",
@@ -105,12 +120,14 @@ namespace SchoolWebApp.Api.Services
             var texte = Regex.Replace(message, @"\[/?[A-Z_]+(?::[^\]]*)?\]", "\n");
             texte = Regex.Replace(texte, @"\.{2,}", "…");
             texte = EnChiffres(texte);
+            // « 2.5 » : virgule décimale, pour que le « . » ne coupe pas la phrase (#60 : une consigne finit par « . »).
+            texte = Regex.Replace(texte, @"(?<=\d)\.(?=\d)", ",");
 
             var trouvees = new List<SuitePosee>();
 
             // Les phrases : un « ? », un « ! », un « . » ou une fin de ligne les termine ; « … » non.
             var phrases = Regex.Matches(texte, @"[^.!?\n]*[.!?\n]?").Select(m => m.Value).Where(p => p.Trim().Length > 0).ToList();
-            var questionDeSuite = phrases.Any(p => p.TrimEnd().EndsWith('?') && MotDeSuite().IsMatch(p) && !PasUneSuite().IsMatch(p));
+            var questionDeSuite = phrases.Any(p => EstPosee(p) && MotDeSuite().IsMatch(p) && !PasUneSuite().IsMatch(p));
 
             // Le pas que le message annonce en mots ; 0 s'il n'en annonce pas, null s'il est illisible.
             int? pasAnnonce = 0;
@@ -162,7 +179,7 @@ namespace SchoolWebApp.Api.Services
             // 2. « après 73 », « avant 80 », « suit 73 », « entre 72 et 74 », dans une question.
             foreach (var phrase in phrases)
             {
-                if (!phrase.TrimEnd().EndsWith('?') || PasUneSuite().IsMatch(phrase)) continue;
+                if (!EstPosee(phrase) || PasUneSuite().IsMatch(phrase)) continue;
 
                 var aRebours = Rebours().IsMatch(texte);
                 foreach (var m in ApresOuAvant().Matches(phrase).Concat(SuitOuPrecede().Matches(phrase)))
@@ -333,6 +350,31 @@ namespace SchoolWebApp.Api.Services
             return (int)donne == s.Attendu
                 ? new Verdict(s.Enonce, attendu, Ecrire(donne), Jugement.Juste)
                 : new Verdict(s.Enonce, attendu, Ecrire(donne), Jugement.Faux) { Indice = s.Indice };
+        }
+
+        /// <summary>« je (ne) sais pas », « j'en sais rien », « je trouve pas », « aide-moi »…</summary>
+        [GeneratedRegex(@"(?<!\p{L})(?:(?:je\s+(?:ne\s+)?|j['’]\s*)?sais\s+pas|chais\s+pas|j['’]en\s+sais\s+rien|je\s+(?:ne\s+)?trouve\s+pas|aucune\s+id[ée]e|je\s+(?:ne\s+)?comprends?\s+pas|aide[-\s]moi|je\s+(?:ne\s+)?m['’]en\s+souviens\s+(?:pas|plus))(?!\p{L})",
+            RegexOptions.IgnoreCase)]
+        private static partial Regex NeSaitPas();
+
+        /// <summary>
+        /// « JE SAIS PAS » PENDANT UNE SUITE — signalement #60 (Adam, 21/11, « après 80 ») : sans nombre dans la réponse,
+        /// aucun verdict, donc aucun indice calculé, et Nora a inventé « ça avance d'une dizaine de plus » devant
+        /// « 71, …, 80 » au tableau. Quand la question ouverte est une question de SUITE et que l'élève dit qu'il ne
+        /// sait pas (sans nombre : un nombre est une réponse, elle passe par le juge), on donne au professeur le même
+        /// indice calculé que pour une réponse fausse — sans verdict : ce n'est pas un essai raté. Null sinon (calcul,
+        /// décomposition, aucune question : rien ne change).
+        /// </summary>
+        public static string? FaitSansReponse(IEnumerable<string?> messagesDuProfesseur, string? messageDeLEleve)
+        {
+            if (string.IsNullOrWhiteSpace(messageDeLEleve) || messageDeLEleve.Length > 80) return null;
+            if (!NeSaitPas().IsMatch(messageDeLEleve)) return null;
+            if (Regex.IsMatch(EnChiffres(VirgulesQuiSeparent(messageDeLEleve)), @"\d")) return null;
+            if (DerniereQuestion(messagesDuProfesseur) is not { Suite: { } s }) return null;
+
+            return $"[Vérifié par l'application : la question posée était « {s.Enonce} », et la bonne réponse est "
+                + $"{s.Attendu.ToString(CultureInfo.InvariantCulture)}. L'élève dit qu'il ne sait pas : ce n'est pas une réponse "
+                + "fausse et ça ne compte pas comme un essai. Ne lui donne pas la réponse. " + s.Indice + "]";
         }
 
         /// <summary>
