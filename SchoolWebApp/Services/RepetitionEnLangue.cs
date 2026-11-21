@@ -356,17 +356,18 @@ namespace SchoolWebApp.Api.Services
             Demande.Traduire =>
                 $"[Fait pour ce tour, qui l'emporte sur tous les faits précédents : vérifié par l'application, il a encore répondu "
                 + $"« {tour.Dit} », le mot FRANÇAIS, à la place du mot en {tour.Langue}, et c'était son dernier essai sur ce mot. Ce n'est "
-                + "pas la réponse : ne commence ni par « Oui », ni par « Parfait », ni par « Bravo ». NE LUI REDEMANDE PAS ce mot. Sans le "
-                + $"gronder, réexplique-lui en une phrase que « {tour.Attendu} » est le mot français et que tu attendais le mot en "
-                + $"{tour.Langue} ; puis dis-lui que ce n'est pas grave, que vous y reviendrez un peu plus tard, et passe à la suite "
+                + "pas la réponse : ne commence ni par « Oui », ni par « Parfait », ni par « Bravo ». NE LUI REDEMANDE PAS ce mot. Ta PREMIÈRE "
+                + $"phrase le lui réexplique, sans le gronder, par exemple : « {Majuscule(tour.Attendu)}, c'est le mot en français ; je "
+                + $"t'avais demandé de le dire en {tour.Langue}. » Ensuite seulement, dis-lui que ce n'est pas grave, que vous y reviendrez "
+                + "un peu plus tard, et passe à la suite "
                 + "avec un autre mot. Ne lui dis pas combien d'essais il a faits.]",
             _ =>
                 $"[Fait pour ce tour, qui l'emporte sur tous les faits précédents : vérifié par l'application, il a encore répondu "
                 + $"« {tour.Dit} », le mot en FRANÇAIS (« {tour.Francais} »), à la place de [{tour.Balise}]{tour.Attendu}[/{tour.Balise}], "
                 + "et c'était son dernier essai sur ce mot. Ce n'est pas la répétition demandée : ne commence ni par « Oui », ni par "
-                + "« Parfait », ni par « Bravo ». NE LUI REDEMANDE PAS ce mot. Sans le gronder, réexplique-lui en une phrase la "
-                + $"différence : « {tour.Francais} », c'est le mot en français, et en {tour.Langue} on dit "
-                + $"[{tour.Balise}]{tour.Attendu}[/{tour.Balise}]. Puis dis-lui que ce n'est pas grave, que vous y reviendrez un peu plus "
+                + "« Parfait », ni par « Bravo ». NE LUI REDEMANDE PAS ce mot. Ta PREMIÈRE phrase lui réexplique la différence, sans "
+                + $"le gronder, par exemple : « {Majuscule(tour.Francais)}, c'est le mot en français ; en {tour.Langue}, il fallait redire le "
+                + "mot comme je le prononce. » Ensuite seulement, dis-lui que ce n'est pas grave, que vous y reviendrez un peu plus "
                 + "tard, et passe à la suite avec un autre mot. Ne lui dis pas combien d'essais il a faits.]",
         };
 
@@ -539,6 +540,9 @@ namespace SchoolWebApp.Api.Services
         }
 
         private static string SansBalises(string texte) => Balise().Replace(texte, " ");
+
+        private static string Majuscule(string mot) =>
+            string.IsNullOrEmpty(mot) ? mot : char.ToUpperInvariant(mot[0]) + mot[1..];
 
         private static string Court(string dit) => dit.Length <= 60 ? dit : dit[..60].TrimEnd() + "…";
 
