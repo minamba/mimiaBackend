@@ -28,9 +28,10 @@ namespace SchoolWebApp.Api.Services
     {
         /// <summary>
         /// Une question de suite : l'énoncé tel qu'on le redira au professeur, le nombre attendu, et les nombres que
-        /// la question cite (une relance peut les reprendre, l'élève aussi : « après 73, c'est 74 »).
+        /// la question cite (une relance peut les reprendre, l'élève aussi : « après 73, c'est 74 »). <c>Pas</c> est le
+        /// pas de la suite dans le sens de la question (+1 pour « après 73 », -1 pour « avant 80 », +10 pour « 10, 20, 30… »).
         /// </summary>
-        private sealed record SuitePosee(string Enonce, int Attendu, HashSet<int> Cites, string Indice);
+        private sealed record SuitePosee(string Enonce, int Attendu, HashSet<int> Cites, string Indice, int Pas);
 
         /// <summary>
         /// L'INDICE CALCULÉ — leçon de #52 (et #29, #46) : « aide-le sans donner la réponse » sans dire comment, le modèle
@@ -155,7 +156,7 @@ namespace SchoolWebApp.Api.Services
                 var indice = trou == nombres.Length
                     ? IndiceDeSuite($"fais-lui relire la suite avec toi, {Recompte(nombres.TakeLast(3))}{Cran(pas)}, et arrête-toi là.", attendu)
                     : IndiceDeSuite($"fais-lui trouver de combien on {(pas > 0 ? "avance" : "recule")} d'un nombre au suivant (ici de {Math.Abs(pas)}), puis s'en servir pour trouver le nombre du trou.", attendu);
-                Ajouter(trouvees, new SuitePosee(Regex.Replace(m.Value.Trim(), @"\s+", " ") + " ?", attendu, nombres.ToHashSet(), indice));
+                Ajouter(trouvees, new SuitePosee(Regex.Replace(m.Value.Trim(), @"\s+", " ") + " ?", attendu, nombres.ToHashSet(), indice, pas));
             }
 
             // 2. « après 73 », « avant 80 », « suit 73 », « entre 72 et 74 », dans une question.
@@ -195,7 +196,7 @@ namespace SchoolWebApp.Api.Services
                     var indice = versLeHaut
                         ? IndiceDeSuite($"fais-lui recompter avec toi {Recompte(new[] { n - 2 * pas, n - pas, n })}{Cran(pas)} et arrête-toi là.", attendu)
                         : IndiceDeSuite($"demande-lui de compter jusqu'à {n} en partant de {n - Math.Min(3, n / pas) * pas}{Cran(pas)}, et de te dire le nombre qu'il dit JUSTE AVANT {n}.", attendu);
-                    Ajouter(trouvees, new SuitePosee(enonce, attendu, new HashSet<int> { n, pas }, indice));
+                    Ajouter(trouvees, new SuitePosee(enonce, attendu, new HashSet<int> { n, pas }, indice, versLeHaut ? pas : -pas));
                 }
 
                 foreach (Match m in Entre().Matches(phrase))
@@ -208,7 +209,7 @@ namespace SchoolWebApp.Api.Services
 
                     var petit = Math.Min(a, b);
                     Ajouter(trouvees, new SuitePosee($"quel nombre est entre {a} et {b}", (a + b) / 2, new HashSet<int> { a, b },
-                        IndiceDeSuite($"le nombre entre {a} et {b} vient juste après {petit} : fais-lui recompter {Recompte(new[] { petit - 1, petit })} et arrête-toi là.", (a + b) / 2)));
+                        IndiceDeSuite($"le nombre entre {a} et {b} vient juste après {petit} : fais-lui recompter {Recompte(new[] { petit - 1, petit })} et arrête-toi là.", (a + b) / 2), 1));
                 }
             }
 
@@ -303,12 +304,24 @@ namespace SchoolWebApp.Api.Services
 
         private static Verdict? JugerSuite(SuitePosee s, string reponse)
         {
-            var valeurs = Valeurs(VirgulesQuiSeparent(reponse));
+            // « soixante-treize soixante-quatorze » (micro, sans virgule) : 73 puis 74, pas 147. Dans le doute, pas de verdict.
+            var enChiffres = EnChiffresSurs(VirgulesQuiSeparent(reponse));
+            if (enChiffres is null) return null;
+
+            var valeurs = Valeurs(enChiffres);
             if (valeurs is null || valeurs.Count == 0) return null;
 
-            // « Après 73, c'est 74 » : le 73 vient de la question ; il reste la réponse.
             if (valeurs.Count > 1)
             {
+                // L'élève recompte, ou continue de compter, en passant par le bon nombre : « soixante-treize
+                // soixante-quatorze », « soixante-quatorze soixante-quinze » pour « après 73 ».
+                if (CompteParLeNombreAttendu(s, enChiffres))
+                {
+                    var juste = s.Attendu.ToString(CultureInfo.InvariantCulture);
+                    return new Verdict(s.Enonce, juste, juste, Jugement.Juste);
+                }
+
+                // « Après 73, c'est 74 » : le 73 vient de la question ; il reste la réponse.
                 valeurs = valeurs.Where(v => !s.Cites.Contains((int)Math.Min(v, int.MaxValue)) || v != Math.Floor(v)).ToList();
                 if (valeurs.Count != 1) return null;
             }
@@ -320,6 +333,180 @@ namespace SchoolWebApp.Api.Services
             return (int)donne == s.Attendu
                 ? new Verdict(s.Enonce, attendu, Ecrire(donne), Jugement.Juste)
                 : new Verdict(s.Enonce, attendu, Ecrire(donne), Jugement.Faux) { Indice = s.Indice };
+        }
+
+        /// <summary>
+        /// LA RÉPONSE NE FAIT QUE COMPTER — contrôle d'Omar sur 1e93c60 (#53) : une réponse faite UNIQUEMENT de nombres
+        /// (pas de « et », pas de « ou », pas de phrase) qui avancent du pas de la suite et passent par le nombre
+        /// attendu est juste : l'élève a recompté jusqu'au trou (« 72, 73, 74 », « soixante-treize soixante-quatorze »)
+        /// ou continué la suite (« soixante-quatorze soixante-quinze »). Dans l'autre sens (« 75, 74 »), seulement
+        /// s'il s'arrête SUR le nombre attendu. « 74 et 75 » ou « 74 ou 75 » hésitent : non.
+        /// </summary>
+        private static bool CompteParLeNombreAttendu(SuitePosee s, string enChiffres)
+        {
+            // Rien d'autre que des nombres entiers et de la ponctuation.
+            if (Regex.IsMatch(enChiffres, @"\d[,.]\d") || Regex.Replace(enChiffres, @"[\d\s.,;:!?…]", "").Length > 0) return false;
+
+            var nombres = Regex.Matches(enChiffres, @"\d+").Select(m => m.Value.Length > 5 ? -1 : int.Parse(m.Value, CultureInfo.InvariantCulture)).ToList();
+            if (nombres.Count < 2 || nombres.Any(x => x < 0 || x > SuiteMaximum) || !nombres.Contains(s.Attendu)) return false;
+
+            var ecart = nombres[1] - nombres[0];
+            if (ecart == 0 || Math.Abs(ecart) != Math.Abs(s.Pas)) return false;
+            if (nombres.Zip(nombres.Skip(1)).Any(p => p.Second - p.First != ecart)) return false;
+
+            return ecart == s.Pas || nombres[^1] == s.Attendu;
+        }
+
+        // ───────────── Les nombres en lettres de la réponse, lus sans doute ─────────────
+
+        private static readonly string[] UnitesEnMots =
+        [
+            "zero", "un", "deux", "trois", "quatre", "cinq", "six", "sept", "huit", "neuf", "dix", "onze", "douze",
+            "treize", "quatorze", "quinze", "seize",
+        ];
+
+        private static readonly string[] DizainesEnMots = ["", "", "vingt", "trente", "quarante", "cinquante", "soixante"];
+
+        /// <summary>Les mots que <see cref="NombresEnLettres"/> sait lire (même liste).</summary>
+        private static readonly HashSet<string> MotsDeNombre =
+        [
+            .. UnitesEnMots, "zéro", "une", "vingt", "vingts", "trente", "quarante", "cinquante", "soixante", "cent", "cents", "mille", "et",
+        ];
+
+        /// <summary>
+        /// Toutes les façons justes d'écrire 0 à <see cref="SuiteMaximum"/>, sous une forme simple, avec leur valeur :
+        /// mots séparés par une espace, sans trait d'union ni « et », « vingts » → « vingt », « cents » → « cent »,
+        /// « une » → « un ». « soixante treize » = 73, « quatre vingt dix sept » = 97, « cent quatre vingt » = 180.
+        /// </summary>
+        private static readonly Lazy<Dictionary<string, int>> Orthographes = new(() =>
+            Enumerable.Range(0, SuiteMaximum + 1).ToDictionary(EnMots, n => n));
+
+        private static string EnMots(int n)
+        {
+            if (n == 0) return "zero";
+            var mots = new List<string>();
+            var milliers = n / 1000;
+            if (milliers == 1) mots.Add("mille");
+            else if (milliers > 1) mots.Add(EnMots(milliers) + " mille");
+
+            var centaines = n % 1000 / 100;
+            if (centaines == 1) mots.Add("cent");
+            else if (centaines > 1) mots.Add(UnitesEnMots[centaines] + " cent");
+
+            if (n % 100 > 0) mots.Add(MoinsDeCent(n % 100));
+            return string.Join(" ", mots);
+        }
+
+        private static string MoinsDeCent(int x) => x switch
+        {
+            <= 16 => UnitesEnMots[x],
+            < 20 => "dix " + UnitesEnMots[x - 10],
+            < 70 => DizainesEnMots[x / 10] + (x % 10 == 0 ? "" : " " + UnitesEnMots[x % 10]),
+            < 80 => "soixante " + MoinsDeCent(x - 60),
+            _ => "quatre vingt" + (x == 80 ? "" : " " + MoinsDeCent(x - 80)),
+        };
+
+        /// <summary>
+        /// LES NOMBRES EN LETTRES DE LA RÉPONSE, EN CHIFFRES — contrôle d'Omar sur 1e93c60 (#53) : au micro,
+        /// « soixante-treize soixante-quatorze » arrive sans virgule, et <see cref="NombresEnLettres"/> (copie du front,
+        /// on n'y touche pas) le lit comme UN nombre : 60 + 13 + 60 + 14 = 147, donc FAUX contre 74.
+        /// Pour le juge de suite seulement, chaque suite de mots-nombres est lue avec la table des orthographes justes
+        /// (<see cref="Orthographes"/>) : un nombre bien écrit reste UN nombre (« soixante dix » = 70, « quatre vingt »
+        /// = 80, « vingt deux » = 22) ; sinon elle est coupée en nombres bien écrits, le moins de morceaux possible
+        /// (« soixante-treize | soixante-quatorze » → « 73; 74 »). Deux découpages aussi courts (« vingt quatre vingt » :
+        /// 20 puis 80, ou 24 puis 20 ?) ou aucun : null, pas de verdict — mieux vaut ne pas juger que dire FAUX à un
+        /// enfant qui a juste. La table lit aussi juste « cent quatre-vingts » (180), que le lecteur commun lit 124 :
+        /// trouvé au balayage 1-998 du harnais, défaut ANCIEN du lecteur (front et back), signalé à part.
+        /// « un » / « une » seuls restent des mots (des articles), comme pour le lecteur commun.
+        /// </summary>
+        private static string? EnChiffresSurs(string texte)
+        {
+            // Les mots et les blancs entre eux (indices pairs = mots), pour tout recoller à l'identique.
+            var morceaux = Regex.Split(texte, @"(\s+)");
+            var mots = new List<(int Place, string Debut, string Coeur, string Fin)>();
+            for (var i = 0; i < morceaux.Length; i += 2)
+            {
+                if (morceaux[i].Length == 0) continue;
+                var m = Regex.Match(morceaux[i], @"^([«""(]*)(.*?)([.,;:!?»"")…]*)$");
+                mots.Add((i, m.Groups[1].Value, m.Groups[2].Value.ToLowerInvariant(), m.Groups[3].Value));
+            }
+
+            static string[] Parties(string coeur) => coeur.Split('-', StringSplitOptions.RemoveEmptyEntries);
+
+            var serie = new List<int>();
+            for (var k = 0; k <= mots.Count; k++)
+            {
+                var estNombre = k < mots.Count && Parties(mots[k].Coeur) is { Length: > 0 } parties && parties.All(MotsDeNombre.Contains)
+                    && (mots[k].Coeur != "et" || (serie.Count > 0 && k + 1 < mots.Count && mots[k + 1].Coeur is "un" or "une" or "onze"));
+
+                if (serie.Count > 0 && (!estNombre || mots[k].Debut.Length > 0))
+                {
+                    if (!Lire(serie)) return null;
+                    serie.Clear();
+                }
+
+                if (!estNombre) continue;
+                serie.Add(k);
+                if (mots[k].Fin.Length > 0)
+                {
+                    if (!Lire(serie)) return null;
+                    serie.Clear();
+                }
+            }
+
+            return string.Concat(morceaux);
+
+            // Remplace la série de mots (indices dans « mots ») par ses nombres ; false si on ne sait pas la lire sans doute.
+            bool Lire(List<int> s)
+            {
+                int? Valeur(int de, int a)
+                {
+                    if (mots[s[de]].Coeur == "et" || mots[s[a - 1]].Coeur == "et") return null;
+                    var simples = s.Skip(de).Take(a - de).SelectMany(k => Parties(mots[k].Coeur))
+                        .Where(p => p != "et")
+                        .Select(p => p switch { "une" => "un", "zéro" => "zero", "vingts" => "vingt", "cents" => "cent", _ => p });
+                    return Orthographes.Value.TryGetValue(string.Join(" ", simples), out var v) ? v : null;
+                }
+
+                // Le moins de morceaux, et combien de découpages l'atteignent (2 = « plusieurs »).
+                var n = s.Count;
+                var moins = Enumerable.Repeat(int.MaxValue, n + 1).ToArray();
+                var facons = new int[n + 1];
+                var depuis = new int[n + 1];
+                moins[0] = 0;
+                facons[0] = 1;
+                for (var a = 1; a <= n; a++)
+                    for (var de = 0; de < a; de++)
+                    {
+                        if (moins[de] == int.MaxValue || Valeur(de, a) is null) continue;
+                        if (moins[de] + 1 < moins[a]) { moins[a] = moins[de] + 1; facons[a] = facons[de]; depuis[a] = de; }
+                        else if (moins[de] + 1 == moins[a]) facons[a] = Math.Min(2, facons[a] + facons[de]);
+                    }
+
+                if (moins[n] == int.MaxValue || facons[n] > 1) return false;
+
+                for (var a = n; a > 0; a = depuis[a])
+                {
+                    var de = depuis[a];
+                    var premier = mots[s[de]];
+                    var dernier = mots[s[a - 1]];
+
+                    // « un » ou « une » tout seul : un article, laissé tel quel (une coupe reste marquée).
+                    if (a - de == 1 && premier.Coeur is "un" or "une")
+                    {
+                        if (a < n) morceaux[premier.Place] += ";";
+                        continue;
+                    }
+
+                    morceaux[premier.Place] = premier.Debut + Valeur(de, a)!.Value.ToString(CultureInfo.InvariantCulture) + dernier.Fin + (a < n ? ";" : "");
+                    for (var k = de + 1; k < a; k++)
+                    {
+                        morceaux[mots[s[k]].Place] = "";
+                        morceaux[mots[s[k]].Place - 1] = "";
+                    }
+                }
+                return true;
+            }
         }
     }
 }
