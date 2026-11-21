@@ -586,6 +586,15 @@ namespace SchoolWebApp.Api.Services.Voix
             + @")[^.!?\n]*[.!:]*", RegexOptions.IgnoreCase)]
         private static partial Regex ConsigneDuProfesseur();
 
+        // CONTRÔLE D'OMAR SUR #52 (bout en bout de la tâche 0615) : « Regarde bien le dernier chiffre, celui de droite, et
+        // relis-le. » partait EN ENTIER (« relis-le » = consigne), et l'indice avec. Quand une phrase parle d'un CHIFFRE puis
+        // finit par une consigne de lecture (« , et relis-le », « et lis-le à voix haute », « , puis essaie de le relire »),
+        // seule cette fin part : la consigne du code la remplace, l'indice reste. Appliqué avant ConsigneDuProfesseur.
+        [GeneratedRegex(@"(?<indice>\bchiffres?\b[^.!?\n]*?)(?:\s*,\s*(?:(?:et|puis)\s+)?|\s+(?:et|puis)\s+)"
+            + @"(?:(?:essaie|essaye)\s+(?:encore\s+)?(?:de\s+)?(?:le\s+|la\s+)?)?(?<!\p{L})(?:re)?(?:lis|lire)(?:-(?:le|la|moi))?(?!\p{L})[^.!?\n]*?(?=[ \t]*(?:[.!]|\r?\n|$))",
+            RegexOptions.IgnoreCase)]
+        private static partial Regex IndicePuisConsigne();
+
         // « dis-moi », « dis-moi bien », « dis-moi, à voix haute, » : l'objet qui suit décide si c'est une consigne.
         private const string DisMoi = @"dis-moi(?!\p{L})(?:\s+(?:bien|vite|donc))?(?:\s*,?\s*[àa]\s+voix\s+haute\s*,?)?";
 
@@ -736,7 +745,8 @@ namespace SchoolWebApp.Api.Services.Voix
             propre = Voix().Replace(propre, "$2");
             propre = Etape(propre, "question", t => Question().Replace(t, string.Empty));
             propre = Etape(propre, "consigne", t => AnnonceSeulement().Replace(RegardeEnFin().Replace(
-                RegardeSeulement().Replace(ConsigneDuProfesseur().Replace(t, string.Empty), string.Empty), "."), string.Empty));
+                RegardeSeulement().Replace(ConsigneDuProfesseur().Replace(IndicePuisConsigne().Replace(t, "${indice}"), string.Empty),
+                    string.Empty), "."), string.Empty));
             propre = Etape(propre, "ecoute", t => PhraseDEcoute().Replace(t, string.Empty));
             if (tour.Demande) propre = Etape(propre, "refus", t => RefusDAfficher().Replace(t, string.Empty));
             // « Le tableau est vide » (vu par Omar après un rechargement, #51) : pendant la lecture, le nombre est au tableau.
