@@ -3635,6 +3635,13 @@ namespace SchoolWebApp.Api.Builders.impl
             {
                 // L'activité qu'il nomme (une histoire, du vocabulaire) suit le fait : signalements #55 et #56.
                 declencheur += "\n\n" + ChangementDExercice.Fait(changement, contenu);
+                // Il quitte les syllabes ou les mots sans nommer d'activité : pas la carte des sons une fois de plus (#55).
+                if (langueDuSon is not null && !ChangementDExercice.NommeUneActivite(contenu)
+                    && Services.Voix.RegleVerificationSon.EnExerciceDeSons(
+                        historique.TakeLast(MessagesPourExerciceDeSons).Select(m => ((string?)m.Contenu, m.SonJuste))))
+                {
+                    declencheur += "\n\n" + ChangementDExercice.FaitApresLesSons;
+                }
                 // Un nombre était au tableau : il n'y sera plus (sa balise est retirée hors de l'exercice, défaut e8).
                 if (!enLectureDeNombres && Services.Voix.LectureDesNombres.DernierMontre(recentsNombres) is not null)
                 {

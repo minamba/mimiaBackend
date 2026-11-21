@@ -108,6 +108,19 @@ namespace SchoolWebApp.Api.Services
             + "Une question à la fois. Ce n'est PAS un exercice de sons : tu ne lui fais pas répéter un mot que tu prononces, "
             + "pas de « redis-le-moi », pas de « qu'as-tu entendu », pas de mot seul dans ta balise de voix.]";
 
+        /// <summary>
+        /// IL QUITTE UN EXERCICE DE SYLLABES OU DE MOTS SANS DIRE POUR QUOI — signalement #55 (Adam, 21/11/2026, capture
+        /// t03) : « Je veux changer d'activité » après la lecture en images, et le professeur reposait la carte des quatre
+        /// jeux de syllabes et de mots, la même famille d'exercice. Vérifié au bout en bout le 21/11 : la règle de la carte
+        /// ne suffisait pas.
+        /// </summary>
+        public const string FaitApresLesSons =
+            "[Fait pour ce tour : l'exercice qu'il quitte était un exercice de syllabes ou de mots. Ne pose pas la carte de "
+            + "ces exercices et ne lui en repropose aucun : une activité d'une AUTRE sorte, que tu choisis et commences tout de "
+            + "suite (une histoire avec des questions, du vocabulaire, une phrase à observer…), sans lui demander laquelle. "
+            + "Une histoire se lit dans ta balise de voix, jamais écrite dans ta bulle ni au tableau, puis tu poses tes "
+            + "questions une à la fois.]";
+
         public static string Fait(Nature nature) => nature == Nature.Arreter ? FaitArreter : FaitChanger;
 
         /// <summary>
