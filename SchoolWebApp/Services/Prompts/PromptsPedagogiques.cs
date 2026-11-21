@@ -3417,24 +3417,32 @@ namespace SchoolWebApp.Api.Services.Prompts
         ///
         /// REDITE À CHAQUE TOUR, PAS ÉCRITE DANS LE NOYAU : le Noyau ne se touche pas (Camara, 19/09/2026), et une
         /// règle lue une fois tout en haut ne tient pas (voir « une règle de prompt ne vaut pas un fait »).
+        ///
+        /// NE SE RECOPIE PAS (21/11/2026, trouvé au bout en bout du #53) : environ une fois sur vingt tours faux, le
+        /// professeur commençait sa réponse par « (On garde 3e réponse fausse → réexplication douce + dernier essai) » —
+        /// son compte et l'étiquette de l'étape, tirés mot pour mot de l'ancienne liste « 3e réponse fausse : … ». La
+        /// règle dit maintenant que le compte se fait EN SILENCE et que rien n'en est écrit, et ses étapes sont des
+        /// phrases (« à sa troisième erreur »), plus des étiquettes à recopier. Le filet derrière, dans le flux :
+        /// <see cref="ApartesInternes"/>.
         /// </summary>
         public const string RegleDesTroisEssais =
             "[RÈGLE DES ESSAIS — STRICTE, dans le droit fil de ta règle absolue : tu ne donnes JAMAIS la réponse, "
-            + "à aucun essai. Compte, dans l'historique, les réponses FAUSSES que l'élève a données à la question "
-            + "d'exercice en cours.\n"
-            + "- 1re et 2e réponse fausse : tu l'aides comme d'habitude, par un indice ou une question, sans donner "
-            + "la réponse.\n"
-            + "- 3e réponse fausse : avec douceur, tu lui réexpliques la règle ou la notion, et tu lui montres "
-            + "pourquoi sa réponse ne marche pas, toujours sans donner la bonne. Puis tu lui laisses UN DERNIER "
-            + "essai, en le lui disant.\n"
-            + "- 4e réponse fausse : tu ne t'acharnes pas. Tu lui dis avec douceur que ce n'est pas grave, tu passes "
-            + "à la question suivante, et tu lui proposes d'y revenir plus tard s'il le souhaite. S'il ne le "
-            + "souhaite pas, cette question est laissée de côté.\n"
-            + "- S'il veut y revenir, maintenant ou plus tard dans la séance : tu cherches TOUS les moyens pour "
-            + "qu'il comprenne et trouve LUI-MÊME — une autre explication, un exemple plus simple, un dessin ou un "
-            + "schéma au tableau, de toutes petites étapes, des objets de la vie de tous les jours. Toujours sans "
-            + "donner la réponse.\n"
-            + "Un « je ne sais pas » ou une question n'est pas une réponse fausse et ne compte pas.]";
+            + "à aucun essai. CETTE RÈGLE EST POUR TOI SEUL : tu comptes EN SILENCE, dans l'historique, les erreurs que "
+            + "l'élève a faites sur la question d'exercice en cours, et tu n'écris JAMAIS ce compte, ni l'étape où tu en es, "
+            + "ni ce que tu as décidé — pas de note entre parenthèses, pas de flèche, pas de résumé. L'élève lit et entend "
+            + "tout ce que tu écris : tu ne lui écris que ce que tu lui dis, à lui.\n"
+            + "Tant qu'il n'en est qu'à sa première ou à sa deuxième erreur, tu l'aides comme d'habitude, par un indice "
+            + "ou une question, sans donner la réponse.\n"
+            + "À sa troisième erreur, tu reprends avec lui la règle ou la notion, sans le gronder, et tu lui montres pourquoi sa "
+            + "réponse ne marche pas, toujours sans donner la bonne. Puis tu lui laisses une toute dernière chance, en le "
+            + "lui disant.\n"
+            + "À sa quatrième erreur, tu ne t'acharnes pas. Tu lui dis, sans le gronder, que ce n'est pas grave, tu passes à la "
+            + "question suivante, et tu lui proposes d'y revenir plus tard s'il le souhaite. S'il ne le souhaite pas, "
+            + "cette question est laissée de côté.\n"
+            + "S'il veut y revenir, maintenant ou plus tard dans la séance : tu cherches TOUS les moyens pour qu'il "
+            + "comprenne et trouve LUI-MÊME — une autre explication, un exemple plus simple, un dessin ou un schéma au "
+            + "tableau, de toutes petites étapes, des objets de la vie de tous les jours. Toujours sans donner la réponse.\n"
+            + "Un « je ne sais pas » ou une question n'est pas une erreur et ne compte pas.]";
 
         /// <summary>
         /// UN INDICE NE S'INVENTE PAS, DANS TOUS LES EXERCICES ET CHEZ TOUS LES PROFESSEURS — contrôle d'Omar sur le
