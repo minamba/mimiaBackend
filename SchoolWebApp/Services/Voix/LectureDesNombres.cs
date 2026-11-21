@@ -109,7 +109,30 @@ namespace SchoolWebApp.Api.Services.Voix
 
         // La proposition du professeur : « Tu veux qu'on lise des nombres ? », « Tu veux relire des nombres ? », et dans
         // l'autre sens « On repart avec un nouveau nombre à lire ? » (vu au bout en bout du retest d'Adam, #51).
-        [GeneratedRegex(@"(?<!\p{L})(?:re)?(?:lire|lise|lisions|lecture)(?!\p{L})[^?\n]{0,30}\b(?:nombres?|chiffres?)\b[^?\n]*\?|\b(?:nombres?|chiffres?)\b[^?\n]{0,20}\b(?:à|a)\s+(?:re)?lire\b[^?\n]*\?", RegexOptions.IgnoreCase)]
+        // RESSERRÉE (contrôle d'Omar sur c807c90, 21/11/2026) : « (re)lire … nombres/chiffres … ? » ouvrait la lecture sur un
+        // « oui » pendant un AUTRE exercice — « Tu veux que je relise le nombre ? », « Tu veux que je te relise les
+        // chiffres ? », « Tu veux relire ton calcul, les chiffres sont bons ? », « Prends le temps de lire les chiffres du
+        // calcul. Tu es prêt ? », « Tu peux relire l'énoncé avec les nombres ? ». Ne compte plus que :
+        //  1. (tu veux / on / qu'on / envie de / ça te dit de) (re)lire DES / D'AUTRES / QUELQUES / UN NOUVEAU nombre(s) ;
+        //     le sujet est collé au verbe, donc « que je (te) relise » (le professeur relit) ne compte pas ;
+        //  2. « un nouveau nombre à lire ? », « d'autres nombres à lire ? » ;
+        //  3. (on continue / on repart sur / on reprend / tu veux faire) la lecture des nombres ? (phrasés du modèle vus en
+        //     bout en bout) ;
+        // jamais des chiffres « du calcul / de ton calcul / de l'énoncé… » (PasDUnCalcul), et la question doit être dans la
+        // MÊME phrase (plus de « … lecture des nombres ! Combien font 5 + 3 ? »).
+        private const string PasDUnCalcul = @"(?!\s+(?:du|des|de\s+|d['’]|dans\s+)\s*(?:(?:ton|ta|tes|le|la|les|l['’]|ce|cette|cet|mon|ma|son|sa)\s*)?"
+            + @"(?:calculs?|énoncés?|enonces?|opérations?|operations?|problèmes?|problemes?|consignes?|additions?|soustractions?|multiplications?|divisions?|leçons?|lecons?|textes?|histoires?|exercices?)(?!\p{L}))";
+
+        [GeneratedRegex(
+            // 1. sujet + (re)lire + des/d'autres… + nombres
+            @"(?<!\p{L})(?:tu\s+veux(?:\s+bien)?|veux-tu|tu\s+voudrais|voudrais-tu|qu['’]on|on(?:\s+(?:va|peut|pourrait))?|(?:tu\s+as\s+|t['’]as\s+)?envie\s+de|(?:ça|ca)\s+te\s+dit\s+de|pr[êe]te?\s+(?:à|a))"
+            + @"\s+(?:(?:continuer|continue|recommencer|recommence)\s+(?:à|a)\s+)?(?:re)?(?:lire|lise|lisions|lit|lis)(?!\p{L})"
+            + @"\s+(?:encore\s+)?(?:des|d['’]autres|quelques|de\s+nouveaux|un\s+(?:autre|nouveau))\s+(?:nombres?|chiffres?)(?!\p{L})" + PasDUnCalcul + @"[^.!?\n]*\?"
+            // 2. un nouveau nombre / d'autres nombres + à (re)lire
+            + @"|(?<!\p{L})(?:(?:encore\s+)?un\s+(?:autre|nouveau)\s+nombre|d['’]autres\s+(?:nombres|chiffres)|de\s+nouveaux\s+(?:nombres|chiffres)|des\s+nombres|quelques\s+nombres)\s+(?:à|a)\s+(?:re)?lire(?!\p{L})[^.!?\n]*\?"
+            // 3. on continue / on repart sur… la lecture des nombres
+            + @"|(?<!\p{L})(?:continue|continuer|reprend|reprendre|repart|repartir|refait|refaire|fait|faire|recommence|recommencer)\s+(?:sur\s+|avec\s+)?(?:la|une|ta)\s+lecture\s+(?:des|de)\s+(?:nombres|chiffres)(?!\p{L})" + PasDUnCalcul + @"[^.!?\n]*\?",
+            RegexOptions.IgnoreCase)]
         private static partial Regex Proposition();
 
         [GeneratedRegex(@"^\s*(?:oui|ouais|ouai|d'accord|dac|ok|okay|vas-y|vas y|allez|go|on y va|carr[ée]ment|volontiers|avec plaisir|je veux bien|bien s[uû]r)\b", RegexOptions.IgnoreCase)]
