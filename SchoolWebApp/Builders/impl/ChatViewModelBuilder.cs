@@ -3627,7 +3627,9 @@ namespace SchoolWebApp.Api.Builders.impl
             // Une réponse jugée par le micro n'est jamais une demande. Pas pendant un contrôle noté : on n'y touche pas.
             var changement = controleOuvert || sonJuste is not null || LecteurAuRevoir.DitAuRevoir(contenu)
                 ? ChangementDExercice.Nature.Aucune
-                : ChangementDExercice.Lire(contenu);
+                // L'activité qu'il nomme n'est pas un changement si c'est déjà celle en cours (contrôle d'Omar, #55/#56).
+                : ChangementDExercice.Lire(contenu, historique.TakeLast(ChangementDExercice.MessagesDeLActiviteEnCours)
+                    .Select(m => ((string)m.Role, (string?)m.Contenu, m.SonJuste)).ToList());
             // « Maintenant on fait une addition » pendant la lecture des nombres (signalement #51) : c'est une demande de
             // changement, même sans « autre exercice ». Le professeur reçoit le même fait, et l'ancien exercice est coupé.
             // Même quand sa lecture vient d'être jugée (« vingt-huit, maintenant on fait une addition », au micro ou tapé :
@@ -3651,7 +3653,15 @@ namespace SchoolWebApp.Api.Builders.impl
             // sons (« je veux lire des mots », la carte des exercices) : là, c'est le code qui ouvre le suivant.
             if (change && !(langueDuSon is not null && Services.Voix.LectureDImage.ChangeDExercice(contenuPourLesSons)))
             {
-                declencheur += "\n\n" + ChangementDExercice.Fait(changement);
+                // L'activité qu'il nomme (une histoire, du vocabulaire) suit le fait : signalements #55 et #56.
+                declencheur += "\n\n" + ChangementDExercice.Fait(changement, contenu);
+                // Il quitte les syllabes ou les mots sans nommer d'activité : pas la carte des sons une fois de plus (#55).
+                if (langueDuSon is not null && !ChangementDExercice.NommeUneActivite(contenu)
+                    && Services.Voix.RegleVerificationSon.EnExerciceDeSons(
+                        historique.TakeLast(MessagesPourExerciceDeSons).Select(m => ((string?)m.Contenu, m.SonJuste))))
+                {
+                    declencheur += "\n\n" + ChangementDExercice.FaitApresLesSons;
+                }
                 // Un nombre était au tableau : il n'y sera plus (sa balise est retirée hors de l'exercice, défaut e8).
                 if (!enLectureDeNombres && Services.Voix.LectureDesNombres.DernierMontre(recentsNombres) is not null)
                 {
@@ -3664,6 +3674,14 @@ namespace SchoolWebApp.Api.Builders.impl
                 historique.TakeLast(ChangementDExercice.MessagesDeSuite).Select(m => ((string)m.Role, (string?)m.Contenu, m.SonJuste)).ToList()))
             {
                 declencheur += "\n\n" + ChangementDExercice.RappelDeSuite;
+            }
+
+            // L'HISTOIRE QU'IL A DEMANDÉE, JUSQU'À SES QUESTIONS — signalement #55 (Adam, 21/11/2026) : une seule question,
+            // puis retour à la grammaire, et une réponse hors de l'histoire laissée sans correction. Pour tous les professeurs.
+            if (!change && !controleOuvert && ChangementDExercice.HistoireEnCours(
+                historique.TakeLast(ChangementDExercice.MessagesDHistoire).Select(m => ((string)m.Role, (string?)m.Contenu, m.SonJuste)).ToList()))
+            {
+                declencheur += "\n\n" + ChangementDExercice.RappelHistoire;
             }
 
             // LA RÈGLE DES TROIS ESSAIS, PARTOUT AILLEURS — Camara, le 11/11/2026, voir

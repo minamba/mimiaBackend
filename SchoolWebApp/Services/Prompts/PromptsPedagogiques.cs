@@ -3065,7 +3065,12 @@ namespace SchoolWebApp.Api.Services.Prompts
             + (enAnglais ? "les sons ou les mots anglais" : "les syllabes ou les mots")
             + ", pose ta question puis écris seule la balise " + Services.Voix.LectureDImage.BaliseChoix + " : son écran lui montre les exercices en boutons ("
             + (enAnglais ? "écouter des sons, écouter des mots, lire des mots" : "écouter des syllabes, écouter des mots, lire des syllabes, lire des mots")
-            + "), et son choix t'arrive dans son message. Ne les énumère pas toi-même et ne commence rien avant son choix.]";
+            + "), et son choix t'arrive dans son message. Ne les énumère pas toi-même et ne commence rien avant son choix. "
+            // Signalements #55 et #56 (Adam, 21/11/2026) : la carte servait de menu de toutes les activités (« je te propose
+            // nos petits jeux de syllabes et de mots »), et l'histoire ou le vocabulaire demandés étaient remis à plus tard.
+            + "Cette carte n'est PAS la liste de tes activités : elle ne sert qu'à ces exercices-là. Quand il demande autre "
+            + "chose (une histoire, du vocabulaire, de la grammaire…) ou veut changer d'activité après un de ces exercices, tu "
+            + "le fais avec lui directement, sans la carte, et jamais « la prochaine fois ».]";
 
         /// <summary>Seulement pendant un exercice de sons ou de syllabes : voir RegleVerificationSon.EnExerciceDeSons.</summary>
         public const string RappelExerciceDeSons =
