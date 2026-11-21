@@ -1089,10 +1089,15 @@ namespace SchoolWebApp.Api.Services.Voix
         /// LE MOT À ÉCOUTER NE S'AFFICHE PAS, ET LA CONSIGNE EST DONNÉE. Si la conversation ne l'a jamais portée, le code
         /// la place devant le mot. Les balises placées en pleine phrase laissaient un trou : « tu as bien entendu  ! ».
         /// </summary>
-        public static string EcouteDesMots(string texte, IEnumerable<string> recents, string entier, string langue = LanguesDesSons.Francais, string? niveau = null, string? messageDeLEleve = null, string? motGarde = null, string? abandonne = null, string? motDeLImage = null, RedireLeMot redire = RedireLeMot.Non)
+        public static string EcouteDesMots(string texte, IEnumerable<string> recents, string entier, string langue = LanguesDesSons.Francais, string? niveau = null, string? messageDeLEleve = null, string? motGarde = null, string? abandonne = null, string? motDeLImage = null, RedireLeMot redire = RedireLeMot.Non, bool arrivee = false)
         {
-            var propre = DicteeDeMots.MotALaFin(DicteeDeMots.MasquerMotDicte(DicteeDeMots.GarderSeulementLaDerniereVoix(texte, motGarde)));
             var liste = recents as IReadOnlyList<string> ?? recents.ToList();
+
+            // LE MOT OUBLIÉ DANS LA VOIX (Adam/Omar, #57, 21/11/2026) : Marine refuse « Bleu! » et redemande le mot sans le
+            // redire — l'enfant doit répondre sans l'avoir entendu. Quand le mot doit rester, le code le remet (AvecLeMotARedire).
+            texte = AvecLeMotARedire(texte, liste, langue, redire, abandonne);
+
+            var propre = DicteeDeMots.MotALaFin(DicteeDeMots.MasquerMotDicte(DicteeDeMots.GarderSeulementLaDerniereVoix(texte, motGarde)));
             var dit = DicteeDeMots.MotDit(propre);
 
             // APRÈS UN REFUS, LE MÊME MOT — retest KO #57 (Adam, 21/11/2026, 15h05) : « Un! » pour « one » est refusé, puis
@@ -1112,6 +1117,8 @@ namespace SchoolWebApp.Api.Services.Voix
                     ? m.Value.Replace(nouveau, dernierDicte, StringComparison.OrdinalIgnoreCase)
                     : m.Value);
                 propre = PhraseDePassage().Replace(propre, string.Empty);
+                // Le mot remis ne s'écrit pas plus que l'autre : au retour, « Cat. Juste ! » citait le mot d'avant en clair.
+                propre = DicteeDeMots.MasquerMotDicte(propre);
                 dit = DicteeDeMots.MotDit(propre);
             }
 
@@ -1193,7 +1200,11 @@ namespace SchoolWebApp.Api.Services.Voix
             // écrirait encore par habitude est retirée.
             var annonceDuType = syllabe ? AnnonceDeSyllabe() : AnnonceDeMot();
             var consigneDuType = syllabe ? ConsigneDeLaSyllabe() : ConsigneDeLEcoute();
-            var premiereDuType = !liste.Any(r => r is not null && (annonceDuType.IsMatch(r) || consigneDuType.IsMatch(r)));
+            // « VOICI LE PREMIER MOT » APRÈS TWO (Adam, #57, 21/11/2026) : Two avait été dit dans ce fil sans l'annonce du
+            // code (répétition, « Tu me dis blue ? »…), et le mot suivant passait pour le premier. Un mot déjà dit à voix
+            // haute dans l'exercice en cours suffit : le suivant est « le prochain ».
+            var premiereDuType = DernierMotDicte(liste) is null
+                && !liste.Any(r => r is not null && (annonceDuType.IsMatch(r) || consigneDuType.IsMatch(r)));
 
             // L'ORDRE D'UN TOUR D'ÉCOUTE — Camara, le 05/11/2026, capture à l'appui : « Écoute bien celle-ci. Tu peux me
             // dire ce que tu entends ? Tu diras : ... », et le son après. Ce qu'il a à dire, puis le son, et rien entre
@@ -1211,6 +1222,16 @@ namespace SchoolWebApp.Api.Services.Voix
             // un mot. « Voici le prochain mot » écrit par Adrien sur une syllabe (05/11/2026, 20h49) se retire.
             corps = PhraseDAnnonce().Replace(corps, string.Empty);
 
+            // CE QU'IL DOIT DIRE NE PASSE PAS AVANT LE SON (e2e #57, 21/11/2026) : « À toi de le dire à voix haute ! Voici le
+            // prochain mot. » — on lui demandait de dire un mot qu'il n'avait pas encore entendu. La question du code suit
+            // le son. Même chose pour l'annonce libre « Je te redis le mot. », doublée par celle du code.
+            corps = PhraseADireAvantLeSon().Replace(corps, string.Empty);
+            corps = AnnonceLibre().Replace(corps, string.Empty);
+
+            // AU RETOUR, RIEN N'EST JUGÉ (e2e, 22/11/2026) : l'enfant revient sans avoir répondu, et Marine écrivait « Cat.
+            // Juste ! C'est bien cat. » ou « Pas tout à fait ! » — un verdict sur une réponse qui n'existe pas.
+            if (arrivee) corps = PhraseQuiJuge().Replace(corps, string.Empty);
+
             // L'ANNONCE AVANT LE SON — Camara, le 05/11/2026 : « il faut qu'il prévienne avant de dire la syllabe ou le mot ».
             // Le même son redit après une erreur n'est pas « le prochain » : « Je te le redis. »
             string? precedent = null;
@@ -1222,7 +1243,8 @@ namespace SchoolWebApp.Api.Services.Voix
             }
 
             var meme = dit is not null && precedent is not null && SansAccents(dit) == SansAccents(precedent);
-            var dejaRedit = meme && AnnonceDuSon().IsMatch(corps);
+            // « Pas de souci, je te le répète encore une fois. » vaut l'annonce : pas de « Je te le redis. » en plus.
+            var dejaRedit = meme && (AnnonceDuSon().IsMatch(corps) || RepeteDansLaPhrase().IsMatch(corps));
             var annonce = dejaRedit ? null
                 : meme ? (syllabe ? "Je te la redis." : "Je te le redis.")
                 : premiereDuType ? (syllabe ? "Voici la première syllabe." : "Voici le premier mot.")
@@ -1257,6 +1279,76 @@ namespace SchoolWebApp.Api.Services.Voix
         private static partial Regex RediteDeLAnnonce();
 
         public const string QuestionApresLeSon = "Qu'as-tu entendu ?";
+
+        [GeneratedRegex(@"\bje\s+te\s+l[ae]\s+(?:répète|repete)\b", RegexOptions.IgnoreCase)]
+        private static partial Regex RepeteDansLaPhrase();
+
+        /// <summary>« À toi de le dire à voix haute ! », « À toi de me dire le mot ! », « À toi de le redire maintenant ! » : la phrase entière.</summary>
+        [GeneratedRegex(
+            @"(?<=^|[.!?…\n])[^\S\n]*(?:(?:et\s+)?maintenant,?\s+)?à\s+toi\s+(?:de\s+(?:me\s+)?(?:l[ea]\s+|l['’])(?:re)?(?:dire|répéter|repeter)|de\s+me\s+(?:re)?dire\s+(?:le|ce)\s+mot)\b[^.!?…\n]*[.!?…]*",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+        private static partial Regex PhraseADireAvantLeSon();
+
+        /// <summary>« Je te redis le mot. », « Je te répète la syllabe. », « Je te le répète. » : seule dans sa phrase.</summary>
+        [GeneratedRegex(
+            @"(?<=^|[.!?…\n])[^\S\n]*(?:je\s+te\s+(?:re)?(?:dis|répète|repete)\s+(?:(?:le|ce)\s+mot|(?:la|cette)\s+syllabe)|je\s+te\s+l[ae]\s+(?:répète|repete))(?:\s+encore(?:\s+une\s+fois)?)?[^\S\n]*[.!:…]+",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+        private static partial Regex AnnonceLibre();
+
+        /// <summary>Au retour : la phrase qui valide ou refuse une réponse (« Juste ! », « C'est bien cat. », « Pas tout à fait ! », « Bravo »).</summary>
+        [GeneratedRegex(
+            @"(?<=^|[.!?…\n])[^\S\n]*(?:oui|non)\b[^.!?…\n]*[.!?…]*"
+            + @"|(?<=^|[.!?…\n])[^.!?…\n]*(?:\b(?:bravo|juste|exact\w*|parfait\w*|super|génial|excellent|correct\w*|faux|presque|réussi|trouvé|gagné)\b"
+            + @"|\bbien\s+(?:entendu|joué|vu|dit|trouvé)\b|\bc['’]est\s+(?:bien|ça|ca)\b|\bpas\s+(?:encore|tout\s+à\s+fait|ça|ca|le\s+bon|la\s+bonne|juste)\b"
+            + @"|\bessaie\s+encore\b|\br[ée]essa\w*|\bmauvaise\s+écoute\b|\bbonne\s+écoute\b)[^.!?…\n]*[.!?…]*",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+        private static partial Regex PhraseQuiJuge();
+
+        /// <summary>
+        /// LE MOT OUBLIÉ DANS LA VOIX — Adam et Omar, #57 (21/11/2026) : après un refus, Marine redemandait le mot sans le
+        /// redire, et l'enfant devait répondre à un mot qu'il n'avait pas entendu à ce tour. Quand le mot doit rester
+        /// (<see cref="RedireLeMot.Toujours"/>, ou <see cref="RedireLeMot.SiRefus"/> et une phrase qui refuse sans rien
+        /// valider) et que sa réponse ne dit AUCUN mot à voix haute, le mot dicté au tour d'avant est ajouté à la fin, dans
+        /// la balise de la langue : <see cref="EcouteDesMots"/> pose ensuite l'annonce et la question. Rien hors d'un tour
+        /// d'écoute en attente, rien sur une clôture, une demande d'écrire, un mot abandonné aux trois essais.
+        /// </summary>
+        public static string AvecLeMotARedire(string texte, IReadOnlyList<string> recents, string langue, RedireLeMot redire, string? abandonne = null)
+        {
+            if (redire == RedireLeMot.Non || string.IsNullOrWhiteSpace(texte)) return texte;
+            if (DicteeDeMots.MotDit(texte) is not null || EstUneCloture(texte) || DemandeDEcrireCeQuIlEntend(texte)) return texte;
+            if (!EcouteEnAttente(recents) || DernierMotDicte(recents) is not { } mot) return texte;
+            if (abandonne is not null && string.Equals(SansAccents(mot), SansAccents(abandonne), StringComparison.OrdinalIgnoreCase)) return texte;
+            if (redire == RedireLeMot.SiRefus && !RefusSansValidation(PassageDeVoix().Replace(texte, " "))) return texte;
+
+            var etiquette = langue == LanguesDesSons.Anglais ? "EN" : "FR";
+            return $"{texte.TrimEnd()}\n\n[{etiquette}]{mot}[/{etiquette}]";
+        }
+
+        /// <summary>
+        /// Le dernier message du professeur est un tour d'écoute qui attend sa réponse : un mot seul dans sa balise de voix,
+        /// puis « Qu'as-tu entendu ? » (ou une autre question d'écoute).
+        /// </summary>
+        public static bool EcouteEnAttente(IReadOnlyList<string> recents)
+        {
+            for (var i = recents.Count - 1; i >= 0; i--)
+            {
+                if (recents[i] is not { } r || !PassageDeVoix().IsMatch(r)) continue;
+                return DicteeDeMots.MotDit(r) is not null && !EstUneCloture(r) && !EcrireCeQuIlEntend().IsMatch(DerniersMots(r))
+                    && (r.Contains(QuestionApresLeSon, StringComparison.OrdinalIgnoreCase) || AttendCeQuIlAEntendu().IsMatch(DerniersMots(r)));
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// LE FAIT DU RETOUR PENDANT L'ÉCOUTE DES MOTS (e2e, 22/11/2026) : au retour, Marine jugeait une réponse qui n'existait
+        /// pas (« Juste ! C'est bien cat. », « Pas tout à fait ! ») ou citait le mot (« Ce mot, c'était le mot que je viens
+        /// de te dire. », retest d'Adam, 21/11/2026, 19h50). Le mot attendu est redit tel quel à la fin de son message.
+        /// </summary>
+        public static string FaitRepriseDeLEcoute(string mot) =>
+            $"[Fait pour ce tour : il revient dans l'écoute des mots. Il n'a PAS encore répondu au dernier mot que tu lui as dit (« {mot} »). "
+            + "Ne juge rien : ni bravo, ni juste, ni faux, ni « pas tout à fait ». N'écris pas ce mot et ne parle pas de lui. "
+            + "Dis-lui seulement, en une phrase, que vous reprenez l'écoute. Ce même mot lui sera redit à voix haute à la fin de ton message.]";
 
         /// <summary>Garder le mot dicté au tour d'avant (retest KO #57) : voir EcouteDesMots.</summary>
         public enum RedireLeMot
@@ -1635,7 +1727,7 @@ namespace SchoolWebApp.Api.Services.Voix
         Task<bool> DemandeDeSonAsync(string? paroleDuProfesseur, CancellationToken ct, string langue = LanguesDesSons.Francais, bool enExercice = true);
 
         /// <summary>Le filtre d'une réponse dans un exercice de sons : la liste blanche, et la réponse cachée quand l'enfant doit l'écrire.</summary>
-        Task<FiltreMotsVerifies?> FiltrePourAsync(string langue, IReadOnlyList<string> messagesRecents, int graine, CancellationToken ct, bool supportConnu = true, bool photoAttendue = false, EtatDuMot? etat = null, bool retenirTout = false, string? niveau = null, string? messageDeLEleve = null, string? motGarde = null, string? abandonne = null, LectureDImage.Tour? lecture = null, string? poserLeChoix = null, string? motDeLImage = null, RegleVerificationSon.RedireLeMot redire = RegleVerificationSon.RedireLeMot.Non);
+        Task<FiltreMotsVerifies?> FiltrePourAsync(string langue, IReadOnlyList<string> messagesRecents, int graine, CancellationToken ct, bool supportConnu = true, bool photoAttendue = false, EtatDuMot? etat = null, bool retenirTout = false, string? niveau = null, string? messageDeLEleve = null, string? motGarde = null, string? abandonne = null, LectureDImage.Tour? lecture = null, string? poserLeChoix = null, string? motDeLImage = null, RegleVerificationSon.RedireLeMot redire = RegleVerificationSon.RedireLeMot.Non, bool arrivee = false);
     }
 
     public sealed class VerificationSonService : IVerificationSonService
@@ -2002,12 +2094,12 @@ namespace SchoolWebApp.Api.Services.Voix
             }
         }
 
-        public async Task<FiltreMotsVerifies?> FiltrePourAsync(string langue, IReadOnlyList<string> messagesRecents, int graine, CancellationToken ct, bool supportConnu = true, bool photoAttendue = false, EtatDuMot? etat = null, bool retenirTout = false, string? niveau = null, string? messageDeLEleve = null, string? motGarde = null, string? abandonne = null, LectureDImage.Tour? lecture = null, string? poserLeChoix = null, string? motDeLImage = null, RegleVerificationSon.RedireLeMot redire = RegleVerificationSon.RedireLeMot.Non)
+        public async Task<FiltreMotsVerifies?> FiltrePourAsync(string langue, IReadOnlyList<string> messagesRecents, int graine, CancellationToken ct, bool supportConnu = true, bool photoAttendue = false, EtatDuMot? etat = null, bool retenirTout = false, string? niveau = null, string? messageDeLEleve = null, string? motGarde = null, string? abandonne = null, LectureDImage.Tour? lecture = null, string? poserLeChoix = null, string? motDeLImage = null, RegleVerificationSon.RedireLeMot redire = RegleVerificationSon.RedireLeMot.Non, bool arrivee = false)
         {
             // INTERRUPTEUR ÉTEINT, LA LISTE NE S'APPLIQUE PAS, MAIS LA RÉPONSE RESTE CACHÉE : le signalement
             // vient de la production, où il l'est. Une liste vide ne remplace aucun mot.
             IReadOnlyList<string> fiables = await _fiabilite.ActifAsync(ct) ? await _fiabilite.ListeAsync(langue, ct) : [];
-            return new FiltreMotsVerifies(langue, fiables, messagesRecents, graine, supportConnu, photoAttendue, etat, retenirTout, niveau, messageDeLEleve, motGarde, abandonne, lecture, poserLeChoix, motDeLImage, redire);
+            return new FiltreMotsVerifies(langue, fiables, messagesRecents, graine, supportConnu, photoAttendue, etat, retenirTout, niveau, messageDeLEleve, motGarde, abandonne, lecture, poserLeChoix, motDeLImage, redire, arrivee);
         }
 
         public async Task<bool> DemandeDeSonAsync(string? paroleDuProfesseur, CancellationToken ct, string langue = LanguesDesSons.Francais, bool enExercice = true)

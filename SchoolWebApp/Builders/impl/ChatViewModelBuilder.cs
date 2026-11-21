@@ -4162,6 +4162,23 @@ namespace SchoolWebApp.Api.Builders.impl
             var filtreAccord = new CorrectionsDuFlux(
                 PromptsPedagogiques.EstUneProfesseure(contexte.Conversation.ProfAvatar));
 
+            // L'ÉCOUTE DES MOTS REPREND AU TOUR D'ARRIVÉE (retest d'Adam, #57, 21/11/2026, et e2e du 22/11/2026) : au retour
+            // ou à l'annonce « cinq minutes », le dernier mot dit attend encore sa réponse. Marine jugeait une réponse qui
+            // n'existait pas (« Juste ! C'est bien cat. », « Pas tout à fait ! »), citait le mot (« Ce mot, c'était le mot que
+            // je viens de te dire. ») ou en dictait un autre. Le fait le lui dit, et le filtre redit le MÊME mot, sans verdict.
+            var filSonsTextes = filSons.Select(m => m.Contenu ?? string.Empty).ToList();
+            var motAReprendre = typeAccueil is TypeAccueil.Retour or TypeAccueil.FinProche
+                && enExerciceDeSons && !change && langueDuSon is not null && lectureDuTour is null && etatDuMot is null
+                && poserLeChoix is null && !controleOuvert
+                && Services.Voix.RegleVerificationSon.EcouteEnAttente(filSonsTextes)
+                    ? Services.Voix.RegleVerificationSon.DernierMotDicte(filSonsTextes)
+                    : null;
+            if (motAReprendre is not null)
+            {
+                declencheur += "\n\n" + Services.Voix.RegleVerificationSon.FaitRepriseDeLEcoute(motAReprendre);
+                _logger.LogInformation("Ecoute des mots reprise au tour d'arrivee ({Type}, conversation {ConversationId}).", typeAccueil, conversationId);
+            }
+
             // IL PIOCHE DANS LA LISTE BLANCHE — voir FiltreMotsVerifies. Le français et l'anglais au
             // primaire, l'interrupteur allumé, et seulement dans un exercice de sons ou de syllabes :
             // ailleurs, pas de filtre, donc pas le moindre retard sur la voix.
@@ -4189,7 +4206,10 @@ namespace SchoolWebApp.Api.Builders.impl
                     // a refusé (verdict du micro faux, mot français reconnu) ; si rien n'est jugé, seulement quand il a répondu par
                     // un mot ou deux (« Orange! ») et que le professeur refuse sans rien valider. Jamais au 3e essai (abandon), ni
                     // quand il change d'exercice ou s'en va.
-                    redire: change || abandon is not null || sonJuste == true || LecteurAuRevoir.DitAuRevoir(contenu)
+                    // Au tour d'arrivée, le mot qui attend sa réponse reste (motAReprendre).
+                    arrivee: motAReprendre is not null,
+                    redire: motAReprendre is not null ? Services.Voix.RegleVerificationSon.RedireLeMot.Toujours
+                        : change || abandon is not null || sonJuste == true || LecteurAuRevoir.DitAuRevoir(contenu)
                         ? Services.Voix.RegleVerificationSon.RedireLeMot.Non
                         : sonJuste == false || repetitionEnLangue is not null
                             ? Services.Voix.RegleVerificationSon.RedireLeMot.Toujours
