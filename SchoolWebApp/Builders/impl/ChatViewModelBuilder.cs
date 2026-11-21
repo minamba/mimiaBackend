@@ -3634,20 +3634,27 @@ namespace SchoolWebApp.Api.Builders.impl
             // LE MOT DIT EN FRANÇAIS N'EST PAS UNE RÉPÉTITION (21/11/2026, signalement #57 : « Blue. Tu répètes ? » —
             // « Bleu! » — « Oui, parfait ! ») — voir RepetitionEnLangue. Commun à TOUS les professeurs de langue : le code
             // reconnaît la traduction française du mot à répéter et le dit au professeur, au tour même. Pas pendant un
-            // contrôle noté, ni dans un exercice de sons (il a son propre verdict), ni quand il demande à changer d'exercice.
-            if (!controleOuvert && !enExerciceDeSons && !change
+            // contrôle noté, ni quand il demande à changer d'exercice. Dans un exercice de sons, seulement à l'ÉCOUTE DES MOTS
+            // TAPÉE (retest KO #57, 21/11/2026 : « [EN]Two[/EN]. Qu'as-tu entendu ? » — « Deux! » validé) : au micro, le relais
+            // juge déjà (verdict faux), et la lecture en images ou la dictée ont leur propre juge.
+            RepetitionEnLangue.Tour? repetitionEnLangue = null;
+            var messagesDuProfPourLaLangue = historique.Where(m => m.Role == "assistant")
+                .Select(m => m.Contenu)
+                .Where(c => !string.IsNullOrWhiteSpace(c)
+                    && !c!.TrimStart().StartsWith("[FICHE]", StringComparison.OrdinalIgnoreCase)
+                    && !c.TrimStart().StartsWith("[RAPPORT]", StringComparison.OrdinalIgnoreCase))
+                .TakeLast(RepetitionEnLangue.MessagesLus)
+                .ToList();
+            var ecouteTapee = enExerciceDeSons && sonJuste is null
+                && Services.Voix.RegleVerificationSon.DemandeCeQuIlAEntendu(messagesDuProfPourLaLangue.LastOrDefault() ?? string.Empty);
+            if (!controleOuvert && (!enExerciceDeSons || ecouteTapee) && !change
                 && RepetitionEnLangue.Concerne(contexte.Conversation.AgentSlug))
             {
                 var repetition = RepetitionEnLangue.Juger(
                     contexte.Conversation.AgentSlug,
-                    historique.Where(m => m.Role == "assistant")
-                        .Select(m => m.Contenu)
-                        .Where(c => !string.IsNullOrWhiteSpace(c)
-                            && !c!.TrimStart().StartsWith("[FICHE]", StringComparison.OrdinalIgnoreCase)
-                            && !c.TrimStart().StartsWith("[RAPPORT]", StringComparison.OrdinalIgnoreCase))
-                        .TakeLast(RepetitionEnLangue.MessagesLus)
-                        .ToList(),
+                    messagesDuProfPourLaLangue,
                     contenu);
+                repetitionEnLangue = repetition;
                 if (repetition is not null)
                 {
                     declencheur += "\n\n" + RepetitionEnLangue.Fait(repetition);
@@ -4062,7 +4069,18 @@ namespace SchoolWebApp.Api.Builders.impl
                     abandonne: abandon?.Son,
                     lecture: lectureDuTour,
                     poserLeChoix: poserLeChoix,
-                    motDeLImage: imageAuTableau is { Syllabe: not null } ? imageAuTableau.Mot : null);
+                    motDeLImage: imageAuTableau is { Syllabe: not null } ? imageAuTableau.Mot : null,
+                    // APRÈS UN REFUS, LE MÊME MOT (retest KO #57) : voir RegleVerificationSon.EcouteDesMots. Toujours quand le code
+                    // a refusé (verdict du micro faux, mot français reconnu) ; si rien n'est jugé, seulement quand il a répondu par
+                    // un mot ou deux (« Orange! ») et que le professeur refuse sans rien valider. Jamais au 3e essai (abandon), ni
+                    // quand il change d'exercice ou s'en va.
+                    redire: change || abandon is not null || sonJuste == true || LecteurAuRevoir.DitAuRevoir(contenu)
+                        ? Services.Voix.RegleVerificationSon.RedireLeMot.Non
+                        : sonJuste == false || repetitionEnLangue is not null
+                            ? Services.Voix.RegleVerificationSon.RedireLeMot.Toujours
+                            : Services.Voix.RegleVerificationSon.ReponseDEcoute(contenu) is not null
+                                ? Services.Voix.RegleVerificationSon.RedireLeMot.SiRefus
+                                : Services.Voix.RegleVerificationSon.RedireLeMot.Non);
 
             // LA LECTURE DES NOMBRES : la réponse est retenue, puis remise en ordre (sa phrase, la consigne, la balise).
             var filtreNombres = nombresDuTour is null ? null : new Services.Voix.FiltreLectureNombres(nombresDuTour);

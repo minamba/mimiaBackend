@@ -110,7 +110,11 @@ namespace SchoolWebApp.Api.Services
             + @"|(?<!\bje\s+(?:vais|peux|veux|voudrais)\s+(?:(?:te|vous|le|la|les|l['’])\s*)*)\brépéter\b|\bredis[- ](?:le|la|les|moi)\b|\bredis\s+après\s+moi\b"
             + @"|\bà\s+toi\s*(?:[!.]|de\s+(?:le\s+|la\s+|les\s+)?(?:dire|répéter|redire|prononcer))"
             + @"|\bà\s+ton\s+tour\b|\bessaie\s+de\s+le\s+(?:dire|répéter|redire|prononcer)\b|\bdis[- ](?:le|la)\b|\bcomme\s+moi\b"
-            + @"|\brepeat\b|\byour\s+turn\b|\brepite\b|\brepítelo\b|\bripeti\b|\bwiederhol|\bsprich\s+nach\b",
+            + @"|\brepeat\b|\byour\s+turn\b|\brepite\b|\brepítelo\b|\bripeti\b|\bwiederhol|\bsprich\s+nach\b"
+            // L'ÉCOUTE DES MOTS (retest KO #57, 21/11/2026, 15h05) : « [EN]Two[/EN]. Qu'as-tu entendu ? » — « Deux! » validé.
+            // Là, l'enfant doit dire le mot ENTENDU (« two »), pas son sens : c'est une répétition. La question est celle que
+            // le code écrit après chaque mot dicté (RegleVerificationSon.QuestionApresLeSon), et ses variantes.
+            + @"|\bqu['’]as[- ]tu\s+entendu|\bqu['’]est[- ]ce\s+que\s+tu\s+(?:as\s+)?entend|\bce\s+que\s+tu\s+(?:as\s+)?entend(?:s|u)\b",
             RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
         private static partial Regex DemandeDeRepetition();
 
@@ -240,15 +244,16 @@ namespace SchoolWebApp.Api.Services
                 $"[Vérifié par l'application : tu lui as demandé comment on dit « {tour.Attendu} » en {tour.Langue}, et il a "
                 + $"répondu « {tour.Dit} » : c'est le mot FRANÇAIS que tu lui as donné, pas le mot en {tour.Langue}. Ce n'est pas "
                 + "la réponse : ne commence ni par « Oui », ni par « Parfait », ni par « Bravo », et ne dis pas que c'est juste. "
-                + $"Dis-lui avec douceur qu'il a redit le mot en français, puis redemande-lui de le dire en {tour.Langue}, sans lui "
+                + $"Sans le gronder, dis-lui qu'il a redit le mot en français, puis redemande-lui de le dire en {tour.Langue}, sans lui "
                 + "donner la réponse.]",
             _ =>
                 $"[Vérifié par l'application : tu lui as demandé de répéter [{tour.Balise}]{tour.Attendu}[/{tour.Balise}], et il a "
                 + $"répondu « {tour.Dit} » : c'est le mot en FRANÇAIS (« {tour.Francais} »), pas le mot en {tour.Langue}. Ce n'est "
                 + "PAS la répétition demandée : ne commence ni par « Oui », ni par « Parfait », ni par « Bravo », et ne dis pas "
-                + "que c'est juste. Dis-lui avec douceur que ça, c'est le mot en français — il en a bien compris le sens —, puis "
-                + $"redis le mot en {tour.Langue}, dans ta balise : [{tour.Balise}]{tour.Attendu}[/{tour.Balise}], et demande-lui "
-                + "de le répéter comme toi.]",
+                + "que c'est juste. Sans le gronder, dis-lui que ça, c'est le mot en français — il en a bien compris le sens —, puis "
+                + $"redis LE MÊME MOT en {tour.Langue}, dans ta balise : [{tour.Balise}]{tour.Attendu}[/{tour.Balise}], et demande-lui "
+                + "de le répéter comme toi. NE PASSE PAS à un autre mot à ce tour : aucun autre mot en "
+                + $"{tour.Langue} dans ton message, ni « voici le prochain mot », ni « on continue » ; il doit d'abord redire celui-ci.]",
         };
 
         /// <summary>
