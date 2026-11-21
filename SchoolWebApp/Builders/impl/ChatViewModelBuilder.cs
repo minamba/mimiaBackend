@@ -3645,7 +3645,9 @@ namespace SchoolWebApp.Api.Builders.impl
                 // Le tour d'arrivée qui reprend la lecture (plus haut) : le même nombre, remontré par le code.
                 nombresDuTour = repriseNombres;
                 declencheur += "\n\n" + Services.Voix.LectureDesNombres.FaitType
-                    + "\n\n" + Services.Voix.LectureDesNombres.FaitReprise;
+                    + "\n\n" + (typeAccueil == TypeAccueil.FinProche
+                        ? Services.Voix.LectureDesNombres.FaitRepriseApresAnnonce
+                        : Services.Voix.LectureDesNombres.FaitReprise);
             }
             else if (enLectureDeNombres)
             {

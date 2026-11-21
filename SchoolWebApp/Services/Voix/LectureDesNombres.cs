@@ -791,10 +791,22 @@ namespace SchoolWebApp.Api.Services.Voix
         /// </summary>
         public const string FaitReprise =
             "[Fait pour ce tour : il revient pendant l'exercice de LECTURE DES NOMBRES, et l'exercice CONTINUE. Le nombre "
-            + "qu'il avait à lire s'affiche DE NOUVEAU au tableau, en image : le tableau n'est pas vide. Dis-lui en une ou deux "
-            + "phrases courtes ce que tu as à lui dire (content de le retrouver, le temps qui reste), SANS lui proposer une autre "
-            + "activité, sans lui demander ce qu'il veut faire et sans lui redemander de lire : la consigne de lecture est ajoutée "
-            + "à la fin de ton message. Ne prononce pas le nombre et n'écris rien au tableau : c'est lui qui le lit. "
+            + "qu'il avait à lire s'affiche DE NOUVEAU au tableau, en image : le tableau n'est pas vide. Écris seulement UNE "
+            + "phrase courte qui ne parle ni du tableau ni de lire (« Te revoilà ! », « Content de te retrouver, on continue ! », "
+            + "ou le temps qui reste), SANS lui proposer une autre activité ni lui demander ce qu'il veut faire : la consigne de "
+            + "lecture est ajoutée après ta phrase, ne l'écris pas toi-même. Ne prononce pas le nombre et n'écris rien au "
+            + "tableau : c'est lui qui le lit. "
+            + JargonTechnique.Regle + "]";
+
+        /// <summary>
+        /// Le même fait pour l'annonce « cinq minutes » du minuteur au milieu de la lecture : il n'est pas parti (le fait du
+        /// retour lui faisait dire « Te revoilà ! », vu au bout en bout de la tâche 0100).
+        /// </summary>
+        public const string FaitRepriseApresAnnonce =
+            "[Fait pour ce tour : il est en pleine LECTURE DES NOMBRES, il n'est pas parti, et l'exercice CONTINUE : le nombre "
+            + "qu'il doit lire reste au tableau, en image. Écris seulement UNE phrase courte qui dit le temps qui reste, sans "
+            + "parler du tableau ni de lire et sans dire « te revoilà » : la consigne de lecture est ajoutée après ta phrase, ne "
+            + "l'écris pas toi-même. Ne prononce pas le nombre et n'écris rien au tableau : c'est lui qui le lit. "
             + JargonTechnique.Regle + "]";
 
         /// <summary>
