@@ -3380,6 +3380,24 @@ namespace SchoolWebApp.Api.Builders.impl
                     : faitCalcul ?? ReponseChiffree.RappelPour(contenu));
             }
 
+            // « JE SAIS PAS » PENDANT UNE SUITE DE NOMBRES — Minamba, le 21/11/2026, signalement #60 : sans nombre,
+            // pas de verdict, et Nora a inventé un indice faux (« ça avance d'une dizaine de plus » devant 71…80).
+            // On lui donne l'indice calculé de la suite (CalculAuTableau.FaitSansReponse), sans verdict. Mêmes
+            // exclusions que le verdict : ni contrôle noté, ni lecture des nombres.
+            else if (!controleOuvert && !enLectureDeNombres
+                && CalculAuTableau.FaitSansReponse(
+                    historique.Where(m => m.Role == "assistant")
+                        .Select(m => m.Contenu)
+                        .Where(c => !string.IsNullOrWhiteSpace(c)
+                            && !c!.TrimStart().StartsWith("[FICHE]", StringComparison.OrdinalIgnoreCase)
+                            && !c.TrimStart().StartsWith("[RAPPORT]", StringComparison.OrdinalIgnoreCase))
+                        .TakeLast(CalculAuTableau.MessagesRemontes),
+                    contenu) is { } faitSansReponse)
+            {
+                _logger.LogInformation("Suite sans reponse (conversation {ConversationId}) : indice calcule donne", conversationId);
+                declencheur += "\n\n" + faitSansReponse;
+            }
+
             // ET SON SYMÉTRIQUE : « VAS-Y » N'EST PAS UNE RÉPONSE — voir
             // `InvitationAContinuer`. Le 03/10/2026, Nora a posé un exercice,
             // l'élève a répondu « Vas-y. », et elle a validé un 53 qu'elle
