@@ -4037,7 +4037,12 @@ namespace SchoolWebApp.Api.Builders.impl
                             filSons.Select(m => m.Contenu).Append(contenuPourLesSons));
                         // Son dernier essai était la traduction française du mot (« J'ai entendu le mot deux. » pour two, au
                         // micro ou tapé) : réexpliquer avant de passer (contrôle d'Omar sur le #57 v2).
-                        var francaisAbandon = sonJuste == false
+                        // Ou sa répétition tapée, déjà reconnue comme la traduction (« J'ai répété : Bleu! ») : sans elle, dans une
+                        // conversation que le code croit en exercice de sons, ce fait l'emportait sans réexplication (1/4 au bout en bout).
+                        var francaisAbandon = repetitionEnLangue is { Nature: RepetitionEnLangue.Demande.Repeter } repete
+                            && string.Equals(repete.Attendu, abandon.Son, StringComparison.OrdinalIgnoreCase)
+                            ? repete.Francais
+                            : sonJuste == false
                             ? RepetitionEnLangue.TraductionDite(langueDuSon, abandon.Son,
                                 Services.Voix.RegleVerificationSon.ReponseDEcoute(contenu), messagesDuProfPourLaLangue)
                             : null;

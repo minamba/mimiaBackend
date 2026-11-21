@@ -109,8 +109,9 @@ namespace SchoolWebApp.Api.Services
             + @"|(?<!\b(?:je|j['’]|que\s+je)\s*(?:(?:te|vous|le|la|les|l['’])\s*)*)\brépète(?:s|z)?\b"
             + @"|(?<!\bje\s+(?:vais|peux|veux|voudrais)\s+(?:(?:te|vous|le|la|les|l['’])\s*)*)\brépéter\b|\bredis[- ](?:le|la|les|moi)\b|\bredis\s+après\s+moi\b"
             + @"|\bà\s+toi\s*(?:[!.]|de\s+(?:le\s+|la\s+|les\s+)?(?:dire|répéter|redire|prononcer))"
-            + @"|\bà\s+ton\s+tour\b|\bessaie\s+de\s+le\s+(?:dire|répéter|redire|prononcer)\b|\bdis[- ](?:le|la)\b|\bcomme\s+moi\b"
-            // « Essaie de faire le même son que moi. » (bout en bout de la tâche 1600) : une demande d'imitation, donc de répétition.
+            + @"|\bà\s+ton\s+tour\b|\bessaie\s+de\s+(?:le\s+|la\s+|l['’]\s*)?(?:dire|répéter|redire|prononcer)\b|\bdis[- ](?:le|la)\b|\bcomme\s+moi\b"
+            // « Essaie de faire le même son que moi. », « Essaie de dire ce son-là » (bout en bout de la tâche 1600) : des demandes
+            // d'imitation, donc de répétition (le mot à redire reste celui de la balise : sans balise, rien n'est jugé).
             + @"|\bmême\s+(?:son|mot)\s+que\s+moi\b|\bpareil\s+que\s+moi\b"
             + @"|\brepeat\b|\byour\s+turn\b|\brepite\b|\brepítelo\b|\bripeti\b|\bwiederhol|\bsprich\s+nach\b"
             // L'ÉCOUTE DES MOTS (retest KO #57, 21/11/2026, 15h05) : « [EN]Two[/EN]. Qu'as-tu entendu ? » — « Deux! » validé.
@@ -132,6 +133,22 @@ namespace SchoolWebApp.Api.Services
             + @"|quel(?:le)?\s+couleur|quel\s+(?:animal|nombre|chiffre|mot)",
             RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
         private static partial Regex SensDemande();
+
+        /// <summary>
+        /// LE SENS EST-IL DEMANDÉ ? Seulement dans une QUESTION : une phrase finie par « ? », ou qui interroge sans le point
+        /// (« tu sais… », « dis-moi… », « explique… », « traduis… »). Au bout en bout de la tâche 1600, le professeur AFFIRMAIT
+        /// (« Tu as bien compris que ça veut dire bleu, c'est super ! », « c'est pile ce que ça veut dire, bravo ! ») et le juge
+        /// se taisait : l'essai suivant n'était plus compté, et le professeur a fini par valider « Bleu! ».
+        /// </summary>
+        private static bool DemandeLeSens(string texte) =>
+            Phrases().Matches(texte).Any(p => SensDemande().IsMatch(p.Value)
+                && (p.Value.TrimEnd().EndsWith('?') || QuestionSansPoint().IsMatch(p.Value)));
+
+        [GeneratedRegex(@"[^.!?…\n]+[.!?…]*")]
+        private static partial Regex Phrases();
+
+        [GeneratedRegex(@"\btu\s+sais\b|\bsais[- ]tu\b|\b(?:dis|explique|traduis|devine)[- ]moi\b|\btraduis\b|\btraduire\b|\bexplique\b|\bdis[- ]?(?:le|la|les|moi)?\s+en\s+français\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+        private static partial Regex QuestionSansPoint();
 
         /// <summary>Une consigne seule, dans la langue : « [EN]Repeat![/EN] » n'est pas le mot à répéter.</summary>
         [GeneratedRegex(
@@ -196,7 +213,7 @@ namespace SchoolWebApp.Api.Services
             var contenuDit = SansRemplissage(motsDits);
 
             var texte = Tableau().Replace(dernier, " ");
-            if (SensDemande().IsMatch(SansBalises(texte))) return null;
+            if (DemandeLeSens(SansBalises(texte))) return null;
 
             var demande = DemandeDeRepetition().Match(texte);
             if (demande.Success)
