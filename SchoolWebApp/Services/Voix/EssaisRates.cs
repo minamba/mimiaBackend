@@ -99,16 +99,22 @@ namespace SchoolWebApp.Api.Services.Voix
         /// #57 v2, 21/11/2026) ; avant de passer, le professeur réexplique ce qui était attendu (règle des trois essais :
         /// réexplication, puis passage), sans redire le mot abandonné.
         /// </summary>
-        public static string Fait(Abandon abandon, bool syllabe, string? francais = null) =>
+        public static string Fait(Abandon abandon, bool syllabe, string? francais = null, string langue = "anglais") =>
             $"[Fait pour ce tour, qui l'emporte sur tous les faits précédents : c'est son {abandon.Essais}e essai raté sur « {abandon.Son} ». "
             + "NE LE LUI REDEMANDE PAS. "
+            // Au bout en bout, « réexplique-lui d'abord » seul était fondu dans « Pas de souci ! » : la phrase attendue est
+            // donnée telle quelle (le modèle recopie ce qu'on lui donne — ici, c'est voulu).
             + (francais is null ? string.Empty
-                : $"Il a répondu « {francais} », le mot en FRANÇAIS : ne dis pas que c'est juste. Sans le gronder, réexplique-lui d'abord en "
-                  + "une phrase que ça, c'est le sens du mot en français, et qu'ici il fallait redire le mot tel qu'il l'a entendu, dans "
-                  + "la langue du cours. ")
-            + "Dis-lui, chaleureusement et en une phrase, que ce n'est pas grave, que vous y reviendrez un peu plus "
+                : $"Il a répondu « {francais} », le mot en FRANÇAIS : ne dis pas que c'est juste. Ta PREMIÈRE phrase le lui réexplique, "
+                  + $"sans le gronder, par exemple : « {Majuscule(francais)}, c'est le sens du mot en français ; ici, il fallait redire le mot "
+                  + $"{langue} que tu as entendu. » Ensuite seulement, ")
+            + (francais is null ? "Dis-lui" : "dis-lui")
+            + ", chaleureusement et en une phrase, que ce n'est pas grave, que vous y reviendrez un peu plus "
             + $"tard, puis passe {(syllabe ? "à la syllabe suivante" : "au mot suivant")}, une autre que « {abandon.Son} ». Ne lui dis pas combien d'essais il a faits, "
             + $"et n'écris pas « {abandon.Son} » dans ta phrase : ta voix le lirait mal.]";
+
+        private static string Majuscule(string mot) =>
+            string.IsNullOrEmpty(mot) ? mot : char.ToUpperInvariant(mot[0]) + mot[1..];
 
         /// <summary>Le son du dernier message du professeur avant l'index `avant`.</summary>
         private static string? SonDemande(IReadOnlyList<(string Role, string? Contenu, bool? SonJuste)> historique, int avant)

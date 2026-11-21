@@ -1073,7 +1073,7 @@ namespace SchoolWebApp.Api.Services.Voix
             {
                 return $"[Fait pour ce tour, qui l'emporte sur le rappel précédent : tu as dit « {verdict.Attendu} » et il a répondu "
                     + $"« {verdict.Entendu} » : c'est le mot en FRANÇAIS (« {francais} »), pas le mot qu'il a entendu. Son écran affiche "
-                    + $"« {faux} ». Ce n'est pas la réponse : ne commence ni par « Oui », ni par « Parfait », ni par « Bravo », et ne dis "
+                    + $"« {faux} ». Ce n'est pas la réponse : ne commence ni par « Oui », ni par « Parfait », ni par « Bravo », ni par « C'est bien ça », et ne dis "
                     + "pas que c'est juste. Sans le gronder, dis-lui que ça, c'est le mot en français — il en a bien compris le sens —, "
                     + $"puis redis LE MÊME MOT « {verdict.Attendu} » dans ta balise de voix et redemande ce qu'il a entendu. NE PASSE PAS à "
                     + "un autre mot à ce tour. Ne parle jamais de cet outil à l'élève.]";
@@ -1355,7 +1355,8 @@ namespace SchoolWebApp.Api.Services.Voix
         // « Je te le redis en anglais. » : la phrase avec son complément SANS CONTENU (tâche 1600, 21/11/2026, bout en bout) —
         // seul « Je te le redis » partait, et il restait « c'est pas grave !en anglais. ». Le code remet sa propre annonce
         // juste avant le son. Un autre complément (un indice : « …, écoute bien le début ») reste, comme avant.
-        [GeneratedRegex(@"(?<=^|[.!?…\n]\s*)\s*(?:voici\s+(?:la|le)\s+(?:(?:prochaine|première|premiere|nouvelle|prochain|premier|nouveau)(?:\s+(?:syllabe|mot)|(?=\s*(?:[.!:…\n]|$)))|syllabe|mot)|je\s+te\s+l[ae]\s+redis(?:\s*,?\s+(?:en\s+(?:anglais|français|francais|espagnol|allemand|italien)|encore(?:\s+une\s+fois)?|une\s+(?:autre|dernière|derniere|nouvelle)\s+fois|une\s+fois\s+de\s+plus|tout\s+de\s+suite|maintenant|lentement|doucement|bien\s+lentement|pour\s+toi))*)\s*[.!:…]?", RegexOptions.IgnoreCase)]
+        // « Voici un autre mot. » et « Je te le dis. » (même tâche) : deux autres annonces, en double avec celle du code.
+        [GeneratedRegex(@"(?<=^|[.!?…\n]\s*)\s*(?:voici\s+(?:la|le)\s+(?:(?:prochaine|première|premiere|nouvelle|prochain|premier|nouveau)(?:\s+(?:syllabe|mot)|(?=\s*(?:[.!:…\n]|$)))|syllabe|mot)|voici\s+une?\s+(?:autre|nouveau|nouvelle)\s+(?:syllabe|mot)(?=\s*[.!:…\n])|je\s+te\s+l[ae]\s+dis(?=\s*[.!…\n])|je\s+te\s+l[ae]\s+redis(?:\s*,?\s+(?:en\s+(?:anglais|français|francais|espagnol|allemand|italien)|encore(?:\s+une\s+fois)?|une\s+(?:autre|dernière|derniere|nouvelle)\s+fois|une\s+fois\s+de\s+plus|tout\s+de\s+suite|maintenant|lentement|doucement|bien\s+lentement|pour\s+toi))*)\s*[.!:…]?", RegexOptions.IgnoreCase)]
         private static partial Regex PhraseDAnnonce();
 
         [GeneratedRegex(@"\bvoici\s+la\s+(?:(?:prochaine|première|premiere|nouvelle)\s+)?syllabe\b|\bje\s+te\s+la\s+redis\b", RegexOptions.IgnoreCase)]

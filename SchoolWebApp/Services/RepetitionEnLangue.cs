@@ -378,7 +378,7 @@ namespace SchoolWebApp.Api.Services
             _ =>
                 $"[Vérifié par l'application : tu lui as demandé de répéter [{tour.Balise}]{tour.Attendu}[/{tour.Balise}], et il a "
                 + $"répondu « {tour.Dit} » : c'est le mot en FRANÇAIS (« {tour.Francais} »), pas le mot en {tour.Langue}. Ce n'est "
-                + "PAS la répétition demandée : ne commence ni par « Oui », ni par « Parfait », ni par « Bravo », et ne dis pas "
+                + "PAS la répétition demandée : ne commence ni par « Oui », ni par « Parfait », ni par « Bravo », ni par « C'est bien ça », et ne dis pas "
                 + "que c'est juste. Sans le gronder, dis-lui que ça, c'est le mot en français — il en a bien compris le sens —, puis "
                 + $"redis LE MÊME MOT en {tour.Langue}, dans ta balise : [{tour.Balise}]{tour.Attendu}[/{tour.Balise}], et demande-lui "
                 + "de le répéter comme toi. NE PASSE PAS à un autre mot à ce tour : aucun autre mot en "
