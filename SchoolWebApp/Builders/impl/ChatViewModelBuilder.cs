@@ -361,6 +361,13 @@ namespace SchoolWebApp.Api.Builders.impl
 
             var vues = _mapper.Map<IEnumerable<MessageViewModel>>(messages).ToList();
 
+            // UN APARTÉ DE RÉGIE DÉJÀ ENREGISTRÉ (avant le filtre du flux) ne se réaffiche pas quand l'écran se recharge :
+            // même filtre que le flux, à la lecture seulement — la base n'est pas modifiée. Voir ApartesInternes.
+            foreach (var vue in vues.Where(v => v.Role == "assistant" && v.Contenu is not null))
+            {
+                vue.Contenu = ApartesInternes.Retirer(vue.Contenu);
+            }
+
             // Les documents en un seul aller-retour, puis répartis. Une requête
             // par message ferait vingt requêtes pour afficher un écran.
             var pieces = (await _conversationService.GetMetadonneesDesMessagesAsync(
