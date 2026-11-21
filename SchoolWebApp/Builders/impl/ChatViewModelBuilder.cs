@@ -2068,17 +2068,17 @@ namespace SchoolWebApp.Api.Builders.impl
         /// les montre — voir <see cref="EcartsDictee"/>. Null si rien ne permet
         /// de les recalculer : le rappel de correction part alors seul.
         /// </summary>
-        private async Task<string?> EcartsAuTableauAsync(CorrectionDictee correction, int eleveId)
+        private async Task<string?> EcartsAuTableauAsync(CorrectionDictee correction, int eleveId, bool francais)
         {
             try
             {
                 if (correction.DicteeId is int id)
                 {
                     var dictee = await _dictees.GetDetailAsync(id, eleveId);
-                    return dictee is null ? null : EcartsDictee.Marqueur(dictee.TexteDicte, dictee.Copie);
+                    return dictee is null ? null : FaitsDeCorrection(dictee.TexteDicte, dictee.Copie, francais);
                 }
 
-                return EcartsDictee.Marqueur(correction.Dicte, correction.Copie);
+                return FaitsDeCorrection(correction.Dicte, correction.Copie, francais);
             }
             catch (Exception ex)
             {
@@ -2087,6 +2087,26 @@ namespace SchoolWebApp.Api.Builders.impl
                 return null;
             }
         }
+
+        /// <summary>
+        /// Les faits d'une correction de dictée : les écarts numérotés du tableau, et en français les lettres
+        /// muettes en cause (signalement #58 — voir <see cref="LettresMuettes"/>). Null s'il n'y a rien à dire.
+        /// </summary>
+        private static string? FaitsDeCorrection(string? dicte, string? copie, bool francais)
+        {
+            var ecarts = EcartsDictee.Marqueur(dicte, copie);
+            var muettes = francais ? LettresMuettes.Fait(dicte, copie) : null;
+
+            return (ecarts, muettes) switch
+            {
+                (null, null) => null,
+                (_, null) => ecarts,
+                (null, _) => muettes,
+                _ => ecarts + "\n\n" + muettes,
+            };
+        }
+
+        private const string AgentFrancais = "agent-francais";
 
         /// <summary>
         /// L'élève parle de dictée, dans l'une des langues enseignées : c'est
@@ -3512,7 +3532,8 @@ namespace SchoolWebApp.Api.Builders.impl
                 // tableau numérote, s'est dédit deux fois, et a inventé un mot.
                 // Le texte d'une dictée remise par son numéro n'est qu'au tour
                 // d'accueil, jamais persisté : on le relit en base à chaque tour.
-                var ecarts = await EcartsAuTableauAsync(correctionDictee, contexte.Eleve.Id);
+                var ecarts = await EcartsAuTableauAsync(
+                    correctionDictee, contexte.Eleve.Id, contexte.Conversation.AgentSlug == AgentFrancais);
                 if (ecarts is not null) declencheur += "\n\n" + ecarts;
 
                 // À L'ARRIVÉE, le tableau est effacé puis remis par l'application
@@ -4140,6 +4161,15 @@ namespace SchoolWebApp.Api.Builders.impl
                 {
                     blocDicteeAjoute = LecteurDictee.TableauDeComparaison(texteDicte, copieTapee) + "\n\n";
                     declencheur += "\n\n" + PromptsPedagogiques.MarqueurTableauDicteeEcrit();
+
+                    // LES FAITS DE LA CORRECTION PARTENT DÈS LE TOUR DE LA COPIE — signalement #58 : c'est dans
+                    // CE message que le professeur commence « par l'erreur 1 », et la correction n'est pas encore
+                    // « ouverte » dans l'historique (son dernier message porte le bloc [DICTEE]). Il expliquait donc
+                    // l'erreur 1 sans ses numéros ni aucun fait : « cha » pour « chat » est devenu « tu l'entends,
+                    // ce son à la fin, « cha-t » ? ».
+                    var faits = FaitsDeCorrection(
+                        texteDicte, copieTapee, contexte.Conversation.AgentSlug == AgentFrancais);
+                    if (faits is not null) declencheur += "\n\n" + faits;
                     yield return blocDicteeAjoute;
                 }
             }

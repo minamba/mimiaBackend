@@ -30,10 +30,31 @@ namespace SchoolWebApp.Api.Services
         public const string FaitMots = "[DICTÉE DE MOTS";
         public const string FaitPhrases = "[DICTÉE DE PHRASES";
 
-        private const string ChoisieMots =
+        /// <summary>
+        /// UNE DICTÉE DE MOTS COMPTE DES MOTS, PAS DES LIGNES — signalement #58 d'Adam, le 21/11/2026 : au CP, le
+        /// minuteur annonce « une dictée demandée maintenant fait 1 lignes » (une phrase de cinq à huit mots, voir
+        /// <c>PromptsPedagogiques.LignesDeDictee</c>), et la dictée de mots se fait « un mot par ligne » : le
+        /// professeur a dicté UN mot, « chat », puis « Voilà, c'était le dernier mot ». Le nombre de mots est donc
+        /// donné à part, au tour même, et il l'emporte sur le nombre de lignes.
+        ///
+        /// Du CP au collège, à la mesure de la classe : cinq mots au CP-CE1 (un peu moins qu'une phrase de
+        /// cinq à huit mots, chaque mot se dicte seul), huit du CE2 au CM2, dix au collège.
+        /// </summary>
+        public static int MotsDeDictee(Eleve eleve) =>
+            eleve.NiveauCycle switch
+            {
+                "Primaire" => eleve.Age <= 7 ? 5 : 8,
+                "College" => 10,
+                _ => 8,
+            };
+
+        private static string ChoisieMots(Eleve eleve) =>
             "\n\n[DICTÉE DE MOTS CHOISIE : ton message est la dictée — la question « sur ton "
             + "cahier ou au clavier ? » puis le bloc —, faite UNIQUEMENT de mots seuls, un par "
-            + "ligne, chacun suivi d'un point. Aucune phrase.]";
+            + "ligne, chacun suivi d'un point. Aucune phrase. Elle compte " + MotsDeDictee(eleve)
+            + " MOTS DIFFÉRENTS, pas un de moins : une dictée de mots ne suit PAS le nombre de "
+            + "lignes du minuteur, qui compte des phrases. Seule exception : s'il a demandé "
+            + "lui-même un nombre de mots, c'est le sien.]";
 
         private const string ChoisiePhrases =
             "\n\n[DICTÉE DE PHRASES CHOISIE : ton message est la dictée — la question « sur "
@@ -78,7 +99,7 @@ namespace SchoolWebApp.Api.Services
 
             if (choixEnAttente is not null)
             {
-                return choixEnAttente == "MOTS" ? ChoisieMots : ChoisiePhrases;
+                return choixEnAttente == "MOTS" ? ChoisieMots(eleve) : ChoisiePhrases;
             }
 
             var enCours = typeDuBloc switch

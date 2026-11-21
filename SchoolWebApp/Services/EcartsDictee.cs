@@ -237,6 +237,24 @@ namespace SchoolWebApp.Api.Services
         }
 
         /// <summary>
+        /// Les mots dictés et ce qu'il a écrit à leur place, un mot contre un mot,
+        /// quand ils se ressemblent assez pour être le même mot mal écrit — SANS le
+        /// seuil des 30 % : une dictée de mots d'un CP peut être fausse partout.
+        /// Ne numérote rien et ne sert pas au tableau ; voir <see cref="LettresMuettes"/>.
+        /// </summary>
+        internal static IReadOnlyList<(string Dicte, string Copie)> MotsMalEcrits(string? dicte, string? copie)
+        {
+            var motsDicte = Mots(dicte);
+            var motsCopie = Mots(copie);
+            if (motsDicte.Count == 0 || motsCopie.Count == 0) return [];
+
+            return Aligner(motsDicte.Select(m => m.Cle).ToList(), motsCopie.Select(m => m.Cle).ToList())
+                .Where(op => op.Type == TypeOp.Faute)
+                .Select(op => (motsDicte[op.A].Cle, motsCopie[op.B].Cle))
+                .ToList();
+        }
+
+        /// <summary>
         /// Le fait joint à chaque tour pendant la correction : la liste que
         /// l'élève a sous les yeux, et la façon d'en parler.
         /// </summary>
