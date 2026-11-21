@@ -3461,6 +3461,27 @@ namespace SchoolWebApp.Api.Services.Prompts
             + "quand l'élève te DEMANDE une leçon ou une explication (« explique-moi… », « c'est quoi… »), tu lui énonces la "
             + "règle ou la définition du cours, juste et en entier ; faire observer ne remplace jamais une leçon demandée.]";
 
+        /// <summary>
+        /// TOUTE QUESTION EST UNE PHRASE CORRECTE ET ENTIÈRE, CHEZ TOUS LES PROFESSEURS — Min's, le 21/11/2026 (Telegram,
+        /// 13 h 02) : « une question doit toujours être une phrase correcte et entière pour tous les profs ». Constat d'Adam
+        /// (#30) : Nora écrit « Et après 74, ça vient ? » au lieu de « Et après 74, qu'est-ce qui vient ? ». Ce n'est pas
+        /// une faute de la suite des nombres : c'est la façon de questionner du professeur, la même en français, en
+        /// anglais ou en histoire — la règle est donc commune, ici, et pas dans la spécialité d'un seul professeur. La
+        /// tournure précise de #53 reste aussi corrigée dans le flux (<c>TournuresFautives</c>, branche #53) : ce filet ne
+        /// rattrape QUE les tournures déjà vues, la règle vise toutes les autres.
+        ///
+        /// REDITE À CHAQUE TOUR, PAS ÉCRITE DANS LE NOYAU, pour la même raison que <see cref="RegleDesTroisEssais"/> et
+        /// <see cref="RegleDesIndices"/> : le Noyau ne se touche pas (Camara, 19/09/2026) et le préfixe en cache ne bouge
+        /// pas. Pas pendant un contrôle noté : on n'y touche pas.
+        ///
+        /// ELLE NE PORTE QUE SUR LA FORME (leçon de <see cref="RegleDesIndices"/> : une règle qui ne dit pas à quoi elle
+        /// s'applique s'étend à tout) : elle ne fait poser ni plus ni moins de questions.
+        /// </summary>
+        public const string RegleDesQuestionsCompletes =
+            "[TES QUESTIONS — chaque question que tu poses est une phrase correcte et entière (ex. « Et après 74, "
+            + "qu'est-ce qui vient ? », jamais « Et après 74, ça vient ? »). Ce rappel porte sur la FORME de tes "
+            + "questions, pas sur leur nombre.]";
+
         public static string MarqueurEvaluationEnCours() =>
             "[CONTRÔLE EN COURS — tu n'es pas en train de faire cours.\n"
             + "TANT QU'IL RESTE DES QUESTIONS : TU NE DIS PAS SI SA RÉPONSE EST "
