@@ -3589,6 +3589,14 @@ namespace SchoolWebApp.Api.Builders.impl
                 declencheur += "\n\n" + PromptsPedagogiques.RegleDesTroisEssais;
             }
 
+            // UN INDICE NE S'INVENTE PAS — contrôle d'Omar sur le signalement #52 (21/11/2026), voir
+            // `PromptsPedagogiques.RegleDesIndices`. Commun à TOUS les professeurs et à tous les exercices, sons et lecture
+            // compris (c'est en lecture des nombres que la règle inventée est apparue). Pas pendant un contrôle noté.
+            if (!controleOuvert)
+            {
+                declencheur += "\n\n" + PromptsPedagogiques.RegleDesIndices;
+            }
+
             // LE TON DES TRACES ÉCRITES (13/11/2026) — voir PromptsPedagogiques.TonDesTracesEcrites. Aux tours où une
             // remarque ou un compte rendu s'écrit : pendant un contrôle (la remarque notée), dans une séance qui prépare un
             // contrôle ou une épreuve (le verdict « prêt »), et quand l'élève dit au revoir (le compte rendu).

@@ -3431,6 +3431,28 @@ namespace SchoolWebApp.Api.Services.Prompts
             + "donner la réponse.\n"
             + "Un « je ne sais pas » ou une question n'est pas une réponse fausse et ne compte pas.]";
 
+        /// <summary>
+        /// UN INDICE NE S'INVENTE PAS, DANS TOUS LES EXERCICES ET CHEZ TOUS LES PROFESSEURS — contrôle d'Omar sur le
+        /// signalement #52 (21/11/2026). En lecture des nombres, Nora a dit à un enfant de CP, devant 58 : « le premier
+        /// chiffre est plus grand que cinq, donc ça commence par soixante ». Personne ne lui avait soufflé cette règle :
+        /// le fait du tour disait seulement « donne un indice de méthode », et elle en a inventé une, fausse. C'est la
+        /// troisième fois (#29 verdicts de calcul, #46 décomposition, #52) : le même schéma existe partout où l'on demande
+        /// « un indice » sans dire lequel (lecture en images, dictée de mots, calculs, formes, et toutes les matières). La
+        /// cause est commune, la règle l'est donc aussi : ici, et pas dans la spécialité d'un seul professeur. L'indice
+        /// CALCULÉ (lecture des nombres, <c>LectureDesNombres.IndiceExact</c>) reste propre à son exercice.
+        ///
+        /// REDITE À CHAQUE TOUR, PAS ÉCRITE DANS LE NOYAU, pour la même raison que <see cref="RegleDesTroisEssais"/> : le
+        /// Noyau ne se touche pas (Camara, 19/09/2026), et une règle lue une fois tout en haut ne vaut pas un rappel au
+        /// tour même. Pas pendant un contrôle noté : il n'y a pas d'indice à donner.
+        /// </summary>
+        public const string RegleDesIndices =
+            "[TES INDICES — pour tous les exercices : n'énonce JAMAIS une règle ou une propriété dont tu n'es pas sûr "
+            + "(sur les chiffres, les nombres, les sons, l'orthographe, la grammaire, une figure, un calcul…). Un indice faux "
+            + "est pire que pas d'indice : l'enfant retient la règle qu'on lui donne. Fais OBSERVER plutôt qu'affirmer : "
+            + "« regarde le premier chiffre », « écoute le début du mot », « suis le bord avec ton doigt », plutôt qu'une règle "
+            + "du genre « c'est plus grand que…, donc… ». Si ce tour te donne un INDICE EXACT, VÉRIFIÉ, c'est celui-là que tu "
+            + "donnes, et les consignes de ce tour passent avant ce rappel.]";
+
         public static string MarqueurEvaluationEnCours() =>
             "[CONTRÔLE EN COURS — tu n'es pas en train de faire cours.\n"
             + "TANT QU'IL RESTE DES QUESTIONS : TU NE DIS PAS SI SA RÉPONSE EST "
