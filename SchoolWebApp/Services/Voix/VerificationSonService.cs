@@ -1507,9 +1507,23 @@ namespace SchoolWebApp.Api.Services.Voix
 
             var cible = CibleSansModele(reponse, langue);
 
-            if (cible is null || EstTenu(cible)) return null;
+            if (cible is null || EstTenu(cible) || CiteCommeMotFrancais(reponse, cible)) return null;
             return fiables.Contains(cible, StringComparer.OrdinalIgnoreCase) ? null : cible;
         }
+
+        /// <summary>
+        /// LE MOT FRANÇAIS CITÉ POUR LE RÉEXPLIQUER N'EST PAS UN MOT À FAIRE DIRE (tâche 1600, 21/11/2026, bout en bout) :
+        /// « « Bleu », c'est le mot français — on y reviendra » devenait « « Homework », c'est le mot français » (remplacé par un
+        /// mot de la liste). Un mot cité dans une phrase qui parle du « mot (en) français » ou du « sens en français » reste.
+        /// </summary>
+        private static bool CiteCommeMotFrancais(string reponse, string cible) =>
+            PhraseDuTexte().Matches(reponse).Any(p => Contient(p.Value, cible) && MotFrancaisCite().IsMatch(p.Value));
+
+        [GeneratedRegex(@"[^.!?…\n]+")]
+        private static partial Regex PhraseDuTexte();
+
+        [GeneratedRegex(@"\b(?:mot|sens)\s+(?:en\s+)?français\b|\ben\s+français\b", RegexOptions.IgnoreCase)]
+        private static partial Regex MotFrancaisCite();
 
         /// <summary>Le mot qui le remplace : du même son d'abord, jamais déjà demandé si on peut l'éviter.</summary>
         public static string? MotPermis(string cible, IReadOnlyCollection<string> fiables, IReadOnlyList<string> recents, int graine, string langue = LanguesDesSons.Francais)
