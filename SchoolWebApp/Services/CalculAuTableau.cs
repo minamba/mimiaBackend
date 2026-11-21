@@ -23,7 +23,11 @@ namespace SchoolWebApp.Api.Services
         public enum Jugement { Juste, Faux, Incomplet, AutreDecomposition }
 
         /// <summary>La question lue, la valeur attendue, ce que l'élève a donné et le verdict.</summary>
-        public sealed record Verdict(string Question, string Attendu, string Donne, Jugement Jugement);
+        public sealed record Verdict(string Question, string Attendu, string Donne, Jugement Jugement)
+        {
+            /// <summary>Un indice calculé à donner sur une réponse fausse (suite des nombres, #53) ; null sinon.</summary>
+            public string? Indice { get; init; }
+        }
 
         // Un nombre : entier ou décimal à virgule (« 2,3 »). Neuf chiffres au plus : pas de débordement.
         private const string NombreMotif = @"\d{1,9}(?:,\d{1,6})?";
@@ -130,7 +134,8 @@ namespace SchoolWebApp.Api.Services
                 $"[Vérifié par l'application : la question posée était « {v.Question} », et la bonne réponse est "
                 + $"{v.Attendu}, pas {v.Donne}. L'élève a répondu « {v.Donne} » : c'est FAUX. Ne dis surtout pas que "
                 + "c'est juste, ne le félicite pas, et n'écris ni ne dis jamais une égalité fausse. Dis-lui que ce "
-                + "n'est pas encore ça et aide-le à retrouver le résultat sans le lui donner tout de suite (règle des trois essais).]",
+                + "n'est pas encore ça et aide-le à retrouver le résultat sans le lui donner tout de suite (règle des trois essais)."
+                + (v.Indice is null ? "" : " " + v.Indice) + "]",
             Jugement.Incomplet =>
                 $"[Vérifié par l'application : la question posée était « {v.Question} », et la bonne réponse est "
                 + $"{v.Attendu}. L'élève a répondu « {v.Donne} » : ce qu'il a dit est JUSTE, mais il manque une "

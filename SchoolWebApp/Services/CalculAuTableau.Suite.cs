@@ -30,7 +30,22 @@ namespace SchoolWebApp.Api.Services
         /// Une question de suite : l'énoncé tel qu'on le redira au professeur, le nombre attendu, et les nombres que
         /// la question cite (une relance peut les reprendre, l'élève aussi : « après 73, c'est 74 »).
         /// </summary>
-        private sealed record SuitePosee(string Enonce, int Attendu, HashSet<int> Cites);
+        private sealed record SuitePosee(string Enonce, int Attendu, HashSet<int> Cites, string Indice);
+
+        /// <summary>
+        /// L'INDICE CALCULÉ — leçon de #52 (et #29, #46) : « aide-le sans donner la réponse » sans dire comment, le modèle
+        /// donne la réponse ou invente. Au bout en bout du 21/11, sur « Sept. », Nora a répondu « Compte avec moi :
+        /// soixante-treize... soixante-quatorze » : la réponse dans l'indice. On lui donne donc l'indice exact : les
+        /// nombres à recompter, en s'arrêtant AVANT le trou.
+        /// </summary>
+        private static string IndiceDeSuite(string comment, int attendu) =>
+            "Indice à donner : " + comment + " C'est LUI qui doit dire le nombre qui manque : ne dis et n'écris pas "
+            + attendu.ToString(CultureInfo.InvariantCulture) + " toi-même à ce tour-ci, ni en chiffres ni en lettres.";
+
+        private static string Recompte(IEnumerable<int> nombres) =>
+            "« " + string.Join(", ", nombres.Where(x => x >= 0).Select(x => x.ToString(CultureInfo.InvariantCulture))) + "… »";
+
+        private static string Cran(int pas) => Math.Abs(pas) == 1 ? "" : (pas > 0 ? $" (on avance de {pas} en {pas})" : $" (on recule de {-pas} en {-pas})");
 
         /// <summary>Au-delà, ce n'est plus la suite des nombres d'école.</summary>
         private const int SuiteMaximum = 9999;
@@ -137,7 +152,10 @@ namespace SchoolWebApp.Api.Services
                 if (pasAnnonce is > 0 && pasAnnonce != Math.Abs(pas)) return null;
                 if (attendu < 0 || attendu > SuiteMaximum) continue;
 
-                Ajouter(trouvees, new SuitePosee(Regex.Replace(m.Value.Trim(), @"\s+", " ") + " ?", attendu, nombres.ToHashSet()));
+                var indice = trou == nombres.Length
+                    ? IndiceDeSuite($"fais-lui relire la suite avec toi, {Recompte(nombres.TakeLast(3))}{Cran(pas)}, et arrête-toi là.", attendu)
+                    : IndiceDeSuite($"fais-lui trouver de combien on {(pas > 0 ? "avance" : "recule")} d'un nombre au suivant (ici de {Math.Abs(pas)}), puis s'en servir pour trouver le nombre du trou.", attendu);
+                Ajouter(trouvees, new SuitePosee(Regex.Replace(m.Value.Trim(), @"\s+", " ") + " ?", attendu, nombres.ToHashSet(), indice));
             }
 
             // 2. « après 73 », « avant 80 », « suit 73 », « entre 72 et 74 », dans une question.
@@ -174,7 +192,10 @@ namespace SchoolWebApp.Api.Services
                     var enonce = versLeHaut
                         ? $"quel nombre vient juste après {n}{(pas == 1 ? "" : $" (de {pas} en {pas})")}"
                         : $"quel nombre vient juste avant {n}{(pas == 1 ? "" : $" (de {pas} en {pas})")}";
-                    Ajouter(trouvees, new SuitePosee(enonce, attendu, new HashSet<int> { n, pas }));
+                    var indice = versLeHaut
+                        ? IndiceDeSuite($"fais-lui recompter avec toi {Recompte(new[] { n - 2 * pas, n - pas, n })}{Cran(pas)} et arrête-toi là.", attendu)
+                        : IndiceDeSuite($"demande-lui de compter jusqu'à {n} en partant de {n - Math.Min(3, n / pas) * pas}{Cran(pas)}, et de te dire le nombre qu'il dit JUSTE AVANT {n}.", attendu);
+                    Ajouter(trouvees, new SuitePosee(enonce, attendu, new HashSet<int> { n, pas }, indice));
                 }
 
                 foreach (Match m in Entre().Matches(phrase))
@@ -185,7 +206,9 @@ namespace SchoolWebApp.Api.Services
                     var b = int.Parse(m.Groups["b"].Value, CultureInfo.InvariantCulture);
                     if (Math.Abs(b - a) != 2) continue;
 
-                    Ajouter(trouvees, new SuitePosee($"quel nombre est entre {a} et {b}", (a + b) / 2, new HashSet<int> { a, b }));
+                    var petit = Math.Min(a, b);
+                    Ajouter(trouvees, new SuitePosee($"quel nombre est entre {a} et {b}", (a + b) / 2, new HashSet<int> { a, b },
+                        IndiceDeSuite($"le nombre entre {a} et {b} vient juste après {petit} : fais-lui recompter {Recompte(new[] { petit - 1, petit })} et arrête-toi là.", (a + b) / 2)));
                 }
             }
 
@@ -281,7 +304,9 @@ namespace SchoolWebApp.Api.Services
             if (donne != Math.Floor(donne) || donne > SuiteMaximum) return null;
 
             var attendu = s.Attendu.ToString(CultureInfo.InvariantCulture);
-            return new Verdict(s.Enonce, attendu, Ecrire(donne), (int)donne == s.Attendu ? Jugement.Juste : Jugement.Faux);
+            return (int)donne == s.Attendu
+                ? new Verdict(s.Enonce, attendu, Ecrire(donne), Jugement.Juste)
+                : new Verdict(s.Enonce, attendu, Ecrire(donne), Jugement.Faux) { Indice = s.Indice };
         }
     }
 }
