@@ -772,11 +772,41 @@ namespace SchoolWebApp.Api.Services.Voix
         /// message montrait un nombre, le tour d'arrivée RESTE dans l'exercice et le code remontre ce nombre : le même (pas
         /// de nouveau tirage, les essais faux déjà faits comptent toujours), et la consigne ne dit pas « essaie encore » (il
         /// n'a rien lu à ce tour). Null s'il n'y avait pas de nombre au tableau.
+        ///
+        /// Pas de reprise après une séance terminée (contrôle d'Omar sur 44fd5c6, 21/11/2026) : <see cref="DernierDuProfesseur"/>
+        /// saute les messages qui COMMENCENT par [RAPPORT] ou [FIN_SEANCE], donc un « [RAPPORT]… [FIN_SEANCE] » écrit après
+        /// le nombre (bouton « Quitter », conclusion du minuteur) laissait le nombre revenir. Si le message du nombre ou
+        /// n'importe quel message postérieur contient l'une de ces balises, où qu'elle soit, la séance est close : null.
         /// </summary>
-        public static Tour? Reprise(IReadOnlyList<(string? Role, string? Contenu, bool? SonJuste)> recents) =>
-            DernierMontre(recents) is { } montre
-                ? new Tour(montre, Redite: true, Premier: false, Abandon: false, SansEssai: true)
-                : null;
+        public static Tour? Reprise(IReadOnlyList<(string? Role, string? Contenu, bool? SonJuste)> recents)
+        {
+            var dernier = -1;
+            for (var i = recents.Count - 1; i >= 0; i--)
+            {
+                if (recents[i].Role == "assistant" && !EstTechnique(recents[i].Contenu)) { dernier = i; break; }
+            }
+            if (dernier < 0 || Affiche(recents[dernier].Contenu) is not { } montre) return null;
+            for (var i = dernier; i < recents.Count; i++)
+            {
+                if (ConclutLaSeance(recents[i].Contenu)) return null;
+            }
+            return new Tour(montre, Redite: true, Premier: false, Abandon: false, SansEssai: true);
+        }
+
+        /// <summary>
+        /// Les tours d'arrivée où la lecture peut reprendre (décision du coordinateur après le contrôle d'Omar sur 44fd5c6,
+        /// 21/11/2026, le choix le plus sûr) : le RETOUR (rechargement de la page, retour après une absence dans la même
+        /// séance) et l'annonce « cinq minutes » du minuteur. Jamais une NOUVELLE SÉANCE : elle repart à zéro. Le bouton
+        /// « Quitter » ou une séance terminée sont fermés par <see cref="Reprise"/> ([RAPPORT] / [FIN_SEANCE]).
+        /// </summary>
+        public static bool RepriseAuTourDArrivee(TypeAccueil type) => type is TypeAccueil.Retour or TypeAccueil.FinProche;
+
+        // Une balise de fin de séance n'importe où dans le message (pas seulement au début, voir EstTechnique).
+        [GeneratedRegex(@"\[(?:RAPPORT|FIN_SEANCE)\]", RegexOptions.IgnoreCase)]
+        private static partial Regex BaliseDeFinDeSeance();
+
+        private static bool ConclutLaSeance(string? contenu) =>
+            !string.IsNullOrEmpty(contenu) && BaliseDeFinDeSeance().IsMatch(contenu);
 
         // « Le tableau est vide », « j'ai effacé le tableau », « le tableau est tout propre » : toujours faux pendant la lecture
         // des nombres, le nombre à lire y est (refus d'Omar sur le retest #51 : « le tableau est vide » après un rechargement).

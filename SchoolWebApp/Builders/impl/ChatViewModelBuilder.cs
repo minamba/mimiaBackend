@@ -3108,10 +3108,12 @@ namespace SchoolWebApp.Api.Builders.impl
             // était hors de l'exercice. Sa balise était retirée, l'exercice se fermait : « sept » n'était plus jugé et le
             // professeur disait « le tableau est vide ». Si son dernier message montrait un nombre, on reste dans l'exercice et
             // le code remontre ce nombre (voir LectureDesNombres.Reprise). Au retour et à l'annonce « cinq minutes » (le
-            // minuteur qui parle au milieu de la lecture) ; jamais quand une dictée, une correction ou une copie ouvre la
-            // séance, ni pendant un contrôle noté. La conclusion de séance, elle, ferme l'exercice comme avant.
+            // minuteur qui parle au milieu de la lecture) SEULEMENT (LectureDesNombres.RepriseAuTourDArrivee, contrôle
+            // d'Omar sur 44fd5c6) : une nouvelle séance repart à zéro, et après « Quitter » ou une séance conclue
+            // ([RAPPORT] / [FIN_SEANCE]) Reprise ne rend rien. Jamais quand une dictée, une correction ou une copie ouvre
+            // la séance, ni pendant un contrôle noté. La conclusion de séance, elle, ferme l'exercice comme avant.
             Services.Voix.LectureDesNombres.Tour? repriseNombres = null;
-            if (typeAccueil is TypeAccueil.Retour or TypeAccueil.NouvelleSeance or TypeAccueil.FinProche
+            if (Services.Voix.LectureDesNombres.RepriseAuTourDArrivee(typeAccueil)
                 && !arriveeOccupee
                 && Services.Voix.LectureDesNombres.Concerne(contexte.Conversation.AgentSlug, contexte.Eleve.NiveauCode)
                 && !LecteurEvaluation.EstOuvert(historique.Where(m => m.Role == "assistant").Select(m => m.Contenu)))
