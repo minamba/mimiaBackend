@@ -3423,19 +3423,21 @@ namespace SchoolWebApp.Api.Services.Prompts
         /// son compte et l'étiquette de l'étape, tirés mot pour mot de l'ancienne liste « 3e réponse fausse : … ». La
         /// règle dit maintenant que le compte se fait EN SILENCE et que rien n'en est écrit, et ses étapes sont des
         /// phrases (« à sa troisième erreur »), plus des étiquettes à recopier. Le filet derrière, dans le flux :
-        /// <see cref="ApartesInternes"/>.
+        /// <see cref="ApartesInternes"/>. MESURÉ AU BOUT EN BOUT : une première version qui disait « n'écris jamais
+        /// l'étape où tu en es » faisait taire l'annonce du dernier essai à l'enfant (0 fois sur 6, contre 6 sur 6 avant) ;
+        /// la règle sépare donc la note pour soi (interdite) de ce qu'il faut DIRE à l'enfant (« c'est ton dernier essai »).
         /// </summary>
         public const string RegleDesTroisEssais =
             "[RÈGLE DES ESSAIS — STRICTE, dans le droit fil de ta règle absolue : tu ne donnes JAMAIS la réponse, "
-            + "à aucun essai. CETTE RÈGLE EST POUR TOI SEUL : tu comptes EN SILENCE, dans l'historique, les erreurs que "
-            + "l'élève a faites sur la question d'exercice en cours, et tu n'écris JAMAIS ce compte, ni l'étape où tu en es, "
-            + "ni ce que tu as décidé — pas de note entre parenthèses, pas de flèche, pas de résumé. L'élève lit et entend "
-            + "tout ce que tu écris : tu ne lui écris que ce que tu lui dis, à lui.\n"
+            + "à aucun essai. Tu comptes EN SILENCE, dans l'historique, les erreurs que l'élève a faites sur la question "
+            + "d'exercice en cours : tu n'écris JAMAIS ce compte ni une note pour toi-même — pas de parenthèse, pas de "
+            + "flèche, pas de résumé de ce que tu décides. L'élève lit et entend tout ce que tu écris. Ce que la règle te "
+            + "demande de LUI dire, en revanche, tu le lui dis à lui, en toutes lettres.\n"
             + "Tant qu'il n'en est qu'à sa première ou à sa deuxième erreur, tu l'aides comme d'habitude, par un indice "
             + "ou une question, sans donner la réponse.\n"
             + "À sa troisième erreur, tu reprends avec lui la règle ou la notion, sans le gronder, et tu lui montres pourquoi sa "
-            + "réponse ne marche pas, toujours sans donner la bonne. Puis tu lui laisses une toute dernière chance, en le "
-            + "lui disant.\n"
+            + "réponse ne marche pas, toujours sans donner la bonne. Puis tu lui laisses UN DERNIER essai, et tu le lui dis "
+            + "clairement : « c'est ton dernier essai ».\n"
             + "À sa quatrième erreur, tu ne t'acharnes pas. Tu lui dis, sans le gronder, que ce n'est pas grave, tu passes à la "
             + "question suivante, et tu lui proposes d'y revenir plus tard s'il le souhaite. S'il ne le souhaite pas, "
             + "cette question est laissée de côté.\n"
