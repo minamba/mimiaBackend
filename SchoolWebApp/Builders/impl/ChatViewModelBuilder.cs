@@ -3623,6 +3623,32 @@ namespace SchoolWebApp.Api.Builders.impl
                 declencheur += "\n\n" + ReponseCourte.Rappel;
             }
 
+            // LE MOT DIT EN FRANÇAIS N'EST PAS UNE RÉPÉTITION (21/11/2026, signalement #57 : « Blue. Tu répètes ? » —
+            // « Bleu! » — « Oui, parfait ! ») — voir RepetitionEnLangue. Commun à TOUS les professeurs de langue : le code
+            // reconnaît la traduction française du mot à répéter et le dit au professeur, au tour même. Pas pendant un
+            // contrôle noté, ni dans un exercice de sons (il a son propre verdict), ni quand il demande à changer d'exercice.
+            if (!controleOuvert && !enExerciceDeSons && !change
+                && RepetitionEnLangue.Concerne(contexte.Conversation.AgentSlug))
+            {
+                var repetition = RepetitionEnLangue.Juger(
+                    contexte.Conversation.AgentSlug,
+                    historique.Where(m => m.Role == "assistant")
+                        .Select(m => m.Contenu)
+                        .Where(c => !string.IsNullOrWhiteSpace(c)
+                            && !c!.TrimStart().StartsWith("[FICHE]", StringComparison.OrdinalIgnoreCase)
+                            && !c.TrimStart().StartsWith("[RAPPORT]", StringComparison.OrdinalIgnoreCase))
+                        .TakeLast(RepetitionEnLangue.MessagesLus)
+                        .ToList(),
+                    contenu);
+                if (repetition is not null)
+                {
+                    declencheur += "\n\n" + RepetitionEnLangue.Fait(repetition);
+                    _logger.LogInformation(
+                        "Repetition en langue : reponse en francais reconnue ({Nature}, {Balise}, attendu « {Attendu} », traduction « {Francais} », conversation {ConversationId}).",
+                        repetition.Nature, repetition.Balise, repetition.Attendu, repetition.Francais, conversationId);
+                }
+            }
+
             if (dicteeDeNombres)
             {
                 declencheur += "\n\n" + Services.Voix.DicteeDeNombres.Rappel;
