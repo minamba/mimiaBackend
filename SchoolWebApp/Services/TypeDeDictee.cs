@@ -54,7 +54,8 @@ namespace SchoolWebApp.Api.Services
             + "ligne, chacun suivi d'un point. Aucune phrase. Elle compte " + MotsDeDictee(eleve)
             + " MOTS DIFFÉRENTS, pas un de moins : une dictée de mots ne suit PAS le nombre de "
             + "lignes du minuteur, qui compte des phrases. Seule exception : s'il a demandé "
-            + "lui-même un nombre de mots, c'est le sien.]";
+            + "lui-même un nombre de mots, c'est le sien. Le bloc [DICTEE] part DANS CE MESSAGE, "
+            + "juste après ta question, pas au suivant.]";
 
         private const string ChoisiePhrases =
             "\n\n[DICTÉE DE PHRASES CHOISIE : ton message est la dictée — la question « sur "

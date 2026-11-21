@@ -203,8 +203,8 @@ namespace SchoolWebApp.Api.Services
                 + "on ne l'entend JAMAIS, même en écoutant très bien. Ce n'est donc pas son oreille qui s'est trompée."
                 + lignes
                 + "\nPour ces mots-là, ne dis JAMAIS qu'il l'entend ou qu'il aurait dû l'entendre, ne lui demande pas "
-                + "d'écouter la fin du mot, et ne découpe pas le mot pour faire sonner cette lettre : ce serait lui "
-                + "apprendre une fausse prononciation. Dis-lui qu'elle ne s'entend pas, qu'elle se retient en regardant "
+                + "d'écouter la fin du mot ni s'il l'entend, et ne découpe pas le mot pour faire sonner cette lettre : ce "
+                + "serait lui apprendre une fausse prononciation. DIS-LUI toi-même qu'elle ne s'entend pas, qu'elle se retient en regardant "
                 + "bien le mot, ou qu'elle se trouve grâce à un mot de la même famille où on l'entend, quand il y en a un.]";
         }
 
