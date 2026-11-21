@@ -3068,14 +3068,17 @@ namespace SchoolWebApp.Api.Builders.impl
                         verdictDuTour.Poser(sonJuste, contenu);
                     }
 
-                    // « Tu répètes ? » hors de l'exercice de sons : seule la TRADUCTION française est reconnue (juge prudent), donc
-                    // seul un verdict FAUX est posé. Le message gardé porte la marque « J'ai répété : » (voir
-                    // RepetitionEnLangue.MarqueDeLaReponse) : sans elle, ce verdict ouvrirait un exercice de sons aux tours suivants.
+                    // « Tu répètes ? » : seule la TRADUCTION française est reconnue (juge prudent), donc seul un verdict FAUX est
+                    // posé. Le message gardé porte la marque « J'ai répété : » (voir RepetitionEnLangue.MarqueDeLaReponse) : sans
+                    // elle, ce verdict ouvrirait un exercice de sons aux tours suivants. Y COMPRIS quand le code croit un exercice de
+                    // sons en cours : il suffit que le professeur écrive « tu me redis ce son ? » ou « avec le son anglais » pendant
+                    // une leçon de couleurs pour que la conversation y bascule (bout en bout de la tâche 1600), et l'essai suivant
+                    // n'était plus compté. Les juges propres aux exercices de sons passent avant (lecture tapée #49, écoute tapée
+                    // ci-dessus) ; une dictée n'est pas concernée (sa copie arrive sous « [DICTÉE AU CLAVIER : …] », ignorée par le juge).
                     else if (RepetitionEnLangue.Concerne(contexte.Conversation.AgentSlug)
                         && !LecteurAuRevoir.DitAuRevoir(contenu)
                         && ChangementDExercice.Lire(contenu) == ChangementDExercice.Nature.Aucune
                         && !LecteurEvaluation.EstOuvert(duProfesseur)
-                        && !(langueDesSons is not null && await EnExerciceDeSonsAsync(conversationId))
                         && RepetitionEnLangue.Juger(
                             contexte.Conversation.AgentSlug,
                             duProfesseur.Where(c => !RepetitionEnLangue.EstTechnique(c)).TakeLast(RepetitionEnLangue.MessagesLus).ToList(),
