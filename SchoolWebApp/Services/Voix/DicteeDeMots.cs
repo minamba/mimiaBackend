@@ -197,7 +197,7 @@ namespace SchoolWebApp.Api.Services.Voix
                 {
                     var t = Ardoise().Replace(sansVitesse.Replace(Efface, string.Empty, StringComparison.OrdinalIgnoreCase), m => CourtOuGarde(m));
                     t = BaliseDeVoix().Replace(t, m => Propre(m.Groups[2].Value).Equals(etat.Mot, StringComparison.OrdinalIgnoreCase) || EstUnMotDicte(t, m) ? string.Empty : m.Groups[2].Value);
-                    t = SansMorceaux(RegleVerificationSon.Remplacer(t, etat.Mot, "ce mot"), etat.Mot);
+                    t = SansGuillemetsAutourDuMasque(SansMorceaux(RegleVerificationSon.Remplacer(t, etat.Mot, "ce mot"), etat.Mot));
                     return $"{t.TrimEnd()}\n\n{voix}";
                 }
 
@@ -249,8 +249,28 @@ namespace SchoolWebApp.Api.Services.Voix
                 position = balise.Index + balise.Length;
             }
             sortie.Append(Masquer(texte[position..]));
-            return sortie.ToString();
+            return SansGuillemetsAutourDuMasque(sortie.ToString());
         }
+
+        /// <summary>
+        /// LE MOT MASQUÉ NE SE CITE PAS — retest KO #57 (Adam et Omar, 21/11/2026) : « D'accord Adam, on fait « Blue » ! »
+        /// devenait « D'accord Adam, on fait « ce mot » ! », comme si le mot demandé s'appelait « ce mot ». Les guillemets
+        /// qui entouraient le mot caché partent avec lui : « on fait ce mot ! ». La majuscule du mot anglais (« Blue ») ne
+        /// reste qu'en début de phrase.
+        /// </summary>
+        public static string SansGuillemetsAutourDuMasque(string texte) =>
+            GuillemetsAutourDuMasque().Replace(texte, m =>
+            {
+                var masque = m.Groups["masque"].Value;
+                var avant = texte[..m.Index].TrimEnd();
+                var debutDePhrase = avant.Length == 0 || avant[^1] is '.' or '!' or '?' or '…';
+                return debutDePhrase
+                    ? char.ToUpperInvariant(masque[0]) + masque[1..]
+                    : char.ToLowerInvariant(masque[0]) + masque[1..];
+            });
+
+        [GeneratedRegex(@"(?:«[\s  ]*|""|“)(?<masque>[Cc]e mot|[Cc]ette syllabe)(?:[\s  ]*»|""|”)")]
+        private static partial Regex GuillemetsAutourDuMasque();
 
         /// <summary>Les petits mots de la langue qui sont aussi des syllabes dictées : ils ne se masquent que cités.</summary>
         private static readonly HashSet<string> MotsOutils = new(StringComparer.OrdinalIgnoreCase)
