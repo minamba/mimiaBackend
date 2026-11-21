@@ -134,7 +134,9 @@ namespace SchoolWebApp.Api.Services
                 $"[Vérifié par l'application : la question posée était « {v.Question} », et la bonne réponse est "
                 + $"{v.Attendu}, pas {v.Donne}. L'élève a répondu « {v.Donne} » : c'est FAUX. Ne dis surtout pas que "
                 + "c'est juste, ne le félicite pas, et n'écris ni ne dis jamais une égalité fausse. Dis-lui que ce "
-                + "n'est pas encore ça et aide-le à retrouver le résultat sans le lui donner tout de suite (règle des trois essais)."
+                // Ni « tout de suite » (Camara, 11/11/2026 : on ne donne JAMAIS la réponse), ni de parenthèse qui nomme la
+                // règle : le professeur la recopiait en aparté, « (On garde 3e réponse fausse → …) » (tâche 1320).
+                + "n'est pas encore ça et aide-le à retrouver le résultat lui-même, sans jamais le lui donner."
                 + (v.Indice is null ? "" : " " + v.Indice) + "]",
             Jugement.Incomplet =>
                 $"[Vérifié par l'application : la question posée était « {v.Question} », et la bonne réponse est "
