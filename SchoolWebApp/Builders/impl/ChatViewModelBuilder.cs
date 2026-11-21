@@ -3859,6 +3859,8 @@ namespace SchoolWebApp.Api.Builders.impl
             // TAPÉE (retest KO #57, 21/11/2026 : « [EN]Two[/EN]. Qu'as-tu entendu ? » — « Deux! » validé) : au micro, le relais
             // juge déjà (verdict faux), et la lecture en images ou la dictée ont leur propre juge.
             RepetitionEnLangue.Tour? repetitionEnLangue = null;
+            // Son dernier essai sur ce mot (3e raté de suite) : on passe, le code ne le redit plus (filtre RedireLeMot).
+            var repetitionAuDernierEssai = false;
             var messagesDuProfPourLaLangue = historique.Where(m => m.Role == "assistant")
                 .Select(m => m.Contenu)
                 .Where(c => !string.IsNullOrWhiteSpace(c)
@@ -3886,7 +3888,8 @@ namespace SchoolWebApp.Api.Builders.impl
                         contexte.Conversation.AgentSlug,
                         historique.Select(m => ((string?)m.Role, (string?)m.Contenu, m.SonJuste)).ToList(),
                         repetition);
-                    declencheur += "\n\n" + (essais >= RepetitionEnLangue.EssaisMax
+                    repetitionAuDernierEssai = essais >= RepetitionEnLangue.EssaisMax;
+                    declencheur += "\n\n" + (repetitionAuDernierEssai
                         ? RepetitionEnLangue.FaitDernierEssai(repetition)
                         : RepetitionEnLangue.Fait(repetition));
                     _logger.LogInformation(
@@ -4326,7 +4329,9 @@ namespace SchoolWebApp.Api.Builders.impl
                     // a refusé (verdict du micro faux, mot français reconnu) ; si rien n'est jugé, seulement quand il a répondu par
                     // un mot ou deux (« Orange! ») et que le professeur refuse sans rien valider. Jamais au 3e essai (abandon), ni
                     // quand il change d'exercice ou s'en va.
-                    redire: change || abandon is not null || sonJuste == true || LecteurAuRevoir.DitAuRevoir(contenu)
+                    // Ni au dernier essai d'une répétition en langue (bout en bout de la tâche 1600 : « Red » remplacé par « Blue »
+                    // redit, alors que le fait disait de passer).
+                    redire: change || abandon is not null || repetitionAuDernierEssai || sonJuste == true || LecteurAuRevoir.DitAuRevoir(contenu)
                         ? Services.Voix.RegleVerificationSon.RedireLeMot.Non
                         : sonJuste == false || repetitionEnLangue is not null
                             ? Services.Voix.RegleVerificationSon.RedireLeMot.Toujours
