@@ -48,14 +48,62 @@ namespace SchoolWebApp.Api.Services
                 _ => 8,
             };
 
-        private static string ChoisieMots(Eleve eleve) =>
+        private static string ChoisieMots(Eleve eleve, int? demande) =>
             "\n\n[DICTÉE DE MOTS CHOISIE : ton message est la dictée — la question « sur ton "
             + "cahier ou au clavier ? » puis le bloc —, faite UNIQUEMENT de mots seuls, un par "
-            + "ligne, chacun suivi d'un point. Aucune phrase. Elle compte " + MotsDeDictee(eleve)
-            + " MOTS DIFFÉRENTS, pas un de moins : une dictée de mots ne suit PAS le nombre de "
-            + "lignes du minuteur, qui compte des phrases. Seule exception : s'il a demandé "
-            + "lui-même un nombre de mots, c'est le sien. Le bloc [DICTEE] part DANS CE MESSAGE, "
-            + "juste après ta question, pas au suivant.]";
+            + "ligne, chacun suivi d'un point. Aucune phrase. "
+            + (demande is { } n
+                ? "Elle compte EXACTEMENT " + n + " MOTS DIFFÉRENTS : c'est le nombre qu'il a "
+                    + "demandé lui-même, ni un de plus, ni un de moins. "
+                : "Elle compte " + MotsDeDictee(eleve) + " MOTS DIFFÉRENTS, pas un de moins : une "
+                    + "dictée de mots ne suit PAS le nombre de lignes du minuteur, qui compte des "
+                    + "phrases. Seule exception : s'il a demandé lui-même un nombre de mots, c'est le sien. ")
+            + "Le bloc [DICTEE] part DANS CE MESSAGE, juste après ta question, pas au suivant.]";
+
+        /// <summary>
+        /// LE NOMBRE DE MOTS QU'IL A DEMANDÉ LUI-MÊME — retour d'Omar sur #58 : « dicte-moi 3 mots » doit donner
+        /// 3 mots, pas les 5 du CP. La phrase « s'il a demandé lui-même un nombre de mots, c'est le sien » laissait
+        /// le modèle retrouver le nombre dans l'historique ; le code le lit et le donne au tour même.
+        ///
+        /// Lu dans ses messages depuis la dernière dictée du professeur (et dans celui du tour), faits de l'écran
+        /// retirés. De 2 à 20 : « tu me dis UN mot et je l'écris » (la phrase d'Adam) décrit le jeu, pas la
+        /// longueur. Le dernier nombre dit l'emporte (« 3 mots… non, 4 mots »).
+        /// </summary>
+        public static int? NombreDeMotsDemande(IEnumerable<DomainMessage> historique, string? messageEleve)
+        {
+            var depuis = new List<string>();
+            foreach (var message in historique)
+            {
+                var contenu = message.Contenu ?? string.Empty;
+                if (message.Role == "assistant" && contenu.Contains("[DICTEE", StringComparison.Ordinal)) depuis.Clear();
+                else if (message.Role == "user") depuis.Add(contenu);
+            }
+
+            if (!string.IsNullOrEmpty(messageEleve)) depuis.Add(messageEleve);
+
+            int? lu = null;
+            foreach (var texte in depuis)
+            {
+                foreach (System.Text.RegularExpressions.Match m in NombreDeMots().Matches(FaitsEntreCrochets().Replace(texte, " ")))
+                {
+                    var n = LireNombre(m.Groups["n"].Value);
+                    if (n is >= 2 and <= 20) lu = n;
+                }
+            }
+
+            return lu;
+        }
+
+        private static int? LireNombre(string mot) =>
+            int.TryParse(mot, out var n)
+                ? n
+                : mot.ToLowerInvariant() switch
+                {
+                    "deux" => 2, "trois" => 3, "quatre" => 4, "cinq" => 5, "six" => 6, "sept" => 7, "huit" => 8,
+                    "neuf" => 9, "dix" => 10, "onze" => 11, "douze" => 12, "treize" => 13, "quatorze" => 14,
+                    "quinze" => 15, "seize" => 16, "vingt" => 20,
+                    _ => null,
+                };
 
         private const string ChoisiePhrases =
             "\n\n[DICTÉE DE PHRASES CHOISIE : ton message est la dictée — la question « sur "
@@ -100,7 +148,9 @@ namespace SchoolWebApp.Api.Services
 
             if (choixEnAttente is not null)
             {
-                return choixEnAttente == "MOTS" ? ChoisieMots(eleve) : ChoisiePhrases;
+                return choixEnAttente == "MOTS"
+                    ? ChoisieMots(eleve, NombreDeMotsDemande(historique, messageEleve))
+                    : ChoisiePhrases;
             }
 
             var enCours = typeDuBloc switch
@@ -128,7 +178,11 @@ namespace SchoolWebApp.Api.Services
             // un enfant qui venait de répondre. Seule la forme complète compte
             // — « dictée de mots », « dictée de phrases » — pour ne rien lire
             // dans un « mot » dit en passant.
-            var mots = DicteeDeMots().IsMatch(contenu);
+            // « Dicte-moi 3 mots », « une dictée de 5 mots » : un nombre de mots demandé, c'est une dictée de mots
+            // (retour d'Omar sur #58). Hors des faits entre crochets, et seulement s'il parle de dicter.
+            var sansFaits = FaitsEntreCrochets().Replace(contenu, " ");
+            var mots = DicteeDeMots().IsMatch(contenu)
+                || (DemandeDeDicter().IsMatch(sansFaits) && NombreDeMots().IsMatch(sansFaits));
             var phrases = DicteeDePhrases().IsMatch(contenu);
             if (mots != phrases) return mots ? "MOTS" : "PHRASES";
 
@@ -144,5 +198,21 @@ namespace SchoolWebApp.Api.Services
             @"dict[ée]e\s+de\s+phrases?\b",
             System.Text.RegularExpressions.RegexOptions.IgnoreCase)]
         private static partial System.Text.RegularExpressions.Regex DicteeDePhrases();
+
+        /// <summary>« dicte-moi », « une dictée », « tu me dictes ».</summary>
+        [System.Text.RegularExpressions.GeneratedRegex(
+            @"\bdict(?:e|es|ez|er|[ée]e|[ée]es)\b",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase)]
+        private static partial System.Text.RegularExpressions.Regex DemandeDeDicter();
+
+        /// <summary>« 3 mots », « trois petits mots », « 4 nouveaux mots ».</summary>
+        [System.Text.RegularExpressions.GeneratedRegex(
+            @"(?<![\w-])(?<n>\d{1,2}|deux|trois|quatre|cinq|six|sept|huit|neuf|dix|onze|douze|treize|quatorze|quinze|seize|vingt)\s+(?:(?:petits|nouveaux|autres|vrais)\s+)?mots\b",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase)]
+        private static partial System.Text.RegularExpressions.Regex NombreDeMots();
+
+        /// <summary>Les faits écrits par l'écran ou le code (« [DICTÉE DE MOTS : … un. deux. trois. …] »).</summary>
+        [System.Text.RegularExpressions.GeneratedRegex(@"\[[^\]]*\]")]
+        private static partial System.Text.RegularExpressions.Regex FaitsEntreCrochets();
     }
 }

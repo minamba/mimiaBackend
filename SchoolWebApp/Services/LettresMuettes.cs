@@ -52,25 +52,99 @@ namespace SchoolWebApp.Api.Services
             "bonus", "sinus", "oasis", "express", "plus", "tous", "lis", "albatros", "rhinocéros", "ananas", "biceps",
             "chips", "jeans", "papyrus", "hibiscus", "eucalyptus", "pancréas", "myosotis", "tournevis", "métis", "gratis",
             "ibis", "kermès", "palmarès", "cosinus", "minus", "chorus", "pénis", "en-tête",
+            // s qui se prononce, retour d'Omar sur #58 (« cassis » et les mots du même type)
+            "cassis", "mœurs", "moeurs", "aloès", "florès", "ès", "pastis", "volubilis", "lapis", "pubis", "abribus",
+            "minibus", "omnibus", "airbus", "trolleybus", "bibus", "calvados", "pathos", "cosmos", "tétanos", "thermos",
+            "albinos", "vasistas", "fœtus", "foetus", "cubitus", "humérus", "utérus", "processus", "consensus",
+            "détritus", "rictus", "hiatus", "motus", "lapsus", "mordicus", "habitus", "tonus", "stimulus", "focus",
+            "crocus", "lupus", "anus", "sanctus", "corpus", "opus", "angélus", "cumulus", "nimbus", "fongus", "gus",
+            "plexus", "phallus", "rasibus", "syllabus", "tumulus", "vénus", "rhésus", "sus", "mas", "lys",
             // t
             "huit", "sept", "net", "brut", "but", "chut", "zut", "dot", "mat", "ouest", "est", "août", "yaourt", "rut",
             "fat", "kit", "basket", "internet", "test", "toast", "short", "foot", "rapt", "scout", "volt", "watt", "flirt",
             "kilt", "bit", "granit", "transit", "déficit", "accessit", "aconit", "coït", "occiput", "sprint", "match",
             "tarot", "mazout", "ketchup", "huit", "contact", "exact", "direct", "correct", "intact", "compact", "tact",
             "strict", "district", "verdict", "infect", "suspect", "abject", "concept", "abrupt", "transept", "rapt",
+            "script", "cobalt", "lest", "zest", "trust", "compost", "twist", "ballast", "kart", "fiat", "spot", "ut",
             // d
-            "sud", "bled", "lad", "raid", "stand", "caïd", "celluloïd", "week-end", "plaid",
+            "sud", "bled", "lad", "raid", "stand", "caïd", "celluloïd", "week-end", "plaid", "fjord", "lord", "oued",
             // x
             "dix", "six", "index", "lynx", "larynx", "thorax", "silex", "phénix", "fax", "box", "lux", "relax", "tex-mex",
-            "coccyx", "sphinx", "borax", "anthrax", "pharynx", "mox", "ox",
+            "coccyx", "sphinx", "borax", "anthrax", "pharynx", "mox", "ox", "latex", "télex", "codex", "vortex", "cortex",
+            "duplex", "triplex", "onyx", "apex", "pyrex", "rex", "ex", "inox", "intox", "détox", "botox",
             // z
-            "gaz", "fez", "quiz", "jazz", "blitz", "kibboutz", "hertz", "quartz", "ersatz", "luz",
+            "gaz", "fez", "quiz", "jazz", "blitz", "kibboutz", "hertz", "quartz", "ersatz", "luz", "merguez", "showbiz",
             // p
             "stop", "cap", "cep", "slip", "top", "hop", "hip", "clip", "rap", "jeep", "scalp", "handicap", "gp", "flip",
             "flop", "pop", "hip-hop", "zip", "ship", "group", "laptop", "cheap", "croup", "julep",
             // g
             "zigzag", "grog", "gag", "gang", "gong", "erg", "iceberg", "joug", "whig", "bug", "tag", "hamburger", "gag",
+            "smog", "blog", "boomerang", "ginseng", "ping", "pong", "bang", "slang",
         };
+
+        /// <summary>
+        /// LE « -ENT » N'EST PAS TOUJOURS UN VERBE — retour d'Omar sur #58 (21/11/2026) : la règle « mot de cinq
+        /// lettres ou plus en -ent, écrit sans le nt » faisait de « content » écrit « conte » un verbe au pluriel
+        /// (« la fin -ent des verbes avec ils ou elles »), alors que le nt de « content » n'est pas muet : on y entend
+        /// [ɑ̃]. Même faute pour « parent », « moment », « souvent ». Ces noms, adjectifs et adverbes ne passent
+        /// jamais par la règle des verbes ; leur « t » final, lui, reste muet (« conten » pour « content » : la lettre
+        /// « t » oubliée, c'est vrai).
+        /// </summary>
+        private static readonly HashSet<string> NonVerbesEnEnt = new(StringComparer.Ordinal)
+        {
+            // demandés par Omar
+            "content", "parent", "moment", "souvent", "accident", "argent", "client", "serpent", "talent", "patient",
+            "prudent", "dent", "vent", "lent",
+            // noms
+            "agent", "sergent", "régent", "accent", "adolescent", "torrent", "continent", "instrument", "monument",
+            "argument", "document", "aliment", "ciment", "piment", "compliment", "sentiment", "régiment", "segment",
+            "fragment", "pigment", "testament", "tempérament", "condiment", "sédiment", "détriment", "rudiment",
+            "firmament", "filament", "médicament", "parlement", "serment", "tourment", "orient", "occident",
+            "incident", "trident", "quotient", "récipient", "ingrédient", "inconvénient", "coefficient", "gradient",
+            "arpent", "avent", "onguent", "tournevent", "paravent", "auvent", "contrevent", "engoulevent", "évent",
+            "dissident", "chiendent", "pourcent",
+            // adjectifs
+            "absent", "présent", "récent", "décent", "indécent", "innocent", "urgent", "intelligent", "diligent",
+            "indulgent", "évident", "imprudent", "impudent", "insolent", "indolent", "opulent", "succulent", "turbulent",
+            "transparent", "apparent", "permanent", "éminent", "imminent", "pertinent", "impertinent", "fréquent",
+            "conséquent", "éloquent", "subséquent", "latent", "compétent", "incompétent", "impatient", "conscient",
+            "inconscient", "efficient", "clément", "véhément", "strident", "ardent", "fervent", "décadent",
+            "omnipotent", "impotent", "magnificent", "malcontent", "mécontent", "cohérent", "incohérent",
+            "inhérent", "fluorescent", "phosphorescent", "incandescent", "confident", "excédent", "obédient",
+            "afférent", "évident",
+            // adverbes
+            "comment",
+        };
+
+        /// <summary>
+        /// LES HOMOGRAPHES — même retour d'Omar : « président » est un nom (le président, t muet, on entend [ɑ̃]) et
+        /// un verbe (ils président, nt muet) ; « couvent », « résident », « violent », « excellent », « affluent »,
+        /// « convient » aussi. Sans le sens de la phrase, le code ne peut pas savoir lequel l'enfant devait écrire :
+        /// il ne dit RIEN sur ces mots, le professeur corrige seul.
+        /// </summary>
+        private static readonly HashSet<string> HomographesEnEnt = new(StringComparer.Ordinal)
+        {
+            // demandés par Omar
+            "président", "couvent", "résident", "violent", "excellent", "affluent", "convient",
+            // même cas : un nom ou un adjectif, et la 3e personne du pluriel d'un verbe (ou du singulier, « il dément »)
+            "expédient", "négligent", "différent", "émergent", "influent", "adhérent", "coïncident", "divergent",
+            "convergent", "équivalent", "précédent", "somnolent", "confluent", "détergent", "effluent", "ferment",
+            "dément", "résurgent", "pressent",
+        };
+
+        /// <summary>
+        /// Les terminaisons qui ne sont pas celles d'un verbe conjugué avec « ils » ou « elles » : « -ement »,
+        /// « -ément » (vêtement, élément, lentement), « -amment », « -emment » (savamment, prudemment). Et
+        /// « -vient », « -tient » (il vient, il tient, il convient) : un verbe au singulier, dont le « n » s'entend.
+        /// </summary>
+        private static bool PasUnVerbeEnEnt(string mot) =>
+            NonVerbesEnEnt.Contains(mot)
+            || mot.EndsWith("ement", StringComparison.Ordinal)
+            || mot.EndsWith("ément", StringComparison.Ordinal)
+            || mot.EndsWith("amment", StringComparison.Ordinal)
+            || mot.EndsWith("emment", StringComparison.Ordinal)
+            || mot.EndsWith("vient", StringComparison.Ordinal)
+            || mot.EndsWith("tient", StringComparison.Ordinal);
 
         /// <summary>
         /// Un mot de la même famille où la lettre muette S'ENTEND, avec son propre son — seulement ceux dont on est
@@ -137,8 +211,13 @@ namespace SchoolWebApp.Api.Services
         {
             if (dicte.Length == 0 || copie.Length == 0 || dicte == copie) return null;
 
-            // « -ent » d'un verbe au pluriel : « mangent » écrit « mange ».
-            if (dicte.Length >= 5 && dicte.EndsWith("ent", StringComparison.Ordinal) && copie == dicte[..^2])
+            // Nom ou verbe ? Sans la phrase, on ne sait pas : rien (« président », « couvent »).
+            if (HomographesEnEnt.Contains(dicte)) return null;
+
+            // « -ent » d'un verbe au pluriel : « mangent » écrit « mange ». Jamais pour « content », « moment »… :
+            // leur nt ne se tait pas ; ils continuent plus bas comme tout autre mot (seul leur « t » est muet).
+            if (dicte.Length >= 5 && dicte.EndsWith("ent", StringComparison.Ordinal) && copie == dicte[..^2]
+                && !PasUnVerbeEnEnt(dicte))
             {
                 return new Ecart(dicte, copie, Sorte.Oubliee, "nt", string.Empty);
             }
