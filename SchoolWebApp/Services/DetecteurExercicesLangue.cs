@@ -28,8 +28,14 @@ namespace SchoolWebApp.Api.Services
     /// </summary>
     public static partial class DetecteurExercicesLangue
     {
+        /// <summary>
+        /// LE VERBE AUSSI — retour d'Omar sur #58 (22/11/2026) : « Dicte-moi 3 mots. » ne contient pas
+        /// « dictée » ; les consignes ne partaient pas, et le professeur improvisait une dictée sans bloc, en
+        /// écrivant le mot au tableau avant que l'enfant l'écrive. « dicte », « dictes », « dictez », « dicter »
+        /// (« dicton » reste dehors).
+        /// </summary>
         [GeneratedRegex(
-            @"\[/?DICTEE|dict[ée]e|dictation|dictado|dettato|diktat|听写",
+            @"\[/?DICTEE|dict[ée]e|\bdict(?:e|es|ez|er)\b|dictation|dictado|dettato|diktat|听写",
             RegexOptions.IgnoreCase)]
         private static partial Regex Dictee();
 
