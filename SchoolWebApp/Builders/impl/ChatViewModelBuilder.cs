@@ -2764,6 +2764,9 @@ namespace SchoolWebApp.Api.Builders.impl
 
             var typeAccueil = TypeAccueil.Aucun;
             TimeSpan? depuis = null;
+            // Le temps écoulé depuis la sortie signalée par l'écran (page rechargée ou fermée, bouton « Quitter ») ; null sans
+            // sortie explicite. Sert à reconnaître un RECHARGEMENT (LectureDesNombres.EstUnRechargement).
+            TimeSpan? absenceApresSortie = null;
 
             // La lecture des nombres de ce tour — voir LectureDesNombres, plus bas.
             var enLectureDeNombres = false;
@@ -2832,6 +2835,7 @@ namespace SchoolWebApp.Api.Builders.impl
 
                     var sortieExplicite =
                         marqueur is { } sortie && sortie >= dernierDeLEleve.DateCreation;
+                    if (sortieExplicite) absenceApresSortie = DateTime.UtcNow - marqueur!.Value;
 
                     if (marqueur is not null)
                     {
@@ -3120,7 +3124,11 @@ namespace SchoolWebApp.Api.Builders.impl
             {
                 var recents = historique.TakeLast(MessagesPourExerciceDeSons)
                     .Select(m => ((string?)m.Role, (string?)m.Contenu, m.SonJuste)).ToList();
-                repriseNombres = Services.Voix.LectureDesNombres.Reprise(recents);
+                // Un RECHARGEMENT (retour quelques secondes après la sortie) passe par le même chemin que « Quitter » : le
+                // worker de départ écrit [FICHE]/[RAPPORT]…[FIN_SEANCE] après le nombre. Ces messages techniques ne ferment
+                // alors pas la lecture (option rechargement, tâche 0140) ; ils la ferment après une vraie absence.
+                repriseNombres = Services.Voix.LectureDesNombres.Reprise(recents,
+                    Services.Voix.LectureDesNombres.EstUnRechargement(typeAccueil, absenceApresSortie));
                 if (repriseNombres is not null)
                 {
                     recentsNombres = recents;

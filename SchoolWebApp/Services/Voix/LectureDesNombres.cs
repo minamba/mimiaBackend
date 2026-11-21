@@ -777,8 +777,13 @@ namespace SchoolWebApp.Api.Services.Voix
         /// saute les messages qui COMMENCENT par [RAPPORT] ou [FIN_SEANCE], donc un « [RAPPORT]… [FIN_SEANCE] » écrit après
         /// le nombre (bouton « Quitter », conclusion du minuteur) laissait le nombre revenir. Si le message du nombre ou
         /// n'importe quel message postérieur contient l'une de ces balises, où qu'elle soit, la séance est close : null.
+        ///
+        /// OPTION RECHARGEMENT (tâche 0140) : un rechargement de page passe par le même chemin serveur que « Quitter »
+        /// (sortie signalée, puis le worker de départ écrit un message technique [FICHE]/[RAPPORT]…[FIN_SEANCE]). Avec
+        /// <paramref name="rechargement"/> (voir <see cref="EstUnRechargement"/>), ces messages TECHNIQUES postérieurs au
+        /// nombre ne ferment pas la lecture ; une balise de fin dans le message du nombre lui-même la ferme toujours.
         /// </summary>
-        public static Tour? Reprise(IReadOnlyList<(string? Role, string? Contenu, bool? SonJuste)> recents)
+        public static Tour? Reprise(IReadOnlyList<(string? Role, string? Contenu, bool? SonJuste)> recents, bool rechargement = false)
         {
             var dernier = -1;
             for (var i = recents.Count - 1; i >= 0; i--)
@@ -788,10 +793,22 @@ namespace SchoolWebApp.Api.Services.Voix
             if (dernier < 0 || Affiche(recents[dernier].Contenu) is not { } montre) return null;
             for (var i = dernier; i < recents.Count; i++)
             {
+                if (rechargement && i > dernier && recents[i].Role == "assistant" && EstTechnique(recents[i].Contenu)) continue;
                 if (ConclutLaSeance(recents[i].Contenu)) return null;
             }
             return new Tour(montre, Redite: true, Premier: false, Abandon: false, SansEssai: true);
         }
+
+        /// <summary>Au-delà, ce n'est plus un rechargement de page mais une absence (option rechargement, tâche 0140).</summary>
+        public static readonly TimeSpan FenetreRechargement = TimeSpan.FromSeconds(60);
+
+        /// <summary>
+        /// Un RETOUR qui suit de moins d'une minute la sortie signalée par l'écran : la page a été rechargée (le serveur ne
+        /// distingue pas un rechargement d'une fermeture ni du bouton « Quitter » ; un « Quitter » suivi d'un retour en
+        /// moins d'une minute est donc traité comme un rechargement).
+        /// </summary>
+        public static bool EstUnRechargement(TypeAccueil type, TimeSpan? absenceApresSortie) =>
+            type == TypeAccueil.Retour && absenceApresSortie is { } a && a >= TimeSpan.Zero && a <= FenetreRechargement;
 
         /// <summary>
         /// Les tours d'arrivée où la lecture peut reprendre (décision du coordinateur après le contrôle d'Omar sur 44fd5c6,
