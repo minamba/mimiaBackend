@@ -117,6 +117,19 @@ namespace SchoolWebApp.Api.Services
             if (string.IsNullOrWhiteSpace(sujet)) return 0;
             if (niveauScolaireId is not int niveau) return 0;
 
+            // UN TITRE VAGUE NE SE DÉDUIT PAS (Camara, 21/11/2026) : « Contrôle de
+            // maths » ne dit rien du programme. Le modèle rendait déjà une liste
+            // vide la plupart du temps ; c'est maintenant sûr, et sans appel. Le
+            // programme reste inconnu, et c'est le professeur qui le demande à
+            // l'enfant (ou le tire de son cours) à la première préparation.
+            if (TitreDeControle.EstGenerique(sujet, null))
+            {
+                _logger.LogInformation(
+                    "Sujet trop vague pour deduire le programme du controle {ControleId} : programme laisse vide.",
+                    controleId);
+                return 0;
+            }
+
             var candidates = (await _maitrises.GetNotionsDuNiveauAsync(matiereId, niveau, ct)).ToList();
 
             // Six niveaux n'ont aucune compétence au référentiel (voies pro,

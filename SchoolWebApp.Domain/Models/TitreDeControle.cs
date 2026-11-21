@@ -68,6 +68,49 @@ namespace SchoolWebApp.Domain.Models
         }
 
         /// <summary>
+        /// LE TITRE APRÈS UNE PRÉCISION — décision de Camara, le 21/11/2026 :
+        /// « Contrôle de maths » précisé en « additions avec retenue » devient
+        /// « Contrôle de maths : additions avec retenue ». Le titre de la
+        /// famille reste en tête ; la précision le complète.
+        ///
+        /// À n'appeler que si <see cref="PeutEtreRemplace"/> a dit oui :
+        /// <list type="bullet">
+        /// <item>titre vide → la précision ;</item>
+        /// <item>titre générique → « titre : précision » (la précision seule si
+        /// elle reprend déjà le titre ; le titre inchangé si elle est elle-même
+        /// générique — « contrôle de maths » n'apprend rien) ;</item>
+        /// <item>titre posé par le professeur → la précision, comme avant.</item>
+        /// </list>
+        /// </summary>
+        public static string NouveauTitre(string? sujetActuel, string precision, string? matiereLibelle)
+        {
+            var propre = precision.Trim();
+            if (string.IsNullOrWhiteSpace(sujetActuel)) return propre;
+
+            var actuel = sujetActuel.Trim();
+            if (!EstGenerique(actuel, matiereLibelle)) return propre;
+
+            if (EstGenerique(propre, matiereLibelle)) return actuel;
+
+            var cleActuel = Cle(actuel);
+            if (Cle(propre).StartsWith(cleActuel, StringComparison.Ordinal)) return propre;
+
+            return $"{actuel.TrimEnd(' ', ':', '-', '–', '—', '.')} : {propre}";
+        }
+
+        /// <summary>Le texte en minuscules, sans accents ni ponctuation, pour comparer deux titres.</summary>
+        private static string Cle(string texte)
+        {
+            var sb = new StringBuilder();
+            foreach (var c in SansAccents(texte.ToLowerInvariant()))
+            {
+                if (char.IsLetterOrDigit(c)) sb.Append(c);
+            }
+
+            return sb.ToString();
+        }
+
+        /// <summary>
         /// Vrai si le titre ne dit rien de plus que « un contrôle dans cette
         /// matière » : chaque mot est un mot de contrôle, un petit mot ou un
         /// nom de matière. Un chiffre, un nom propre, un thème : ce n'est plus

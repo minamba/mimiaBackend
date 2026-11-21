@@ -931,7 +931,17 @@ namespace SchoolWebApp.Api.Builders.impl
 
                 var preparation = await _controles.GetPreparationAsync(eleveId, prochain.Id, ct);
 
-                return MarqueurControle(prochain, joursRestants, preparation, maintenantParis);
+                // SON COURS EST-IL LÀ ? Il décide de la première question quand
+                // le programme est inconnu (Camara, 21/11/2026) : sans cours, on
+                // demande ; avec, on le lit. Lu seulement dans ce cas-là.
+                var nbCours = 0;
+                if (preparation is { PerimetreConnu: false })
+                {
+                    nbCours = (await _controles.GetDocumentsAsync(eleveId, prochain.Id, ct))
+                        .Count(d => d.Exploitable);
+                }
+
+                return MarqueurControle(prochain, joursRestants, preparation, maintenantParis, nbCours);
             }
             catch (Exception ex)
             {
@@ -1419,7 +1429,15 @@ namespace SchoolWebApp.Api.Builders.impl
         /// ceux-là, le professeur doit les faire réimporter — le dire ici évite
         /// que « ne lui redemande pas » contredise la mention du préfixe.
         /// </param>
-        private static string MarqueurModeSeance(string mode, int? controleId, string? epreuveCode, int? nbCours = null, int nbIllisibles = 0) => mode switch
+        /// <param name="programmeInconnu">
+        /// LE PROGRAMME DU CONTRÔLE N'EST PAS ENCORE CONNU (aucune notion) —
+        /// décision de Camara, le 21/11/2026. La consigne d'arrivée ne voyage
+        /// qu'avec le premier tour ; c'est au tour SUIVANT que l'enfant répond
+        /// « c'est sur les additions avec retenue ». Le fait revient donc à
+        /// chaque tour tant que le programme manque : ne pas préparer avant
+        /// de savoir, et écrire le bloc qui complète le titre dès qu'on sait.
+        /// </param>
+        private static string MarqueurModeSeance(string mode, int? controleId, string? epreuveCode, int? nbCours = null, int nbIllisibles = 0, bool programmeInconnu = false) => mode switch
         {
             ModesSeance.Controle =>
                 $"[SÉANCE DE PRÉPARATION DU CONTRÔLE n° {controleId} : l'élève est entré par le bouton de "
@@ -1440,6 +1458,19 @@ namespace SchoolWebApp.Api.Builders.impl
                       + $"{(nbIllisibles > 1 ? "sont" : "est")} ILLISIBLE{(nbIllisibles > 1 ? "S" : "")} (lecture échouée) : "
                       + "dis-le lui simplement et demande-lui de le réimporter en photo nette ou en PDF."
                     : "")
+                + (!programmeInconnu
+                    ? ""
+                    : nbCours > 0
+                        ? " LE PROGRAMME DE CE CONTRÔLE N'EST PAS ENCORE ENREGISTRÉ : ne lui demande pas sur "
+                          + "quoi il porte, tire-le de son cours, et écris dans ce message [CONTROLE_NOTIONS] "
+                          + $"controle: {controleId} avec un `sujet:` court et précis tiré du cours et ses notions."
+                        : " LE PROGRAMME DE CE CONTRÔLE N'EST PAS ENCORE CONNU : tant qu'il ne t'a pas dit sur "
+                          + "quoi il porte, NE PRÉPARE RIEN (ni exercice, ni explication) et redemande-le-lui "
+                          + "(s'il ne sait pas, qu'il demande à ses parents ou photographie sa leçon depuis "
+                          + "« Mes contrôles »). DÈS QU'IL TE L'A DIT, écris dans ce message [CONTROLE_NOTIONS] "
+                          + $"controle: {controleId} avec un `sujet:` court et précis (ex. « additions avec "
+                          + "retenue » — il complète le titre de son contrôle) et les notions correspondantes, "
+                          + "puis commence la préparation.")
                 + "]",
 
             ModesSeance.Bilan =>
@@ -1707,7 +1738,7 @@ namespace SchoolWebApp.Api.Builders.impl
         /// </summary>
         private static string MarqueurControle(
             ControleScolaireEleve controle, int joursRestants, PreparationControle? preparation,
-            DateTime maintenantParis)
+            DateTime maintenantParis, int nbCours = 0)
         {
             var intention = joursRestants switch
             {
@@ -1733,16 +1764,45 @@ namespace SchoolWebApp.Api.Builders.impl
                 // LE PROGRAMME MANQUE : C'EST LA PREMIÈRE CHOSE À OBTENIR.
                 // Sans lui, il n'y a rien à préparer, rien à mesurer, et la
                 // barre de l'élève reste à zéro quoi qu'il travaille.
+                // TITRE VAGUE, DEUX CAS — décision de Camara, le 21/11/2026 :
+                // a) sans cours importé, le professeur DEMANDE et ne prépare
+                //    rien avant d'avoir la réponse ; le titre est ensuite
+                //    complété (« Contrôle de maths : additions avec retenue ») ;
+                // b) avec un cours, il le LIT, en tire lui-même le sujet,
+                //    prépare tout de suite, et dit à l'enfant que le titre était
+                //    trop vague mais que son cours a suffi.
+                { PerimetreConnu: false } when nbCours > 0 =>
+                    "ON NE SAIT PAS ENCORE CE QU'IL Y A AU PROGRAMME de ce contrôle"
+                    + (TitreDeControle.EstGenerique(controle.Sujet, controle.MatiereLibelle)
+                        ? " : son titre est trop vague pour le dire"
+                        : "")
+                    + ". MAIS SON COURS EST IMPORTÉ : ne lui demande PAS sur quoi porte le contrôle. "
+                    + "Lis son cours (section « Le cours de l'élève pour ce contrôle ») et déduis-en "
+                    + "TOI-MÊME le sujet précis du contrôle. Dans CE premier message : "
+                    + (TitreDeControle.EstGenerique(controle.Sujet, controle.MatiereLibelle)
+                        ? "dis-lui simplement que le titre de son contrôle était trop vague pour savoir "
+                          + "sur quoi il porte, mais que grâce au cours qu'il a posté tu as pu le "
+                          + "déterminer, et nomme-lui ce sujet ; "
+                        : "nomme-lui le sujet que tu as tiré de son cours ; ")
+                    + $"écris [CONTROLE_NOTIONS] avec controle: {controle.Id}, un `sujet:` court et "
+                    + "précis tiré du cours (sans majuscule au début sauf nom propre, ex. « additions "
+                    + "avec retenue » — il complète le titre de son contrôle) et les notions de ce "
+                    + "cours ; puis COMMENCE LA PRÉPARATION tout de suite, sur ce cours.",
+
                 { PerimetreConnu: false } =>
                     "ON NE SAIT PAS ENCORE CE QU'IL Y A AU PROGRAMME de ce contrôle — "
-                    + "son sujet est trop vague ou n'a pas été précisé. C'est ta PREMIÈRE "
-                    + "question, avant toute préparation : demande-lui sur quoi ça porte "
+                    + "son sujet est trop vague ou n'a pas été précisé, et il n'a importé aucun "
+                    + "cours. C'est ta PREMIÈRE question : demande-lui sur quoi ça porte "
                     + "exactement, ce que son professeur a annoncé, ce que vous avez vu en "
-                    + "classe ces dernières semaines. Puis écris [CONTROLE_NOTIONS] avec "
-                    + $"controle: {controle.Id}, un `sujet:` reformulé en clair, et les "
+                    + "classe ces dernières semaines. NE COMMENCE AUCUNE PRÉPARATION — ni "
+                    + "exercice, ni explication, ni question de cours — tant qu'il ne te l'a pas "
+                    + "dit. Dès qu'il te l'a dit, écris [CONTROLE_NOTIONS] avec "
+                    + $"controle: {controle.Id}, un `sujet:` court et précis (sans majuscule au "
+                    + "début sauf nom propre, ex. « additions avec retenue » — il complète le "
                     // Plus « le sujet sera corrigé partout » : un titre donné
                     // par la famille ne change plus (signalement #54).
-                    + "notions correspondantes — c'est ce qui pose son programme. TANT QUE LE "
+                    + "titre de son contrôle) et les notions correspondantes — c'est ce qui pose "
+                    + "son programme —, puis commence la préparation. TANT QUE LE "
                     + "PROGRAMME N'EST PAS CONNU, ton verdict de fin de séance ne peut être que "
                     + "`pas_pret` : on n'est pas « bientôt prêt » pour un programme que personne "
                     + "ne connaît.",
@@ -3301,6 +3361,7 @@ namespace SchoolWebApp.Api.Builders.impl
             // document illisible ne compte pas comme cours : il se fait réimporter.
             int? nbCours = null;
             var nbIllisibles = 0;
+            var programmeInconnu = false;
             if (mode == ModesSeance.Controle && controleMode is int controlePrepare)
             {
                 try
@@ -3308,6 +3369,10 @@ namespace SchoolWebApp.Api.Builders.impl
                     var documents = await _controles.GetDocumentsAsync(contexte.Eleve.Id, controlePrepare, ct);
                     nbCours = documents.Count(d => d.Exploitable);
                     nbIllisibles = documents.Count(d => d.Illisible);
+
+                    // Le programme manque-t-il encore ? Voir `MarqueurModeSeance`.
+                    var preparationDuTour = await _controles.GetPreparationAsync(contexte.Eleve.Id, controlePrepare, ct);
+                    programmeInconnu = preparationDuTour is { PerimetreConnu: false };
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
@@ -3315,7 +3380,7 @@ namespace SchoolWebApp.Api.Builders.impl
                 }
             }
 
-            declencheur += "\n\n" + MarqueurModeSeance(mode, controleMode, epreuveMode, nbCours, nbIllisibles);
+            declencheur += "\n\n" + MarqueurModeSeance(mode, controleMode, epreuveMode, nbCours, nbIllisibles, programmeInconnu);
 
             // UN CONTRÔLE OUVERT SE RAPPELLE À CHAQUE TOUR, ET C'EST LE CODE QUI
             // S'EN CHARGE.

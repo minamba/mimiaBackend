@@ -579,7 +579,12 @@ namespace SchoolWebApp.Dal.Repositories
             // PAS DE DATE DE MODIFICATION : elle est réservée au parent et à
             // l'enfant (voir l'entité), et c'est elle qui dit ensuite que le
             // titre leur appartient. Le professeur qui précise ne la touche pas.
-            controle.Sujet = propre;
+            //
+            // UN TITRE VAGUE SE COMPLÈTE, IL NE DISPARAÎT PAS (Camara,
+            // 21/11/2026) : « Contrôle de maths » + « additions avec retenue »
+            // → « Contrôle de maths : additions avec retenue ».
+            controle.Sujet = Tronquer(
+                TitreDeControle.NouveauTitre(controle.Sujet, propre, controle.Matiere?.Libelle), 300);
 
             await _context.SaveChangesAsync(ct);
             return PrecisionDuSujet.Remplace;
