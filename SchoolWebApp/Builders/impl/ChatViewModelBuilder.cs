@@ -1740,7 +1740,9 @@ namespace SchoolWebApp.Api.Builders.impl
                     + "exactement, ce que son professeur a annoncé, ce que vous avez vu en "
                     + "classe ces dernières semaines. Puis écris [CONTROLE_NOTIONS] avec "
                     + $"controle: {controle.Id}, un `sujet:` reformulé en clair, et les "
-                    + "notions correspondantes — le sujet sera corrigé partout. TANT QUE LE "
+                    // Plus « le sujet sera corrigé partout » : un titre donné
+                    // par la famille ne change plus (signalement #54).
+                    + "notions correspondantes — c'est ce qui pose son programme. TANT QUE LE "
                     + "PROGRAMME N'EST PAS CONNU, ton verdict de fin de séance ne peut être que "
                     + "`pas_pret` : on n'est pas « bientôt prêt » pour un programme que personne "
                     + "ne connaît.",
@@ -5538,13 +5540,19 @@ namespace SchoolWebApp.Api.Builders.impl
                 // contrôle de maths » devient « les triangles semblables et le
                 // théorème de Thalès » une fois que le professeur a posé la
                 // question — et c'est ce sujet-là qui doit rester.
-                var sujetPrecise = false;
+                //
+                // SAUF SI LA FAMILLE A NOMMÉ LE CONTRÔLE (signalement #54) : son
+                // titre reste, et la précision ne sert qu'à poser le programme.
+                // Le dépôt tranche (`TitreDeControle.PeutEtreRemplace`).
+                var precision = PrecisionDuSujet.Introuvable;
 
                 if (declare.Sujet is not null)
                 {
-                    sujetPrecise = await _controles.PreciserSujetAsync(
+                    precision = await _controles.PreciserSujetAsync(
                         eleveId, declare.Controle, matiereId, declare.Sujet, ct);
                 }
+
+                var sujetPrecise = precision != PrecisionDuSujet.Introuvable;
 
                 // La matière de la conversation, sans rapprochement possible :
                 // poser le périmètre d'une préparation est un acte pédagogique,
@@ -5575,7 +5583,14 @@ namespace SchoolWebApp.Api.Builders.impl
 
                 _logger.LogInformation(
                     "Controle {ControleId} complete (eleve {EleveId}) : sujet {Sujet}, {Nombre} notion(s).",
-                    declare.Controle, eleveId, sujetPrecise ? "precise" : "inchange", posees);
+                    declare.Controle, eleveId,
+                    precision switch
+                    {
+                        PrecisionDuSujet.Remplace => "precise",
+                        PrecisionDuSujet.TitreGarde => "titre de la famille garde",
+                        _ => "inchange",
+                    },
+                    posees);
             }
             catch (Exception ex)
             {

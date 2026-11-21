@@ -549,27 +549,40 @@ namespace SchoolWebApp.Dal.Repositories
             return touchees;
         }
 
-        public async Task<bool> PreciserSujetAsync(
+        public async Task<PrecisionDuSujet> PreciserSujetAsync(
             int eleveId, int controleId, int matiereId, string sujet,
             CancellationToken ct = default)
         {
             var propre = Tronquer(sujet, 300);
-            if (propre is null) return false;
+            if (propre is null) return PrecisionDuSujet.Introuvable;
 
             var controle = await _context.ControlesScolaires
+                .Include(c => c.Matiere)
                 .Where(c => c.Id == controleId && c.EleveId == eleveId && c.MatiereId == matiereId)
                 .FirstOrDefaultAsync(ct);
 
-            if (controle is null) return false;
+            if (controle is null) return PrecisionDuSujet.Introuvable;
 
-            // On écrase sans état d'âme : ce que le professeur a obtenu de
-            // l'élève en lui posant la question vaut mieux que ce qui avait
-            // été tapé à la va-vite dans un formulaire.
+            // LE TITRE APPARTIENT À CELUI QUI L'A ÉCRIT (signalement #54).
+            // Ce que le professeur a obtenu de l'élève vaut mieux que « contrôle
+            // de maths » tapé à la va-vite ; mais « Contrôle de Mme Durand » ou
+            // « TEST ADAM - les plantes » est un choix de la famille, et il
+            // reste. La précision sert alors au programme, pas au titre.
+            if (!TitreDeControle.PeutEtreRemplace(
+                    controle.Sujet, controle.PosePar,
+                    modifieParLaFamille: controle.DateModification is not null,
+                    controle.Matiere?.Libelle))
+            {
+                return PrecisionDuSujet.TitreGarde;
+            }
+
+            // PAS DE DATE DE MODIFICATION : elle est réservée au parent et à
+            // l'enfant (voir l'entité), et c'est elle qui dit ensuite que le
+            // titre leur appartient. Le professeur qui précise ne la touche pas.
             controle.Sujet = propre;
-            controle.DateModification = DateTime.UtcNow;
 
             await _context.SaveChangesAsync(ct);
-            return true;
+            return PrecisionDuSujet.Remplace;
         }
 
         public async Task<int> MarquerNotionsTravailleesAsync(

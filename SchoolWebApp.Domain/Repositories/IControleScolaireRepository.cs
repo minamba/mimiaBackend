@@ -90,10 +90,16 @@ namespace SchoolWebApp.Domain.Repositories
         /// UN CONTRÔLE MAL DÉCLARÉ SE COMPLÈTE, IL NE SE RECRÉE PAS. Beaucoup
         /// arrivent avec « contrôle de maths » et rien d'autre : c'est en
         /// parlant avec l'élève que le professeur découvre qu'il s'agit de
-        /// Thalès. Faux si le contrôle n'est pas à cet élève dans cette
-        /// matière.
+        /// Thalès. <see cref="PrecisionDuSujet.Introuvable"/> si le contrôle
+        /// n'est pas à cet élève dans cette matière.
+        ///
+        /// MAIS UN TITRE CHOISI PAR LA FAMILLE NE SE RÉÉCRIT PAS (signalement
+        /// #54) : seul un titre vide, générique ou posé par le professeur est
+        /// remplacé — voir <see cref="TitreDeControle.PeutEtreRemplace"/>.
+        /// Sinon <see cref="PrecisionDuSujet.TitreGarde"/>, et rien ne change
+        /// en base.
         /// </summary>
-        Task<bool> PreciserSujetAsync(
+        Task<PrecisionDuSujet> PreciserSujetAsync(
             int eleveId, int controleId, int matiereId, string sujet,
             CancellationToken ct = default);
 
