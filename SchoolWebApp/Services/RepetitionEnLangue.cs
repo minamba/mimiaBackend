@@ -462,11 +462,18 @@ namespace SchoolWebApp.Api.Services
         /// le code connaît le mot français (<paramref name="mot"/>), il donne la PREMIÈRE phrase, sobre, à dire telle quelle
         /// (une consigne, rien n'est retiré de la réponse) ; et le compliment sur le sens est nommé dans l'interdit.
         /// </summary>
-        public static string RappelTraductionRefusee(string langue, bool sensCompris = true, bool redemander = true, string? mot = null)
+        // CONTRÔLE D'OMAR SUR LA v5 (point 3) : la phrase revenait MOT POUR MOT à chaque refus (« Deux, c'est le mot en
+        // français : tu as compris le sens. » ×3 dans QE1). Trois variantes sobres selon le rang du refus (<paramref name="rang"/>,
+        // voir RangDuRappel), toujours sans compliment ; la 1re est celle de la v5.
+        // La signature v5 reste (rang 1) : les harnais des versions précédentes l'appellent par réflexion avec 4 paramètres.
+        public static string RappelTraductionRefusee(string langue, bool sensCompris = true, bool redemander = true, string? mot = null) =>
+            RappelTraductionRefuseeAuRang(langue, sensCompris, redemander, mot, 1);
+
+        public static string RappelTraductionRefuseeAuRang(string langue, bool sensCompris, bool redemander, string? mot, int rang)
         {
-            var premiere = redemander && !string.IsNullOrWhiteSpace(mot) && mot.Length <= 30 && !mot.Contains('[')
-                ? " Commence ton message EXACTEMENT par cette phrase, sans rien devant : « " + Majuscule(mot.Trim().TrimEnd('!', '.', '?', ',').Trim())
-                  + (sensCompris ? ", c'est le mot en français : tu as compris le sens. »" : ", c'est le mot en français. »")
+            var propre = mot?.Trim().TrimEnd('!', '.', '?', ',').Trim() ?? string.Empty;
+            var premiere = redemander && propre.Length is > 0 and <= 30 && !propre.Contains('[')
+                ? " Commence ton message EXACTEMENT par cette phrase, sans rien devant : « " + PhraseDuRefus(propre, sensCompris, rang) + " »"
                 : string.Empty;
             return "[Rappel pour ce tour : sa réponse est le mot FRANÇAIS, elle est refusée." + premiere
                 + " AUCUN compliment nulle part dans ton message, même pour le sens : ni « bravo », ni « super », ni « c'est super », "
@@ -475,6 +482,33 @@ namespace SchoolWebApp.Api.Services
                 + (redemander ? $". Dis-lui que c'est le mot en français, puis redemande-lui le mot en {langue}.]"
                     : ". Dis-lui que c'est le mot en français, puis fais ce que le fait de ce tour demande (on ne lui redemande pas ce mot).]");
         }
+
+        /// <summary>La 1re phrase sobre, selon le rang du refus : 1 (et 4, 7…) « Bleu, c'est le mot en français : tu as compris
+        /// le sens. », 2 « En français, c'est bleu : tu as compris le sens. », 3 « Tu as compris le sens : bleu, c'est en
+        /// français. ». Sans <paramref name="sensCompris"/> (il a redit le mot français qu'on lui donnait), rien sur le sens.</summary>
+        public static string PhraseDuRefus(string mot, bool sensCompris, int rang)
+        {
+            var dans = Minuscule(mot);
+            return ((Math.Max(rang, 1) - 1) % 3) switch
+            {
+                1 => sensCompris ? $"En français, c'est {dans} : tu as compris le sens." : $"En français, c'est {dans}.",
+                2 => sensCompris ? $"Tu as compris le sens : {dans}, c'est en français." : $"{Majuscule(mot)}, ça, c'est en français.",
+                _ => sensCompris ? $"{Majuscule(mot)}, c'est le mot en français : tu as compris le sens." : $"{Majuscule(mot)}, c'est le mot en français.",
+            };
+        }
+
+        /// <summary>Le rang du refus d'une traduction : 1 + le nombre de ses messages lus (les derniers, <see cref="MessagesLus"/>)
+        /// qui disaient déjà que sa réponse était le mot français (une des trois phrases, ou l'explication du code).</summary>
+        public static int RangDuRappel(IEnumerable<string?> messagesDuProf) =>
+            1 + messagesDuProf.Count(m => m is not null && DejaDitEnFrancais().IsMatch(m));
+
+        [GeneratedRegex(@"\bc['’]est\s+le\s+mot\s+(?:en\s+)?fran[çc]ais\b|\ben\s+fran[çc]ais,\s+c['’]est\b|\bc['’]est\s+en\s+fran[çc]ais\b",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+        private static partial Regex DejaDitEnFrancais();
+
+        /// <summary>« Bleu » → « bleu » au milieu d'une phrase ; un mot tout en capitales ou un sigle reste tel quel.</summary>
+        private static string Minuscule(string mot) =>
+            mot.Length > 1 && char.IsUpper(mot[0]) && !char.IsUpper(mot[1]) ? char.ToLowerInvariant(mot[0]) + mot[1..] : mot;
 
         /// <summary>
         /// Les mots à répéter du dernier message : ceux de la balise de la langue (sans les consignes « Repeat! »), et, en

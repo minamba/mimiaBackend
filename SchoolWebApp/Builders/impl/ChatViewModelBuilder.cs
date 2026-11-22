@@ -4553,14 +4553,17 @@ namespace SchoolWebApp.Api.Builders.impl
             // (on passe à un autre mot), on ne lui redemande pas le mot.
             if ((sonJuste == false && Services.Voix.RegleVerificationSon.EstUneTraductionEntendue(contenu)) || repetitionEnLangue is not null)
             {
-                declencheur += "\n\n" + RepetitionEnLangue.RappelTraductionRefusee(
+                declencheur += "\n\n" + RepetitionEnLangue.RappelTraductionRefuseeAuRang(
                     repetitionEnLangue?.Langue ?? (langueDuSon == SchoolWebApp.Domain.Repositories.LanguesDesSons.Anglais ? "anglais" : "langue étudiée"),
                     sensCompris: repetitionEnLangue?.Nature != RepetitionEnLangue.Demande.Traduire,
                     redemander: !repetitionAuDernierEssai && abandon is null,
                     // Le mot français qu'il a dit : la première phrase, sobre, que le code lui donne à dire.
                     mot: repetitionEnLangue is { } rep
                         ? (rep.Nature == RepetitionEnLangue.Demande.Traduire ? rep.Dit : rep.Francais)
-                        : Services.Voix.RegleVerificationSon.MotDeLaTraduction(contenu));
+                        : Services.Voix.RegleVerificationSon.MotDeLaTraduction(contenu),
+                    // Le rang de ce refus (1, 2, 3…), lu dans ses messages d'avant : la première phrase change à chaque fois
+                    // (contrôle d'Omar sur la v5, point 3 : la même phrase revenait mot pour mot à chaque refus).
+                    rang: RepetitionEnLangue.RangDuRappel(messagesDuProfPourLaLangue));
             }
 
             // « DERNIER ESSAI » TROP TÔT AU RETOUR (décision de Min's du 22/11, 07h58 : au retour, le compte repart de zéro ;
@@ -4575,6 +4578,12 @@ namespace SchoolWebApp.Api.Builders.impl
                 || DernierEssaiTropTot.TropTotApresLeRetour(historique.Select(m => ((string?)m.Role, (string?)m.Contenu)).ToList())))
             {
                 declencheur += "\n\n" + DernierEssaiTropTot.FaitAuRetour;
+            }
+            // AU TOUR D'ARRIVÉE, IL N'Y A RIEN À JUGER (contrôle d'Omar sur la v5, point 2 ; QR1, conv. de test 1272) : l'accueil
+            // du retour recopiait « Bleu, c'est le mot en français : tu as compris le sens. » de l'historique. En dernier.
+            if (DernierEssaiTropTot.AuRetour(typeAccueil))
+            {
+                declencheur += "\n\n" + DernierEssaiTropTot.FaitRienReponduAuRetour;
             }
 
             // PENDANT UNE SUITE NON TROUVÉE, ON NE CHANGE PAS D'EXERCICE — voir SuiteGardee (contrôle d'Omar sur le lot groupé v3,
