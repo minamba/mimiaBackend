@@ -63,6 +63,8 @@ namespace SchoolWebApp.Api.Services
             + @"(?!\s+(?:un\s+(?:instant|moment|petit\s+instant)|une\s+seconde|deux\s+secondes))"
             + @"|\b(?:on|qu['’]on)\s+s['’]\s*arr[êe]te\b"
             + @"|\bon\s+(?:va\s+)?arr[êe]te[rz]?\s+(?:là|ici|pour\s+(?:aujourd|cette|ce|l))|\barr[êe]tons(?:-nous)?\s+(?:là|ici)\b"
+            // « On en reste là pour cette question, Adam, ce n'est pas grave. » (bout en bout v6 sur 1760617, série 4, 3e erreur).
+            + @"|\bon\s+(?:va\s+)?en\s+rest(?:e|er|era)\s+là\b|\brestons-en\s+là\b"
             + @"|\bon\s+fait\s+une\s+pause\b(?![^.!?\n]{0,40}?\bet\s+(?:puis\s+)?on\s+re)"
             + @"|\bon\s+reviendra\b|\bon\s+reprendra\s+(?:ça|cela|ce|cette)\b"
             + @"|\b(?:verra|reverra|reprendra|reprend|refera|essaiera|réessaiera|continuera|retentera|recommencera)\b[^.!?\n]{0,40}?\b(?:une\s+autre\s+fois|plus\s+tard|demain|la\s+prochaine\s+fois)\b"
