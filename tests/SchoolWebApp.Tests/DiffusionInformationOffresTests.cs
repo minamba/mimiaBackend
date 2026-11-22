@@ -267,6 +267,7 @@ namespace SchoolWebApp.Tests
                 Assert.DoesNotContain("offres", envoi.Valeurs["mentionPied"], StringComparison.OrdinalIgnoreCase);
                 Assert.DoesNotContain("désinscrire", envoi.Valeurs["mentionPied"], StringComparison.OrdinalIgnoreCase);
                 Assert.DoesNotContain("Ne plus recevoir", envoi.Valeurs["mentionPied"]);
+                Assert.DoesNotContain("SIRET", envoi.Valeurs["mentionPied"]);
                 Assert.DoesNotContain("{{lien_desinscription}}", envoi.Valeurs["corpsMessage"]);
                 Assert.DoesNotContain("desabonnement", envoi.Valeurs["corpsMessage"], StringComparison.OrdinalIgnoreCase);
             }

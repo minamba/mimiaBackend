@@ -343,6 +343,15 @@ namespace SchoolWebApp.Api.Services.Notifications
                   + "style=\"color:#a5abb8; text-decoration:underline;\">Ne plus recevoir ces messages</a>";
         }
 
+        /// <summary>
+        /// L'IDENTITÉ DE L'ANNONCEUR SUR TOUTE PROMOTION (22/11/2026, Othman : art. R526-27 C. com. pour l'entrepreneur
+        /// individuel ; un e-mail commercial doit dire clairement pour le compte de qui il part). Mise dans le pied
+        /// commercial, elle figure UNE fois sur chaque promotion, quel que soit le texte écrit dans l'admin. Les
+        /// informations (case décochée) ne la portent pas : leur pied ne change pas.
+        /// </summary>
+        public const string MentionIdentite =
+            "Minanba Camara, entrepreneur individuel (Mins Corp), Évry-Courcouronnes, SIRET 924 291 800 00010.";
+
         public string ComposerMentionPied(string? lienDesabonnement, string? categorie)
         {
             if (!CategorieDesabonnement.EstCommerciale(categorie)) return ComposerMentionPied(lienDesabonnement);
@@ -350,7 +359,8 @@ namespace SchoolWebApp.Api.Services.Notifications
             var mention = "Vous recevez ce message parce que vous avez accepté de recevoir les offres et nouveautés "
                           + "de Mimia par e-mail. Une question ? Écrivez-nous à "
                           + "<a href=\"mailto:support@mimia.fr\" style=\"color:#a5abb8; text-decoration:underline;\">"
-                          + "support@mimia.fr</a>.";
+                          + "support@mimia.fr</a>."
+                          + "<br>" + WebUtility.HtmlEncode(MentionIdentite);
 
             return lienDesabonnement is null
                 ? mention

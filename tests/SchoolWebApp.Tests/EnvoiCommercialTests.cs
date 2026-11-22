@@ -124,6 +124,10 @@ namespace SchoolWebApp.Tests
             Assert.Contains("https://site.exemple.invalid/desabonnement?jeton=", html);
             Assert.Contains("Me désinscrire de ces e-mails", html);
             Assert.Contains("accepté de recevoir les offres et nouveautés", html);
+            // L'identité de l'annonceur (Othman, 22/11/2026) : exactement une fois, jamais l'ancienne forme.
+            var identite = System.Net.WebUtility.HtmlEncode(DiffusionService.MentionIdentite);
+            Assert.Equal(1, (html.Length - html.Replace(identite, "").Length) / identite.Length);
+            Assert.DoesNotContain("Mins Corp (entrepreneur individuel)", html);
             Assert.DoesNotContain("{{", html);
 
             var dossier = Environment.GetEnvironmentVariable("MIMIA_TEST_RENDU");
