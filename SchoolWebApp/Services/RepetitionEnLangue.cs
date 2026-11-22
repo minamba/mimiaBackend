@@ -340,6 +340,9 @@ namespace SchoolWebApp.Api.Services
             for (var i = historique.Count - 1; i >= 0 && essais < EssaisMax; i--)
             {
                 var (role, contenu, juste) = historique[i];
+                // Parti puis revenu entre deux essais (message de fin de séance, avant ou après l'accueil) : le compte repart
+                // de zéro (décision de Min's, 22/11/2026, la même règle que EssaisRates).
+                if (EssaisRates.FinDeSeance(role, contenu)) break;
                 if (role != "user") continue;
                 if (juste != false || !EstUneReponseJugee(contenu)) break;
 
