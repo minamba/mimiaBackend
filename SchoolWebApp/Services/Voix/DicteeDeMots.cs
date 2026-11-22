@@ -261,14 +261,24 @@ namespace SchoolWebApp.Api.Services.Voix
         /// </summary>
         public static string SansMasqueVide(string texte)
         {
-            var sans = MasqueSeul().Replace(texte, string.Empty);
+            // « Le mot que j'ai dit, c'est Ce mot, pas "dog". » (bout en bout, 22/11/2026) : la majuscule du mot anglais restait
+            // en pleine phrase, et la phrase ne disait plus rien.
+            var sans = MasqueEnMajuscule().Replace(texte, m => char.ToLowerInvariant(m.Value[0]) + m.Value[1..]);
+            sans = MasqueSeul().Replace(sans, string.Empty);
             sans = MasqueQuiSeRedit().Replace(sans, string.Empty);
+            sans = MotDitQuiEstLeMasque().Replace(sans, string.Empty);
             if (sans == texte) return texte;
 
             return LignesVidesEnTrop().Replace(sans, "\n\n").Trim();
         }
 
-        [GeneratedRegex(@"(?<=^|[.!?…\n])[^\S\n]*(?:«[^\S\n]*)?(?:ce\s+mot|cette\s+syllabe)(?:[^\S\n]*»)?[^\S\n]*[.!?…]*[^\S\n]*(?=\n|$)", RegexOptions.IgnoreCase | RegexOptions.Multiline)]
+        [GeneratedRegex(@"(?<=[^\s.!?…«""“]\s+)(?:Ce mot|Cette syllabe)\b")]
+        private static partial Regex MasqueEnMajuscule();
+
+        [GeneratedRegex(@"(?<=^|[.!?…\n])[^\S\n]*(?:le\s+mot|la\s+syllabe)\s+que\s+(?:je\s+(?:viens\s+de\s+te\s+|t['’]ai\s+)?|j['’]ai\s+)(?:dit|dire|dicté|dicter|redit)\w*\s*,?\s*c['’](?:était|etait|est)\s+(?:ce\s+mot|cette\s+syllabe)\b[^.!?…\n]*[.!?…]*", RegexOptions.IgnoreCase)]
+        private static partial Regex MotDitQuiEstLeMasque();
+
+        [GeneratedRegex(@"(?<=^|[.!?…\n])[^\S\n]*(?:«[^\S\n]*)?(?:ce\s+mot|cette\s+syllabe)(?:[^\S\n]*»)?[^\S\n]*(?:[.!?…]+[^\S\n]*|(?=\n|$))", RegexOptions.IgnoreCase | RegexOptions.Multiline)]
         private static partial Regex MasqueSeul();
 
         [GeneratedRegex(@"(?<=^|[.!?…\n])[^\S\n]*(?:ce\s+mot|cette\s+syllabe)[^\S\n]*[,:]?[^\S\n]*c['’](?:était|etait|est)\s+(?:bien\s+)?(?:l[ea]\s+(?:mot|syllabe)\s+|celui\s+|celle\s+)?(?:que|qu['’])\s*(?:je|j['’])\s*(?:viens\s+de\s+te\s+|t['’]ai\s+|vais\s+te\s+)?(?:dire|dit|dicter|dicté|demander|demandé|faire\s+écouter|fait\s+écouter|redire|redit)\b[^.!?…\n]*[.!?…]*", RegexOptions.IgnoreCase)]
