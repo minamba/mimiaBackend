@@ -4209,10 +4209,18 @@ namespace SchoolWebApp.Api.Builders.impl
             var filtreAccord = new CorrectionsDuFlux(
                 PromptsPedagogiques.EstUneProfesseure(contexte.Conversation.ProfAvatar));
 
+            // UNE DICTÉE AU TABLEAU POUR SA CORRECTION : ses mots ne se cachent plus (signalement #61, voir VoixEnClair).
+            // Remise par l'application à l'arrivée, correction ouverte, ou copie tapée qui vient d'arriver. Ce n'est
+            // pas un exercice de sons : la liste blanche ne s'applique pas (bout en bout du 22/11 : un historique qui
+            // parlait de « sons » l'allumait à la reprise, et « chaton » devenait « pomme » ou « savon »).
+            var dicteeAuTableau = (nouvelleArrivee && tableauRepris is not null)
+                || correctionDictee.Ouverte
+                || blocDicteeAjoute is not null;
+
             // IL PIOCHE DANS LA LISTE BLANCHE — voir FiltreMotsVerifies. Le français et l'anglais au
             // primaire, l'interrupteur allumé, et seulement dans un exercice de sons ou de syllabes :
             // ailleurs, pas de filtre, donc pas le moindre retard sur la voix.
-            var filtreMots = (!enExerciceDeSons && poserLeChoix is null) || langueDuSon is null
+            var filtreMots = (!enExerciceDeSons && poserLeChoix is null) || langueDuSon is null || dicteeAuTableau
                 ? null
                 : await _verificationSon.FiltrePourAsync(
                     langueDuSon,
@@ -4244,6 +4252,8 @@ namespace SchoolWebApp.Api.Builders.impl
                                 ? Services.Voix.RegleVerificationSon.RedireLeMot.SiRefus
                                 : Services.Voix.RegleVerificationSon.RedireLeMot.Non);
 
+            var filtreVoixEnClair = dicteeAuTableau ? new Services.Voix.VoixEnClair.Filtre() : null;
+
             // LA LECTURE DES NOMBRES : la réponse est retenue, puis remise en ordre (sa phrase, la consigne, la balise).
             var filtreNombres = nombresDuTour is null ? null : new Services.Voix.FiltreLectureNombres(nombresDuTour);
 
@@ -4256,14 +4266,6 @@ namespace SchoolWebApp.Api.Builders.impl
                     .Any(m => m.Role == "assistant" && Services.Voix.LectureDesNombres.ContientUneBalise(m.Contenu)))
                 : null;
 
-            // UNE DICTÉE AU TABLEAU POUR SA CORRECTION : ses mots ne se cachent plus (signalement #61, voir VoixEnClair).
-            // Remise par l'application à l'arrivée, correction ouverte, ou copie tapée qui vient d'arriver.
-            var filtreVoixEnClair = (nouvelleArrivee && tableauRepris is not null)
-                || correctionDictee.Ouverte
-                || blocDicteeAjoute is not null
-                ? new Services.Voix.VoixEnClair.Filtre()
-                : null;
-
             await foreach (var fragment in _agent.RepondreAsync(
                 contexte.Eleve, contexte.Conversation, historique, declencheur, bilan,
                 TypeTache.Dialogue, typeAccueil, depuis, secondesRestantes,
@@ -4271,9 +4273,9 @@ namespace SchoolWebApp.Api.Builders.impl
             {
                 var accorde = filtreAccord.Passer(fragment.Texte);
                 if (filtreMots is not null) accorde = filtreMots.Passer(accorde);
+                if (filtreVoixEnClair is not null) accorde = filtreVoixEnClair.Passer(accorde);
                 if (filtreNombres is not null) accorde = filtreNombres.Passer(accorde);
                 if (filtreBaliseNombre is not null) accorde = filtreBaliseNombre.Passer(accorde);
-                if (filtreVoixEnClair is not null) accorde = filtreVoixEnClair.Passer(accorde);
                 if (accorde.Length == 0) continue;
 
                 if (filtreEcoute is null)
@@ -4294,6 +4296,17 @@ namespace SchoolWebApp.Api.Builders.impl
                 if (filtreMots.ARemplace)
                 {
                     _logger.LogInformation("Mot hors liste remplace (conversation {ConversationId}).", conversationId);
+                }
+            }
+
+            if (filtreVoixEnClair is not null)
+            {
+                finAccordee = filtreVoixEnClair.Passer(finAccordee) + filtreVoixEnClair.Terminer();
+
+                if (filtreVoixEnClair.ARemplace)
+                {
+                    _logger.LogInformation(
+                        "Dictee au tableau : balise de voix [FR] remise en clair (conversation {ConversationId}).", conversationId);
                 }
             }
 
@@ -4322,17 +4335,6 @@ namespace SchoolWebApp.Api.Builders.impl
             if (filtreBaliseNombre is not null)
             {
                 finAccordee = filtreBaliseNombre.Passer(finAccordee) + filtreBaliseNombre.Terminer();
-            }
-
-            if (filtreVoixEnClair is not null)
-            {
-                finAccordee = filtreVoixEnClair.Passer(finAccordee) + filtreVoixEnClair.Terminer();
-
-                if (filtreVoixEnClair.ARemplace)
-                {
-                    _logger.LogInformation(
-                        "Dictee au tableau : balise de voix [FR] remise en clair (conversation {ConversationId}).", conversationId);
-                }
             }
 
             if (finAccordee.Length > 0)
