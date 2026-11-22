@@ -171,9 +171,23 @@ namespace SchoolWebApp.Api.Services
         public static (string Question, decimal Valeur)? ReponseCherchee(IEnumerable<string?> messagesDuProfesseur, string? messageDeLEleve)
         {
             var messages = messagesDuProfesseur.ToList();
-            if (DerniereQuestion(messages) is not { } question || question.Decomposition is not null) return null;
-            if (!decimal.TryParse(question.Resultat.Replace(',', '.'), NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out var valeur))
+            string enonce;
+            decimal valeur;
+            if (DerniereQuestion(messages) is { } question)
+            {
+                if (question.Decomposition is not null) return null;
+                if (!decimal.TryParse(question.Resultat.Replace(',', '.'), NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out valeur))
+                    return null;
+                enonce = question.Suite is { } s ? s.Enonce : question.Expression + " = ?";
+            }
+            else if (CalculToujoursOuvert(messages) is { } ouvert)
+            {
+                (enonce, valeur) = ouvert;
+            }
+            else
+            {
                 return null;
+            }
 
             if (!string.IsNullOrWhiteSpace(messageDeLEleve))
             {
@@ -181,8 +195,38 @@ namespace SchoolWebApp.Api.Services
                 if (NombresDuMessage(messageDeLEleve).Contains(valeur)) return null;
             }
 
-            var enonce = question.Suite is { } s ? s.Enonce : question.Expression + " = ?";
             return (enonce, valeur);
+        }
+
+        /// <summary>
+        /// POUR LA PROTECTION SEULEMENT (jamais pour un verdict) — tâche 1941 (bout en bout, conv. 748) : « Lève 7 doigts.
+        /// Plie un doigt à la fois en comptant : 8, 9, 10, 11… Tu t'arrêtes à combien de doigts pliés ? » pose une
+        /// SOUS-QUESTION : le juge ne rend plus de verdict, à raison (l'élève peut répondre 5). Mais le calcul n'est pas
+        /// résolu pour autant, et le professeur a donné 12 au tour suivant. Le calcul posé le plus récemment (un seul
+        /// résultat) reste à protéger tant qu'aucun message plus récent ne le ferme : une félicitation, un tableau effacé,
+        /// une autre question de calcul, de décomposition ou de suite.
+        /// </summary>
+        private static (string Question, decimal Valeur)? CalculToujoursOuvert(IReadOnlyList<string?> messagesDuProfesseur)
+        {
+            foreach (var message in messagesDuProfesseur.Reverse().Take(MessagesRemontes))
+            {
+                if (string.IsNullOrWhiteSpace(message)) continue;
+
+                var calculs = Calculs(message, out var illisible);
+                if (illisible) return null;
+                if (calculs.Count > 0)
+                {
+                    return calculs.Select(c => c.Resultat).Distinct().Count() == 1 && calculs[0].Resultat >= 0
+                        ? (calculs[0].Expression + " = ?", calculs[0].Resultat)
+                        : null;
+                }
+
+                if (Felicite().IsMatch(message) || message.Contains("[TABLEAU_EFFACE]", StringComparison.OrdinalIgnoreCase)) return null;
+                if (Decompositions(message) is not { Count: 0 }) return null;
+                if (Suites(message) is { Count: > 0 }) return null;
+            }
+
+            return null;
         }
 
         [GeneratedRegex(@"^\W*(?:oui|bravo|exact|super|parfait|génial|bien\s+joué|c'est\s+(?:ça|juste|bon))\b", RegexOptions.IgnoreCase)]
@@ -285,7 +329,19 @@ namespace SchoolWebApp.Api.Services
 
                 // Signalement #53 : « Après 73, qu'est-ce que tu dis ? », « 71, 72, 73… ? ».
                 var suites = Suites(message);
-                if (suites is null) return null;
+
+                // UNE RELANCE QUE LE JUGE DE SUITE NE SAIT PAS LIRE — tâche 1941 (bout en bout, conv. 749) : « compte
+                // encore 5 de plus en disant : 8, 9, 10, 11… à quel nombre tu arrives ? » (le pas annoncé, 5, n'est pas
+                // celui de la suite écrite) rendait le message illisible et faisait tomber le calcul posé plus haut : ni
+                // verdict, ni protection. Ce n'est illisible que pour une suite : si un calcul est posé plus haut, le
+                // message est lu comme ses autres relances (mêmes règles, plus bas).
+                if (suites is null)
+                {
+                    if (calculs.Count + decompositions.Count > 0
+                        || j + 1 >= recents.Count
+                        || DerniereQuestion(recents.Skip(j + 1).Reverse()) is not { Expression: not null }) return null;
+                    suites = [];
+                }
 
                 if (calculs.Count + decompositions.Count + suites.Count > 1) return null;
 

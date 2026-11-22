@@ -421,11 +421,12 @@ namespace SchoolWebApp.Api.Services
 
         // Après le dernier nombre : ses guillemets, sa petite parenthèse, sa ponctuation de suspension ou d'exclamation.
         // Et la suite qui continuait sans nombre au tableau : « 74, 75, ... » → « 74… », pas « 74…, ... ».
-        [GeneratedRegex(@"^(?:\s*(?:""|»))?(?:\s*\([^()\n]{0,40}\))?\s*(?:""|»)?\s*(?:,\s*(?:\.{2,}|…)|\.{2,}|…|!+|\.(?!\d))?")]
+        // Sur la même ligne seulement : au tableau, la « (1) » de la ligne suivante n'est pas à lui (conv. 749).
+        [GeneratedRegex(@"^(?:[ \t]*(?:""|»))?(?:[ \t]*\([^()\n]{0,40}\))?[ \t]*(?:""|»)?[ \t]*(?:,[ \t]*(?:\.{2,}|…)|\.{2,}|…|!+|\.(?!\d))?")]
         private static partial Regex FinDuDernier();
 
         // Ce qui reste collé à l'avant-dernier nombre : son guillemet fermant, sa petite parenthèse (« "11" (4e) »).
-        [GeneratedRegex(@"^(?:\s*(?:""|»))?(?:\s*\([^()\n]{0,40}\))?")]
+        [GeneratedRegex(@"^(?:[ \t]*(?:""|»))?(?:[ \t]*\([^()\n]{0,40}\))?")]
         private static partial Regex GardeDeLAvantDernier();
 
         private static bool TermeDeCalcul(string texte, Lu n) =>
