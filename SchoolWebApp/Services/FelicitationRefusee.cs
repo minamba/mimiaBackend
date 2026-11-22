@@ -32,10 +32,10 @@ namespace SchoolWebApp.Api.Services
         private const string CEst =
             // « tu en as compris le sens, c'est déjà bien ! » (bout en bout QE1 sur c71d07a, conv. de test 1070) : « déjà bien »
             // part ; « c'est bien le mot français » (un constat) reste.
-            @"(?:\bça\s+|\bca\s+)?\bc['’]est\s+(?:(?:vraiment|trop|déjà|deja|quand\s+même|tout\s+de\s+même)\s+)?(?:très\s+bien|bien\s+joué|super|top|génial|genial|parfait|formidable|excellent|chouette|bravo|(?:déjà|deja)\s+bien)\b";
+            @"(?:\bça\s+|\bca\s+)?\bc['’]est\s+(?:(?:vraiment|trop|déjà|deja|quand\s+même|tout\s+de\s+même)\s+)?(?:très\s+bien|bien\s+joué|super|top|génial|genial|parfait|formidable|excellent|chouette|bravo|bien\s+trouvé|(?:déjà|deja)\s+bien)\b";
 
         /// <summary>« bravo », « très bien », « super »… dits seuls.</summary>
-        private const string Seul = @"\b(?:bravo|très\s+bien|super|génial|parfait|bien\s+joué)\b";
+        private const string Seul = @"\b(?:bravo|très\s+bien|super|génial|parfait|bien\s+joué|bien\s+trouvé)\b";
 
         /// <summary>
         /// LE GROUPE DÉTACHÉ PART AVEC SA FÉLICITATION — contrôle d'Omar sur le lot groupé v3 (89f010e, point 4) : « Le sens,
@@ -51,10 +51,12 @@ namespace SchoolWebApp.Api.Services
         /// LE COMPLÉMENT DE « BRAVO POUR » S'ARRÊTE AU MOT QUI LIE — contrôle d'Omar sur le lot groupé v3 (point 8) : « Bravo pour
         /// le sens mais en anglais on dit Two. » partait en entier. Le complément ne traverse ni mais, et, car, parce que, alors,
         /// donc ; devant mais / car / parce que / alors / donc, la félicitation se ferme (« Mais en anglais on dit Two. ») ;
-        /// devant « et » (« bravo pour l'effort et la patience »), rien ne part.
+        /// devant « et » (« bravo pour l'effort et la patience »), rien ne part. Bout en bout v4 (QR2 sur dd2a71b, conv. de test
+        /// 1182) : « C'est le mot en français, bien joué pour le sens ! » restait : « bien joué pour … » suit la même règle ; et
+        /// « c'est bien trouvé ! » (QR1, conv. de test 1180) est une félicitation aussi.
         /// </summary>
         private const string BravoPour =
-            @"(?<=bravo)\s+pour\s+(?:(?!\b(?:mais|et|car|parce|alors|donc)\b)[^!.?,;:\n\[]){1,40}?(?:\s*\.(?!\.)(?=\s|$)|" + Ferme + @"|(?=\s+(?:mais|car|parce\s+que|alors|donc)\b))";
+            @"(?<=bravo|bien\s+joué)\s+pour\s+(?:(?!\b(?:mais|et|car|parce|alors|donc)\b)[^!.?,;:\n\[]){1,40}?(?:\s*\.(?!\.)(?=\s|$)|" + Ferme + @"|(?=\s+(?:mais|car|parce\s+que|alors|donc)\b))";
 
         /// <summary>« , c'est très bien ! », « et c'est super, », « — ça c'est top », « , bravo ! », « Bravo ! », « Très bien ! ».</summary>
         [GeneratedRegex(
