@@ -300,6 +300,10 @@ namespace SchoolWebApp.Api.Services
             // tous appartenir à la question retrouvée plus haut, sinon on ne sait pas de quoi la relance parle.
             var nombresDesRelances = new List<decimal>();
 
+            // Les mêmes, sans les nombres que la relance REFUSE ou prête à l'élève (« C'est encore 7 », « ce n'est pas 7 ») :
+            // pour une suite seulement (retest KO #53, conversation de test 813).
+            var nombresDesRelancesSansRefus = new List<decimal>();
+
             // Le rang que demande la relance la plus récente (« Combien d'unités restent, alors ? ») : '\0' tant
             // qu'aucune relance n'en demande, null si elle en demande plusieurs.
             char? rangDeLaRelance = '\0';
@@ -372,7 +376,7 @@ namespace SchoolWebApp.Api.Services
                     }
 
                     // Une relance ne cite que les nombres de la suite (« Compte avec moi : 71, 72, 73… »), son pas, 1 ou 10.
-                    return nombresDesRelances.All(NombresDUneRelanceDeSuite(s).Contains)
+                    return nombresDesRelancesSansRefus.All(NombresDUneRelanceDeSuite(s).Contains)
                         ? new Question(null, s.Attendu.ToString(CultureInfo.InvariantCulture), null, s)
                         : null;
                 }
@@ -456,6 +460,8 @@ namespace SchoolWebApp.Api.Services
                 if (rangs.Count > 0 && Conversion().IsMatch(message)) return null;
 
                 nombresDesRelances.AddRange(nombres);
+                var refuses = NombresRefuses(message);
+                nombresDesRelancesSansRefus.AddRange(nombres.Where(x => !refuses.Contains(x)));
 
                 // Signalement #46 : seule la relance la plus récente dit ce qu'on attend maintenant.
                 if (rangDeLaRelance == '\0' && rangs.Count > 0) rangDeLaRelance = rangs.Count == 1 ? rangs[0] : null;

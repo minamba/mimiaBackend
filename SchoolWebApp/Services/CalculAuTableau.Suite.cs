@@ -289,6 +289,30 @@ namespace SchoolWebApp.Api.Services
             return permis;
         }
 
+        /// <summary>
+        /// LE NOMBRE QUE LA RELANCE REFUSE — retest KO #53, bout en bout du 22/11 (conversation de test 813) : « C'est
+        /// encore 7, et on a déjà essayé ensemble. … Après 80, le petit nombre qui vient juste après, ce n'est pas 7. » Le
+        /// 7 est la réponse de l'élève, pas un autre exercice : la question « après 80 » était perdue au 3e essai (pas de
+        /// verdict, et Nora a écrit « ça fait 81, 82, 83… »). Un nombre que la relance nie ou prête à l'élève (« ce n'est
+        /// pas 7 », « pas 7 », « c'est encore 7 », « tu as dit 7 », « un petit nombre comme 7 », « au lieu de 7 ») ne
+        /// compte pas parmi les nombres d'une relance de SUITE.
+        /// </summary>
+        private static HashSet<decimal> NombresRefuses(string message)
+        {
+            var refuses = new HashSet<decimal>();
+            var texte = EnChiffres(VirgulesQuiSeparent(Regex.Replace(message, @"\[/?[A-Z_]+(?::[^\]]*)?\]", "\n")));
+            foreach (Match m in Regex.Matches(texte, @"(?<![\d,.])\d{1,4}(?![\d]|[,.]\d)"))
+            {
+                if (AvantUnNombreRefuse().IsMatch(texte[..m.Index]))
+                    refuses.Add(int.Parse(m.Value, CultureInfo.InvariantCulture));
+            }
+            return refuses;
+        }
+
+        [GeneratedRegex(@"(?:(?<!\p{L})n['’]est\s+(?:toujours\s+|encore\s+|vraiment\s+)?pas|(?<!\p{L})pas|(?<!\p{L})tu\s+(?:as\s+(?:dit|répondu|repondu|écrit|ecrit|trouvé|trouve)|dis|redis|répètes|repetes)|(?<!\p{L})c['’]est\s+(?:encore|toujours)|(?<!\p{L})comme|(?<!\p{L})plutôt\s+que|(?<!\p{L})au\s+lieu\s+de)\s+(?:(?:le|un)\s+(?:nombre\s+)?)?[«""]?\s*$",
+            RegexOptions.IgnoreCase)]
+        private static partial Regex AvantUnNombreRefuse();
+
         /// <summary>Deux lectures qui attendent le même nombre sont la même question ; on garde la plus parlante.</summary>
         private static void Ajouter(List<SuitePosee> trouvees, SuitePosee suite)
         {
