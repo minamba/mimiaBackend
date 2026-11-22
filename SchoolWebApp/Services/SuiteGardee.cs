@@ -14,7 +14,7 @@ namespace SchoolWebApp.Api.Services
     /// jusqu'à 2 sur 10 en v2).
     ///
     /// Aux 1re, 2e et 3e erreurs comptées par le code sur une SUITE, la réponse du professeur est retenue en entier (pas de
-    /// coupure possible) puis lue : si elle abandonne la question (« on y reviendra », « autre chose », « un autre exercice »,
+    /// coupure possible) puis lue : si elle donne la réponse (voir <see cref="ReponseNonDonnee.LaDonne"/>), abandonne la question (« on y reviendra », « autre chose », « un autre exercice »,
     /// « on s'arrête »…) ou en pose une autre (le juge, relisant le message, y lit une autre question : « avant 10 », « 3 + 4 »), elle est
     /// remplacée par un message du code, en entier : jamais de phrase coupée, la question du code à la fin, et aucune ardoise
     /// d'une autre question. Sinon elle part telle quelle. Générique : tous les professeurs, toute suite jugée par le code.
@@ -38,6 +38,11 @@ namespace SchoolWebApp.Api.Services
         public static bool QuitteLaQuestion(IReadOnlyList<string?> messagesAvant, string texte, decimal valeur)
         {
             if (Abandon().IsMatch(texte)) return true;
+            // LA RÉPONSE DONNÉE — bout en bout final v4 (a77bcd4, série 9, conv. de test 1201, 3e erreur) : « 78... 79... 80... et
+            // après, ça fait quatre-vingt-UN. Dis-moi juste ce dernier mot. » Le filtre « réponse jamais donnée » retirait bien
+            // le nombre, mais il restait « Dis-moi juste ce dernier mot. » : une phrase sans objet, et pas de question. Le
+            // message était construit autour de la réponse : il est remplacé en entier (le filtre reste derrière, par sûreté).
+            if (ReponseNonDonnee.LaDonne(texte, valeur)) return true;
             var nombre = valeur.ToString(CultureInfo.InvariantCulture);
             var lu = CalculAuTableau.Juger(messagesAvant.Append(texte).TakeLast(CalculAuTableau.MessagesRemontes), nombre);
             // Une autre question lue (« Qu'est-ce qui vient juste avant 10 ? », « combien font 3 + 4 ? ») : elle remplace la nôtre.
