@@ -3495,6 +3495,21 @@ namespace SchoolWebApp.Api.Builders.impl
                 declencheur += "\n\n" + InvitationAContinuer.Rappel;
             }
 
+            // LA RÉPONSE QU'IL CHERCHE ENCORE NE LUI EST PAS DONNÉE — tâche 1941 (Omar, sur master : « 7 + 5, ça fait 12 : je
+            // te le dis cette fois », environ 10 réponses sur 40). Camara et Min's : on ne donne JAMAIS la réponse. Le code
+            // la connaît (même question que le juge) : tant que l'élève ne l'a pas trouvée, ReponseNonDonnee la retire de
+            // l'écran, de la voix et de l'historique. Mêmes exclusions que le verdict : ni contrôle noté, ni lecture des nombres.
+            var reponseCherchee = controleOuvert || enLectureDeNombres
+                ? null
+                : CalculAuTableau.ReponseCherchee(
+                    historique.Where(m => m.Role == "assistant")
+                        .Select(m => m.Contenu)
+                        .Where(c => !string.IsNullOrWhiteSpace(c)
+                            && !c!.TrimStart().StartsWith("[FICHE]", StringComparison.OrdinalIgnoreCase)
+                            && !c.TrimStart().StartsWith("[RAPPORT]", StringComparison.OrdinalIgnoreCase))
+                        .TakeLast(CalculAuTableau.MessagesRemontes),
+                    contenu);
+
             // UNE EXPRESSION ÉCRITE EN COURS DE CORRECTION SE RAPPELLE AUSSI À
             // CHAQUE TOUR, et pour la même raison que le contrôle juste au-dessus :
             // le serveur sait qu'elle est ouverte, la mémoire du modèle non.
@@ -4239,6 +4254,10 @@ namespace SchoolWebApp.Api.Builders.impl
                     .Any(m => m.Role == "assistant" && Services.Voix.LectureDesNombres.ContientUneBalise(m.Contenu)))
                 : null;
 
+            // LA RÉPONSE ATTENDUE NE PART PAS — voir ReponseNonDonnee (tâche 1941). Le filtre n'existe que si une question est
+            // ouverte et que l'élève n'a pas trouvé : ailleurs, pas le moindre retard sur la voix. Dernier filtre du texte.
+            var filtreReponse = reponseCherchee is { } cherchee ? new ReponseNonDonnee(cherchee.Valeur) : null;
+
             await foreach (var fragment in _agent.RepondreAsync(
                 contexte.Eleve, contexte.Conversation, historique, declencheur, bilan,
                 TypeTache.Dialogue, typeAccueil, depuis, secondesRestantes,
@@ -4248,6 +4267,7 @@ namespace SchoolWebApp.Api.Builders.impl
                 if (filtreMots is not null) accorde = filtreMots.Passer(accorde);
                 if (filtreNombres is not null) accorde = filtreNombres.Passer(accorde);
                 if (filtreBaliseNombre is not null) accorde = filtreBaliseNombre.Passer(accorde);
+                if (filtreReponse is not null) accorde = filtreReponse.Passer(accorde);
                 if (accorde.Length == 0) continue;
 
                 if (filtreEcoute is null)
@@ -4296,6 +4316,11 @@ namespace SchoolWebApp.Api.Builders.impl
             if (filtreBaliseNombre is not null)
             {
                 finAccordee = filtreBaliseNombre.Passer(finAccordee) + filtreBaliseNombre.Terminer();
+            }
+
+            if (filtreReponse is not null)
+            {
+                finAccordee = filtreReponse.Passer(finAccordee) + filtreReponse.Terminer();
             }
 
             if (finAccordee.Length > 0)
@@ -4486,6 +4511,19 @@ namespace SchoolWebApp.Api.Builders.impl
                         _logger.LogInformation(
                             "Balise de nombre ecrite hors de la lecture des nombres : retiree (conversation {ConversationId}).",
                             conversationId);
+                    }
+                }
+
+                // La réponse qu'il cherche encore ne reste pas non plus : l'historique dit ce que l'élève a vu et entendu, et
+                // un « 7 + 5 = 12 » relu au tour suivant se recopierait. Un repère au journal, sans contenu (tâche 1941).
+                if (filtreReponse is not null && reponseCherchee is { } protegee)
+                {
+                    contenuPersiste = ReponseNonDonnee.Retirer(contenuPersiste, protegee.Valeur, out var reponsesRetirees);
+                    if (reponsesRetirees > 0 || filtreReponse.Retraits > 0)
+                    {
+                        _logger.LogInformation(
+                            "Reponse attendue retiree du message du professeur ({Nombre}, question {Question}) (conversation {ConversationId}).",
+                            Math.Max(reponsesRetirees, filtreReponse.Retraits), protegee.Question, conversationId);
                     }
                 }
 

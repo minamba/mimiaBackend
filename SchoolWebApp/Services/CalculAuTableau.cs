@@ -37,20 +37,27 @@ namespace SchoolWebApp.Api.Services
         // Pas le morceau d'une expression plus longue qu'on ne sait pas lire : « (2 + 3) × 4 », « 1/2 + 1/4 »,
         // « 3² + 4 », « -4 + 3 », « 1 000 + 200 ». Les deux-points restent permis devant (« Calcule : 4 + 3 = ? »),
         // un mot aussi (« Calcule 4 + 3 »), le crochet de [ARDOISE] aussi.
-        private const string PasDeSuiteAvant = @"(?<![\d,./()^²³+\-−–×*÷=]\s*)(?<![\p{L}\d])";
+        // La virgule qui suit un MOT n'en fait pas partie : « Alors ça fait combien, 10 + 2 ? » (tâche 1941) ; celle d'un
+        // nombre, si : « 2,5 + 1 », « 12, 4 + 3 ».
+        private const string PasDeSuiteAvant = @"(?<![\d./()^²³+\-−–×*÷=]\s*)(?<!(?<!\p{L}),\s*)(?<![\p{L}\d])";
         private const string PasDeSuiteApres = @"(?!\s*[\d/^²³(])";
 
-        /// <summary>« 4 + 3 = ? », « 23 × 14 = … », « 9 - 4 = ___ ».</summary>
-        [GeneratedRegex(PasDeSuiteAvant + @"(?<expr>" + ExpressionMotif + @")\s*=\s*(?:\?|…|\.{2,}|_+)", RegexOptions.IgnoreCase)]
+        /// <summary>« 4 + 3 = ? », « 23 × 14 = … », « 9 - 4 = ___ », « 10 + 2 = combien ? ».</summary>
+        [GeneratedRegex(PasDeSuiteAvant + @"(?<expr>" + ExpressionMotif + @")\s*=\s*(?:\?|…|\.{2,}|_+|combien(?!\s+(?:de|d'|d’)))", RegexOptions.IgnoreCase)]
         private static partial Regex EgalQuestion();
 
-        /// <summary>« Combien font 4 + 3 ? », « combien fait 8 moins 3 ».</summary>
-        [GeneratedRegex(@"combien\s+(?:font|fait|ça\s+fait|ca\s+fait|égalent|égale)\s+(?<expr>" + ExpressionMotif + @")" + PasDeSuiteApres
+        /// <summary>« Combien font 4 + 3 ? », « combien fait 8 moins 3 », « Combien ça fait, 10 + 2 ? ».</summary>
+        [GeneratedRegex(@"combien\s+(?:font|fait|ça\s+fait|ca\s+fait|cela\s+fait|ça\s+donne|ca\s+donne|égalent|égale)\s*,?\s+(?<expr>" + ExpressionMotif + @")" + PasDeSuiteApres
             + @"(?!\s*=)", RegexOptions.IgnoreCase)]
         private static partial Regex CombienFont();
 
-        /// <summary>« 4 + 3, ça fait combien ? », « Et 8 - 3 ? ».</summary>
-        [GeneratedRegex(PasDeSuiteAvant + @"(?<expr>" + ExpressionMotif + @")\s*(?:,?\s*(?:ça|ca|cela)\s+fait\s+combien|\?)",
+        /// <summary>
+        /// « 4 + 3, ça fait combien ? », « Et 8 - 3 ? », « Alors ça fait combien, 10 + 2 ? », « 10 + 2, c'est combien ? ».
+        /// Tâche 1941 (vu par Omar sur master) : la relance « Alors ça fait combien, 10 + 2 ? » n'était pas lue (la virgule
+        /// devant le calcul), aucun fait ne partait, et « 14 » a été validé.
+        /// </summary>
+        [GeneratedRegex(PasDeSuiteAvant + @"(?<expr>" + ExpressionMotif + @")\s*(?:,?\s*(?:(?:ça|ca|cela)\s+(?:fait|donne)\s+combien"
+            + @"|combien\s+(?:ça|ca|cela)\s+(?:fait|donne)|c['’]est\s+combien|(?:font|fait|égale|égalent|donne)\s+combien)(?!\s+(?:de|d'|d’))|\?)",
             RegexOptions.IgnoreCase)]
         private static partial Regex ExpressionInterrogee();
 
@@ -134,7 +141,9 @@ namespace SchoolWebApp.Api.Services
                 $"[Vérifié par l'application : la question posée était « {v.Question} », et la bonne réponse est "
                 + $"{v.Attendu}, pas {v.Donne}. L'élève a répondu « {v.Donne} » : c'est FAUX. Ne dis surtout pas que "
                 + "c'est juste, ne le félicite pas, et n'écris ni ne dis jamais une égalité fausse. Dis-lui que ce "
-                + "n'est pas encore ça et aide-le à retrouver le résultat sans le lui donner tout de suite (règle des trois essais)."
+                // Ni « tout de suite » (Camara, 11/11/2026 : on ne donne JAMAIS la réponse), ni de parenthèse qui nomme la
+                // règle : le professeur la recopiait en aparté, « (On garde 3e réponse fausse → …) » (tâche 1320).
+                + "n'est pas encore ça et aide-le à retrouver le résultat lui-même, sans jamais le lui donner."
                 + (v.Indice is null ? "" : " " + v.Indice) + "]",
             Jugement.Incomplet =>
                 $"[Vérifié par l'application : la question posée était « {v.Question} », et la bonne réponse est "
@@ -146,6 +155,34 @@ namespace SchoolWebApp.Api.Services
                 + "cette décomposition. Ne dis pas que c'est faux : dis-lui que ça fait bien ce nombre, puis "
                 + "demande-lui de le dire avec le moins d'unités possible.]",
         };
+
+        /// <summary>
+        /// LA RÉPONSE QUE L'ÉLÈVE CHERCHE ENCORE — tâche 1941 (Omar, master : « 7 + 5, ça fait 12 : je te le dis cette
+        /// fois », environ 10 réponses sur 40). La règle des essais (Camara, Min's : ne JAMAIS donner la réponse) ne
+        /// tient pas par le texte seul. Le code connaît la réponse attendue : <see cref="ReponseNonDonnee"/> la retire
+        /// de ce que le professeur écrit, dit et garde en mémoire.
+        ///
+        /// La question ouverte est celle du juge (calcul ou suite des nombres, jamais une décomposition : « 2 dizaines »
+        /// se dit pour expliquer), lue exactement comme pour le verdict. Rien à cacher si l'élève l'a trouvée (verdict
+        /// JUSTE) ou s'il a dit ce nombre, même dans une phrase que le juge ne lit pas (« c'est 12 ou 13 ? ») : le
+        /// professeur peut alors le reprendre. Null sinon, et null sans question lue.
+        /// </summary>
+        public static (string Question, decimal Valeur)? ReponseCherchee(IEnumerable<string?> messagesDuProfesseur, string? messageDeLEleve)
+        {
+            var messages = messagesDuProfesseur.ToList();
+            if (DerniereQuestion(messages) is not { } question || question.Decomposition is not null) return null;
+            if (!decimal.TryParse(question.Resultat.Replace(',', '.'), NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out var valeur))
+                return null;
+
+            if (!string.IsNullOrWhiteSpace(messageDeLEleve))
+            {
+                if (Juger(messages, messageDeLEleve) is { Jugement: Jugement.Juste or Jugement.Incomplet }) return null;
+                if (NombresDuMessage(messageDeLEleve).Contains(valeur)) return null;
+            }
+
+            var enonce = question.Suite is { } s ? s.Enonce : question.Expression + " = ?";
+            return (enonce, valeur);
+        }
 
         [GeneratedRegex(@"^\W*(?:oui|bravo|exact|super|parfait|génial|bien\s+joué|c'est\s+(?:ça|juste|bon))\b", RegexOptions.IgnoreCase)]
         private static partial Regex OuvertureQuiValide();
@@ -229,6 +266,17 @@ namespace SchoolWebApp.Api.Services
                 var calculs = Calculs(message, out var illisible);
                 if (illisible) return null;
 
+                // LA MÊME QUESTION, DÉCOMPOSÉE — tâche 1941 (vu par Omar sur master, conversation de test 457) : « [ARDOISE]
+                // 7 + 5 = ? 7 + 3 = 10 Il reste 2 à ajouter : 10 + 2 = ? [/ARDOISE] … Ça fait combien, 10 + 2 ? ». Deux
+                // calculs, donc aucun verdict, et « 14 » a reçu « Oui, c'est ça ! 10 + 2 = 12 ». Des calculs qui ont TOUS le
+                // même résultat attendent la même réponse : une seule question (ses nombres sont ceux de tous les calculs).
+                var operandesEnPlus = new HashSet<decimal>();
+                if (calculs.Count > 1 && calculs.Select(c => c.Resultat).Distinct().Count() == 1)
+                {
+                    foreach (var autre in calculs.Skip(1)) operandesEnPlus.UnionWith(Operandes(autre.Expression));
+                    calculs = [calculs[0]];
+                }
+
                 var decompositions = Decompositions(message);
                 if (decompositions is null) return null;
 
@@ -258,6 +306,7 @@ namespace SchoolWebApp.Api.Services
 
                     var (expression, resultat) = calculs[0];
                     var operandes = Operandes(expression);
+                    operandes.UnionWith(operandesEnPlus);
                     return nombresDesRelances.All(operandes.Contains)
                         ? new Question(expression, Ecrire(resultat), null)
                         : null;
