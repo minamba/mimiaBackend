@@ -19,13 +19,22 @@ namespace SchoolWebApp.Api.Services
     public static partial class AnalogieDeSuite
     {
         /// <summary>
-        /// « comme quand … », « comme après / avant … », « comme pour 20 », « comme vingt-et-un », « n'importe quel nombre »,
-        /// « tu te souviens de 9, 10 », « c'est pareil qu'après 70 ». « Comme tout à l'heure », « comme moi » restent.
+        /// « comme quand … », « comme après 70 / avant 30 », « comme pour 20 », « comme vingt-et-un », « n'importe quel
+        /// nombre », « c'est pareil qu'après 70 ». « Comme tout à l'heure », « comme moi », « comme avant » (= comme tout à
+        /// l'heure) restent.
         /// </summary>
+        // CONTRÔLE D'OMAR SUR LE LOT GROUPÉ v3 (89f010e, point 2) : le filtre prenait pour une comparaison une phrase qui ne
+        // fait que RELIRE la suite (« Tu te souviens de 78, 79, 80… et après ? » → « et après ? » ; « Comme avant, on lit la
+        // suite : 78, 79, 80… Et après ? » → « Et après ? » ; « Recompte comme avant : 78, 79, 80, et après ? » → rien). Ne
+        // comptent plus : « tu te souviens de / tu te rappelles + nombre » (c'est la suite qu'il relit ; le « tu te souviens de
+        // 9, 10 ? » de la conv. 1117 part par « n'importe quel nombre », dans la même phrase), ni « comme avant / comme après »
+        // SANS nombre derrière (« comme avant » = comme tout à l'heure ; « comme après 70 » reste une comparaison).
         private const string AnalogieTexte =
-            @"^.*?(?:\bcomme\s+(?:quand|lorsque)\b|\bcomme\s+(?:après|apres|avant)\b|\bcomme\s+(?:pour|avec)\s+(?:le\s+|les\s+)?(?:nombres?\s+)?\d"
+            @"^.*?(?:\bcomme\s+(?:quand|lorsque)\b"
+            + @"|\bcomme\s+(?:après|apres|avant)\s+(?:\d|(?:un|deux|trois|quatre|cinq|six|sept|huit|neuf|dix|onze|douze|treize|quatorze|quinze|seize|vingt|trente|quarante|cinquante|soixante|cent|mille)\b)"
+            + @"|\bcomme\s+(?:pour|avec)\s+(?:le\s+|les\s+)?(?:nombres?\s+)?\d"
             + @"|\bcomme\s+(?:vingt|trente|quarante|cinquante|soixante|cent)\b|\bn['’]importe\s+quel(?:le)?\s+(?:nombre|dizaine)\b"
-            + @"|\btu\s+te\s+(?:souviens|rappelles)\s+(?:de\s+)?\d|\b(?:pareil|la\s+même\s+chose)\s+qu(?:e\s+|['’]\s*)(?:après|apres|avant|pour|quand|\d))[^\n]*$";
+            + @"|\b(?:pareil|la\s+même\s+chose)\s+qu(?:e\s+|['’]\s*)(?:après|apres|avant|pour|quand|\d))[^\n]*$";
 
         [GeneratedRegex(AnalogieTexte, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
         private static partial Regex Analogie();
@@ -57,34 +66,48 @@ namespace SchoolWebApp.Api.Services
         public static string Retirer(string? texte, string enonce, decimal? valeur, out int retraits)
         {
             var r = FelicitationRefusee.ParPhrase(texte, Motif(valeur), out retraits);
-            if (retraits > 0 && texte!.Contains('?') && !r.Contains('?')) r += "\n\n" + QuestionDuCode(enonce);
-            return r;
+            return retraits > 0 ? AvecLaQuestion(r, enonce) : r;
         }
+
+        /// <summary>
+        /// JAMAIS UN MESSAGE SANS QUESTION APRÈS UN RETRAIT — contrôle d'Omar sur le lot groupé v3 (point 3, AG3) : « 80, c'est
+        /// 8 dizaines. Le nombre juste après, c'est 8 dizaines et 1 : essaie de le dire. » devenait « 80, c'est 8 dizaines. »,
+        /// sans rien demander. Dès qu'un retrait laisse le message sans « ? » (qu'il y en ait eu un avant ou non), la question
+        /// du code revient à la fin ; s'il ne reste rien, elle est seule (jamais de lignes vides en tête).
+        /// </summary>
+        public static string AvecLaQuestion(string texte, string enonce) =>
+            texte.Contains('?') ? texte
+            : string.IsNullOrWhiteSpace(texte) ? QuestionDuCode(enonce)
+            : texte + "\n\n" + QuestionDuCode(enonce);
 
         public static string Retirer(string? texte, string enonce) => Retirer(texte, enonce, out _);
 
         /// <summary>Le filtre du flux : phrase par phrase ; à la fin, la question du code si la seule question est partie.</summary>
         public sealed class Filtre(string enonce, decimal? valeur = null)
         {
+            /// <summary>Les retraits des filtres d'avant dans le même flux (« dernier essai » trop tôt) : eux non plus ne laissent
+            /// jamais le message sans la question (point 3 d'Omar sur la v3).</summary>
+            public Func<int>? AutresRetraits { get; init; }
+
             private readonly FelicitationRefusee.Filtre _phrases = new(Motif(valeur));
-            private bool _questionEntree;
             private bool _questionSortie;
+            private bool _texteSorti;
 
             public int Retraits => _phrases.Retraits;
 
-            public string Passer(string? fragment)
-            {
-                if (fragment?.Contains('?') == true) _questionEntree = true;
-                var sortie = _phrases.Passer(fragment);
-                if (sortie.Contains('?')) _questionSortie = true;
-                return sortie;
-            }
+            public string Passer(string? fragment) => Noter(_phrases.Passer(fragment));
 
             public string Terminer()
             {
-                var sortie = _phrases.Terminer();
+                var sortie = Noter(_phrases.Terminer());
+                if (_phrases.Retraits + (AutresRetraits?.Invoke() ?? 0) > 0 && !_questionSortie) sortie += (_texteSorti ? "\n\n" : string.Empty) + QuestionDuCode(enonce);
+                return sortie;
+            }
+
+            private string Noter(string sortie)
+            {
                 if (sortie.Contains('?')) _questionSortie = true;
-                if (_phrases.Retraits > 0 && _questionEntree && !_questionSortie) sortie += "\n\n" + QuestionDuCode(enonce);
+                if (!string.IsNullOrWhiteSpace(sortie)) _texteSorti = true;
                 return sortie;
             }
         }

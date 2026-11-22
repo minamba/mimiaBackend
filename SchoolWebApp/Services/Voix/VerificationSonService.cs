@@ -1553,7 +1553,9 @@ namespace SchoolWebApp.Api.Services.Voix
         [GeneratedRegex(@"[^.!?…\n]*\b[ÉEée]coute\s+(?:bien|encore|attentivement|cette|ce|celle|celui)\b[^.!?…:\n]*[.!?…:]?", RegexOptions.IgnoreCase)]
         private static partial Regex PhraseEcouteBien();
 
-        [GeneratedRegex(@"[^.!?…\n]*(?:\bqu.as-tu\s+entendu\w*|\b(?:qu.est-ce\s+que\s+tu|ce\s+que\s+tu)\s+(?:as\s+)?entend\w*)[^.!?…\n]*[.!?…]?", RegexOptions.IgnoreCase)]
+        // « Qu'est-ce que t'entends ? » (bout en bout QE2 sur 89f010e, conv. de test 1155 ; contrôle d'Omar sur le lot groupé v3,
+        // point 5) : l'élision familière « t' » vaut « tu » (TournuresFautives la réécrit aussi, en amont).
+        [GeneratedRegex(@"[^.!?…\n]*(?:\bqu.as-tu\s+entendu\w*|\b(?:qu.est-ce\s+que|ce\s+que)\s+(?:tu\s+|t['’]\s*)(?:as\s+)?entend\w*)[^.!?…\n]*[.!?…]?", RegexOptions.IgnoreCase)]
         private static partial Regex PhraseQuestionEcoute();
 
         [GeneratedRegex(@"\s*\n\s*\n\s*")]

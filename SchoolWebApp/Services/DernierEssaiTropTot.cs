@@ -82,13 +82,23 @@ namespace SchoolWebApp.Api.Services
         /// la mention est en tête de proposition (« c'est … », ou juste après une ponctuation, « et », « allez »), jamais
         /// après « de », « lors de », « pour », « avant », « presque », et elle ferme sa proposition (pas de « de réviser… »).
         /// </summary>
+        // CONTRÔLE D'OMAR SUR LE LOT GROUPÉ v3 (89f010e) :
+        // - point 1 (régression O4) : « Concentre-toi pour ton dernier essai ! » et « Pour ton dernier essai, prends ton temps. »
+        //   sont des annonces : « pour ton / ta / le dernier essai » part aussi, s'il ferme sa proposition (« Concentre-toi ! »,
+        //   « Prends ton temps. »). « Pour ton deuxième essai » n'est pas une annonce (pas « dernier ») ; de, lors de, avant,
+        //   presque restent exclus.
+        // - point 7 : « Ton dernier essai, c'était 79. » et « C'était ton dernier essai, et tu avais trouvé 79. » parlent d'un
+        //   essai PASSÉ : une mention introduite par « c'était », ou suivie de « , c'est / c'était », n'est pas une annonce.
         private const string MentionTexte =
             @"(?:\s*,\s*|\s*[—–]\s*|\s+)?(?:\bet\s+)?(?:\b(?:allez|alors|bon|ok)\s*,?\s*)?"
-            + @"(?:(?<!\b(?:de|d['’]|pour|avant|presque)\s+)\bc['’](?:est|était)\s+(?:\b(?:ton|ta|le|un|une)\s+)?"
+            + @"(?:(?<!\b(?:de|d['’]|pour|avant|presque)\s+)\bc['’]est\s+(?:\b(?:ton|ta|le|un|une)\s+)?"
+            + @"|\bpour\s+(?:ton|ta|le)\s+"
             + @"|(?<=(?:^|[,;:—–.!?…(\]])\s*(?:\b(?:et|allez|alors|bon|ok)\b\s*,?\s*)*)(?:\b(?:ton|ta|le|un|une)\s+)?)"
             + @"\b(?:dernier\s+essai|derni[eè]re\s+(?:chance|tentative))\b"
             // « C'est ton dernier essai sur ce mot, tu es prêt ? » (accueil du retour, conv. de test 1055) : « sur ce mot » part avec.
             + @"(?:\s+(?:pour|sur)\s+(?:celui-ci|celui-là|celle-ci|celle-là|cette\s+question|ce\s+nombre|ce\s+calcul|cette\s+fois|aujourd['’]hui|ce\s+mot|cette\s+syllabe|cette\s+couleur|ce\s+son))?(?-i:\s+\p{Lu}\p{Ll}+)?"
+            // « Dernier essai, c'est parti ! » / « …, c'est maintenant » / « …, c'est à toi » restent des annonces.
+            + @"(?!\s*,?\s*c['’](?:était\b|est\b(?!\s+(?:parti|maintenant|à\s+toi|le\s+moment)\b)))"
             + Ferme;
 
         /// <summary>

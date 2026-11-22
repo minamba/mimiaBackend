@@ -28,13 +28,40 @@ namespace SchoolWebApp.Api.Services
         /// </summary>
         private const string Ferme = @"(?:\s*(?:!+|,)(?=\s|$)|(?=\s*(?:[.!?…,;:)—–]|$)))";
 
-        /// <summary>« , c'est très bien ! », « et c'est super, », « — ça c'est top », « , bravo ! », « Bravo ! », « Très bien ! ».</summary>
-        [GeneratedRegex(
+        /// <summary>« c'est très bien », « c'est vraiment super », « ça c'est top » (sans ce qui précède ni ce qui ferme).</summary>
+        private const string CEst =
             // « tu en as compris le sens, c'est déjà bien ! » (bout en bout QE1 sur c71d07a, conv. de test 1070) : « déjà bien »
             // part ; « c'est bien le mot français » (un constat) reste.
-            @"(?:\s*,\s*|\s*[—–]\s*|\s+)?(?:\bet\s+)?(?:\bça\s+|\bca\s+)?\bc['’]est\s+(?:(?:vraiment|trop|déjà|deja|quand\s+même|tout\s+de\s+même)\s+)?(?:très\s+bien|bien\s+joué|super|top|génial|genial|parfait|formidable|excellent|chouette|bravo|(?:déjà|deja)\s+bien)\b(?:\s+de\s+ta\s+part)?(?-i:\s+\p{Lu}\p{Ll}+)?" + Ferme
+            @"(?:\bça\s+|\bca\s+)?\bc['’]est\s+(?:(?:vraiment|trop|déjà|deja|quand\s+même|tout\s+de\s+même)\s+)?(?:très\s+bien|bien\s+joué|super|top|génial|genial|parfait|formidable|excellent|chouette|bravo|(?:déjà|deja)\s+bien)\b";
+
+        /// <summary>« bravo », « très bien », « super »… dits seuls.</summary>
+        private const string Seul = @"\b(?:bravo|très\s+bien|super|génial|parfait|bien\s+joué)\b";
+
+        /// <summary>
+        /// LE GROUPE DÉTACHÉ PART AVEC SA FÉLICITATION — contrôle d'Omar sur le lot groupé v3 (89f010e, point 4) : « Le sens,
+        /// c'est parfait ! » devenait « Le sens ! », « Deux, c'est très bien, mais en anglais ? » devenait « Deux, mais en
+        /// anglais ? ». Quand ce qui précède la félicitation, depuis le début de la proposition, n'est qu'un groupe sans sujet
+        /// (pas de je, tu, il, on, c', ça…), il n'a pas de sens sans elle : la proposition part ENTIÈRE (« Mais en
+        /// anglais ? »). Avec un sujet (« Tu as compris le sens, c'est super ! »), seule la félicitation part, comme avant.
+        /// </summary>
+        private const string GroupeDetache =
+            @"(?<=^[^\S\n]*|[;:—–][^\S\n]*)(?:(?!\b(?:je|tu|il|elle|on|nous|vous|ils|elles|ça|ca|ce|cela|ceci)(?!\p{L})|\b[jtcç]['’])[^;:.!?…\n\[\]]){1,40}?\s*,\s*(?:\bet\s+)?";
+
+        /// <summary>
+        /// LE COMPLÉMENT DE « BRAVO POUR » S'ARRÊTE AU MOT QUI LIE — contrôle d'Omar sur le lot groupé v3 (point 8) : « Bravo pour
+        /// le sens mais en anglais on dit Two. » partait en entier. Le complément ne traverse ni mais, et, car, parce que, alors,
+        /// donc ; devant mais / car / parce que / alors / donc, la félicitation se ferme (« Mais en anglais on dit Two. ») ;
+        /// devant « et » (« bravo pour l'effort et la patience »), rien ne part.
+        /// </summary>
+        private const string BravoPour =
+            @"(?<=bravo)\s+pour\s+(?:(?!\b(?:mais|et|car|parce|alors|donc)\b)[^!.?,;:\n\[]){1,40}?(?:\s*\.(?!\.)(?=\s|$)|" + Ferme + @"|(?=\s+(?:mais|car|parce\s+que|alors|donc)\b))";
+
+        /// <summary>« , c'est très bien ! », « et c'est super, », « — ça c'est top », « , bravo ! », « Bravo ! », « Très bien ! ».</summary>
+        [GeneratedRegex(
+            GroupeDetache + "(?:" + CEst + "|" + Seul + @")(?:\s+de\s+ta\s+part)?(?-i:\s+\p{Lu}\p{Ll}+)?" + Ferme
+            + @"|(?:\s*,\s*|\s*[—–]\s*|\s+)?(?:\bet\s+)?" + CEst + @"(?:\s+de\s+ta\s+part)?(?-i:\s+\p{Lu}\p{Ll}+)?" + Ferme
             // « Bon, et bravo pour l'effort de répéter ! » (bout en bout QR2, conv. de test 949) : « et » devant, « pour … » derrière.
-            + @"|(?:\s*,\s*|(?<=^|[.!?…\n])\s*)(?:\bet\s+)?\b(?:bravo|très\s+bien|super|génial|parfait|bien\s+joué)\b(?:(?<=bravo)\s+pour\s+[^!.?,;:\n\[]{1,40}?|(?-i:\s+\p{Lu}\p{Ll}+))?(?:\s*\.(?!\.)(?=\s|$)|" + Ferme + ")",
+            + @"|(?:\s*,\s*|(?<=^|[.!?…\n])\s*)(?:\bet\s+)?" + Seul + "(?:" + BravoPour + @"|(?-i:\s+\p{Lu}\p{Ll}+)?(?:\s*\.(?!\.)(?=\s|$)|" + Ferme + "))",
             RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
         private static partial Regex Felicitation();
 
@@ -48,13 +75,32 @@ namespace SchoolWebApp.Api.Services
         /// <summary>Le motif retiré phrase par phrase, avec le même découpage que le filtre du flux.</summary>
         internal static string ParPhrase(string? texte, Regex motif, out int retraits, bool debut = true, Options? options = null)
         {
+            var majuscule = false;
+            return ParPhrase(texte, motif, out retraits, ref majuscule, debut, options);
+        }
+
+        /// <summary>
+        /// PAS DE SUITE ORPHELINE EN MINUSCULE — contrôle d'Omar sur le lot groupé v3 (point 2) : « Tu te souviens de 78, 79,
+        /// 80… et après ? » devenait « et après ? ». Quand une phrase part ENTIÈRE, la suivante, si elle commence par une
+        /// minuscule, reprend la majuscule (<paramref name="majuscule"/> : l'état, gardé d'un morceau du flux à l'autre).
+        /// </summary>
+        internal static string ParPhrase(string? texte, Regex motif, out int retraits, ref bool majuscule, bool debut = true, Options? options = null)
+        {
             retraits = 0;
             if (string.IsNullOrEmpty(texte)) return texte ?? string.Empty;
             var sortie = new StringBuilder();
             foreach (Match m in Phrases().Matches(texte))
             {
                 if (m.Length == 0) continue;
-                sortie.Append(RetirerDeLaPhrase(m.Value, motif, ref retraits, options));
+                var avant = retraits;
+                var morceau = RetirerDeLaPhrase(m.Value, motif, ref retraits, options);
+                if (majuscule && morceau.Any(c => !char.IsWhiteSpace(c)))
+                {
+                    morceau = AvecMajuscule(morceau);
+                    majuscule = false;
+                }
+                if (retraits > avant && m.Value.Any(char.IsLetterOrDigit) && !morceau.Any(char.IsLetterOrDigit)) majuscule = true;
+                sortie.Append(morceau);
             }
             // La 1re phrase du message partie (« C'est sa troisième erreur sur cette question.⏎… », conv. de test 1015) : ses
             // sauts de ligne ne restent pas en tête du message. Le flux fait pareil tant qu'il n'a rien envoyé (debut).
@@ -63,6 +109,14 @@ namespace SchoolWebApp.Api.Services
         }
 
         public static string Retirer(string? texte) => Retirer(texte, out _);
+
+        /// <summary>La 1re lettre (après les blancs) en majuscule, si c'est une minuscule ; une balise en tête ne se touche pas.</summary>
+        private static string AvecMajuscule(string texte)
+        {
+            var i = 0;
+            while (i < texte.Length && char.IsWhiteSpace(texte[i])) i++;
+            return i < texte.Length && char.IsLower(texte[i]) ? texte[..i] + char.ToUpperInvariant(texte[i]) + texte[(i + 1)..] : texte;
+        }
 
         /// <summary>
         /// Réglages d'un filtre par phrase. <c>Garder</c> : un groupe nommé du motif dont la PREMIÈRE occurrence du message
@@ -126,15 +180,17 @@ namespace SchoolWebApp.Api.Services
             // « …le son au début :⏎⏎[EN]Blue[/EN] » (bout en bout QR2 sur 5c685bd) : les deux-points qui annoncent la ligne
             // suivante restent, s'ils ne faisaient pas partie de ce qui part.
             var origine = corps.TrimEnd();
-            var finDuDernier = 0;
             corps = motif.Replace(corps, m =>
             {
                 if (options?.Garder is { } garder && m.Groups[garder].Success && options.Vues++ == 0) return m.Value;
                 n++;
-                finDuDernier = m.Index + m.Length;
                 var v = m.Value.Trim();
                 // Au milieu, entre deux virgules (« …en français, et c'est très bien, tu as compris ») : une virgule reste.
                 if ((v.StartsWith(',') || v.StartsWith('—') || v.StartsWith('–')) && v.EndsWith(',') && m.Index > 0) return ", ";
+                // Au milieu, fermé par sa virgule (« Prends ton temps pour ton dernier essai, d'accord ? ») : la virgule reste
+                // (contrôle d'Omar sur le lot groupé v3, point 1), jamais « Prends ton temps d'accord ? ».
+                if (v.EndsWith(',') && m.Index > 0 && corps[..m.Index].Any(char.IsLetterOrDigit)
+                    && corps[(m.Index + m.Length)..].Any(char.IsLetterOrDigit)) return ", ";
                 // Entre deux mots, jamais rien : « ça vient, c'est ton dernier essai pour… » ne devient pas « ça vientpour… »
                 // (bout en bout du lot groupé sur 7039668, conv. de test 990).
                 var avant = m.Index > 0 ? corps[m.Index - 1] : ' ';
@@ -159,7 +215,10 @@ namespace SchoolWebApp.Api.Services
                 // Une phrase qui n'était que la félicitation (« Bravo ! ») part entière ; ses sauts de ligne restent.
                 return blancs.Contains('\n') ? blancs[blancs.IndexOf('\n')..] : string.Empty;
             }
-            if (origine.EndsWith(':') && finDuDernier < origine.Length && !corps.EndsWith(':')) corps += " :";
+            // « Écoute encore une fois, c'est ton dernier essai pour celui-là :⏎⏎[EN]Blue[/EN] » (bout en bout QR1 sur 89f010e,
+            // conv. de test 1154 ; contrôle d'Omar sur le lot groupé v3, point 9) : les deux-points PORTÉS par l'annonce retirée
+            // annonçaient aussi la ligne du son. Dès que la phrase d'origine finissait par « : », ce qui reste les garde.
+            if (origine.EndsWith(':') && !corps.EndsWith(':') && !Regex.IsMatch(corps, @"[.!?…]$")) corps += " :";
             if (char.IsLower(corps[0])) corps = char.ToUpperInvariant(corps[0]) + corps[1..];
             if (Regex.IsMatch(corps, @"[.!?…]$")) ponctuation = string.Empty;
             return corps + ponctuation + blancs;
@@ -177,6 +236,9 @@ namespace SchoolWebApp.Api.Services
 
             /// <summary>Rien n'est encore parti : une phrase retirée en tête ne laisse pas ses sauts de ligne.</summary>
             private bool _rienEnvoye = true;
+
+            /// <summary>Une phrase vient de partir entière : la suivante reprend la majuscule (voir ParPhrase).</summary>
+            private bool _majuscule;
 
             public string Passer(string? fragment)
             {
@@ -199,7 +261,7 @@ namespace SchoolWebApp.Api.Services
 
                 var fini = texte[..coupe];
                 _tampon.Remove(0, coupe);
-                var sortie = ParPhrase(fini, _motif, out var r, _rienEnvoye, _options);
+                var sortie = ParPhrase(fini, _motif, out var r, ref _majuscule, _rienEnvoye, _options);
                 _retraits += r;
                 if (sortie.Length > 0) _rienEnvoye = false;
                 return sortie;
@@ -209,7 +271,7 @@ namespace SchoolWebApp.Api.Services
             {
                 var reste = _tampon.ToString();
                 _tampon.Clear();
-                var sortie = ParPhrase(reste, _motif, out var r, _rienEnvoye, _options);
+                var sortie = ParPhrase(reste, _motif, out var r, ref _majuscule, _rienEnvoye, _options);
                 _retraits += r;
                 if (sortie.Length > 0) _rienEnvoye = false;
                 return sortie;

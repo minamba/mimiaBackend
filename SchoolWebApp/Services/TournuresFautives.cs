@@ -45,11 +45,29 @@ namespace SchoolWebApp.Api.Services
         [GeneratedRegex(@"(?<=(?<!\p{L})(?:[Aa]près|[Aa]vant)(?:\s+[\p{L}\d'’-]+){1,3}\s*,\s*)ça\s+vient(?=\s*\?)")]
         private static partial Regex CaVient();
 
+        /// <summary>
+        /// LES ÉLISIONS DE L'ORAL FAMILIER — contrôle d'Omar sur le lot groupé v3 (89f010e, point 5 ; bout en bout QE2, conv. de
+        /// test 1155, tour 1) : « je veux que tu m'dises le mot anglais que t'entends », « Qu'est-ce que t'entends ? ». Un
+        /// professeur écrit « me dises », « tu entends ». Étroit : « m' » devant une consonne (« m'dises ») ; « t' » SUJET
+        /// devant entends / écoutes / as entendu (« que t'entends ») — jamais « je t'entends », « il t'écoute », « ne
+        /// t'entends » (« te » complément, juste).
+        /// </summary>
+        [GeneratedRegex(@"\b(?<m>[Mm])['’](?=[bcdfgjklmnpqrstvwxzç]\p{L})")]
+        private static partial Regex MeElide();
+
+        [GeneratedRegex(@"(?<!\b(?:[Jj]e|[Ii]l|[Ee]lle|[Oo]n|[Nn]ous|[Vv]ous|[Ii]ls|[Ee]lles|[Nn]e|[Qq]ui|[Ll]e|[Ll]a|[Ll]es)\s+)\b(?<t>[Tt])['’](?=(?:entends|écoutes|ecoutes|as\s+entendu)\b)")]
+        private static partial Regex TuElide();
+
         public static string Corriger(string? texte)
         {
             if (string.IsNullOrEmpty(texte)) return texte ?? string.Empty;
 
             if (texte.Contains("ça vient", StringComparison.Ordinal)) texte = CaVient().Replace(texte, "qu'est-ce qui vient");
+            if (texte.Contains('\'') || texte.Contains('’'))
+            {
+                texte = MeElide().Replace(texte, m => (m.Groups["m"].Value == "M" ? "Me" : "me") + " ");
+                texte = TuElide().Replace(texte, m => (m.Groups["t"].Value == "T" ? "Tu" : "tu") + " ");
+            }
             if (!texte.Contains("réécoute", StringComparison.Ordinal)) return texte;
 
             var corrige = AvecPronom().Replace(texte, "${je} ${a} ${quoi} fais réécouter");
