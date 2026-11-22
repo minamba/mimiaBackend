@@ -89,14 +89,14 @@ namespace SchoolWebApp.Api.Services
 
             var laFoisDAvant = avant.Mode switch
             {
-                ModesSeance.Controle => "la préparation d'un AUTRE contrôle" + titre,
-                ModesSeance.Bilan => "le bilan d'un AUTRE contrôle" + titre,
-                ModesSeance.Examen => "la préparation d'une épreuve d'examen",
-                _ => "un cours ordinaire",
+                ModesSeance.Controle => "à la préparation d'un AUTRE contrôle" + titre,
+                ModesSeance.Bilan => "au bilan d'un AUTRE contrôle" + titre,
+                ModesSeance.Examen => "à la préparation d'une épreuve d'examen",
+                _ => "à un cours ordinaire",
             };
 
             return $"[CETTE SÉANCE NE CONTINUE PAS LA PRÉCÉDENTE. Les derniers messages de ton historique "
-                + $"viennent de {laFoisDAvant} ; aujourd'hui, l'élève a ouvert la séance {cetteFois}. "
+                + $"appartiennent {laFoisDAvant} ; cette fois, l'élève a ouvert la séance {cetteFois}. "
                 + "Ne reprends NI la dernière question NI l'exercice de cette séance-là, même s'ils "
                 + "n'étaient pas finis, et ne commence pas par « on reprend ». Si ta consigne d'accueil "
                 + "te demande de repartir là où vous en étiez, elle ne vaut ici que pour le ton : ta "
