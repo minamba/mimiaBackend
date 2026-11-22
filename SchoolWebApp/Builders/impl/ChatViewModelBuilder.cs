@@ -4451,6 +4451,27 @@ namespace SchoolWebApp.Api.Builders.impl
             // professeurs ; seul le texte qui suit une parenthèse ouvrante est retenu, le temps de la fermer.
             var filtreApartes = new ApartesInternes.Filtre();
 
+            // L'ÉCOUTE DES MOTS REPREND AU TOUR D'ARRIVÉE (retest d'Adam, #57, 21/11/2026, et e2e du 22/11/2026) : au retour
+            // ou à l'annonce « cinq minutes », le dernier mot dit attend encore sa réponse. Marine jugeait une réponse qui
+            // n'existait pas (« Juste ! C'est bien cat. », « Pas tout à fait ! »), citait le mot (« Ce mot, c'était le mot que
+            // je viens de te dire. ») ou en dictait un autre. Le fait le lui dit, et le filtre redit le MÊME mot, sans verdict.
+            // Comme pour la lecture des nombres (option rechargement, tâche 0140) : un [RAPPORT]/[FIN_SEANCE] ferme l'écoute
+            // (« Quitter », séance conclue), sauf au RECHARGEMENT, où le worker de départ l'écrit juste après le mot.
+            var rechargement = Services.Voix.LectureDesNombres.EstUnRechargement(typeAccueil, absenceApresSortie);
+            var filSonsTextes = filSons.Select(m => m.Contenu ?? string.Empty)
+                .Where(t => !rechargement || !Services.Voix.RegleVerificationSon.EstUneCloture(t)).ToList();
+            var motAReprendre = typeAccueil is TypeAccueil.Retour or TypeAccueil.FinProche
+                && enExerciceDeSons && !change && langueDuSon is not null && lectureDuTour is null && etatDuMot is null
+                && poserLeChoix is null && !controleOuvert
+                && Services.Voix.RegleVerificationSon.EcouteEnAttente(filSonsTextes)
+                    ? Services.Voix.RegleVerificationSon.DernierMotDicte(filSonsTextes)
+                    : null;
+            if (motAReprendre is not null)
+            {
+                declencheur += "\n\n" + Services.Voix.RegleVerificationSon.FaitRepriseDeLEcoute(motAReprendre);
+                _logger.LogInformation("Ecoute des mots reprise au tour d'arrivee ({Type}, conversation {ConversationId}).", typeAccueil, conversationId);
+            }
+
             // IL PIOCHE DANS LA LISTE BLANCHE — voir FiltreMotsVerifies. Le français et l'anglais au
             // primaire, l'interrupteur allumé, et seulement dans un exercice de sons ou de syllabes :
             // ailleurs, pas de filtre, donc pas le moindre retard sur la voix.
@@ -4479,8 +4500,10 @@ namespace SchoolWebApp.Api.Builders.impl
                     // un mot ou deux (« Orange! ») et que le professeur refuse sans rien valider. Jamais au 3e essai (abandon), ni
                     // quand il change d'exercice ou s'en va.
                     // Ni au dernier essai d'une répétition en langue (bout en bout de la tâche 1600 : « Red » remplacé par « Blue »
-                    // redit, alors que le fait disait de passer).
-                    redire: change || abandon is not null || repetitionAuDernierEssai || sonJuste == true || LecteurAuRevoir.DitAuRevoir(contenu)
+                    // redit, alors que le fait disait de passer). Au tour d'arrivée, le mot qui attend sa réponse reste (motAReprendre).
+                    arrivee: motAReprendre is not null,
+                    redire: motAReprendre is not null ? Services.Voix.RegleVerificationSon.RedireLeMot.Toujours
+                        : change || abandon is not null || repetitionAuDernierEssai || sonJuste == true || LecteurAuRevoir.DitAuRevoir(contenu)
                         ? Services.Voix.RegleVerificationSon.RedireLeMot.Non
                         : sonJuste == false || repetitionEnLangue is not null
                             ? Services.Voix.RegleVerificationSon.RedireLeMot.Toujours

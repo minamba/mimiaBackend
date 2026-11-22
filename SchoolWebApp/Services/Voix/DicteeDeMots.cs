@@ -175,7 +175,8 @@ namespace SchoolWebApp.Api.Services.Voix
                     + "NE DICTE PAS de nouveau mot dans ce message. Termine en lui demandant de te dire quand il est prêt pour le mot suivant. Le mot s'écrit ensuite au tableau.]",
                 _ =>
                     $"[Fait pour ce tour, qui l'emporte sur tout le reste : {(etat.Tape.Length > 0 ? $"il a tapé « {etat.Tape} », c'est juste. Félicite-le en une phrase." : "il a vu le mot au tableau.")} "
-                    + $"Le tableau est effacé. Dicte maintenant UN NOUVEAU mot, jamais « {etat.Mot} », seul sur sa ligne à la fin de ton message, dans {voix}. Rien d'autre après.]",
+                    + $"Le tableau est effacé. Dicte maintenant UN NOUVEAU mot, jamais « {etat.Mot} », seul sur sa ligne à la fin de ton message, dans {voix}. Rien d'autre après. "
+                    + "Ce nouveau mot ne s'écrit nulle part ailleurs, ni dans ta phrase ni entre guillemets : il l'entend, puis il l'écrit.]",
             };
         }
 
@@ -197,7 +198,7 @@ namespace SchoolWebApp.Api.Services.Voix
                 {
                     var t = Ardoise().Replace(sansVitesse.Replace(Efface, string.Empty, StringComparison.OrdinalIgnoreCase), m => CourtOuGarde(m));
                     t = BaliseDeVoix().Replace(t, m => Propre(m.Groups[2].Value).Equals(etat.Mot, StringComparison.OrdinalIgnoreCase) || EstUnMotDicte(t, m) ? string.Empty : m.Groups[2].Value);
-                    t = SansGuillemetsAutourDuMasque(SansMorceaux(RegleVerificationSon.Remplacer(t, etat.Mot, "ce mot"), etat.Mot));
+                    t = SansMasqueVide(SansGuillemetsAutourDuMasque(SansMorceaux(RegleVerificationSon.Remplacer(t, etat.Mot, "ce mot"), etat.Mot)));
                     return $"{t.TrimEnd()}\n\n{voix}";
                 }
 
@@ -249,8 +250,90 @@ namespace SchoolWebApp.Api.Services.Voix
                 position = balise.Index + balise.Length;
             }
             sortie.Append(Masquer(texte[position..]));
-            return SansGuillemetsAutourDuMasque(sortie.ToString());
+            return SansMasqueVide(SansGuillemetsAutourDuMasque(sortie.ToString()));
         }
+
+        /// <summary>
+        /// LE MASQUE NE FAIT PAS UNE PHRASE — retest d'Adam (21/11/2026, 19h50) : au retour, « Orange, c'était le mot que je
+        /// viens de te dire. » devenait « Ce mot, c'était le mot que je viens de te dire. », et « Orange ! » seul devenait
+        /// « Ce mot ». Une phrase qui n'est que le masque, ou qui ne dit que « ce mot, c'est le mot que je t'ai dit », part
+        /// entière : le mot est redit à voix haute juste après.
+        /// </summary>
+        public static string SansMasqueVide(string texte)
+        {
+            // « Le mot que j'ai dit, c'est Ce mot, pas "dog". » (bout en bout, 22/11/2026) : la majuscule du mot anglais restait
+            // en pleine phrase, et la phrase ne disait plus rien.
+            var sans = MasqueEnMajuscule().Replace(texte, m => char.ToLowerInvariant(m.Value[0]) + m.Value[1..]);
+            sans = MasqueSeul().Replace(sans, string.Empty);
+            sans = MasqueQuiSeRedit().Replace(sans, string.Empty);
+            sans = MotDitQuiEstLeMasque().Replace(sans, string.Empty);
+            if (sans == texte) return texte;
+
+            return LignesVidesEnTrop().Replace(sans, "\n\n").Trim();
+        }
+
+        [GeneratedRegex(@"(?<=[^\s.!?…«""“]\s+)(?:Ce mot|Cette syllabe)\b")]
+        private static partial Regex MasqueEnMajuscule();
+
+        [GeneratedRegex(@"(?<=^|[.!?…\n])[^\S\n]*(?:le\s+mot|la\s+syllabe)\s+que\s+(?:je\s+(?:viens\s+de\s+te\s+|t['’]ai\s+)?|j['’]ai\s+)(?:dit|dire|dicté|dicter|redit)\w*\s*,?\s*c['’](?:était|etait|est)\s+(?:ce\s+mot|cette\s+syllabe)\b[^.!?…\n]*[.!?…]*", RegexOptions.IgnoreCase)]
+        private static partial Regex MotDitQuiEstLeMasque();
+
+        [GeneratedRegex(@"(?<=^|[.!?…\n])[^\S\n]*(?:«[^\S\n]*)?(?:ce\s+mot|cette\s+syllabe)(?:[^\S\n]*»)?[^\S\n]*(?:[.!?…]+[^\S\n]*|(?=\n|$))", RegexOptions.IgnoreCase | RegexOptions.Multiline)]
+        private static partial Regex MasqueSeul();
+
+        [GeneratedRegex(@"(?<=^|[.!?…\n])[^\S\n]*(?:ce\s+mot|cette\s+syllabe)[^\S\n]*[,:]?[^\S\n]*c['’](?:était|etait|est)\s+(?:bien\s+)?(?:l[ea]\s+(?:mot|syllabe)\s+|celui\s+|celle\s+)?(?:que|qu['’])\s*(?:je|j['’])\s*(?:viens\s+de\s+te\s+|t['’]ai\s+|vais\s+te\s+)?(?:dire|dit|dicter|dicté|demander|demandé|faire\s+écouter|fait\s+écouter|redire|redit)\b[^.!?…\n]*[.!?…]*", RegexOptions.IgnoreCase)]
+        private static partial Regex MasqueQuiSeRedit();
+
+        [GeneratedRegex(@"[^\S\n]*\n(?:[^\S\n]*\n)+")]
+        private static partial Regex LignesVidesEnTrop();
+
+        /// <summary>
+        /// LE NOUVEAU MOT ÉCRIT EN CLAIR, SANS VOIX — Adam, retests #57 (21/11/2026) : au clavier, Marine écrivait « on écrit
+        /// « orange » au clavier » avant que l'enfant l'écrive, ou demandait le mot suivant sans le dire. Après un mot trouvé
+        /// (<see cref="PhaseDuMot.MotSuivant"/>), si sa réponse ne dit AUCUN mot à voix haute mais en cite un nouveau (entre
+        /// guillemets, ou « écris / tape / note (le mot) X »), ce mot passe dans la balise de voix et sa place devient
+        /// « ce mot ». Le mot qu'il vient de trouver, et ce qu'il a tapé, ne sont jamais pris pour le nouveau.
+        /// </summary>
+        public static string AvecLeNouveauMotEnVoix(string texte, EtatDuMot etat, string langue)
+        {
+            if (etat.Phase != PhaseDuMot.MotSuivant || MotDit(texte) is not null) return texte;
+
+            var deja = SansAccents(etat.Mot);
+            var tape = SansAccents(etat.Tape);
+            bool Neuf(string m) => m.Length > 1 && SansAccents(m) != deja && SansAccents(m) != tape && !MotsOutils.Contains(m);
+
+            // Un mot cité n'est le nouveau mot que dans une phrase qui le donne à écrire ou l'annonce — jamais une
+            // traduction (« cat veut dire « chat » »), qui donnerait un mot français à dire en anglais.
+            var lu = Ardoise().Replace(texte, " ");
+            string? nouveau = null;
+            foreach (Match m in MotCiteOuAEcrire().Matches(lu))
+            {
+                var mot = Propre(m.Groups["cite"].Success ? m.Groups["cite"].Value : m.Groups["ecrit"].Value);
+                if (!EstUnMot(mot) || !Neuf(mot)) continue;
+                if (m.Groups["cite"].Success)
+                {
+                    var debut = lu.LastIndexOfAny(['.', '!', '?', '…', '\n'], Math.Max(0, m.Index - 1)) + 1;
+                    var fin = lu.IndexOfAny(['.', '!', '?', '…', '\n'], m.Index + m.Length);
+                    var phrase = lu[debut..(fin < 0 ? lu.Length : fin)];
+                    if (!PhraseQuiDonneLeMot().IsMatch(phrase) || PhraseDeSens().IsMatch(phrase)) continue;
+                }
+                nouveau = mot;
+            }
+
+            if (nouveau is null) return texte;
+
+            var etiquette = langue == LanguesDesSons.Anglais ? "EN" : "FR";
+            return MasquerMotDicte($"{texte.TrimEnd()}\n\n[{etiquette}]{nouveau}[/{etiquette}]");
+        }
+
+        [GeneratedRegex(@"(?:«[\s  ]*|""|“)(?<cite>[\p{L}'’-]{2,20})(?:[\s  ]*»|""|”)|\b(?:écris|ecris|écrit|ecrit|écrire|ecrire|tape|tapes|taper|note|notes|noter)\s+(?:maintenant\s+)?(?:le\s+mot\s+)?(?<ecrit>(?!le\b|la\b|les\b|un\b|une\b|ce\b|cette\b|ça\b|ca\b|au\b|sur\b|avec\b|dans\b|ton\b|ta\b|tes\b|mon\b|moi\b|bien\b|vite\b|tout\b|ici\b)\p{L}[\p{L}'’-]{1,19})(?=\s+(?:au\s+clavier|sur\s+ton\s+cahier|dans\s+ton\s+champ)|\s*[.!?…]|\s*$)", RegexOptions.IgnoreCase)]
+        private static partial Regex MotCiteOuAEcrire();
+
+        [GeneratedRegex(@"\b(?:écri\w*|ecri\w*|tap\w*|not(?:e|es|er)\b|voici|prochain|suivant|nouveau|maintenant)", RegexOptions.IgnoreCase)]
+        private static partial Regex PhraseQuiDonneLeMot();
+
+        [GeneratedRegex(@"\bveut\s+dire\b|\bse\s+dit\b|\ben\s+(?:français|anglais)\b|\bsignifie\b|\bcomme\s+dans\b", RegexOptions.IgnoreCase)]
+        private static partial Regex PhraseDeSens();
 
         /// <summary>
         /// LE MOT MASQUÉ NE SE CITE PAS — retest KO #57 (Adam et Omar, 21/11/2026) : « D'accord Adam, on fait « Blue » ! »

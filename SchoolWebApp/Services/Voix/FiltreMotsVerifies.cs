@@ -60,6 +60,9 @@ namespace SchoolWebApp.Api.Services.Voix
         /// <summary>Après un refus, le mot dicté au tour d'avant reste (retest KO #57) : voir EcouteDesMots.</summary>
         private readonly RegleVerificationSon.RedireLeMot _redire;
 
+        /// <summary>Tour d'arrivée (retour, annonce du minuteur) : rien n'est jugé, le mot attendu est redit (voir EcouteDesMots).</summary>
+        private readonly bool _arrivee;
+
         /// <summary>Il demande un exercice de sons sans dire lequel : la carte est posée, rien ne commence (voir LectureDImage).</summary>
         private readonly string? _poserLeChoix;
 
@@ -68,8 +71,9 @@ namespace SchoolWebApp.Api.Services.Voix
 
         /// <param name="supportConnu">Le choix cahier ou clavier a déjà été posé : la carte ne s'ajoute pas.</param>
         /// <param name="photoAttendue">Il écrit sur son cahier et la photo n'est pas là : rien ne s'affiche, quoi que dise le professeur.</param>
-        public FiltreMotsVerifies(string langue, IReadOnlyCollection<string> fiables, IReadOnlyList<string> messagesRecents, int graine, bool supportConnu = true, bool photoAttendue = false, EtatDuMot? etat = null, bool retenirTout = false, string? niveau = null, string? messageDeLEleve = null, string? motGarde = null, string? abandonne = null, LectureDImage.Tour? lecture = null, string? poserLeChoix = null, string? motDeLImage = null, RegleVerificationSon.RedireLeMot redire = RegleVerificationSon.RedireLeMot.Non)
+        public FiltreMotsVerifies(string langue, IReadOnlyCollection<string> fiables, IReadOnlyList<string> messagesRecents, int graine, bool supportConnu = true, bool photoAttendue = false, EtatDuMot? etat = null, bool retenirTout = false, string? niveau = null, string? messageDeLEleve = null, string? motGarde = null, string? abandonne = null, LectureDImage.Tour? lecture = null, string? poserLeChoix = null, string? motDeLImage = null, RegleVerificationSon.RedireLeMot redire = RegleVerificationSon.RedireLeMot.Non, bool arrivee = false)
         {
+            _arrivee = arrivee;
             _redire = redire;
             _motDeLImage = motDeLImage;
             _lecture = lecture;
@@ -137,10 +141,12 @@ namespace SchoolWebApp.Api.Services.Voix
             }
 
             var complet = _parti + _tampon;
-            if (RegleVerificationSon.EstEcouteDeMot(complet, RegleVerificationSon.ContexteDEcoute(_recents)))
+            // LE MOT OUBLIÉ DANS LA VOIX (#57) : sa réponse ne dit aucun mot alors que le mot doit rester ; le code le remet.
+            var avecLeMot = RegleVerificationSon.AvecLeMotARedire(complet, _recents, _langue, _redire, _abandonne);
+            if (avecLeMot != complet || RegleVerificationSon.EstEcouteDeMot(complet, RegleVerificationSon.ContexteDEcoute(_recents)))
             {
-                _ecoute = complet;
-                var ecoute = RegleVerificationSon.EcouteDesMots(RegleVerificationSon.RetirerEcouteParasite(_tampon), _recents, complet, _langue, _niveau, _messageDeLEleve, _motGarde, _abandonne, _motDeLImage, _redire);
+                _ecoute = avecLeMot;
+                var ecoute = RegleVerificationSon.EcouteDesMots(RegleVerificationSon.RetirerEcouteParasite(_tampon), _recents, avecLeMot, _langue, _niveau, _messageDeLEleve, _motGarde, _abandonne, _motDeLImage, _redire, _arrivee);
                 _parti += ecoute;
                 _tampon = string.Empty;
                 return ecoute;
@@ -204,7 +210,7 @@ namespace SchoolWebApp.Api.Services.Voix
             if (_lecture is not null) return LectureDImage.Reecrire(texte, _lecture);
             var propre = RegleVerificationSon.RetirerEcouteParasite(texte);
             if (_retenirTout || _etat is not null) return EnEcriture(propre);
-            if (_ecoute is not null) return RegleVerificationSon.EcouteDesMots(propre, _recents, _ecoute, _langue, _niveau, _messageDeLEleve, _motGarde, _abandonne, _motDeLImage, _redire);
+            if (_ecoute is not null) return RegleVerificationSon.EcouteDesMots(propre, _recents, _ecoute, _langue, _niveau, _messageDeLEleve, _motGarde, _abandonne, _motDeLImage, _redire, _arrivee);
             if (_balisePrise) propre = RegleVerificationSon.BonneBaliseDeSupport(propre, propre, _dernierEleve);
             if (_sansVoix) propre = RegleVerificationSon.SansVoix(RegleVerificationSon.CacherLaReponse(propre, _langue));
             return CorrigerSuite(propre);
@@ -223,6 +229,8 @@ namespace SchoolWebApp.Api.Services.Voix
             if (_etat is null) return DicteeDeMots.MotALaFin(DicteeDeMots.MasquerMotDicte(RegleVerificationSon.CacherLaReponse(propre, _langue, enEcriture: true)));
 
             var tenue = DicteeDeMots.Imposer(propre, _etat, _langue);
+            // Le nouveau mot écrit en clair sans être dit (« on écrit « orange » au clavier ») passe dans la voix.
+            tenue = DicteeDeMots.AvecLeNouveauMotEnVoix(tenue, _etat, _langue);
             return _etat.Phase == PhaseDuMot.AuTableau ? tenue : DicteeDeMots.MotALaFin(DicteeDeMots.MasquerMotDicte(tenue));
         }
 
