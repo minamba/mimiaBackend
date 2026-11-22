@@ -19,7 +19,7 @@ namespace SchoolWebApp.Api.Services
     {
         /// <summary>« , c'est très bien ! », « et c'est super, », « — ça c'est top », « , bravo ! », « Bravo ! », « Très bien ! ».</summary>
         [GeneratedRegex(
-            @"(?:\s*,\s*|\s*[—–]\s*|\s+)?(?:\bet\s+)?(?:\bça\s+|\bca\s+)?\bc['’]est\s+(?:vraiment\s+|trop\s+)?(?:très\s+bien|bien\s+joué|super|top|génial|genial|parfait|formidable|excellent|chouette|bravo)\b(?:\s+de\s+ta\s+part|\s+pour\s+[^!.?,;:\n\[]{1,40})?\s*(?:[!]+|,)?(?=\s|$|[.!?…])"
+            @"(?:\s*,\s*|\s*[—–]\s*|\s+)?(?:\bet\s+)?(?:\bça\s+|\bca\s+)?\bc['’]est\s+(?:(?:vraiment|trop|déjà|deja|quand\s+même|tout\s+de\s+même)\s+)?(?:très\s+bien|bien\s+joué|super|top|génial|genial|parfait|formidable|excellent|chouette|bravo)\b(?:\s+de\s+ta\s+part|\s+pour\s+[^!.?,;:\n\[]{1,40})?\s*(?:[!]+|,)?(?=\s|$|[.!?…])"
             // « Bon, et bravo pour l'effort de répéter ! » (bout en bout QR2, conv. de test 949) : « et » devant, « pour … » derrière.
             + @"|(?:\s*,\s*|(?<=^|[.!?…\n])\s*)(?:\bet\s+)?\b(?:bravo|très\s+bien|super|génial|parfait|bien\s+joué)\b(?:\s+pour\s+[^!.?,;:\n\[]{1,40}|\s+\p{Lu}\p{Ll}+)?\s*(?:!+|,|\.(?!\.))?(?=\s|$)",
             RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
