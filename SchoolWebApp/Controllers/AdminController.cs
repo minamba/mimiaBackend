@@ -2571,7 +2571,8 @@ namespace SchoolWebApp.Api.Controllers
             var valeurs = new Dictionary<string, string>
             {
                 ["titre"] = sujet ?? string.Empty,
-                ["titreMessage"] = titre ?? string.Empty,
+                // Le Titre est du texte, échappé comme à l'envoi (22/11/2026).
+                ["titreMessage"] = System.Net.WebUtility.HtmlEncode(titre ?? string.Empty),
                 // `{{lien_desinscription}}` montré à sa place dans l'aperçu d'une diffusion (19/11/2026) ; il ne mène nulle part d'ici.
                 ["corpsMessage"] = diffusion.ComposerCorps(texte ?? string.Empty, images?.Count ?? 0,
                     offres ? LienDesinscriptionApercu() : signature ? null : SansLienDesinscription()),
@@ -2749,7 +2750,8 @@ namespace SchoolWebApp.Api.Controllers
             var valeurs = new Dictionary<string, string>
             {
                 ["titre"] = sujet,
-                ["titreMessage"] = titre ?? sujet,
+                // Le Titre est du texte, échappé comme à l'envoi (22/11/2026).
+                ["titreMessage"] = System.Net.WebUtility.HtmlEncode(titre ?? sujet),
                 ["corpsMessage"] = diffusion.ComposerCorps(texte, lues.Count),
                 ["blocPiecesJointes"] =
                     diffusion.ComposerPiecesJointes(jointes.Select(d => d.NomFichier).ToList()),

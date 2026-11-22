@@ -311,6 +311,63 @@ namespace SchoolWebApp.Tests
             Assert.Contains("Me désinscrire", envoi.Valeurs["mentionPied"]);
         }
 
+        /// <summary>
+        /// LE BOUTON ET LE TITRE (22/11/2026) : l'aperçu de l'écran et l'envoi réel rendent le MÊME bouton (même fonction
+        /// `ComposerCorps`), et le Titre est échappé des deux côtés — prénom saisi par le parent compris.
+        /// </summary>
+        [Fact]
+        public async Task L_apercu_et_l_envoi_rendent_le_meme_bouton_et_un_titre_echappe()
+        {
+            var parent = await CreerParentAsync(consenti: true, prenom: "<i>Léa</i>");
+            const string texte = "Bonjour {{prenom}},\n\n-50 % sur la 1re année.\n\n[[Voir les formules]](https://mimia.fr/tarifs?a=1&b=2)";
+            const string titre = "Black Friday <b>-50 %</b> & {{prenom}}";
+            var bouton = DiffusionBoutonTests.BoutonAttendu("Voir les formules", "https://mimia.fr/tarifs?a=1&amp;b=2");
+
+            // L'ENVOI.
+            var (diffusion, envois) = Diffusion(Jetons);
+            Assert.True(diffusion.Lancer("Black Friday", titre, texte, [], [], ModeDiffusion.Offres));
+            Assert.Null((await AttendreFinAsync(diffusion)).Erreur);
+            var envoi = Assert.Single(envois, e => e.Destinataire == parent.Mail);
+
+            Assert.Contains(bouton, envoi.Valeurs["corpsMessage"]);
+            Assert.Equal(
+                "Black Friday &lt;b&gt;-50 %&lt;/b&gt; &amp; &lt;i&gt;L&#233;a&lt;/i&gt;", envoi.Valeurs["titreMessage"]);
+            Assert.DoesNotContain("<i>", envoi.Valeurs["corpsMessage"]);
+
+            // L'APERÇU de l'écran « Message de diffusion » (route `POST /admin/diffusion/apercu`).
+            IDictionary<string, string>? apercu = null;
+            var email = new Mock<IServiceEmail>();
+            email.Setup(e => e.RendreAsync(It.IsAny<string>(), "diffusion", It.IsAny<IDictionary<string, string>>()))
+                .Callback<string, string, IDictionary<string, string>>((_, _, v) => apercu = v)
+                .ReturnsAsync("<html></html>");
+            var admin = new AdminController(
+                Mock.Of<SchoolWebApp.Domain.Services.IAdminService>(),
+                NullLogger<AdminController>.Instance,
+                new SchoolWebApp.Api.Services.ComptesProteges(new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build()),
+                Microsoft.Extensions.Options.Options.Create(new SchoolWebApp.Api.Services.Paiement.ExemptionFacturation()));
+
+            await admin.ApercuDiffusion(
+                "Black Friday", "Black Friday <b>-50 %</b> & co", texte, diffusion, email.Object,
+                Mock.Of<SchoolWebApp.Api.Services.IBoitesAdminService>(), mode: "offres");
+
+            Assert.NotNull(apercu);
+            Assert.Contains(bouton, apercu!["corpsMessage"]);
+            Assert.Equal("Black Friday &lt;b&gt;-50 %&lt;/b&gt; &amp; co", apercu["titreMessage"]);
+
+            // LE RENDU RÉEL dans le gabarit embarqué (capture du compte rendu avec `MIMIA_TEST_RENDU=<dossier>`).
+            var html = await new ServiceEmail(
+                    Microsoft.Extensions.Options.Options.Create(new OptionsEmail()), NullLogger<ServiceEmail>.Instance)
+                .RendreAsync(envoi.Sujet, "diffusion", envoi.Valeurs);
+            Assert.Contains(bouton, html);
+            Assert.DoesNotContain("<i>L", html);
+
+            var dossier = Environment.GetEnvironmentVariable("MIMIA_TEST_RENDU");
+            if (!string.IsNullOrWhiteSpace(dossier))
+            {
+                await File.WriteAllTextAsync(Path.Combine(dossier, "message-avec-bouton.html"), html);
+            }
+        }
+
         [Fact]
         public async Task Sans_cle_offres_et_promotions_ne_part_pas()
         {
