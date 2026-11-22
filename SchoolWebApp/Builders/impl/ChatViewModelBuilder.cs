@@ -3051,7 +3051,8 @@ namespace SchoolWebApp.Api.Builders.impl
                 // (21/11/2026, 16 h : « oui faut modifier l'écran pour compter 3 essais au lieu de 5 »). Une traduction tapée
                 // (« Deux! » pour Two, « Bleu! » pour Blue) n'avait aucun verdict : rien à l'écran, aucun essai compté, et le
                 // même mot pouvait revenir cinq fois. Elle est jugée ici, comme la lecture tapée (#49) : le verdict part avant la
-                // réponse, la bulle dit « Mauvaise écoute » ou « On réessaie », et l'essai compte pour la règle des trois essais.
+                // réponse, la bulle dit « Mauvaise écoute » ou « On réessaie » (une traduction, décision de Min's du 22/11/2026 :
+                // voir RegleVerificationSon.TexteDEcoute), et l'essai compte pour la règle des trois essais.
                 // Mêmes conditions que le micro et la lecture tapée : vérification des sons allumée, pas déjà jugé, pas en
                 // lecture des nombres. Portée GÉNÉRIQUE : l'écoute des mots en français et en anglais, et tous les professeurs
                 // de langue pour la répétition (RepetitionEnLangue).

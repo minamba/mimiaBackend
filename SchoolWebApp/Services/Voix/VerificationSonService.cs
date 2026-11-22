@@ -14,7 +14,12 @@ namespace SchoolWebApp.Api.Services.Voix
     /// Un mot que l'oreille ne sait pas reconnaître : ni juste ni faux, voir
     /// <see cref="RegleVerificationSon.Inreconnaissable"/>.
     /// </param>
-    public sealed record VerdictSon(string Attendu, string Entendu, bool Juste, bool SansJugement = false);
+    /// <param name="Francais">
+    /// À l'écoute d'un mot en langue étrangère : la traduction française reconnue dans sa réponse (« deux » pour two), ou
+    /// null. Le refus vient alors d'une traduction, pas d'une mauvaise écoute (décision de Min's du 22/11/2026, voir
+    /// <see cref="RegleVerificationSon.TexteDEcoute"/>).
+    /// </param>
+    public sealed record VerdictSon(string Attendu, string Entendu, bool Juste, bool SansJugement = false, string? Francais = null);
 
     /// <summary>
     /// LA VÉRIFICATION DES SYLLABES AU PRIMAIRE — Camara, le 04/11/2026 : « on doit envoyer
@@ -1068,12 +1073,13 @@ namespace SchoolWebApp.Api.Services.Voix
             const string faux = "Mauvaise écoute";
 
             // LE MOT FRANÇAIS (retest KO #57, 21/11/2026) : la même consigne qu'au clavier (RepetitionEnLangue.Fait), sans
-            // « Oui » ni « Bravo », et le même mot redit.
+            // « Oui » ni « Bravo », et le même mot redit. Son écran dit « On réessaie », pas « Mauvaise écoute » : décision de
+            // Min's du 22/11/2026, voir TexteDEcoute.
             if (!verdict.Juste && francais is not null)
             {
                 return $"[Fait pour ce tour, qui l'emporte sur le rappel précédent : tu as dit « {verdict.Attendu} » et il a répondu "
                     + $"« {verdict.Entendu} » : c'est le mot en FRANÇAIS (« {francais} »), pas le mot qu'il a entendu. Son écran affiche "
-                    + $"« {faux} ». Ce n'est pas la réponse : ne commence ni par « Oui », ni par « Parfait », ni par « Bravo », ni par « C'est bien ça », et ne dis "
+                    + "« On réessaie ». Ce n'est pas la réponse : ne commence ni par « Oui », ni par « Parfait », ni par « Bravo », ni par « C'est bien ça », et ne dis "
                     + "pas que c'est juste. Sans le gronder, dis-lui que ça, c'est le mot en français — il en a bien compris le sens —, "
                     + $"puis redis LE MÊME MOT « {verdict.Attendu} » dans ta balise de voix et redemande ce qu'il a entendu. NE PASSE PAS à "
                     + "un autre mot à ce tour. Ne parle jamais de cet outil à l'élève.]";
@@ -1088,11 +1094,30 @@ namespace SchoolWebApp.Api.Services.Voix
         /// Ce qui s'enregistre à la place de sa réponse d'écoute jugée : « J'ai entendu le mot two. » (ou « la syllabe »). Le
         /// MÊME texte au micro (EcouteController) et au clavier (ChatViewModelBuilder) : c'est ce début que l'écran lit pour
         /// écrire « Bonne écoute » ou « Mauvaise écoute », et le compte des essais relit le mot dans la balise du professeur.
+        ///
+        /// LE REFUS QUI VIENT D'UNE TRADUCTION — décision de Min's (22/11/2026, 00 h 04) : « deux » pour two n'est pas une
+        /// mauvaise écoute (il a compris le mot), l'écran dit « On réessaie ». Le texte gardé porte alors la marque
+        /// <see cref="MarqueDeTraduction"/> (« J'ai entendu le mot deux (en français). ») : c'est elle que l'écran lit, aussi
+        /// après rechargement, sans rien changer en base. Le début reste le même : le compte des essais, la reprise du mot et
+        /// le classement de l'exercice ne changent pas. Au micro comme au clavier.
         /// </summary>
         public static string TexteDEcoute(VerdictSon ecoute, string? typeDEcoute, string? parole, string? texte) =>
-            typeDEcoute == Syllabe || (typeDEcoute is null && EstEcouteDeSyllabe(ecoute.Attendu, parole, texte))
-                ? $"J'ai entendu la syllabe {ecoute.Entendu}."
-                : $"J'ai entendu le mot {ecoute.Entendu}.";
+            (typeDEcoute == Syllabe || (typeDEcoute is null && EstEcouteDeSyllabe(ecoute.Attendu, parole, texte))
+                ? $"J'ai entendu la syllabe {ecoute.Entendu}"
+                : $"J'ai entendu le mot {ecoute.Entendu}")
+            + (!ecoute.Juste && ecoute.Francais is not null ? MarqueDeTraduction : string.Empty)
+            + ".";
+
+        /// <summary>
+        /// Ce qui suit le mot dans le texte gardé quand sa réponse était la traduction française du mot à écouter. Le même
+        /// texte côté écran (src/components/VerdictSon.js, `estTraductionEntendue`) : ne pas le changer d'un seul côté.
+        /// </summary>
+        public const string MarqueDeTraduction = " (en français)";
+
+        /// <summary>Un verdict d'écoute gardé avec la marque de traduction ?</summary>
+        public static bool EstUneTraductionEntendue(string? contenu) =>
+            contenu is not null && DebutJaiEntendu().IsMatch(contenu)
+            && contenu.TrimEnd().TrimEnd('.').EndsWith(MarqueDeTraduction, StringComparison.Ordinal);
 
         [GeneratedRegex(@"^\s*j\W?\s*ai\s+entendu\s", RegexOptions.IgnoreCase)]
         private static partial Regex DebutJaiEntendu();
@@ -1941,7 +1966,7 @@ namespace SchoolWebApp.Api.Services.Voix
                 }
             }
 
-            var verdict = new VerdictSon(mot, dit, juste);
+            var verdict = new VerdictSon(mot, dit, juste, Francais: juste ? null : francais);
             var syllabe = typeDEcoute == RegleVerificationSon.Syllabe
                 || (typeDEcoute is null && RegleVerificationSon.EstEcouteDeSyllabe(mot, paroleDuProfesseur, texte));
             _cache.Set(CleFait(conversationId), RegleVerificationSon.FaitEcoute(verdict, syllabe, francais), DureeDuFait);
