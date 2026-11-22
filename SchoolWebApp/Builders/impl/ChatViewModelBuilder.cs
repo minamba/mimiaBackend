@@ -774,7 +774,7 @@ namespace SchoolWebApp.Api.Builders.impl
         /// la fenêtre d'historique que le professeur a sous les yeux. Une
         /// consigne seule lui aurait demandé de corriger ce qu'il ne voit pas.
         /// </summary>
-        private async Task<(string Rappel, int Id)?> DicteeEnAttenteAsync(int eleveId, int matiereId, CancellationToken ct)
+        private async Task<(string Rappel, int Id)?> DicteeEnAttenteAsync(int eleveId, int matiereId, bool francais, CancellationToken ct)
         {
             try
             {
@@ -823,6 +823,16 @@ namespace SchoolWebApp.Api.Builders.impl
                     + $"[DICTEE_SUPPRIMEE]{enAttente.Id}[/DICTEE_SUPPRIMEE] et passe à autre chose.\n"
                     + "Texte dicté :\n" + enAttente.TexteDicte + "\n"
                     + "Sa copie :\n" + enAttente.Copie + "]" + numeros;
+
+                // LES LETTRES MUETTES DÈS L'ACCUEIL — retest KO #58 d'Adam, le 22/11/2026 : le fait des lettres muettes
+                // partait au tour de la copie et pendant la correction ouverte, jamais à la REPRISE d'une dictée en
+                // attente. Le professeur a donc rouvert la séance par « Il manque juste un petit son à la fin. Écoute
+                // bien : t. Tu entends ce dernier son ? » pour « cha » au lieu de « chat ».
+                var muettes = francais ? LettresMuettes.Fait(enAttente.TexteDicte, enAttente.Copie) : null;
+                if (muettes is not null) rappel += "\n" + muettes;
+
+                // ET LES MOTS EN CLAIR — signalement #61 : voir VoixEnClair.
+                rappel += "\n" + Services.Voix.VoixEnClair.Consigne;
 
                 return (rappel, enAttente.Id);
             }
@@ -3186,7 +3196,8 @@ namespace SchoolWebApp.Api.Builders.impl
             if (retourEnCours)
             {
                 var enAttente = await DicteeEnAttenteAsync(
-                    contexte.Eleve.Id, contexte.Conversation.MatiereId, ct);
+                    contexte.Eleve.Id, contexte.Conversation.MatiereId,
+                    contexte.Conversation.AgentSlug == AgentFrancais, ct);
 
                 if (enAttente is { } attente)
                 {
@@ -3626,9 +3637,14 @@ namespace SchoolWebApp.Api.Builders.impl
                 // tableau numérote, s'est dédit deux fois, et a inventé un mot.
                 // Le texte d'une dictée remise par son numéro n'est qu'au tour
                 // d'accueil, jamais persisté : on le relit en base à chaque tour.
-                var ecarts = await EcartsAuTableauAsync(
+                // La même dictée que celle reprise à l'accueil : ses faits sont déjà dans le rappel d'attente.
+                var dejaRappelee = dicteeEnAttenteId is int idRappele && correctionDictee.DicteeId == idRappele;
+                var ecarts = dejaRappelee ? null : await EcartsAuTableauAsync(
                     correctionDictee, contexte.Eleve.Id, contexte.Conversation.AgentSlug == AgentFrancais);
                 if (ecarts is not null) declencheur += "\n\n" + ecarts;
+
+                // Les mots sont au tableau : ils se citent en clair (signalement #61, voir VoixEnClair).
+                if (!dejaRappelee) declencheur += "\n\n" + Services.Voix.VoixEnClair.Consigne;
 
                 // À L'ARRIVÉE, le tableau est effacé puis remis par l'application
                 // elle-même (voir `tableauRepris`) : le professeur n'a ni à
@@ -4264,6 +4280,7 @@ namespace SchoolWebApp.Api.Builders.impl
                     var faits = FaitsDeCorrection(
                         texteDicte, copieTapee, contexte.Conversation.AgentSlug == AgentFrancais);
                     if (faits is not null) declencheur += "\n\n" + faits;
+                    if (!correctionDictee.Ouverte) declencheur += "\n\n" + Services.Voix.VoixEnClair.Consigne;
                     yield return blocDicteeAjoute;
                 }
             }
@@ -4271,6 +4288,14 @@ namespace SchoolWebApp.Api.Builders.impl
             // L'écran doit l'apprendre aussi : il garde la copie deux heures,
             // et la rouvrirait pour une dictée que le professeur déclare perdue.
             if (marquerAbandonDictee) yield return LecteurDictee.Abandon;
+
+            // UNE DICTÉE AU TABLEAU POUR SA CORRECTION : ses mots ne se cachent plus (signalement #61, voir VoixEnClair).
+            // Remise par l'application à l'arrivée, correction ouverte, ou copie tapée qui vient d'arriver. Ce n'est
+            // pas un exercice de sons : la liste blanche ne s'applique pas (bout en bout du 22/11 : un historique qui
+            // parlait de « sons » l'allumait à la reprise, et « chaton » devenait « pomme » ou « savon »).
+            var dicteeAuTableau = (nouvelleArrivee && tableauRepris is not null)
+                || correctionDictee.Ouverte
+                || blocDicteeAjoute is not null;
 
             // PENDANT UNE ÉCOUTE, LE TEXTE LU NE PASSE PAS AU TABLEAU — voir
             // EcouteAuTableau. Le filtre n'existe que si une écoute est ouverte :
@@ -4289,7 +4314,7 @@ namespace SchoolWebApp.Api.Builders.impl
             // IL PIOCHE DANS LA LISTE BLANCHE — voir FiltreMotsVerifies. Le français et l'anglais au
             // primaire, l'interrupteur allumé, et seulement dans un exercice de sons ou de syllabes :
             // ailleurs, pas de filtre, donc pas le moindre retard sur la voix.
-            var filtreMots = (!enExerciceDeSons && poserLeChoix is null) || langueDuSon is null
+            var filtreMots = (!enExerciceDeSons && poserLeChoix is null) || langueDuSon is null || dicteeAuTableau
                 ? null
                 : await _verificationSon.FiltrePourAsync(
                     langueDuSon,
@@ -4321,6 +4346,8 @@ namespace SchoolWebApp.Api.Builders.impl
                                 ? Services.Voix.RegleVerificationSon.RedireLeMot.SiRefus
                                 : Services.Voix.RegleVerificationSon.RedireLeMot.Non);
 
+            var filtreVoixEnClair = dicteeAuTableau ? new Services.Voix.VoixEnClair.Filtre() : null;
+
             // LA LECTURE DES NOMBRES : la réponse est retenue, puis remise en ordre (sa phrase, la consigne, la balise).
             var filtreNombres = nombresDuTour is null ? null : new Services.Voix.FiltreLectureNombres(nombresDuTour);
 
@@ -4340,6 +4367,7 @@ namespace SchoolWebApp.Api.Builders.impl
             {
                 var accorde = filtreAccord.Passer(fragment.Texte);
                 if (filtreMots is not null) accorde = filtreMots.Passer(accorde);
+                if (filtreVoixEnClair is not null) accorde = filtreVoixEnClair.Passer(accorde);
                 if (filtreNombres is not null) accorde = filtreNombres.Passer(accorde);
                 if (filtreBaliseNombre is not null) accorde = filtreBaliseNombre.Passer(accorde);
                 if (accorde.Length == 0) continue;
@@ -4362,6 +4390,17 @@ namespace SchoolWebApp.Api.Builders.impl
                 if (filtreMots.ARemplace)
                 {
                     _logger.LogInformation("Mot hors liste remplace (conversation {ConversationId}).", conversationId);
+                }
+            }
+
+            if (filtreVoixEnClair is not null)
+            {
+                finAccordee = filtreVoixEnClair.Passer(finAccordee) + filtreVoixEnClair.Terminer();
+
+                if (filtreVoixEnClair.ARemplace)
+                {
+                    _logger.LogInformation(
+                        "Dictee au tableau : balise de voix [FR] remise en clair (conversation {ConversationId}).", conversationId);
                 }
             }
 
@@ -4562,6 +4601,11 @@ namespace SchoolWebApp.Api.Builders.impl
 
                 // L'historique dit ce que l'élève a vu et entendu : le mot remplacé n'y revient pas.
                 if (filtreMots is not null) contenuPersiste = filtreMots.Corriger(contenuPersiste);
+
+                // Les mots de la dictée au tableau, en clair comme à l'écran (signalement #61) : une page rechargée ne
+                // montre pas de blanc, et l'historique relu ne lui réapprend pas la balise.
+                if (filtreVoixEnClair is not null) contenuPersiste = Services.Voix.VoixEnClair.Corriger(contenuPersiste);
+
                 if (filtreNombres is not null)
                 {
                     // La gomme d'une arrivée (lecture des nombres reprise au retour) reste devant : la réécriture retire tout
