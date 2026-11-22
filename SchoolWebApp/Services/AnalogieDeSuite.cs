@@ -57,8 +57,11 @@ namespace SchoolWebApp.Api.Services
         }
 
         /// <summary>« quel nombre vient juste après 80 » → « Quel nombre vient juste après 80 ? ».</summary>
+        // « 78, 79, 80… ? » (énoncé d'une suite relancée, bout en bout final v4 sur 0c68fea, conv. de test 1239) : l'énoncé
+        // porte déjà son « ? » ; on ne le double pas (« 78, 79, 80… ? ? »).
         public static string QuestionDuCode(string enonce) =>
-            string.IsNullOrWhiteSpace(enonce) ? string.Empty : char.ToUpperInvariant(enonce.Trim()[0]) + enonce.Trim()[1..] + " ?";
+            string.IsNullOrWhiteSpace(enonce) ? string.Empty
+            : char.ToUpperInvariant(enonce.Trim()[0]) + enonce.Trim()[1..] + (enonce.TrimEnd().EndsWith('?') ? string.Empty : " ?");
 
         /// <summary>Le texte entier (historique) : mêmes retraits que le flux, même question remise.</summary>
         public static string Retirer(string? texte, string enonce, out int retraits) => Retirer(texte, enonce, null, out retraits);
