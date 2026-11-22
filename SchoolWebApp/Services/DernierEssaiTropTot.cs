@@ -54,6 +54,24 @@ namespace SchoolWebApp.Api.Services
         public static bool AuRetour(TypeAccueil type) =>
             type is TypeAccueil.Retour or TypeAccueil.NouvelleSeance or TypeAccueil.RetourDicteeInterrompue or TypeAccueil.RetourControleAbandonne;
 
+        /// <summary>
+        /// APRÈS UN RETOUR, PAS DE « DERNIER ESSAI » À LA PREMIÈRE RÉPONSE — lot groupé, bout en bout QR1 sur c2cac28 (conv. de
+        /// test 1089) : l'accueil du retour n'avait pas redit le mot (« On repart sur l'écoute des couleurs ? »), « Bleu! »
+        /// n'était donc pas jugé, et le professeur, comptant lui-même les deux erreurs d'AVANT le départ, a dit « C'est ton
+        /// dernier essai » au premier essai après le retour. Le compte repart de zéro à la frontière de séance
+        /// (<see cref="Voix.EssaisRates.FinDeSeance"/>) : sa première réponse depuis n'est jamais un dernier essai (au plus
+        /// une erreur comptée ; l'annonce vient après la 2e en écoute/répétition, après la 3e en calcul, par le code). <paramref name="historique"/> : les messages AVANT celui du tour, dans l'ordre.
+        /// </summary>
+        public static bool TropTotApresLeRetour(IReadOnlyList<(string? Role, string? Contenu)> historique)
+        {
+            for (var i = historique.Count - 1; i >= 0; i--)
+            {
+                if (!Voix.EssaisRates.FinDeSeance(historique[i].Role, historique[i].Contenu)) continue;
+                return !historique.Skip(i + 1).Any(m => m.Role == "user");
+            }
+            return false;
+        }
+
         /// <summary>Un filtre à poser dès que le code a compté une erreur (rang non nul).</summary>
         public static bool AFiltrer(int? rang) => rang is not null;
 

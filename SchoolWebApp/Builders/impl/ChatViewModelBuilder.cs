@@ -4553,7 +4553,9 @@ namespace SchoolWebApp.Api.Builders.impl
             // AU RETOUR, LE COMPTE REPART DE ZÉRO (décision de Min's du 22/11, 07h58 ; lot groupé, bout en bout QR1 sur 03a659d,
             // conv. de test 1055) : à l'accueil du retour, « C'est ton dernier essai sur ce mot, tu es prêt ? » — le prochain
             // essai est le PREMIER. Au tour d'arrivée d'un retour, la mention part comme à la 1re erreur (DernierEssaiTropTot.AuRetour).
-            var rangPourDernierEssai = rangDeLErreur ?? (DernierEssaiTropTot.AuRetour(typeAccueil) ? 1 : null);
+            // Ni à sa première réponse depuis le retour (DernierEssaiTropTot.TropTotApresLeRetour, conv. de test 1089).
+            var rangPourDernierEssai = rangDeLErreur ?? (DernierEssaiTropTot.AuRetour(typeAccueil)
+                || DernierEssaiTropTot.TropTotApresLeRetour(historique.Select(m => ((string?)m.Role, (string?)m.Contenu)).ToList()) ? 1 : null);
             var filtreDernierEssai = DernierEssaiTropTot.AFiltrer(rangPourDernierEssai) ? DernierEssaiTropTot.Filtre(rangPourDernierEssai) : null;
 
             await foreach (var fragment in _agent.RepondreAsync(
