@@ -113,6 +113,9 @@ namespace SchoolWebApp.Api.Services
             // « Essaie de faire le même son que moi. », « Essaie de dire ce son-là » (bout en bout de la tâche 1600) : des demandes
             // d'imitation, donc de répétition (le mot à redire reste celui de la balise : sans balise, rien n'est jugé).
             + @"|\bmême\s+(?:son|mot)\s+que\s+moi\b|\bpareil\s+que\s+moi\b"
+            // « [EN]Blue[/EN] … Tu veux réessayer ? » (accueil NATUREL du retour après Quitter, e2e QR1 du 22/11/2026, contrôle
+            // d'Omar sur le lot groupé) : « Bleu! » n'était plus jugé. Pas le futur (« on réessaiera plus tard »).
+            + @"|\bréessa(?:yer|ies?|yez)\b"
             + @"|\brepeat\b|\byour\s+turn\b|\brepite\b|\brepítelo\b|\bripeti\b|\bwiederhol|\bsprich\s+nach\b"
             // L'ÉCOUTE DES MOTS (retest KO #57, 21/11/2026, 15h05) : « [EN]Two[/EN]. Qu'as-tu entendu ? » — « Deux! » validé.
             // Là, l'enfant doit dire le mot ENTENDU (« two »), pas son sens : c'est une répétition. La question est celle que
