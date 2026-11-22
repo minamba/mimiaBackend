@@ -397,6 +397,13 @@ namespace SchoolWebApp.Api.Builders.impl
 
             var vues = _mapper.Map<IEnumerable<MessageViewModel>>(messages).ToList();
 
+            // UN APARTÉ DE RÉGIE DÉJÀ ENREGISTRÉ (avant le filtre du flux) ne se réaffiche pas quand l'écran se recharge :
+            // même filtre que le flux, à la lecture seulement — la base n'est pas modifiée. Voir ApartesInternes.
+            foreach (var vue in vues.Where(v => v.Role == "assistant" && v.Contenu is not null))
+            {
+                vue.Contenu = ApartesInternes.Retirer(vue.Contenu);
+            }
+
             // Les documents en un seul aller-retour, puis répartis. Une requête
             // par message ferait vingt requêtes pour afficher un écran.
             var pieces = (await _conversationService.GetMetadonneesDesMessagesAsync(
@@ -4321,10 +4328,12 @@ namespace SchoolWebApp.Api.Builders.impl
             // retrouver », écrit une fois, se recopie de séance en séance.
             var professeure = PromptsPedagogiques.EstUneProfesseure(contexte.Conversation.ProfAvatar);
 
+            // Et ses apartés de régie (« (On garde 3e réponse fausse → …) ») : un aparté relu se recopie au tour suivant.
+            // Déterministe aussi. Voir ApartesInternes.
             foreach (var message in historique.Where(m => m.Role == "assistant"))
             {
                 message.Contenu = AccordDuProfesseur.Corriger(
-                    TournuresFautives.Corriger(message.Contenu), professeure);
+                    TournuresFautives.Corriger(ApartesInternes.Retirer(message.Contenu)), professeure);
             }
 
             var piecesHistorique = await _conversationService.GetPiecesDesMessagesAsync(
@@ -4437,6 +4446,11 @@ namespace SchoolWebApp.Api.Builders.impl
             var filtreAccord = new CorrectionsDuFlux(
                 PromptsPedagogiques.EstUneProfesseure(contexte.Conversation.ProfAvatar));
 
+            // SES NOTES DE RÉGIE NE PARTENT PAS — voir ApartesInternes : « (On garde 3e réponse fausse → réexplication
+            // douce + dernier essai) » arrivait à l'écran et dans la voix. Premier filtre du flux, chez TOUS les
+            // professeurs ; seul le texte qui suit une parenthèse ouvrante est retenu, le temps de la fermer.
+            var filtreApartes = new ApartesInternes.Filtre();
+
             // IL PIOCHE DANS LA LISTE BLANCHE — voir FiltreMotsVerifies. Le français et l'anglais au
             // primaire, l'interrupteur allumé, et seulement dans un exercice de sons ou de syllabes :
             // ailleurs, pas de filtre, donc pas le moindre retard sur la voix.
@@ -4497,7 +4511,7 @@ namespace SchoolWebApp.Api.Builders.impl
                 TypeTache.Dialogue, typeAccueil, depuis, secondesRestantes,
                 parMessage, piecesDuTour, enExerciceDeSons, ct))
             {
-                var accorde = filtreAccord.Passer(fragment.Texte);
+                var accorde = filtreAccord.Passer(filtreApartes.Passer(fragment.Texte));
                 if (filtreMots is not null) accorde = filtreMots.Passer(accorde);
                 if (filtreVoixEnClair is not null) accorde = filtreVoixEnClair.Passer(accorde);
                 if (filtreNombres is not null) accorde = filtreNombres.Passer(accorde);
@@ -4515,7 +4529,7 @@ namespace SchoolWebApp.Api.Builders.impl
                 if (passe.Length > 0) yield return passe;
             }
 
-            var finAccordee = filtreAccord.Terminer() ?? string.Empty;
+            var finAccordee = filtreAccord.Passer(filtreApartes.Terminer()) + (filtreAccord.Terminer() ?? string.Empty);
             if (filtreMots is not null)
             {
                 finAccordee = filtreMots.Passer(finAccordee) + filtreMots.Terminer();
@@ -4732,6 +4746,24 @@ namespace SchoolWebApp.Api.Builders.impl
                 // Rien de ce que l'application souffle au professeur ne reste
                 // dans sa bouche — voir LecteurDictee.SansNoteApplication.
                 contenuPersiste = LecteurDictee.SansNoteApplication(contenuPersiste);
+
+                // Ni un aparté de régie : même filtre que le flux, donc le même texte que l'écran et la voix. Un repère
+                // au journal, sans contenu ; le texte de l'aparté seulement hors production, drapeau allumé, en Debug.
+                var texteAvantApartes = contenuPersiste;
+                contenuPersiste = ApartesInternes.Retirer(contenuPersiste, out var apartesRetires);
+                if (apartesRetires > 0 || filtreApartes.Retires > 0)
+                {
+                    _logger.LogInformation(
+                        "Aparte de regie retire du message du professeur ({Nombre}) (conversation {ConversationId}).",
+                        Math.Max(apartesRetires, filtreApartes.Retires), conversationId);
+
+                    if (_texteBrutAuJournal && _logger.IsEnabled(LogLevel.Debug))
+                    {
+                        _logger.LogDebug("Aparte de regie, texte brut du professeur (conversation {ConversationId}) : {Brut}",
+                            conversationId,
+                            Services.Voix.LectureDesNombres.SansPrenom(texteAvantApartes, contexte.Eleve.Prenom).ReplaceLineEndings(" / "));
+                    }
+                }
 
                 // Et une tournure fautive ne reste pas dans l'historique, où il
                 // la reprendrait à la séance suivante — voir TournuresFautives.
