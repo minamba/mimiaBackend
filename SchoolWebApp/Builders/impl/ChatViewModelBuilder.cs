@@ -4538,12 +4538,21 @@ namespace SchoolWebApp.Api.Builders.impl
             // ouverte et que l'élève n'a pas trouvé : ailleurs, pas le moindre retard sur la voix. Dernier filtre du texte.
             var filtreReponse = reponseCherchee is { } cherchee ? new ReponseNonDonnee(cherchee.Valeur) : null;
 
+            // UNE TRADUCTION REFUSÉE NE SE FÉLICITE PAS — voir FelicitationRefusee (contrôle d'Omar sur le lot groupé, point 5 :
+            // « c'est très bien ! », « c'est top ! » malgré le fait). Seulement au tour où sa réponse est la traduction française
+            // du mot (écoute au micro ou au clavier, répétition en langue) : ailleurs, pas de filtre, pas de retard.
+            var filtreFelicitation = (sonJuste == false && Services.Voix.RegleVerificationSon.EstUneTraductionEntendue(contenu))
+                || repetitionEnLangue is not null
+                ? new FelicitationRefusee.Filtre()
+                : null;
+
             await foreach (var fragment in _agent.RepondreAsync(
                 contexte.Eleve, contexte.Conversation, historique, declencheur, bilan,
                 TypeTache.Dialogue, typeAccueil, depuis, secondesRestantes,
                 parMessage, piecesDuTour, enExerciceDeSons, ct))
             {
                 var accorde = filtreAccord.Passer(filtreApartes.Passer(fragment.Texte));
+                if (filtreFelicitation is not null) accorde = filtreFelicitation.Passer(accorde);
                 if (filtreMots is not null) accorde = filtreMots.Passer(accorde);
                 if (filtreVoixEnClair is not null) accorde = filtreVoixEnClair.Passer(accorde);
                 if (filtreNombres is not null) accorde = filtreNombres.Passer(accorde);
@@ -4562,6 +4571,15 @@ namespace SchoolWebApp.Api.Builders.impl
             }
 
             var finAccordee = filtreAccord.Passer(filtreApartes.Terminer()) + (filtreAccord.Terminer() ?? string.Empty);
+            if (filtreFelicitation is not null)
+            {
+                finAccordee = filtreFelicitation.Passer(finAccordee) + filtreFelicitation.Terminer();
+                if (filtreFelicitation.Retraits > 0)
+                {
+                    _logger.LogInformation("Felicitation retiree apres une traduction refusee ({Nombre}) (conversation {ConversationId}).",
+                        filtreFelicitation.Retraits, conversationId);
+                }
+            }
             if (filtreMots is not null)
             {
                 finAccordee = filtreMots.Passer(finAccordee) + filtreMots.Terminer();
@@ -4800,6 +4818,9 @@ namespace SchoolWebApp.Api.Builders.impl
                 // Et une tournure fautive ne reste pas dans l'historique, où il
                 // la reprendrait à la séance suivante — voir TournuresFautives.
                 contenuPersiste = TournuresFautives.Corriger(contenuPersiste);
+
+                // Pas de félicitation gardée après une traduction refusée : l'écran ne l'a pas montrée (FelicitationRefusee).
+                if (filtreFelicitation is not null) contenuPersiste = FelicitationRefusee.Retirer(contenuPersiste);
 
                 // L'historique dit ce que l'élève a vu et entendu : le mot remplacé n'y revient pas.
                 if (filtreMots is not null) contenuPersiste = filtreMots.Corriger(contenuPersiste);
