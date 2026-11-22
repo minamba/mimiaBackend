@@ -28,7 +28,7 @@ namespace SchoolWebApp.Domain.Models
         /// À METTRE AU JOUR DE LA MISE EN LIGNE quand même : un parent arrivé par Google entre cette date et la mise en ligne
         /// lirait « première fois » au lieu de « mise à jour », rien de plus.
         /// </summary>
-        public static readonly DateTime Depuis = new(2026, 11, 20, 0, 0, 0, DateTimeKind.Utc);
+        public static readonly DateTime Depuis = new(2026, 11, 22, 0, 0, 0, DateTimeKind.Utc);
 
         /// <summary>Le parent a-t-il accepté la version en vigueur ?</summary>
         public static bool Acceptees(string? versionDuParent) => versionDuParent == Version;
