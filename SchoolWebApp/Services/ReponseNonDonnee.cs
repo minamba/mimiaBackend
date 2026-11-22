@@ -541,7 +541,8 @@ namespace SchoolWebApp.Api.Services
             + @"|(?<!\p{L})(?:c['’]est|c['’]était|ce\s+sera(?:it)?)\s+(?:(?:bien|donc|alors|encore|juste|exactement|tout\s+simplement)\s+)?"
             // La suite des nombres (corpus de test, #60 sur master) : « après 74, on dit 75 », « il y a 75 », « on a 75 »,
             // « après 74 vient 75 », « on obtient 12 », « tu trouves 12 »
-            + @"|(?<!\p{L})(?:on\s+(?:dit|disait|a|avait|obtient|trouve|tombe\s+sur)|il\s+y\s+a(?:vait)?|vient|viennent|tu\s+(?:obtiens|trouves))\s+(?:(?:bien|donc|alors|juste|ensuite)\s+)?"
+            // « et après, on dit : quatre-vingt-UN. » (bout en bout ×10 sur c0836ad, conv. de test 1042) : deux-points aussi.
+            + @"|(?<!\p{L})(?:on\s+(?:dit|disait|a|avait|obtient|trouve|tombe\s+sur)|il\s+y\s+a(?:vait)?|vient|viennent|tu\s+(?:obtiens|trouves))(?:\s*:\s*|\s+)(?:(?:bien|donc|alors|juste|ensuite)\s+)?"
             // « Dis-le avec moi : soixante-quatorze », « répète après moi : 75 », « tu peux me redire 75 ? »
             + @"|(?<!\p{L})(?:avec\s+moi|après\s+moi|(?:re)?dire|redis|répète|répéter)\s*:\s*(?:[«""]\s*)?"
             + @"|(?<!\p{L})redire\s+(?:ce\s+nombre\s*,?\s*|le\s+nombre\s+)?(?:[«""]\s*)?"
