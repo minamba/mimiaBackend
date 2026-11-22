@@ -259,8 +259,10 @@ namespace SchoolWebApp.Api.Services
             // qu'aucune relance n'en demande, null si elle en demande plusieurs.
             char? rangDeLaRelance = '\0';
 
-            foreach (var message in messagesDuProfesseur.Reverse().Take(MessagesRemontes))
+            var recents = messagesDuProfesseur.Reverse().Take(MessagesRemontes).ToList();
+            for (var j = 0; j < recents.Count; j++)
             {
+                var message = recents[j];
                 if (string.IsNullOrWhiteSpace(message)) continue;
 
                 var calculs = Calculs(message, out var illisible);
@@ -291,8 +293,25 @@ namespace SchoolWebApp.Api.Services
                     // Une relance « combien d'unités ? » ne parle pas d'une suite.
                     if (rangDeLaRelance != '\0') return null;
 
-                    // Une relance ne cite que les nombres de la suite (« Compte avec moi : 71, 72, 73… »), son pas, 1 ou 10.
                     var s = suites[0];
+
+                    // LA SUITE QUI COMPTE VERS LE RÉSULTAT D'UN CALCUL — tâche 1941 (corpus de test, conversation 489) :
+                    // après « Combien font 7 + 5 ? », la relance « Compte à partir de 7 : 8, 9, 10... continue jusqu'où ? » se
+                    // lisait comme la suite « 8, 9, 10… ? », qui attend 11 : « 12 », juste, aurait été jugé FAUX. Si un calcul
+                    // est posé plus haut et que la suite ne fait que compter vers son résultat (ses nombres et celui qu'elle
+                    // attend sont entre les termes et le résultat), c'est le calcul qu'on attend.
+                    if (j + 1 < recents.Count
+                        && DerniereQuestion(recents.Skip(j + 1).Reverse()) is { Expression: { } exprPlusHaut } calculPlusHaut
+                        && decimal.TryParse(calculPlusHaut.Resultat.Replace(',', '.'), NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out var resultatPlusHaut))
+                    {
+                        var permisDuCalcul = NombresDUneRelance(exprPlusHaut, resultatPlusHaut, []);
+                        if (s.Cites.All(c => permisDuCalcul.Contains(c)) && permisDuCalcul.Contains(s.Attendu))
+                        {
+                            return nombresDesRelances.All(permisDuCalcul.Contains) ? calculPlusHaut : null;
+                        }
+                    }
+
+                    // Une relance ne cite que les nombres de la suite (« Compte avec moi : 71, 72, 73… »), son pas, 1 ou 10.
                     var permis = s.Cites.Select(c => (decimal)c).Append(1).Append(10).ToHashSet();
                     return nombresDesRelances.All(permis.Contains)
                         ? new Question(null, s.Attendu.ToString(CultureInfo.InvariantCulture), null, s)
@@ -305,8 +324,7 @@ namespace SchoolWebApp.Api.Services
                     if (rangDeLaRelance != '\0') return null;
 
                     var (expression, resultat) = calculs[0];
-                    var operandes = Operandes(expression);
-                    operandes.UnionWith(operandesEnPlus);
+                    var operandes = NombresDUneRelance(expression, resultat, operandesEnPlus);
                     return nombresDesRelances.All(operandes.Contains)
                         ? new Question(expression, Ecrire(resultat), null)
                         : null;
@@ -475,6 +493,40 @@ namespace SchoolWebApp.Api.Services
                 .Select(m => decimal.TryParse(m.Value.Replace(',', '.'), NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out var d) ? d : -1m)
                 .Concat(NombresEnLettres.Lire(sansBalises).Select(l => (decimal)l.Valeur))
                 .ToList();
+        }
+
+        /// <summary>
+        /// Les nombres qu'une RELANCE d'un calcul peut citer sans parler d'autre chose — tâche 1941 (bout en bout réel,
+        /// 3 séances sur 5) : « Montre-moi 7 doigts, puis ajoute un doigt à chaque fois : 8, 9, 10... », « après 7 tu dis
+        /// 8, puis 9, puis 10, puis 11… » citaient d'autres nombres que 7 et 5 : le juge abandonnait la question, le
+        /// professeur ne recevait aucun fait, validait « 14 » ou donnait 12. Une relance peut citer : les termes, le
+        /// comptage de l'un à l'autre jusqu'au résultat (résultat compris), et le passage par la dizaine d'une addition
+        /// (7 + 5 = 7 + 3 + 2 : 10, 3 et 2).
+        /// </summary>
+        private static HashSet<decimal> NombresDUneRelance(string expression, decimal resultat, HashSet<decimal> operandesEnPlus)
+        {
+            var permis = Operandes(expression);
+            permis.UnionWith(operandesEnPlus);
+
+            var bornes = permis.Append(resultat).ToList();
+            var (min, max) = (bornes.Min(), bornes.Max());
+            if (bornes.All(b => b == Math.Floor(b)) && min >= 0 && max - min <= 30)
+            {
+                for (var n = min; n <= max; n++) permis.Add(n);
+            }
+
+            // Le passage par 10 : « 7 + 5 » → 7 + 3 = 10, puis 10 + 2.
+            var termes = NombreEnChiffres().Matches(expression).Select(m => decimal.Parse(m.Value.Replace(',', '.'), CultureInfo.InvariantCulture)).ToList();
+            if (termes.Count == 2 && expression.Contains('+') && resultat > 10)
+            {
+                foreach (var (a, b) in new[] { (termes[0], termes[1]), (termes[1], termes[0]) })
+                {
+                    var complement = 10 - a;
+                    if (complement > 0 && complement < b) permis.UnionWith([10, complement, b - complement]);
+                }
+            }
+
+            return permis;
         }
 
         private static HashSet<decimal> Operandes(string expression) =>
