@@ -86,6 +86,11 @@ namespace SchoolWebApp.Api.Services
         // phrase (question rhétorique : « On s'en tient là ? Non, … »). Les bornes {0,N} sont toutes GOURMANDES (sans « ? ») :
         // avec le lookahead final, le générateur de regex .NET 8 produit du code qui ne compile pas pour une boucle paresseuse
         // (CS0165 « lazyloop_iteration »). Seul IsMatch sert : gourmand ou paresseux trouvent exactement les mêmes textes.
+        //
+        // CONTRÔLE D'OMAR SUR LA v8 (4b04a75, points 2 et 3) : « Une prochaine fois, tu continueras. », « La prochaine fois, tu
+        // trouveras. » étaient épargnés par « tu …ras » ; « Question suivante… » en fin de ligne n'était plus lu. v9 (tâche
+        // 2335, motifs d'Omar tels quels) : « la / une prochaine fois » n'est épargné que par « tu …ras plus vite / mieux » ;
+        // le nom seul finit aussi par « … » en fin de ligne (« Et le nombre suivant… ? » reste une relance).
         [GeneratedRegex(
             @"(?:\bon\s+y\s+reviendra\b"
             + @"|\bon\s+(?:va\s+)?(?:la|le)\s+(?:garde[rz]?|reprendra|laisse[rz]?)\b(?!\s+(?:bien\s+)?(?:en\s+t[êe]te|sur\s+l['’]\s*ardoise|au\s+tableau|ensemble\s*(?::|,?\s*\d|maintenant\b|tout\s+de\s+suite\b)))"
@@ -93,7 +98,7 @@ namespace SchoolWebApp.Api.Services
             + @"|(?:^|[.!?…:;])\s*plus\s+tard\b(?!\s*,?\s*(?:quand\b|tu\s+(?:verras|sauras|comprendras|trouveras|pourras|seras)\b))"
             + @"|(?:\b(?:on|nous)\s+(?:va\s+|allons\s+|peut\s+|pouvons\s+|pourrait\s+|pourrions\s+|pourra\s+|pourrons\s+)?pass(?:e|er|era|erons|ons)|\bpassons|\bpropose\s+de\s+passer)\s+à\s+(?:autre\s+chose|un\s+autre|une\s+autre|la\s+suite)\b"
             + @"|(?:\b(?:on|nous)\s+(?:va\s+|allons\s+|peut\s+|pouvons\s+|pourrait\s+|pourrions\s+|pourra\s+|pourrons\s+)?pass(?:e|er|era|erons|ons)|\bpassons|\bpropose\s+de\s+passer)\s+(?:à\s+la\s+(?:(?:question|activité|leçon|partie|série|consigne)\s+)?suivante|au\s+(?:(?:nombre|calcul|exercice|jeu|mot|problème|défi)\s+)?suivant)\b"
-            + @"|(?:^|[.!?…:;,]\s*|\b(?:allez|bon|alors|hop|ok|d['’]accord|maintenant)\s*,?\s*)(?:et\s+)?(?:(?:(?:à\s+)?la\s+|au\s+|(?!le\s+nombre\b)le\s+)?(?:question|nombre|calcul)\s+suivante?|au\s+suivant|(?:à\s+la\s+)?suivante)\s*(?:,\s*(?-i:\p{Lu})[\p{L}-]*\s*)?(?:[.!]|$)"
+            + @"|(?:^|[.!?…:;,]\s*|\b(?:allez|bon|alors|hop|ok|d['’]accord|maintenant)\s*,?\s*)(?:et\s+)?(?:(?:(?:à\s+)?la\s+|au\s+|(?!le\s+nombre\b)le\s+)?(?:question|nombre|calcul)\s+suivante?|au\s+suivant|(?:à\s+la\s+)?suivante)\s*(?:,\s*(?-i:\p{Lu})[\p{L}-]*\s*)?(?:[.!]|…\s*$|$)"
             // « On garde ce nombre pour une autre fois. On continue autre chose maintenant. » (corpus réel v2, 3e essai) : « pour
             // une autre fois » et « continuer autre chose » sont des abandons (« essaie une autre fois » n'en est pas un).
             + @"|\b(?:on\s+(?:va\s+)?(?:fait|faire|continue[r]?)|faisons|continuons)\s+(?:avec\s+)?autre\s+chose\b(?!\s+qu)|\bpour\s+une\s+autre\s+fois\b"
@@ -116,7 +121,7 @@ namespace SchoolWebApp.Api.Services
             + @"|(?<!\b(?:il|elle|ça|cela)\s+(?:(?:te|t['’]|nous|me|m['’])\s*)?)\b(?:verra|reverra|reprendra|reprend|refera|fera|regardera|essaiera|réessaiera|continuera|retentera|recommencera)\b[^.!?\n]{0,40}\b(?:une\s+autre\s+fois|plus\s+tard|demain|la\s+prochaine\s+fois)\b"
             + @"|\b(?:on|nous)\s+(?:(?:ne|n['’]|le|la|les|l['’]|y|en|s['’]|t['’]|te|se|nous)\s*)*\p{L}+(?:ra|rons|ras)\b[^.!?\n]{0,40}\b(?:une\s+autre\s+fois|demain|la\s+prochaine\s+fois)\b"
             + @"|(?<!(?:^|[.!?…:;])\s*)\b(?:la|une)\s+prochaine\s+fois\b(?!\s+qu)"
-            + @"|(?:^|[.!?…:;])\s*(?:la|une)\s+prochaine\s+fois\b(?!\s+qu)(?!\s*,?\s*tu\s+\p{L}+ras\b)"
+            + @"|(?:^|[.!?…:;])\s*(?:la|une)\s+prochaine\s+fois\b(?!\s+qu)(?!\s*,?\s*tu\s+\p{L}+ras\s+(?:plus\s+vite|mieux)\b)"
             + @"|\b(?:on\s+(?:va\s+)?change[rz]?|changeons)\s+(?:d['’]\s*(?:exercice|activité)|de\s+(?:jeu|calcul|question|sujet|leçon))\b)"
             + @"(?![^.!?\n]{0,40}\?\s*non\b)",
             RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Multiline)]
@@ -217,13 +222,18 @@ namespace SchoolWebApp.Api.Services
         // nombre suivant. », « Recompte jusqu'à 81 et dis le nombre. », « Dis–le ! » (tiret demi-cadratin), « Tu peux dire le
         // nombre suivant ? » n'étaient pas lus. v8 (tâche 2230) : vas-y, allez, ensuite, bon, hop ouvrent aussi une proposition ;
         // « (re)compte … et dis / donne » ; « dis–le » ; « tu peux / peux-tu / pourrais-tu (me) dire / donner / trouver / écrire ».
+        //
+        // CONTRÔLE D'OMAR SUR LA v8 (4b04a75, point 1) : « Je sais que tu peux trouver la réponse. », « Tu pourrais trouver la
+        // réponse en comptant sur tes doigts. », « Tu peux écrire la réponse plus tard. » étaient lus comme des demandes (la
+        // question du code n'était pas ajoutée). v9 (tâche 2335, motif d'Omar tel quel) : en tête de proposition seulement, avec
+        // « me » obligatoire après « tu peux / tu pourrais », ou l'inversion « peux-tu / pourrais-tu (me) ».
         [GeneratedRegex(@"\b(?:dis|donne|écris|ecris|montre)[- ]moi\b|\bà\s+toi\s+de\s+(?:trouver|dire|me\s+dire)\b"
             + @"|\b(?:re)?dis[-‑–]le\b"
             + @"|(?:^|[.!:;,…]\s*|\b(?:et|puis|alors|maintenant|ensuite|allez|bon|hop|vas-y)\s*,?\s*)(?:re)?dis\s+(?:(?:le|la)\s+(?:nombre|réponse|résultat|chiffre|suivant)|ce\s+qui|combien|quel)\b"
             + @"|\bessaie\s+de\s+(?:trouver|(?:me\s+)?(?:le\s+)?dire|compter)\b"
             + @"|(?:^|[.!:;,…]\s*|\b(?:et|puis|alors|maintenant|ensuite|allez|bon|hop|vas-y)\s*,?\s*)trouve(?:[- ]moi)?\s+(?:ce|le|la|quel|quelle|combien|qu|l['’])"
             + @"|(?:^|[.!:;,…]\s*|\b(?:et|puis|alors|maintenant|ensuite|allez|bon|hop|vas-y)\s*,?\s*)(?:re)?compte\b[^.!?\n]{0,60}?\bet\s+(?:dis|donne)\b"
-            + @"|\b(?:tu\s+peux|peux-tu|pourrais-tu|tu\s+pourrais)\s+(?:me\s+)?(?:dire|donner|trouver|écrire)\s+(?:le|la|l['’]|ce\s+qui|combien|quel|quelle|qu)",
+            + @"|(?:^|[.!:;,…]\s*|\b(?:et|puis|alors|maintenant|ensuite|allez|bon|hop|vas-y)\s*,?\s*)(?:(?:tu\s+peux|tu\s+pourrais)\s+me|(?:peux|pourrais)-tu(?:\s+me)?)\s+(?:dire|donner|trouver|écrire)\b",
             RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Multiline)]
         private static partial Regex Demande();
     }
