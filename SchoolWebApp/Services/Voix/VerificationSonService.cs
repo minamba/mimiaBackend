@@ -1366,12 +1366,6 @@ namespace SchoolWebApp.Api.Services.Voix
         [GeneratedRegex(@"\bvoici\s+(?:la\s+(?:prochaine|première|premiere|nouvelle)\s+syllabe|le\s+(?:prochain|premier|nouveau)\s+mot)\b|\bje\s+(?:te\s+)?l[ae]\s+redis\b", RegexOptions.IgnoreCase)]
         private static partial Regex AnnonceDuSon();
 
-        /// <summary>
-        /// La phrase du code quand le professeur n'a rien gardé qui explique le refus d'une traduction (voir EcouteDesMots) :
-        /// « Tu m'as dit « deux » : c'est le mot en français, tu as bien compris le sens. Mais moi, je cherche le mot en
-        /// anglais. » — « tu as compris le sens » reste (décision de Min's du 22/11, 00 h 04). Null hors d'une traduction
-        /// refusée dans une langue étrangère.
-        /// </summary>
         /// <summary>Le mot français d'un verdict d'écoute refusé pour traduction (« J'ai entendu le mot deux (en français). » →
         /// « deux ») ; null sinon. Sert au rappel de fin de consignes (RepetitionEnLangue.RappelTraductionRefusee, tâche 0000o).</summary>
         public static string? MotDeLaTraduction(string? messageDeLEleve)
@@ -1382,6 +1376,12 @@ namespace SchoolWebApp.Api.Services.Voix
             return mot.Length is > 0 and <= 30 && !mot.Contains('[') ? mot : null;
         }
 
+        /// <summary>
+        /// La phrase du code quand le professeur n'a rien gardé qui explique le refus d'une traduction (voir EcouteDesMots) :
+        /// « Tu m'as dit « deux » : c'est le mot en français, tu as bien compris le sens. Mais moi, je cherche le mot en
+        /// anglais. » — « tu as compris le sens » reste (décision de Min's du 22/11, 00 h 04). Null hors d'une traduction
+        /// refusée dans une langue étrangère.
+        /// </summary>
         public static string? ExplicationDeLaTraduction(string? messageDeLEleve, string langue)
         {
             if (langue != LanguesDesSons.Anglais || !EstUneTraductionEntendue(messageDeLEleve)) return null;
