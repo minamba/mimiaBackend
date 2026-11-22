@@ -3414,8 +3414,23 @@ namespace SchoolWebApp.Api.Builders.impl
 
                             if (autreSujet is not null) declencheur += "\n\n" + autreSujet;
 
-                            await MarquerPreparationControleAsync(
-                                contexte.Eleve.Id, controleMode.Value, ct);
+                            // UN RECHARGEMENT NE ROUVRE PAS LA PRÉPARATION. Son
+                            // ouverture (`DernierePreparationLe`) dit depuis quand
+                            // l'enfant doit avoir répondu pour qu'un verdict
+                            // s'écrive (VerdictsDuTour) ; or la conclusion de départ
+                            // d'un rechargement arrive quelques secondes APRÈS ce
+                            // nouvel accueil, et elle aurait écarté le verdict du
+                            // travail fait juste avant. Même contrôle, retour moins
+                            // d'une minute après la sortie : la séance continue.
+                            var rechargement = sujetPrecedent is not null
+                                && !SujetDeSeance.Change(sujetPrecedent, SujetDeSeance.De(mode, controleMode, epreuveMode))
+                                && Services.Voix.LectureDesNombres.EstUnRechargement(typeAccueil, absenceApresSortie);
+
+                            if (!rechargement)
+                            {
+                                await MarquerPreparationControleAsync(
+                                    contexte.Eleve.Id, controleMode.Value, ct);
+                            }
 
                             declencheur += "\n\n" + controleAVenir;
                         }
