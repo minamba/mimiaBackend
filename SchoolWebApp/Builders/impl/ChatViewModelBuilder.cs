@@ -4558,14 +4558,34 @@ namespace SchoolWebApp.Api.Builders.impl
                 || DernierEssaiTropTot.TropTotApresLeRetour(historique.Select(m => ((string?)m.Role, (string?)m.Contenu)).ToList()) ? 1 : null);
             var filtreDernierEssai = DernierEssaiTropTot.AFiltrer(rangPourDernierEssai) ? DernierEssaiTropTot.Filtre(rangPourDernierEssai) : null;
 
+            // PAS D'INDICE PAR COMPARAISON DANS UNE SUITE — voir AnalogieDeSuite (contrôle d'Omar sur le lot groupé v2, point 6 :
+            // « comme quand tu comptais avant » malgré le fait). Seulement quand la question ouverte est une SUITE de nombres que
+            // l'élève n'a pas trouvée : ailleurs, pas de filtre, pas de retard.
+            var filtreAnalogie = reponseCherchee is { } suiteCherchee
+                && CalculAuTableau.EstUneSuite(historique.Where(m => m.Role == "assistant")
+                    .Select(m => m.Contenu)
+                    .Where(c => !string.IsNullOrWhiteSpace(c)
+                        && !c!.TrimStart().StartsWith("[FICHE]", StringComparison.OrdinalIgnoreCase)
+                        && !c.TrimStart().StartsWith("[RAPPORT]", StringComparison.OrdinalIgnoreCase))
+                    .TakeLast(CalculAuTableau.MessagesRemontes))
+                ? new AnalogieDeSuite.Filtre(suiteCherchee.Question)
+                : null;
+
+            // LE TEXTE BRUT DU MODÈLE, AU JOURNAL DE MISE AU POINT — contrôle d'Omar sur le lot groupé v2 (points 7 et 8) : pour
+            // savoir quel filtre a retiré quoi, le texte tel que le modèle l'a écrit, avant tout filtre. Niveau Debug seulement
+            // (jamais en production, où le journal est au niveau Information) ; c'est le texte du professeur, pas de l'élève.
+            var texteBrut = _logger.IsEnabled(LogLevel.Debug) ? new System.Text.StringBuilder() : null;
+
             await foreach (var fragment in _agent.RepondreAsync(
                 contexte.Eleve, contexte.Conversation, historique, declencheur, bilan,
                 TypeTache.Dialogue, typeAccueil, depuis, secondesRestantes,
                 parMessage, piecesDuTour, enExerciceDeSons, ct))
             {
+                texteBrut?.Append(fragment.Texte);
                 var accorde = filtreAccord.Passer(filtreApartes.Passer(fragment.Texte));
                 if (filtreFelicitation is not null) accorde = filtreFelicitation.Passer(accorde);
                 if (filtreDernierEssai is not null) accorde = filtreDernierEssai.Passer(accorde);
+                if (filtreAnalogie is not null) accorde = filtreAnalogie.Passer(accorde);
                 if (filtreMots is not null) accorde = filtreMots.Passer(accorde);
                 if (filtreVoixEnClair is not null) accorde = filtreVoixEnClair.Passer(accorde);
                 if (filtreNombres is not null) accorde = filtreNombres.Passer(accorde);
@@ -4601,6 +4621,20 @@ namespace SchoolWebApp.Api.Builders.impl
                     _logger.LogInformation("Dernier essai trop tot ou compte des erreurs (erreur numero {Rang}) : retire (conversation {ConversationId}).",
                         rangPourDernierEssai, conversationId);
                 }
+            }
+            if (filtreAnalogie is not null)
+            {
+                finAccordee = filtreAnalogie.Passer(finAccordee) + filtreAnalogie.Terminer();
+                if (filtreAnalogie.Retraits > 0)
+                {
+                    _logger.LogInformation("Analogie retiree d'une relance de suite ({Nombre}) (conversation {ConversationId}).",
+                        filtreAnalogie.Retraits, conversationId);
+                }
+            }
+            if (texteBrut is not null)
+            {
+                _logger.LogDebug("Texte brut du professeur (conversation {ConversationId}) : {Brut}",
+                    conversationId, texteBrut.ToString().ReplaceLineEndings("⏎"));
             }
             if (filtreMots is not null)
             {
@@ -4844,6 +4878,8 @@ namespace SchoolWebApp.Api.Builders.impl
                 // Pas de félicitation gardée après une traduction refusée : l'écran ne l'a pas montrée (FelicitationRefusee).
                 if (filtreFelicitation is not null) contenuPersiste = FelicitationRefusee.Retirer(contenuPersiste);
                 if (filtreDernierEssai is not null) contenuPersiste = DernierEssaiTropTot.Retirer(contenuPersiste, rangPourDernierEssai);
+                if (filtreAnalogie is not null && reponseCherchee is { } suiteProtegee)
+                    contenuPersiste = AnalogieDeSuite.Retirer(contenuPersiste, suiteProtegee.Question);
 
                 // L'historique dit ce que l'élève a vu et entendu : le mot remplacé n'y revient pas.
                 if (filtreMots is not null) contenuPersiste = filtreMots.Corriger(contenuPersiste);

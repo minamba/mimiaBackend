@@ -1,0 +1,72 @@
+using System.Text.RegularExpressions;
+
+namespace SchoolWebApp.Api.Services
+{
+    /// <summary>
+    /// PAS D'INDICE PAR COMPARAISON DANS UNE SUITE, RETIRÉ PAR LE CODE — contrôle d'Omar sur le lot groupé v2 (19abbfd, 22/11/2026,
+    /// point 6). Le fait <see cref="CalculAuTableau.PasDAnalogie"/> ne suffisait pas : 2 séries sur 10 au bout en bout (#53)
+    /// donnaient encore un indice par comparaison, « Maintenant compte un tout petit peu après quatre-vingts, comme quand tu
+    /// comptais avant. » (conv. de test 1115), « …et après 80, c'est comme après n'importe quel nombre qui finit par 0, tu te
+    /// souviens de 9, 10 ? » (conv. de test 1117). Les noms des nombres ne se construisent pas tous pareil : une comparaison
+    /// mène l'élève à un nom qui n'existe pas, ou à un autre nombre.
+    ///
+    /// Pendant une SUITE de nombres que l'élève n'a pas encore trouvée (même question que le juge, <see cref="CalculAuTableau.ReponseCherchee"/>),
+    /// la phrase qui compare part entière, à l'écran, dans la voix et dans l'historique (même découpage par phrase que
+    /// <see cref="FelicitationRefusee"/>). Si c'était elle qui posait la question (plus aucun « ? » dans le message), la question
+    /// du code est remise à la fin (« Quel nombre vient juste après 80 ? ») : le juge la relit au tour suivant. Une phrase
+    /// qui porte une balise (l'ardoise) ne se touche pas. Générique : tous les professeurs, toute suite jugée par le code.
+    /// </summary>
+    public static partial class AnalogieDeSuite
+    {
+        /// <summary>
+        /// « comme quand … », « comme après / avant … », « comme pour 20 », « comme vingt-et-un », « n'importe quel nombre »,
+        /// « tu te souviens de 9, 10 », « c'est pareil qu'après 70 ». « Comme tout à l'heure », « comme moi » restent.
+        /// </summary>
+        [GeneratedRegex(
+            @"^.*?(?:\bcomme\s+(?:quand|lorsque)\b|\bcomme\s+(?:après|apres|avant)\b|\bcomme\s+(?:pour|avec)\s+(?:le\s+|les\s+)?(?:nombres?\s+)?\d"
+            + @"|\bcomme\s+(?:vingt|trente|quarante|cinquante|soixante|cent)\b|\bn['’]importe\s+quel(?:le)?\s+(?:nombre|dizaine)\b"
+            + @"|\btu\s+te\s+(?:souviens|rappelles)\s+(?:de\s+)?\d|\b(?:pareil|la\s+même\s+chose)\s+qu(?:e\s+|['’]\s*)(?:après|apres|avant|pour|quand|\d))[^\n]*$",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+        private static partial Regex Analogie();
+
+        /// <summary>« quel nombre vient juste après 80 » → « Quel nombre vient juste après 80 ? ».</summary>
+        public static string QuestionDuCode(string enonce) =>
+            string.IsNullOrWhiteSpace(enonce) ? string.Empty : char.ToUpperInvariant(enonce.Trim()[0]) + enonce.Trim()[1..] + " ?";
+
+        /// <summary>Le texte entier (historique) : mêmes retraits que le flux, même question remise.</summary>
+        public static string Retirer(string? texte, string enonce, out int retraits)
+        {
+            var r = FelicitationRefusee.ParPhrase(texte, Analogie(), out retraits);
+            if (retraits > 0 && texte!.Contains('?') && !r.Contains('?')) r += "\n\n" + QuestionDuCode(enonce);
+            return r;
+        }
+
+        public static string Retirer(string? texte, string enonce) => Retirer(texte, enonce, out _);
+
+        /// <summary>Le filtre du flux : phrase par phrase ; à la fin, la question du code si la seule question est partie.</summary>
+        public sealed class Filtre(string enonce)
+        {
+            private readonly FelicitationRefusee.Filtre _phrases = new(Analogie());
+            private bool _questionEntree;
+            private bool _questionSortie;
+
+            public int Retraits => _phrases.Retraits;
+
+            public string Passer(string? fragment)
+            {
+                if (fragment?.Contains('?') == true) _questionEntree = true;
+                var sortie = _phrases.Passer(fragment);
+                if (sortie.Contains('?')) _questionSortie = true;
+                return sortie;
+            }
+
+            public string Terminer()
+            {
+                var sortie = _phrases.Terminer();
+                if (sortie.Contains('?')) _questionSortie = true;
+                if (_phrases.Retraits > 0 && _questionEntree && !_questionSortie) sortie += "\n\n" + QuestionDuCode(enonce);
+                return sortie;
+            }
+        }
+    }
+}

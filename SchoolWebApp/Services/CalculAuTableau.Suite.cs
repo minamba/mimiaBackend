@@ -57,7 +57,15 @@ namespace SchoolWebApp.Api.Services
             // « après 80, c'est un petit nombre tout seul », « c'est tout petit comme nombre, comme quand tu comptais 8, 9, 10 »
             // (bout en bout ×10 sur 03a659d, conv. de test 1059 et 1058) : le nombre cherché est le PLUS GRAND de la suite.
             + " Ne décris pas non plus le nombre cherché (« un petit nombre », « tout petit », « comme quand tu comptais … ») : "
-            + "il vient juste après, il est plus grand que tous ceux du tableau.";
+            + "il vient juste après, il est plus grand que tous ceux du tableau."
+            // « comme quand tu comptais avant », « c'est comme après n'importe quel nombre qui finit par 0, tu te souviens de 9,
+            // 10 ? » (contrôle d'Omar sur le lot groupé v2, point 6 : 2 séries sur 10). Le filtre AnalogieDeSuite retire ces phrases.
+            + " Aucune comparaison avec un autre moment ou un autre nombre (« comme quand… », « comme après… », « n'importe quel "
+            + "nombre qui… », « tu te souviens de … ? ») : relis la suite avec lui, puis demande le nombre suivant.";
+
+        /// <summary>La question ouverte est-elle une SUITE de nombres (pas un calcul) ? Même lecture que le juge.</summary>
+        public static bool EstUneSuite(IEnumerable<string?> messagesDuProfesseur) =>
+            DerniereQuestion(messagesDuProfesseur.ToList()) is { Suite: not null };
 
         private static string Recompte(IEnumerable<int> nombres) =>
             "« " + string.Join(", ", nombres.Where(x => x >= 0).Select(x => x.ToString(CultureInfo.InvariantCulture))) + "… »";
