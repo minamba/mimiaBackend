@@ -24,7 +24,8 @@ namespace SchoolWebApp.Api.Services
         private const string Compte =
             @"(?:\s*,\s*|\s*[—–]\s*|\s+)?(?:\bet\s+)?(?:\bc['’](?:est|était)\s+(?:déjà\s+|deja\s+)?)?\b(?:sa|ta|son|ton)\s+"
             + @"(?:première|premiere|deuxième|deuxieme|seconde|second|troisième|troisieme|quatrième|quatrieme|cinquième|cinquieme|\d{1,2}\s*(?:e|ème|eme))\s+"
-            + @"(?:erreur|faute|réponse\s+fausse|essai|tentative)(?:\s+sur\s+(?:cette\s+question|ce\s+calcul|ce\s+nombre))?\b\s*(?:!+|,|:)?";
+            // « C'est sa troisième fois, Adam » (bout en bout ×10 sur e952d87, conv. de test 1029) : « fois » aussi.
+            + @"(?:erreur|faute|réponse\s+fausse|essai|tentative|fois)(?:\s+sur\s+(?:cette\s+question|ce\s+calcul|ce\s+nombre))?\b\s*(?:!+|,|:)?";
 
         [GeneratedRegex(Compte, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
         private static partial Regex CompteSeul();

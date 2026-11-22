@@ -553,6 +553,9 @@ namespace SchoolWebApp.Api.Services
             // nombre annoncé après « après : » est celui qu'on cherche.
             // « Alors juste après 80 : 81, 82... » (conv. de test 1012) : « après N : » aussi.
             + @"|(?<!\p{L})(?:après|apres)(?:\s+\d{1,9})?\s*:\s*"
+            // « Montre-moi avec tes doigts : un doigt pour 81, deux pour 82... » (bout en bout ×10 sur e952d87, conv. de test
+            // 1035) : le nombre compté sur le doigt, ou le petit pas qui y mène, c'est la réponse.
+            + @"|(?<!\p{L})(?:doigts?|pas|bond|saut|case)\s+(?:de\s+plus\s+)?(?:pour|jusqu['’]à|vers|sur)\s+"
             // « il y en a 12 en tout » : voir AvecEnTout.
             + @")"
             // Entre guillemets aussi : « le mot juste après 80, c'est « quatre-vingt-un » » (conv. de test 926), « on dit « 81 » ».
