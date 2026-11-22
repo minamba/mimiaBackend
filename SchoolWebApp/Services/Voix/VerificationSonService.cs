@@ -1494,7 +1494,11 @@ namespace SchoolWebApp.Api.Services.Voix
         // seul « Je te le redis » partait, et il restait « c'est pas grave !en anglais. ». Le code remet sa propre annonce
         // juste avant le son. Un autre complément (un indice : « …, écoute bien le début ») reste, comme avant.
         // « Voici un autre mot. » et « Je te le dis. » (même tâche) : deux autres annonces, en double avec celle du code.
-        [GeneratedRegex(@"(?<=^|[.!?…\n]\s*)\s*(?:voici\s+(?:la|le)\s+(?:(?:prochaine|première|premiere|nouvelle|prochain|premier|nouveau)(?:\s+(?:syllabe|mot)|(?=\s*(?:[.!:…\n]|$)))|syllabe|mot)|voici\s+une?\s+(?:autre|nouveau|nouvelle)\s+(?:syllabe|mot)(?=\s*[.!:…\n])|je\s+te\s+l[ae]\s+dis(?=\s*[.!…\n])|je\s+te\s+l[ae]\s+redis(?:\s*,?\s+(?:en\s+(?:anglais|français|francais|espagnol|allemand|italien)|encore(?:\s+une\s+fois)?|une\s+(?:autre|dernière|derniere|nouvelle)\s+fois|une\s+fois\s+de\s+plus|tout\s+de\s+suite|maintenant|lentement|doucement|bien\s+lentement|pour\s+toi))*)\s*[.!:…]?", RegexOptions.IgnoreCase)]
+        // « Voici le mot encore une fois. » (lot groupé, bout en bout QE2 sur c0836ad, conv. de test 1040) : seul « Voici le mot »
+        // partait, et il restait « c'est malin !encore une fois. » (collé). Les mêmes compléments sans contenu valent pour
+        // « voici le mot » que pour « je te le redis », et l'annonce ne part que SEULE dans sa phrase (ponctuation ou fin de
+        // ligne juste après) : sinon la phrase reste entière, jamais un morceau collé au « ! » d'avant.
+        [GeneratedRegex(@"(?<=^|[.!?…\n]\s*)\s*(?:voici\s+(?:la|le)\s+(?:(?:prochaine|première|premiere|nouvelle|prochain|premier|nouveau)(?:\s+(?:syllabe|mot)|(?=\s*(?:[.!:…\n,]|$)))|syllabe|mot)|voici\s+une?\s+(?:autre|nouveau|nouvelle)\s+(?:syllabe|mot)|je\s+te\s+l[ae]\s+dis|je\s+te\s+l[ae]\s+redis)(?:\s*,?\s+(?:en\s+(?:anglais|français|francais|espagnol|allemand|italien)|encore(?:\s+une\s+fois)?|une\s+(?:autre|dernière|derniere|nouvelle)\s+fois|une\s+fois\s+de\s+plus|tout\s+de\s+suite|maintenant|lentement|doucement|bien\s+lentement|pour\s+toi))*[^\S\n]*(?:[.!:…]+|(?=\n|$))", RegexOptions.IgnoreCase)]
         private static partial Regex PhraseDAnnonce();
 
         [GeneratedRegex(@"\bvoici\s+la\s+(?:(?:prochaine|première|premiere|nouvelle)\s+)?syllabe\b|\bje\s+te\s+la\s+redis\b", RegexOptions.IgnoreCase)]
