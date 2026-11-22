@@ -151,6 +151,40 @@ namespace SchoolWebApp.Api.Services.Notifications
 
         private const string StyleLien = "color:#e8603c; font-weight:600; text-decoration:underline;";
 
+        /// <summary>
+        /// LE BOUTON (Min's, le 22/11/2026 : mail Black Friday, « Voir les
+        /// formules » doit être un vrai bouton). Un paragraphe qui ne contient
+        /// QUE `[[Voir les formules]](https://mimia.fr/tarifs)` devient un bouton.
+        ///
+        /// Syntaxe EXPLICITE, doubles crochets : la règle implicite « un lien
+        /// seul sur sa ligne = bouton » aurait changé sans prévenir tous les
+        /// modèles déjà enregistrés, et `ComposerCorps` sert aussi aux courriels
+        /// automatiques et à l'écriture à un parent. Lu sur le texte BRUT (avant
+        /// l'échappement) ; texte et adresse sont échappés à la sortie. Une
+        /// adresse qui n'est pas http(s) ne correspond pas : le paragraphe suit
+        /// le chemin normal et reste du texte.
+        /// </summary>
+        private static readonly Regex Bouton = new(
+            @"^\[\[([^\]\n]{1,80})\]\]\((https?://[^\s()<>""]+)\)$",
+            RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+        /// <summary>
+        /// Le bouton « à l'épreuve d'Outlook » : un tableau avec `bgcolor` (Outlook
+        /// ignore le fond et le padding d'un lien seul). Or #f5b301 et texte
+        /// #141414, les couleurs du bouton du thème Black Friday du site
+        /// (contraste ≈ 10:1). Hauteur 14 + 20 + 14 = 48 px, au-dessus des 44 px
+        /// d'une cible tactile.
+        /// </summary>
+        private static string ComposerBouton(string texte, string adresse) =>
+            "<table role=\"presentation\" align=\"center\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" "
+            + "style=\"margin:6px auto 24px auto;\"><tr>"
+            + "<td align=\"center\" bgcolor=\"#f5b301\" style=\"background-color:#f5b301; border-radius:12px;\">"
+            + $"<a href=\"{WebUtility.HtmlEncode(adresse)}\" style=\"display:inline-block; padding:14px 28px; "
+            + "font-family:-apple-system,'Segoe UI',Helvetica,Arial,sans-serif; font-size:16px; line-height:20px; "
+            + "font-weight:700; color:#141414; text-decoration:none; border-radius:12px;\">"
+            + $"{WebUtility.HtmlEncode(texte)}</a>"
+            + "</td></tr></table>";
+
         /// <summary>Les liens d'un bloc de texte déjà échappé.</summary>
         private static string Lier(string contenu)
         {
@@ -253,6 +287,16 @@ namespace SchoolWebApp.Api.Services.Notifications
 
             foreach (var bloc in blocs)
             {
+                // LE BOUTON, AVANT TOUT LE RESTE : le paragraphe entier est remplacé.
+                // Les variables du texte (`{{prenom}}`) sont remplacées puis
+                // échappées, comme dans le titre.
+                if (Bouton.Match(bloc.Trim()) is { Success: true } bouton
+                    && RemplacerVariables(bouton.Groups[1].Value, variables).Trim() is { Length: > 0 } texteBouton)
+                {
+                    sb.AppendLine(ComposerBouton(texteBouton, bouton.Groups[2].Value));
+                    continue;
+                }
+
                 var contenu = WebUtility.HtmlEncode(bloc.Trim()).Replace("\n", "<br>");
 
                 // LES LIENS, juste après l'échappement et avant le reste : les
@@ -549,7 +593,9 @@ namespace SchoolWebApp.Api.Services.Notifications
                     var valeurs = new Dictionary<string, string>
                     {
                         ["titre"] = sujetPersonnel,
-                        ["titreMessage"] = RemplacerVariables(titre, variables),
+                        // Le Titre est du TEXTE, comme le corps (22/11/2026) : échappé
+                        // APRÈS les variables, le prénom saisi par un parent compris.
+                        ["titreMessage"] = WebUtility.HtmlEncode(RemplacerVariables(titre, variables)),
                         ["corpsMessage"] = ComposerCorps(texte, images.Count, variables),
                         ["blocPiecesJointes"] = blocPieces,
                         ["mentionPied"] = offres

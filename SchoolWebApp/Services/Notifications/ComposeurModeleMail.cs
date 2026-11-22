@@ -73,7 +73,8 @@ namespace SchoolWebApp.Api.Services.Notifications
             var valeurs = new Dictionary<string, string>
             {
                 ["titre"] = sujet,
-                ["titreMessage"] = titre,
+                // Le Titre est du texte : échappé après les variables (22/11/2026).
+                ["titreMessage"] = System.Net.WebUtility.HtmlEncode(titre),
                 ["corpsMessage"] = _diffusion.ComposerCorps(modele.Texte ?? string.Empty, images.Count, variables),
                 ["blocPiecesJointes"] =
                     _diffusion.ComposerPiecesJointes(documents.Select(d => d.NomFichier).ToList()),

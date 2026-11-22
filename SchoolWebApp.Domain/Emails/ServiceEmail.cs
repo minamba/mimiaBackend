@@ -627,7 +627,11 @@ namespace SchoolWebApp.Domain.Emails
 
             var enveloppe = new Dictionary<string, string>(valeurs)
             {
-                ["titre"] = valeurs.TryGetValue("titre", out var t) ? t : sujet,
+                // LE <title> DE LA PAGE (22/11/2026) : l'objet est du texte brut
+                // (MimeKit l'encode à part pour l'en-tête) ; dans le HTML, il est
+                // échappé, sinon un « < » ou un « & » de l'objet casse l'en-tête.
+                ["titre"] = System.Net.WebUtility.HtmlEncode(
+                    valeurs.TryGetValue("titre", out var t) ? t : sujet),
                 ["contenu"] = contenu,
                 ["annee"] = DateTime.UtcNow.Year.ToString(),
                 ["urlSite"] = _options.UrlSite ?? "https://mimia.fr",
