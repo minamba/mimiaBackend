@@ -512,6 +512,36 @@ namespace SchoolWebApp.Api.Services
                     return;
                 }
 
+                // SEULEMENT LES MESSAGES DE CETTE PRÉPARATION, ET L'ENFANT DOIT
+                // Y AVOIR RÉPONDU (retest #54 d'Adam, 21/11/2026, reproduit sur
+                // master le 22/11). La « séance » regroupe tout ce qui n'a pas
+                // encore été observé : une préparation des plantes, puis
+                // l'ouverture d'un autre contrôle quitté sans un mot, et ce
+                // filet jugeait le NOUVEAU contrôle sur le travail des plantes
+                // — 60 % « Pas encore prêt ». Ce qui précède l'ouverture de la
+                // préparation appartient à une autre séance. Voir VerdictsDuTour.
+                var preparationSeule = VerdictsDuTour.DeLaPreparation(
+                    seance.Messages, m => m.Date, controle.DernierePreparationLe);
+
+                if (!VerdictsDuTour.EnfantARepondu(
+                        tourDArrivee: false, tourDeLEleve: false, controle.DernierePreparationLe,
+                        preparationSeule.Select(m => ((string?)m.Role, m.Date))))
+                {
+                    _logger.LogInformation(
+                        "Aucune conclusion pour le controle {ControleId} (seance {ConversationId}) : "
+                        + "l'eleve n'a rien repondu depuis l'ouverture de la preparation.",
+                        controle.Id, seance.ConversationId);
+                    return;
+                }
+
+                if (preparationSeule.Count < MessagesMinimumVerdict) return;
+
+                if (preparationSeule.Count != seance.Messages.Count)
+                {
+                    seance = CopieAvecMessages(seance, preparationSeule);
+                    debut = preparationSeule.Min(m => m.Date);
+                }
+
                 // Un verdict rendu pendant la séance suffit : le professeur a
                 // fait son travail, on ne repasse pas derrière lui.
                 var dejaJuge = await _controles.GetPreparationAsync(seance.EleveId, cible, ct);
@@ -735,6 +765,36 @@ namespace SchoolWebApp.Api.Services
             un enfant que tu parles : des phrases courtes, pas de jargon, pas
             de pourcentages recopiés, et un chemin plutôt qu'un constat.
             """;
+
+        /// <summary>
+        /// La même séance, réduite aux messages donnés (et aux exercices
+        /// archivés depuis le premier d'entre eux) — voir VerdictsDuTour. Une
+        /// copie : la séance d'origine sert encore à l'observation des
+        /// compétences, qui, elle, lit tout.
+        /// </summary>
+        private static SeanceAObserver CopieAvecMessages(SeanceAObserver seance, List<MessageObserve> messages)
+        {
+            var debut = messages.Min(m => m.Date);
+
+            return new SeanceAObserver
+            {
+                ConversationId = seance.ConversationId,
+                EleveId = seance.EleveId,
+                ElevePrenom = seance.ElevePrenom,
+                MatiereId = seance.MatiereId,
+                MatiereLibelle = seance.MatiereLibelle,
+                NiveauLibelle = seance.NiveauLibelle,
+                NiveauOrdre = seance.NiveauOrdre,
+                NiveauCode = seance.NiveauCode,
+                NiveauScolaireId = seance.NiveauScolaireId,
+                ModeSeance = seance.ModeSeance,
+                ModeControleId = seance.ModeControleId,
+                ModeEpreuveCode = seance.ModeEpreuveCode,
+                Jusqua = seance.Jusqua,
+                Messages = messages,
+                Exercices = seance.Exercices.Where(e => e.Date >= debut).ToList(),
+            };
+        }
 
         private async Task<string> AppelerConclusionAsync(
             SeanceAObserver seance, ControleScolaireEleve controle, CancellationToken ct)

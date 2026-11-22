@@ -4722,20 +4722,24 @@ namespace SchoolWebApp.Api.Builders.impl
                 // ignoré : c'est le code qui tient le cloisonnement, pas la
                 // mémoire du modèle.
                 //
-                // ET PAS AU TOUR D'ARRIVÉE, où l'élève n'a encore rien pu
-                // répondre (retest #54 d'Adam, 21/11/2026 : carte d'un contrôle
-                // neuf à 60 % « Pas encore prêt » avant toute réponse). Le
-                // programme posé à l'arrivée — lu dans son cours, par exemple —
-                // entre au périmètre, mais ses notions ne sont pas « travaillées »
-                // et aucun verdict ne s'écrit. Voir VerdictsDuTour.
+                // ET PAS TANT QUE L'ENFANT N'A RIEN RÉPONDU DANS CETTE
+                // PRÉPARATION (retest #54 d'Adam, 21/11/2026 : carte d'un
+                // contrôle neuf à 60 % « Pas encore prêt » sans une réponse —
+                // verdict du tour d'arrivée ou de la conclusion de départ). Le
+                // programme posé avant — lu dans son cours, par exemple — entre
+                // au périmètre, mais ses notions ne sont pas « travaillées » et
+                // aucun verdict ne s'écrit. Voir VerdictsDuTour.
                 if (mode == ModesSeance.Controle)
                 {
+                    var aRepondu = await EnfantARepondu(
+                        contexte.Eleve.Id, controleMode!.Value, nouvelleArrivee, typeAccueil, historique, ct);
+
                     await EnregistrerControleNotionsAsync(
                         conversationId, contexte.Eleve.Id, contexte.Conversation.MatiereId,
-                        contexte.Eleve.NiveauScolaireId, controleMode!.Value, resultat.TexteComplet, ct,
-                        travaillee: VerdictsDuTour.NotionsTravaillees(nouvelleArrivee));
+                        contexte.Eleve.NiveauScolaireId, controleMode.Value, resultat.TexteComplet, ct,
+                        travaillee: aRepondu);
 
-                    if (VerdictsDuTour.VerdictAccepte(nouvelleArrivee))
+                    if (aRepondu)
                     {
                         await EnregistrerControlePretAsync(
                             conversationId, contexte.Eleve.Id, contexte.Conversation.MatiereId,
@@ -4744,9 +4748,9 @@ namespace SchoolWebApp.Api.Builders.impl
                     else if (LecteurControlePret.Lire(resultat.TexteComplet) is not null)
                     {
                         _logger.LogWarning(
-                            "Verdict ignore : ecrit au tour d'arrivee, avant toute reponse de l'eleve "
-                            + "(controle {ControleId}, conversation {ConversationId}).",
-                            controleMode.Value, conversationId);
+                            "Verdict ignore : l'eleve n'a rien repondu dans cette preparation "
+                            + "(controle {ControleId}, conversation {ConversationId}, tour {Type}).",
+                            controleMode.Value, conversationId, typeAccueil);
                     }
                 }
 
@@ -4756,7 +4760,10 @@ namespace SchoolWebApp.Api.Builders.impl
                     conversationId, contexte.Eleve.Id, contexte.Conversation.MatiereId,
                     contexte.Eleve.NiveauScolaireId, resultat.TexteComplet, ct);
 
-                if (mode == ModesSeance.Examen && VerdictsDuTour.VerdictAccepte(nouvelleArrivee))
+                // L'épreuve n'a pas de date d'ouverture lue ici : seule la règle
+                // du tour d'arrivée s'applique (personne n'a encore parlé).
+                if (mode == ModesSeance.Examen
+                    && VerdictsDuTour.EnfantARepondu(nouvelleArrivee, typeAccueil == TypeAccueil.Aucun, null, []))
                 {
                     await EnregistrerExamenPretAsync(
                         conversationId, contexte.Eleve.Id, contexte.Eleve.NiveauCode,
@@ -5687,6 +5694,37 @@ namespace SchoolWebApp.Api.Builders.impl
                 _logger.LogError(ex,
                     "Echec de la cloture de correction (conversation {ConversationId}).", conversationId);
             }
+        }
+
+        /// <summary>
+        /// L'enfant a-t-il répondu depuis l'ouverture de CETTE préparation ?
+        /// Voir VerdictsDuTour. L'ouverture est relue en base (posée à
+        /// l'arrivée par MarquerPreparationControleAsync) ; si elle est
+        /// illisible, on ne bloque rien.
+        /// </summary>
+        private async Task<bool> EnfantARepondu(
+            int eleveId, int controleId, bool tourDArrivee, TypeAccueil typeAccueil,
+            IReadOnlyList<DomainMessage> historique, CancellationToken ct)
+        {
+            DateTime? ouverture = null;
+
+            if (!tourDArrivee && typeAccueil != TypeAccueil.Aucun)
+            {
+                try
+                {
+                    ouverture = (await _controles.GetAsync(eleveId, controleId, ct))?.DernierePreparationLe;
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    _logger.LogWarning(ex, "Ouverture de la preparation {ControleId} illisible.", controleId);
+                }
+            }
+
+            return VerdictsDuTour.EnfantARepondu(
+                tourDArrivee,
+                tourDeLEleve: typeAccueil == TypeAccueil.Aucun,
+                ouverture,
+                historique.Select(m => ((string?)m.Role, m.DateCreation)));
         }
 
         /// <summary>
