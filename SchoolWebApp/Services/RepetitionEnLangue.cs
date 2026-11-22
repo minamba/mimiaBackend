@@ -188,6 +188,20 @@ namespace SchoolWebApp.Api.Services
             + $@"(?:(?<fort>se\s+dit)|c['’]est|ça\s+donne|devient)\s*(?:en\s+\p{{L}}+\s*)?[:,]?\s*\[{balise}\][^\[\]]*?{Regex.Escape(mot)}\s*[!.?,]*\s*\[/{balise}\]",
             RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
+        /// <summary>
+        /// UNE DEMANDE DE RÉPÉTITION DANS LA LANGUE N'OUVRE PAS UN EXERCICE DE SONS — lot groupé, bout en bout QR2 sur c71d07a
+        /// (conv. de test 1073) : l'accueil du retour, « Écoute encore une fois, et essaie de reproduire le son, pas le mot
+        /// français. [EN]Blue[/EN] Tu répètes ? », faisait croire au code qu'un exercice de sons était en cours (« le son »),
+        /// et le tour suivant proposait la carte [CHOIX_EXERCICE_SONS] au lieu de reprendre Blue. Ici, « le son » veut dire
+        /// « prononce comme moi ». Une écoute (« qu'as-tu entendu ? ») ou une syllabe reste un exercice de sons.
+        /// </summary>
+        public static bool EstUneDemandeDeRepetitionEnLangue(string? texte) =>
+            texte is not null && Balise().IsMatch(texte) && DemandeDeRepetition().IsMatch(texte) && !EcouteOuSyllabe().IsMatch(texte);
+
+        [GeneratedRegex(@"\bqu['’]as[- ]tu\s+entendu|\bqu['’]est[- ]ce\s+que\s+tu\s+(?:as\s+)?entend|\bce\s+que\s+tu\s+(?:as\s+)?entend|\bj['’]ai\s+entendu\b|\bsyllabes?\b",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+        private static partial Regex EcouteOuSyllabe();
+
         /// <summary>Le professeur enseigne-t-il une langue étrangère ?</summary>
         public static bool Concerne(string? agentSlug) =>
             PromptsPedagogiques.LangueDe(agentSlug) is { } langue && !langue.Equals("fr", StringComparison.OrdinalIgnoreCase)

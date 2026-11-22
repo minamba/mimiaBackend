@@ -724,7 +724,10 @@ namespace SchoolWebApp.Api.Services.Voix
         public static bool EnExerciceDeSons(IEnumerable<string?> messagesRecents) =>
             // Une note de séance ne parle que de la séance finie (voir EstUneNoteDeSeance) : « reproduire le son anglais ».
             messagesRecents.Any(m => m is not null && !EstUneNoteDeSeance(m)
-                && (m.Contains(Prompts.PromptsPedagogiques.SonFait, StringComparison.Ordinal) || MentionDeSons().IsMatch(m)
+                && (m.Contains(Prompts.PromptsPedagogiques.SonFait, StringComparison.Ordinal)
+                    // « Essaie de reproduire le son. [EN]Blue[/EN] Tu répètes ? » : une répétition dans la langue, pas un exercice
+                    // de sons (RepetitionEnLangue.EstUneDemandeDeRepetitionEnLangue, conv. de test 1073).
+                    || (MentionDeSons().IsMatch(m) && !RepetitionEnLangue.EstUneDemandeDeRepetitionEnLangue(m))
                     // LA LECTURE EN IMAGES (07/11/2026) : l'image montrée, ou « je veux lire des mots », qui ne nomme aucun son.
                     || LectureDImage.Affiche(m) is not null || LectureDImage.ChoixDeLEnfant(m) is not null));
 
