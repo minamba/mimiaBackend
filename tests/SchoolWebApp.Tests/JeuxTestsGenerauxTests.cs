@@ -1,14 +1,19 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using SchoolWebApp.Api.Controllers;
+using SchoolWebApp.Api.Request;
+using SchoolWebApp.Api.Services;
 using SchoolWebApp.Api.Services.Notifications;
+using SchoolWebApp.Api.Services.Paiement;
 using SchoolWebApp.Api.Utils;
 using SchoolWebApp.Dal.Repositories;
 using SchoolWebApp.Domain.Emails;
 using SchoolWebApp.Domain.Models;
+using SchoolWebApp.Domain.Repositories;
 using SchoolWebApp.Domain.Services;
 using DomainJeu = SchoolWebApp.Domain.Models.JeuDeTest;
 
@@ -238,6 +243,127 @@ namespace SchoolWebApp.Tests
             Assert.Null(StatutsDeTest.Categorie("   "));
             Assert.Null(StatutsDeTest.Categorie(new string('a', 101)));
             Assert.Equal(new string('a', 100), StatutsDeTest.Categorie(new string('a', 100)));
+        }
+
+        /// <summary>
+        /// RETOUR D'OMAR (22/11/2026) : « Ajout d’enfant » (apostrophe typographique, liste de départ du front) et
+        /// « Ajout d'enfant » (clavier, API) faisaient DEUX catégories. On enregistre et on compare avec l'apostrophe droite.
+        /// </summary>
+        [Fact]
+        public void Une_categorie_ramene_l_apostrophe_typographique_a_l_apostrophe_droite()
+        {
+            Assert.Equal("Ajout d'enfant", StatutsDeTest.Categorie("Ajout d’enfant"));
+            Assert.Equal("Ajout d'enfant", StatutsDeTest.Categorie("ajout d‘enfant", ["Ajout d'enfant"]));
+            Assert.Equal("Ajout d'enfant", StatutsDeTest.Categorie("ajout d'enfant", ["Ajout d’enfant"]));
+            Assert.Equal("Ajout d'enfant", StatutsDeTest.Categorie("Ajout dʼenfant"));
+        }
+
+        [Fact]
+        public async Task Apostrophe_droite_ou_typographique_rejoignent_la_meme_categorie_en_base()
+        {
+            var jeu = await CreerJeuGenerauxAsync();
+            var controleur = Jeux();
+            var typographique = _categorie + " d’enfant";
+            var droite = _categorie + " d'enfant";
+
+            var un = Corps<DomainJeu>(await controleur.AjouterTest(jeu.Id, new TestDuJeuRequest { Titre = "Bloc 1", Categorie = typographique, Nombre = 1 }, default));
+            Assert.Equal(droite, Assert.Single(un.Tests).Matiere);
+
+            var deux = Corps<DomainJeu>(await controleur.AjouterTest(jeu.Id, new TestDuJeuRequest { Titre = "Bloc 2", Categorie = droite.ToLowerInvariant(), Nombre = 1 }, default));
+            Assert.All(deux.Tests, t => Assert.Equal(droite, t.Matiere));
+
+            // Une ancienne ligne écrite avec l'apostrophe typographique (avant ce correctif) : la liste n'en montre qu'une.
+            await using (var c = NouveauContexte())
+            {
+                var bloc = await c.TestsDesJeux.FirstAsync(t => t.JeuId == jeu.Id && t.Titre == "Bloc 2");
+                bloc.Matiere = typographique;
+                await c.SaveChangesAsync();
+            }
+
+            var categories = Corps<IReadOnlyList<string>>(await controleur.Categories(default));
+            var memes = categories.Where(c => StatutsDeTest.ApostropheDroite(c).Equals(droite, StringComparison.OrdinalIgnoreCase)).ToList();
+            Assert.Equal([droite], memes);
+        }
+
+        /// <summary>
+        /// RETOUR D'OMAR (22/11/2026) : « Traité » + rattachement dans le même « Enregistrer ». Le front rattache D'ABORD
+        /// puis modifie : le passage à « Traité » trouve alors la ligne, la remet « à tester » et le mail « prêt à être
+        /// testé » part. Dans l'ordre inverse (l'ancien), aucune ligne au moment du passage à « Traité » → aucun mail.
+        /// </summary>
+        [Fact]
+        public async Task Rattacher_puis_passer_a_traite_previent_la_personne_qui_teste()
+        {
+            var jeu = await CreerJeuGenerauxAsync();
+            var bloc = Assert.Single(Corps<DomainJeu>(await Jeux().AjouterTest(jeu.Id, new TestDuJeuRequest
+            {
+                Titre = "Abonnements", Categorie = _categorie, Nombre = 1,
+            }, default)).Tests);
+
+            var parent = await CreerParentAsync();
+            var depot = new SignalementRepository(NouveauContexte());
+
+            // Le nouvel ordre (front) : rattacher, puis « Traité ».
+            var bon = await depot.CreerAdminAsync(parent.Id, "AUTRE", "La formule la plus large mène aux tarifs.", null, null);
+            _signalements.Add(bon.Id);
+            Assert.Equal("ko", Corps<Signalement>(await Signalements().Rattacher(bon.Id, new RattachementJeuRequest
+            {
+                JeuId = jeu.Id, TestId = bloc.Id, Competence = "La formule pleine ne mène plus aux tarifs",
+            }, depot, default)).Test!.Statut);
+
+            var (email, envois) = FauxCourriel();
+            var r = await ModifierEnTraiteAsync(bon.Id, "La formule la plus large mène aux tarifs (corrigé).", email);
+            var apres = Corps<Signalement>(r);
+
+            var envoi = Assert.Single(envois);
+            Assert.Equal("testeur@exemple.test", envoi.Destinataire);
+            Assert.Equal("test-pret", envoi.Gabarit);
+            Assert.Contains("Prêt à être testé", envoi.Sujet);
+            Assert.Equal("Tests Généraux", System.Net.WebUtility.HtmlDecode(envoi.Valeurs["classe"]));
+            await using (var c = NouveauContexte())
+            {
+                var ligne = await c.LignesDeTest.SingleAsync(l => l.Id == apres.LigneDeTestId);
+                Assert.Equal("a_tester", ligne.Statut);
+                Assert.Equal("La formule la plus large mène aux tarifs (corrigé).", ligne.Commentaire);
+            }
+
+            // L'ancien ordre (« Traité » d'abord, rattachement ensuite) : pas de ligne au passage à « Traité », pas de mail.
+            var ancien = await depot.CreerAdminAsync(parent.Id, "AUTRE", "Autre bug.", null, null);
+            _signalements.Add(ancien.Id);
+            var (email2, envois2) = FauxCourriel();
+            await ModifierEnTraiteAsync(ancien.Id, "Autre bug.", email2);
+            await Signalements().Rattacher(ancien.Id, new RattachementJeuRequest { JeuId = jeu.Id, TestId = bloc.Id, Competence = "Autre" }, depot, default);
+            Assert.Empty(envois2);
+        }
+
+        private sealed record Envoi(string Destinataire, string Sujet, string Gabarit, IDictionary<string, string> Valeurs);
+
+        private static (Mock<IServiceEmail> Email, List<Envoi> Envois) FauxCourriel()
+        {
+            var envois = new List<Envoi>();
+            var email = new Mock<IServiceEmail>();
+            email.Setup(e => e.EnvoyerAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
+                    It.IsAny<IDictionary<string, string>>(), It.IsAny<CancellationToken>()))
+                .Callback<string, string, string, IDictionary<string, string>, CancellationToken>((d, s, g, v, _) => envois.Add(new Envoi(d, s, g, v)))
+                .ReturnsAsync(true);
+            return (email, envois);
+        }
+
+        private async Task<IActionResult> ModifierEnTraiteAsync(int id, string description, Mock<IServiceEmail> email)
+        {
+            var controleur = new AdminController(
+                Mock.Of<IAdminService>(), NullLogger<AdminController>.Instance,
+                new ComptesProteges(new ConfigurationBuilder().Build()),
+                Microsoft.Extensions.Options.Options.Create(new ExemptionFacturation()));
+
+            var roles = new Mock<IRolesRepository>();
+            roles.Setup(r => r.AdressesPourCourrielAsync(CourrielsDeRole.TestPret, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(["testeur@exemple.test"]);
+            var reglages = new Mock<IReglageRepository>();
+
+            return await controleur.ModifierSignalement(
+                id, new SignalementAdminRequest { Categorie = "AUTRE", Description = description, Etat = "traite" },
+                new Domain.Services.impl.SignalementService(new SignalementRepository(NouveauContexte()), Mock.Of<IStockageSignalements>()),
+                email.Object, new JeuxDeTestsRepository(NouveauContexte()), roles.Object, reglages.Object, default);
         }
 
         async Task IAsyncLifetime.DisposeAsync()

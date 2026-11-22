@@ -167,10 +167,11 @@ namespace SchoolWebApp.Dal.Repositories
                 .Distinct()
                 .ToListAsync(ct);
 
-            // Le tri et le dédoublonnage à la casse près se font ici : la collation de la base n'est pas celle du français.
+            // Le tri et le dédoublonnage à la casse et à l'apostrophe près se font ici : la collation de la base n'est
+            // pas celle du français, et « d’enfant » / « d'enfant » sont la même catégorie.
             return lues
                 .Where(c => !string.IsNullOrWhiteSpace(c))
-                .GroupBy(c => c.Trim(), StringComparer.CurrentCultureIgnoreCase)
+                .GroupBy(c => StatutsDeTest.ApostropheDroite(c.Trim()), StringComparer.CurrentCultureIgnoreCase)
                 .Select(g => g.Key)
                 .OrderBy(c => c, StringComparer.Create(new System.Globalization.CultureInfo("fr-FR"), ignoreCase: true))
                 .ToList();

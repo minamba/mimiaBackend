@@ -53,17 +53,28 @@ namespace SchoolWebApp.Domain.Models
         };
 
         /// <summary>
-        /// Une catégorie écrite à la main, mise au propre : espaces en trop retirés. Null si vide ou trop longue. Une
-        /// catégorie DÉJÀ EMPLOYÉE à la casse près reprend son orthographe (« ux » → « UX ») : pas de doublon de groupe.
+        /// Une catégorie écrite à la main, mise au propre : espaces en trop retirés, apostrophes typographiques (’ ‘ ʼ)
+        /// ramenées à l'apostrophe droite du clavier. Null si vide ou trop longue. Une catégorie DÉJÀ EMPLOYÉE à la casse
+        /// et à l'apostrophe près reprend son orthographe (« ux » → « UX », « Ajout d’enfant » → « Ajout d'enfant ») :
+        /// pas de doublon de groupe.
         /// </summary>
         public static string? Categorie(string? saisie, IEnumerable<string>? existantes = null)
         {
-            var propre = string.Join(' ', (saisie ?? string.Empty).Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+            var propre = ApostropheDroite(string.Join(' ', (saisie ?? string.Empty).Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)));
             if (propre.Length == 0 || propre.Length > CategorieMax) return null;
 
-            var deja = existantes?.FirstOrDefault(c => string.Equals(c, propre, StringComparison.CurrentCultureIgnoreCase));
+            var deja = existantes?
+                .Select(c => ApostropheDroite(c.Trim()))
+                .FirstOrDefault(c => string.Equals(c, propre, StringComparison.CurrentCultureIgnoreCase));
             return deja ?? propre;
         }
+
+        /// <summary>
+        /// « Ajout d’enfant » (apostrophe typographique, copiée d'un texte) et « Ajout d'enfant » (tapée au clavier) sont
+        /// la même catégorie : on enregistre et on compare toujours avec l'apostrophe droite.
+        /// </summary>
+        public static string ApostropheDroite(string texte) =>
+            texte.Replace('’', '\'').Replace('‘', '\'').Replace('ʼ', '\'');
 
         /// <summary>Au plus autant de lignes créées d'un coup : une faute de frappe ne doit pas en créer dix mille.</summary>
         public const int LignesMaxParAjout = 50;
