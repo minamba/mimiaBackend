@@ -37,20 +37,28 @@ namespace SchoolWebApp.Api.Services
         // Pas le morceau d'une expression plus longue qu'on ne sait pas lire : « (2 + 3) × 4 », « 1/2 + 1/4 »,
         // « 3² + 4 », « -4 + 3 », « 1 000 + 200 ». Les deux-points restent permis devant (« Calcule : 4 + 3 = ? »),
         // un mot aussi (« Calcule 4 + 3 »), le crochet de [ARDOISE] aussi.
-        private const string PasDeSuiteAvant = @"(?<![\d,./()^²³+\-−–×*÷=]\s*)(?<![\p{L}\d])";
+        // La virgule qui suit un MOT n'en fait pas partie : « Alors ça fait combien, 10 + 2 ? » (tâche 1941) ; celle d'un
+        // nombre, si : « 2,5 + 1 », « 12, 4 + 3 ».
+        // Un saut de ligne sépare aussi : au tableau, « 7 + 3 = 10⏎10 + 2 = ? » pose bien « 10 + 2 » (tâche 1941, conv. 703).
+        private const string PasDeSuiteAvant = @"(?<![\d./()^²³+\-−–×*÷=][ \t]*)(?<!(?<!\p{L}),\s*)(?<![\p{L}\d])";
         private const string PasDeSuiteApres = @"(?!\s*[\d/^²³(])";
 
-        /// <summary>« 4 + 3 = ? », « 23 × 14 = … », « 9 - 4 = ___ ».</summary>
-        [GeneratedRegex(PasDeSuiteAvant + @"(?<expr>" + ExpressionMotif + @")\s*=\s*(?:\?|…|\.{2,}|_+)", RegexOptions.IgnoreCase)]
+        /// <summary>« 4 + 3 = ? », « 23 × 14 = … », « 9 - 4 = ___ », « 10 + 2 = combien ? ».</summary>
+        [GeneratedRegex(PasDeSuiteAvant + @"(?<expr>" + ExpressionMotif + @")\s*=\s*(?:\?|…|\.{2,}|_+|combien(?!\s+(?:de|d'|d’)))", RegexOptions.IgnoreCase)]
         private static partial Regex EgalQuestion();
 
-        /// <summary>« Combien font 4 + 3 ? », « combien fait 8 moins 3 ».</summary>
-        [GeneratedRegex(@"combien\s+(?:font|fait|ça\s+fait|ca\s+fait|égalent|égale)\s+(?<expr>" + ExpressionMotif + @")" + PasDeSuiteApres
+        /// <summary>« Combien font 4 + 3 ? », « combien fait 8 moins 3 », « Combien ça fait, 10 + 2 ? ».</summary>
+        [GeneratedRegex(@"combien\s+(?:font|fait|ça\s+fait|ca\s+fait|cela\s+fait|ça\s+donne|ca\s+donne|égalent|égale)\s*,?\s+(?<expr>" + ExpressionMotif + @")" + PasDeSuiteApres
             + @"(?!\s*=)", RegexOptions.IgnoreCase)]
         private static partial Regex CombienFont();
 
-        /// <summary>« 4 + 3, ça fait combien ? », « Et 8 - 3 ? ».</summary>
-        [GeneratedRegex(PasDeSuiteAvant + @"(?<expr>" + ExpressionMotif + @")\s*(?:,?\s*(?:ça|ca|cela)\s+fait\s+combien|\?)",
+        /// <summary>
+        /// « 4 + 3, ça fait combien ? », « Et 8 - 3 ? », « Alors ça fait combien, 10 + 2 ? », « 10 + 2, c'est combien ? ».
+        /// Tâche 1941 (vu par Omar sur master) : la relance « Alors ça fait combien, 10 + 2 ? » n'était pas lue (la virgule
+        /// devant le calcul), aucun fait ne partait, et « 14 » a été validé.
+        /// </summary>
+        [GeneratedRegex(PasDeSuiteAvant + @"(?<expr>" + ExpressionMotif + @")\s*(?:,?\s*(?:(?:ça|ca|cela)\s+(?:fait|donne)\s+combien"
+            + @"|combien\s+(?:ça|ca|cela)\s+(?:fait|donne)|c['’]est\s+combien|(?:font|fait|égale|égalent|donne)\s+combien)(?!\s+(?:de|d'|d’))|\?)",
             RegexOptions.IgnoreCase)]
         private static partial Regex ExpressionInterrogee();
 
@@ -134,7 +142,9 @@ namespace SchoolWebApp.Api.Services
                 $"[Vérifié par l'application : la question posée était « {v.Question} », et la bonne réponse est "
                 + $"{v.Attendu}, pas {v.Donne}. L'élève a répondu « {v.Donne} » : c'est FAUX. Ne dis surtout pas que "
                 + "c'est juste, ne le félicite pas, et n'écris ni ne dis jamais une égalité fausse. Dis-lui que ce "
-                + "n'est pas encore ça et aide-le à retrouver le résultat sans le lui donner tout de suite (règle des trois essais)."
+                // Ni « tout de suite » (Camara, 11/11/2026 : on ne donne JAMAIS la réponse), ni de parenthèse qui nomme la
+                // règle : le professeur la recopiait en aparté, « (On garde 3e réponse fausse → …) » (tâche 1320).
+                + "n'est pas encore ça et aide-le à retrouver le résultat lui-même, sans jamais le lui donner."
                 + (v.Indice is null ? "" : " " + v.Indice) + "]",
             Jugement.Incomplet =>
                 $"[Vérifié par l'application : la question posée était « {v.Question} », et la bonne réponse est "
@@ -146,6 +156,78 @@ namespace SchoolWebApp.Api.Services
                 + "cette décomposition. Ne dis pas que c'est faux : dis-lui que ça fait bien ce nombre, puis "
                 + "demande-lui de le dire avec le moins d'unités possible.]",
         };
+
+        /// <summary>
+        /// LA RÉPONSE QUE L'ÉLÈVE CHERCHE ENCORE — tâche 1941 (Omar, master : « 7 + 5, ça fait 12 : je te le dis cette
+        /// fois », environ 10 réponses sur 40). La règle des essais (Camara, Min's : ne JAMAIS donner la réponse) ne
+        /// tient pas par le texte seul. Le code connaît la réponse attendue : <see cref="ReponseNonDonnee"/> la retire
+        /// de ce que le professeur écrit, dit et garde en mémoire.
+        ///
+        /// La question ouverte est celle du juge (calcul ou suite des nombres, jamais une décomposition : « 2 dizaines »
+        /// se dit pour expliquer), lue exactement comme pour le verdict. Rien à cacher si l'élève l'a trouvée (verdict
+        /// JUSTE) ou s'il a dit ce nombre, même dans une phrase que le juge ne lit pas (« c'est 12 ou 13 ? ») : le
+        /// professeur peut alors le reprendre. Null sinon, et null sans question lue.
+        /// </summary>
+        public static (string Question, decimal Valeur)? ReponseCherchee(IEnumerable<string?> messagesDuProfesseur, string? messageDeLEleve)
+        {
+            var messages = messagesDuProfesseur.ToList();
+            string enonce;
+            decimal valeur;
+            if (DerniereQuestion(messages) is { } question)
+            {
+                if (question.Decomposition is not null) return null;
+                if (!decimal.TryParse(question.Resultat.Replace(',', '.'), NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out valeur))
+                    return null;
+                enonce = question.Suite is { } s ? s.Enonce : question.Expression + " = ?";
+            }
+            else if (CalculToujoursOuvert(messages) is { } ouvert)
+            {
+                (enonce, valeur) = ouvert;
+            }
+            else
+            {
+                return null;
+            }
+
+            if (!string.IsNullOrWhiteSpace(messageDeLEleve))
+            {
+                if (Juger(messages, messageDeLEleve) is { Jugement: Jugement.Juste or Jugement.Incomplet }) return null;
+                if (NombresDuMessage(messageDeLEleve).Contains(valeur)) return null;
+            }
+
+            return (enonce, valeur);
+        }
+
+        /// <summary>
+        /// POUR LA PROTECTION SEULEMENT (jamais pour un verdict) — tâche 1941 (bout en bout, conv. 748) : « Lève 7 doigts.
+        /// Plie un doigt à la fois en comptant : 8, 9, 10, 11… Tu t'arrêtes à combien de doigts pliés ? » pose une
+        /// SOUS-QUESTION : le juge ne rend plus de verdict, à raison (l'élève peut répondre 5). Mais le calcul n'est pas
+        /// résolu pour autant, et le professeur a donné 12 au tour suivant. Le calcul posé le plus récemment (un seul
+        /// résultat) reste à protéger tant qu'aucun message plus récent ne le ferme : une félicitation, un tableau effacé,
+        /// une autre question de calcul, de décomposition ou de suite.
+        /// </summary>
+        private static (string Question, decimal Valeur)? CalculToujoursOuvert(IReadOnlyList<string?> messagesDuProfesseur)
+        {
+            foreach (var message in messagesDuProfesseur.Reverse().Take(MessagesRemontes))
+            {
+                if (string.IsNullOrWhiteSpace(message)) continue;
+
+                var calculs = Calculs(message, out var illisible);
+                if (illisible) return null;
+                if (calculs.Count > 0)
+                {
+                    return calculs.Select(c => c.Resultat).Distinct().Count() == 1 && calculs[0].Resultat >= 0
+                        ? (calculs[0].Expression + " = ?", calculs[0].Resultat)
+                        : null;
+                }
+
+                if (Felicite().IsMatch(message) || message.Contains("[TABLEAU_EFFACE]", StringComparison.OrdinalIgnoreCase)) return null;
+                if (Decompositions(message) is not { Count: 0 }) return null;
+                if (Suites(message) is { Count: > 0 }) return null;
+            }
+
+            return null;
+        }
 
         [GeneratedRegex(@"^\W*(?:oui|bravo|exact|super|parfait|génial|bien\s+joué|c'est\s+(?:ça|juste|bon))\b", RegexOptions.IgnoreCase)]
         private static partial Regex OuvertureQuiValide();
@@ -218,23 +300,55 @@ namespace SchoolWebApp.Api.Services
             // tous appartenir à la question retrouvée plus haut, sinon on ne sait pas de quoi la relance parle.
             var nombresDesRelances = new List<decimal>();
 
+            // Les mêmes, sans les nombres que la relance REFUSE ou prête à l'élève (« C'est encore 7 », « ce n'est pas 7 ») :
+            // pour une suite seulement (retest KO #53, conversation de test 813).
+            var nombresDesRelancesSansRefus = new List<decimal>();
+
             // Le rang que demande la relance la plus récente (« Combien d'unités restent, alors ? ») : '\0' tant
             // qu'aucune relance n'en demande, null si elle en demande plusieurs.
             char? rangDeLaRelance = '\0';
 
-            foreach (var message in messagesDuProfesseur.Reverse().Take(MessagesRemontes))
+            // Une relance traversée ne peut relancer qu'une suite des nombres (tableau réécrit, ou simple refus en tête).
+            var seulementUneSuite = false;
+
+            var recents = messagesDuProfesseur.Reverse().Take(MessagesRemontes).ToList();
+            for (var j = 0; j < recents.Count; j++)
             {
+                var message = recents[j];
                 if (string.IsNullOrWhiteSpace(message)) continue;
 
                 var calculs = Calculs(message, out var illisible);
                 if (illisible) return null;
+
+                // LA MÊME QUESTION, DÉCOMPOSÉE — tâche 1941 (vu par Omar sur master, conversation de test 457) : « [ARDOISE]
+                // 7 + 5 = ? 7 + 3 = 10 Il reste 2 à ajouter : 10 + 2 = ? [/ARDOISE] … Ça fait combien, 10 + 2 ? ». Deux
+                // calculs, donc aucun verdict, et « 14 » a reçu « Oui, c'est ça ! 10 + 2 = 12 ». Des calculs qui ont TOUS le
+                // même résultat attendent la même réponse : une seule question (ses nombres sont ceux de tous les calculs).
+                var operandesEnPlus = new HashSet<decimal>();
+                if (calculs.Count > 1 && calculs.Select(c => c.Resultat).Distinct().Count() == 1)
+                {
+                    foreach (var autre in calculs.Skip(1)) operandesEnPlus.UnionWith(Operandes(autre.Expression));
+                    calculs = [calculs[0]];
+                }
 
                 var decompositions = Decompositions(message);
                 if (decompositions is null) return null;
 
                 // Signalement #53 : « Après 73, qu'est-ce que tu dis ? », « 71, 72, 73… ? ».
                 var suites = Suites(message);
-                if (suites is null) return null;
+
+                // UNE RELANCE QUE LE JUGE DE SUITE NE SAIT PAS LIRE — tâche 1941 (bout en bout, conv. 749) : « compte
+                // encore 5 de plus en disant : 8, 9, 10, 11… à quel nombre tu arrives ? » (le pas annoncé, 5, n'est pas
+                // celui de la suite écrite) rendait le message illisible et faisait tomber le calcul posé plus haut : ni
+                // verdict, ni protection. Ce n'est illisible que pour une suite : si un calcul est posé plus haut, le
+                // message est lu comme ses autres relances (mêmes règles, plus bas).
+                if (suites is null)
+                {
+                    if (calculs.Count + decompositions.Count > 0
+                        || j + 1 >= recents.Count
+                        || DerniereQuestion(recents.Skip(j + 1).Reverse()) is not { Expression: not null }) return null;
+                    suites = [];
+                }
 
                 if (calculs.Count + decompositions.Count + suites.Count > 1) return null;
 
@@ -243,13 +357,32 @@ namespace SchoolWebApp.Api.Services
                     // Une relance « combien d'unités ? » ne parle pas d'une suite.
                     if (rangDeLaRelance != '\0') return null;
 
-                    // Une relance ne cite que les nombres de la suite (« Compte avec moi : 71, 72, 73… »), son pas, 1 ou 10.
                     var s = suites[0];
-                    var permis = s.Cites.Select(c => (decimal)c).Append(1).Append(10).ToHashSet();
-                    return nombresDesRelances.All(permis.Contains)
+
+                    // LA SUITE QUI COMPTE VERS LE RÉSULTAT D'UN CALCUL — tâche 1941 (corpus de test, conversation 489) :
+                    // après « Combien font 7 + 5 ? », la relance « Compte à partir de 7 : 8, 9, 10... continue jusqu'où ? » se
+                    // lisait comme la suite « 8, 9, 10… ? », qui attend 11 : « 12 », juste, aurait été jugé FAUX. Si un calcul
+                    // est posé plus haut et que la suite ne fait que compter vers son résultat (ses nombres et celui qu'elle
+                    // attend sont entre les termes et le résultat), c'est le calcul qu'on attend.
+                    if (j + 1 < recents.Count
+                        && DerniereQuestion(recents.Skip(j + 1).Reverse()) is { Expression: { } exprPlusHaut } calculPlusHaut
+                        && decimal.TryParse(calculPlusHaut.Resultat.Replace(',', '.'), NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out var resultatPlusHaut))
+                    {
+                        var permisDuCalcul = NombresDUneRelance(exprPlusHaut, resultatPlusHaut, []);
+                        if (s.Cites.All(c => permisDuCalcul.Contains(c)) && permisDuCalcul.Contains(s.Attendu))
+                        {
+                            return nombresDesRelances.All(permisDuCalcul.Contains) ? calculPlusHaut : null;
+                        }
+                    }
+
+                    // Une relance ne cite que les nombres de la suite (« Compte avec moi : 71, 72, 73… »), son pas, 1 ou 10.
+                    return nombresDesRelancesSansRefus.All(NombresDUneRelanceDeSuite(s).Contains)
                         ? new Question(null, s.Attendu.ToString(CultureInfo.InvariantCulture), null, s)
                         : null;
                 }
+
+                // Un tableau réécrit, ou une relance qui n'est qu'un refus (« Non, … »), ne laisse ouverte qu'une SUITE.
+                if (seulementUneSuite && calculs.Count + decompositions.Count > 0) return null;
 
                 if (calculs.Count == 1)
                 {
@@ -257,7 +390,7 @@ namespace SchoolWebApp.Api.Services
                     if (rangDeLaRelance != '\0') return null;
 
                     var (expression, resultat) = calculs[0];
-                    var operandes = Operandes(expression);
+                    var operandes = NombresDUneRelance(expression, resultat, operandesEnPlus);
                     return nombresDesRelances.All(operandes.Contains)
                         ? new Question(expression, Ecrire(resultat), null)
                         : null;
@@ -282,13 +415,22 @@ namespace SchoolWebApp.Api.Services
                     return new Question(null, d.N.ToString(CultureInfo.InvariantCulture), d);
                 }
 
-                // Un tableau réécrit ou effacé sans qu'on lise de question : l'exercice d'avant n'est plus affiché.
-                if (Regex.IsMatch(message, @"\[(?:ARDOISE|TABLEAU_EFFACE)\]", RegexOptions.IgnoreCase)) return null;
+                // Un tableau effacé sans qu'on lise de question : l'exercice d'avant n'est plus affiché.
+                if (Regex.IsMatch(message, @"\[TABLEAU_EFFACE\]", RegexOptions.IgnoreCase)) return null;
+
+                // UN TABLEAU RÉÉCRIT POUR RECOMPTER — retest KO #53 (Adam, 22/11/2026, en ligne b5dfd9f) : au 2e essai,
+                // Nora a refusé « Sept » en réécrivant la suite, « Pas tout à fait, Adam. On relit ensemble : 78, 79, 80...
+                // [ARDOISE]78, 79, 80, ...[/ARDOISE] … », sans question qu'on lise. Un tableau réécrit fermait la question :
+                // aucun verdict, et le 2e « sept » a été validé (« c'est bien 81 ! », 2 fois sur 2). Un tableau réécrit
+                // laisse donc ouverte une question de SUITE posée plus haut, si le message la relance (mots de relance ou
+                // refus en tête) et ne cite que des nombres du recomptage (vérifié quand on la retrouve). Pour un calcul ou
+                // une décomposition, rien ne change : le tableau réécrit sans question ferme l'exercice d'avant.
+                var tableauReecrit = Regex.IsMatch(message, @"\[ARDOISE\]", RegexOptions.IgnoreCase);
 
                 // Le message le plus récent ne pose rien, ne parle d'aucun nombre : la question d'avant reste ouverte
                 // (« Ce n'est pas encore ça. C'est ton dernier essai. »).
                 var nombres = NombresDuMessage(message);
-                if (!message.Contains('?') && nombres.Count == 0) continue;
+                if (!tableauReecrit && !message.Contains('?') && nombres.Count == 0) continue;
 
                 // LA RELANCE DE LA MÊME QUESTION — Minamba, le 20/11/2026, signalement #45 : après « 8 - 3 = ? » au
                 // tableau, Nora a relancé « Non, pas tout à fait Adam… Combien il en reste ? », sans réécrire le calcul.
@@ -298,7 +440,13 @@ namespace SchoolWebApp.Api.Services
                 // calcul. Sinon (« Maintenant, calcule 9 - 4. », « Combien de billes a Paul ? ») : on ne remonte plus.
                 // Une relance ne félicite pas : « Bravo, tu as trouvé le résultat ! Tu en veux un autre ? » clôt la question.
                 var rangs = RangDemande().Matches(message).Select(m => char.ToLowerInvariant(m.Groups["u"].Value[0])).Distinct().ToList();
-                if (!(RelanceDeCalcul().IsMatch(message) || rangs.Count > 0) || Felicite().IsMatch(message)) return null;
+
+                // Un refus en tête (« Non, regarde : 78, 79, 80… ») ou une relance douce (« Pas grave, tu peux me le
+                // redire ? ») relance aussi une SUITE (retest #53) ; un calcul garde ses seuls mots de relance.
+                var refus = (OuvertureQuiRefuse().IsMatch(message.TrimStart()) || RelanceDeSuite().IsMatch(message)) && !AutreChose().IsMatch(message);
+                if (!(RelanceDeCalcul().IsMatch(message) || rangs.Count > 0 || refus) || Felicite().IsMatch(message)) return null;
+                if (tableauReecrit && rangs.Count > 0) return null;
+                if (tableauReecrit || !(RelanceDeCalcul().IsMatch(message) || rangs.Count > 0)) seulementUneSuite = true;
 
                 // UNE RELANCE QUI POSE UNE SOUS-QUESTION — contrôle d'Omar, 20/11/2026 : « Pas encore. Lève 8 doigts.
                 // Combien de doigts tu as levés ? » après « 8 - 3 = ? ». L'élève répond 8, juste à CETTE question, et le
@@ -312,6 +460,8 @@ namespace SchoolWebApp.Api.Services
                 if (rangs.Count > 0 && Conversion().IsMatch(message)) return null;
 
                 nombresDesRelances.AddRange(nombres);
+                var refuses = NombresRefuses(message);
+                nombresDesRelancesSansRefus.AddRange(nombres.Where(x => !refuses.Contains(x)));
 
                 // Signalement #46 : seule la relance la plus récente dit ce qu'on attend maintenant.
                 if (rangDeLaRelance == '\0' && rangs.Count > 0) rangDeLaRelance = rangs.Count == 1 ? rangs[0] : null;
@@ -426,6 +576,47 @@ namespace SchoolWebApp.Api.Services
                 .Select(m => decimal.TryParse(m.Value.Replace(',', '.'), NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out var d) ? d : -1m)
                 .Concat(NombresEnLettres.Lire(sansBalises).Select(l => (decimal)l.Valeur))
                 .ToList();
+        }
+
+        /// <summary>
+        /// Les nombres qu'une RELANCE d'un calcul peut citer sans parler d'autre chose — tâche 1941 (bout en bout réel,
+        /// 3 séances sur 5) : « Montre-moi 7 doigts, puis ajoute un doigt à chaque fois : 8, 9, 10... », « après 7 tu dis
+        /// 8, puis 9, puis 10, puis 11… » citaient d'autres nombres que 7 et 5 : le juge abandonnait la question, le
+        /// professeur ne recevait aucun fait, validait « 14 » ou donnait 12. Une relance peut citer : les termes, le
+        /// comptage de l'un à l'autre jusqu'au résultat (résultat compris), et le passage par la dizaine d'une addition
+        /// (7 + 5 = 7 + 3 + 2 : 10, 3 et 2).
+        /// </summary>
+        private static HashSet<decimal> NombresDUneRelance(string expression, decimal resultat, HashSet<decimal> operandesEnPlus)
+        {
+            var permis = Operandes(expression);
+            permis.UnionWith(operandesEnPlus);
+            var bornes = permis.Append(resultat).ToList();
+
+            // « 1 de plus », « on avance de 1 en 1 » (le pas d'une suite qui compte vers le résultat, conversation 696), et
+            // les doigts d'un terme qu'on compte un par un : « ajoute 1, 2, 3, 4, 5 en comptant : 8, 9, 10, 11… » (693).
+            permis.Add(1);
+            foreach (var terme in Operandes(expression).Where(t => t == Math.Floor(t) && t >= 1 && t <= 20))
+            {
+                for (var n = 1m; n <= terme; n++) permis.Add(n);
+            }
+            var (min, max) = (bornes.Min(), bornes.Max());
+            if (bornes.All(b => b == Math.Floor(b)) && min >= 0 && max - min <= 30)
+            {
+                for (var n = min; n <= max; n++) permis.Add(n);
+            }
+
+            // Le passage par 10 : « 7 + 5 » → 7 + 3 = 10, puis 10 + 2.
+            var termes = NombreEnChiffres().Matches(expression).Select(m => decimal.Parse(m.Value.Replace(',', '.'), CultureInfo.InvariantCulture)).ToList();
+            if (termes.Count == 2 && expression.Contains('+') && resultat > 10)
+            {
+                foreach (var (a, b) in new[] { (termes[0], termes[1]), (termes[1], termes[0]) })
+                {
+                    var complement = 10 - a;
+                    if (complement > 0 && complement < b) permis.UnionWith([10, complement, b - complement]);
+                }
+            }
+
+            return permis;
         }
 
         private static HashSet<decimal> Operandes(string expression) =>
