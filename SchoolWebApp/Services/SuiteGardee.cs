@@ -36,7 +36,9 @@ namespace SchoolWebApp.Api.Services
         [GeneratedRegex(
             @"\bon\s+y\s+reviendra\b|\bon\s+(?:va\s+)?(?:la|le)\s+(?:garde[rz]?|reprendra|laisse[rz]?)\b|\bplus\s+tard\b"
             + @"|\bon\s+(?:va\s+)?pass(?:e|er)\s+à\s+(?:autre\s+chose|un\s+autre|une\s+autre|la\s+suite)\b|\bpassons\s+à\s+(?:autre\s+chose|un\s+autre|une\s+autre|la\s+suite)\b"
-            + @"|\b(?:on\s+(?:va\s+)?(?:fait|faire)|faisons)\s+autre\s+chose\b"
+            // « On garde ce nombre pour une autre fois. On continue autre chose maintenant. » (corpus réel v2, 3e essai) : « pour
+            // une autre fois » et « continuer autre chose » sont des abandons (« essaie une autre fois » n'en est pas un).
+            + @"|\b(?:on\s+(?:va\s+)?(?:fait|faire|continue[r]?)|faisons|continuons)\s+(?:avec\s+)?autre\s+chose\b|\bpour\s+une\s+autre\s+fois\b"
             + @"|\b(?:un|une)\s+autre\s+(?:petit\s+|petite\s+)?(?:exercice|jeu|question|calcul|activité)\b"
             + @"|\bune\s+autre\s+(?:petite\s+)?suite\b(?!\s+qu)"
             + @"|\bon\s+(?:va\s+)?laisse[rz]?\s+(?:cette|ce|celle-ci|celle-là|celui-ci|celui-là|ça|tomber)\b"

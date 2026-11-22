@@ -82,8 +82,9 @@ namespace SchoolWebApp.Api.Services
         {
             1 => PourToiSeul + "PREMIÈRE erreur sur cette question. Ce n'est pas son dernier essai : aide-le par un indice, et "
                  + "laisse-le réessayer. " + PasDeDernierEssai + "]",
-            2 => PourToiSeul + "DEUXIÈME erreur sur cette question. Ce n'est PAS encore son dernier essai : aide-le par un "
-                 + "indice, et laisse-le réessayer. " + PasDeDernierEssai + "]",
+            2 => PourToiSeul + "DEUXIÈME erreur sur cette question. Ce n'est PAS encore son dernier essai : ne dis surtout pas "
+                 + "« dernier essai » à ce tour, ni « une dernière fois », ni « dernière chance ». Aide-le par un indice, et "
+                 + "laisse-le réessayer.]",
             3 => PourToiSeul + "TROISIÈME erreur sur cette question. Reprends avec lui la notion, sans donner la réponse, puis "
                  + "laisse-lui UN DERNIER essai et dis-le-lui clairement, une seule fois : « c'est ton dernier essai ». Ne passe "
                  + "pas encore à une autre question : pas de « on y reviendra », pas de « on laisse celle-là », pas d'autre "
