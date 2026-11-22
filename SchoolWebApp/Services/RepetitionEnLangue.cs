@@ -112,7 +112,9 @@ namespace SchoolWebApp.Api.Services
             // « Tu peux essayer de redire ce son-là ? », « Tu veux essayer de le redire ? » (accueils NATURELS du retour, bout en
             // bout final du lot groupé v4 sur 8aa6e9d, QR1 conv. de test 1208, QR2 conv. 1210) : « essayer » n'était pas lu,
             // « Bleu! » n'était pas jugé, et le professeur l'a validé (« Bravo, cette fois c'est le bon son ! »).
-            + @"|\bà\s+ton\s+tour\b|\bessa(?:ie|yer|yez)\s+de\s+(?:le\s+|la\s+|l['’]\s*)?(?:dire|répéter|redire|prononcer)\b|\bdis[- ](?:le|la)\b|\bcomme\s+moi\b"
+            // « Essaie encore de me dire bleu en anglais : [EN]Blue[/EN] » (accueil NATUREL du retour, bout en bout de la tâche
+            // 0000o sur dc8c86b, QR1 conv. de test 1258) : « encore » et « me » n'étaient pas lus, « Bleu! » n'était pas jugé.
+            + @"|\bà\s+ton\s+tour\b|\bessa(?:ie|yer|yez)\s+(?:encore\s+|à\s+nouveau\s+|une\s+(?:autre|nouvelle)\s+fois\s+)?de\s+(?:me\s+|m['’]\s*|le\s+|la\s+|l['’]\s*)*(?:dire|répéter|redire|prononcer)\b|\bdis[- ](?:le|la)\b|\bcomme\s+moi\b"
             // « Essaie de faire le même son que moi. », « Essaie de dire ce son-là » (bout en bout de la tâche 1600) : des demandes
             // d'imitation, donc de répétition (le mot à redire reste celui de la balise : sans balise, rien n'est jugé).
             + @"|\bmême\s+(?:son|mot)\s+que\s+moi\b|\bpareil\s+que\s+moi\b"
@@ -452,15 +454,27 @@ namespace SchoolWebApp.Api.Services
         /// LE RAPPEL DE FIN DE CONSIGNES, AU TOUR D'UNE TRADUCTION REFUSÉE — tâche 0000o (22/11/2026, décision du coordinateur,
         /// règle de Min's « des consignes plutôt que des filtres ») : le filtre <see cref="FelicitationRefusee"/> n'est plus
         /// branché (il cassait des phrases, 4e tour de contrôle d'Omar). Le fait du tour le disait déjà, mais loin dans les
-        /// consignes : ce rappel court vient en DERNIER, juste avant que le professeur réponde. Pas de phrase toute faite à
-        /// recopier, pas de nombre. Générique : écoute des mots (micro, clavier) et répétition / traduction en langue.
+        /// consignes : ce rappel court vient en DERNIER, juste avant que le professeur réponde. Pas de nombre. Générique : écoute
+        /// des mots (micro, clavier) et répétition / traduction en langue.
+        ///
+        /// Bout en bout sur dc8c86b (QE1, QR1) : avec la seule liste des félicitations interdites, le professeur félicitait encore
+        /// la compréhension du SENS (« tu as bien compris le sens, c'est super ! », « tu connais bien le sens, bravo ! »). Quand
+        /// le code connaît le mot français (<paramref name="mot"/>), il donne la PREMIÈRE phrase, sobre, à dire telle quelle
+        /// (une consigne, rien n'est retiré de la réponse) ; et le compliment sur le sens est nommé dans l'interdit.
         /// </summary>
-        public static string RappelTraductionRefusee(string langue, bool sensCompris = true, bool redemander = true) =>
-            "[Rappel pour ce tour : sa réponse est le mot FRANÇAIS, elle est refusée. Aucune félicitation dans ton message, "
-            + "nulle part (ni « bravo », ni « très bien », ni « super », ni « parfait », ni « bien joué », ni « c'est top »)"
-            + (sensCompris ? " ; tu peux seulement lui dire qu'il a compris le sens" : string.Empty)
-            + (redemander ? $". Dis-lui que c'est le mot en français, puis redemande-lui le mot en {langue}.]"
-                : ". Dis-lui que c'est le mot en français, puis fais ce que le fait de ce tour demande (on ne lui redemande pas ce mot).]");
+        public static string RappelTraductionRefusee(string langue, bool sensCompris = true, bool redemander = true, string? mot = null)
+        {
+            var premiere = redemander && !string.IsNullOrWhiteSpace(mot) && mot.Length <= 30 && !mot.Contains('[')
+                ? " Commence ton message EXACTEMENT par cette phrase, sans rien devant : « " + Majuscule(mot.Trim().TrimEnd('!', '.', '?', ',').Trim())
+                  + (sensCompris ? ", c'est le mot en français : tu as compris le sens. »" : ", c'est le mot en français. »")
+                : string.Empty;
+            return "[Rappel pour ce tour : sa réponse est le mot FRANÇAIS, elle est refusée." + premiere
+                + " AUCUN compliment nulle part dans ton message, même pour le sens : ni « bravo », ni « super », ni « c'est super », "
+                + "ni « très bien », ni « parfait », ni « bien joué », ni « c'est top », ni « génial »"
+                + (sensCompris && premiere.Length == 0 ? " ; tu peux seulement dire, sobrement, qu'il a compris le sens" : string.Empty)
+                + (redemander ? $". Dis-lui que c'est le mot en français, puis redemande-lui le mot en {langue}.]"
+                    : ". Dis-lui que c'est le mot en français, puis fais ce que le fait de ce tour demande (on ne lui redemande pas ce mot).]");
+        }
 
         /// <summary>
         /// Les mots à répéter du dernier message : ceux de la balise de la langue (sans les consignes « Repeat! »), et, en

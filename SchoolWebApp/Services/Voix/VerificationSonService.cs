@@ -1372,6 +1372,16 @@ namespace SchoolWebApp.Api.Services.Voix
         /// anglais. » — « tu as compris le sens » reste (décision de Min's du 22/11, 00 h 04). Null hors d'une traduction
         /// refusée dans une langue étrangère.
         /// </summary>
+        /// <summary>Le mot français d'un verdict d'écoute refusé pour traduction (« J'ai entendu le mot deux (en français). » →
+        /// « deux ») ; null sinon. Sert au rappel de fin de consignes (RepetitionEnLangue.RappelTraductionRefusee, tâche 0000o).</summary>
+        public static string? MotDeLaTraduction(string? messageDeLEleve)
+        {
+            if (!EstUneTraductionEntendue(messageDeLEleve)) return null;
+            var m = MotTraduit().Match(messageDeLEleve!);
+            var mot = m.Success ? m.Groups["mot"].Value.Trim() : string.Empty;
+            return mot.Length is > 0 and <= 30 && !mot.Contains('[') ? mot : null;
+        }
+
         public static string? ExplicationDeLaTraduction(string? messageDeLEleve, string langue)
         {
             if (langue != LanguesDesSons.Anglais || !EstUneTraductionEntendue(messageDeLEleve)) return null;

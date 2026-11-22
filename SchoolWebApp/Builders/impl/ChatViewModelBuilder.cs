@@ -4556,7 +4556,11 @@ namespace SchoolWebApp.Api.Builders.impl
                 declencheur += "\n\n" + RepetitionEnLangue.RappelTraductionRefusee(
                     repetitionEnLangue?.Langue ?? (langueDuSon == SchoolWebApp.Domain.Repositories.LanguesDesSons.Anglais ? "anglais" : "langue étudiée"),
                     sensCompris: repetitionEnLangue?.Nature != RepetitionEnLangue.Demande.Traduire,
-                    redemander: !repetitionAuDernierEssai && abandon is null);
+                    redemander: !repetitionAuDernierEssai && abandon is null,
+                    // Le mot français qu'il a dit : la première phrase, sobre, que le code lui donne à dire.
+                    mot: repetitionEnLangue is { } rep
+                        ? (rep.Nature == RepetitionEnLangue.Demande.Traduire ? rep.Dit : rep.Francais)
+                        : Services.Voix.RegleVerificationSon.MotDeLaTraduction(contenu));
             }
 
             // « DERNIER ESSAI » TROP TÔT AU RETOUR (décision de Min's du 22/11, 07h58 : au retour, le compte repart de zéro ;
