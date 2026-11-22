@@ -21,7 +21,7 @@ namespace SchoolWebApp.Api.Services
         [GeneratedRegex(
             // « tu en as compris le sens, c'est déjà bien ! » (bout en bout QE1 sur c71d07a, conv. de test 1070) : « déjà bien »
             // part ; « c'est bien le mot français » (un constat) reste.
-            @"(?:\s*,\s*|\s*[—–]\s*|\s+)?(?:\bet\s+)?(?:\bça\s+|\bca\s+)?\bc['’]est\s+(?:(?:vraiment|trop|déjà|deja|quand\s+même|tout\s+de\s+même)\s+)?(?:très\s+bien|bien\s+joué|super|top|génial|genial|parfait|formidable|excellent|chouette|bravo|(?:déjà|deja)\s+bien(?!\s+(?:le|la|les|l['’]|un|une|du|des|de|ce|cette|ça|ca)\b))\b(?:\s+de\s+ta\s+part|\s+pour\s+[^!.?,;:\n\[]{1,40})?\s*(?:[!]+|,)?(?=\s|$|[.!?…])"
+            @"(?:\s*,\s*|\s*[—–]\s*|\s+)?(?:\bet\s+)?(?:\bça\s+|\bca\s+)?\bc['’]est\s+(?:(?:vraiment|trop|déjà|deja|quand\s+même|tout\s+de\s+même)\s+)?(?:très\s+bien|bien\s+joué|super|top|génial|genial|parfait|formidable|excellent|chouette|bravo|(?:déjà|deja)\s+bien(?=\s*(?:[!.,…]|$)))\b(?:\s+de\s+ta\s+part|\s+pour\s+[^!.?,;:\n\[]{1,40})?\s*(?:[!]+|,)?(?=\s|$|[.!?…])"
             // « Bon, et bravo pour l'effort de répéter ! » (bout en bout QR2, conv. de test 949) : « et » devant, « pour … » derrière.
             + @"|(?:\s*,\s*|(?<=^|[.!?…\n])\s*)(?:\bet\s+)?\b(?:bravo|très\s+bien|super|génial|parfait|bien\s+joué)\b(?:\s+pour\s+[^!.?,;:\n\[]{1,40}|(?-i:\s+\p{Lu}\p{Ll}+))?\s*(?:!+|,|\.(?!\.))?(?=\s|$)",
             RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
