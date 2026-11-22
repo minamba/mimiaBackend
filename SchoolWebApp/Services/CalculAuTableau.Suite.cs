@@ -332,6 +332,11 @@ namespace SchoolWebApp.Api.Services
             {
                 if (AvantUnNombreRefuse().IsMatch(texte[..m.Index]))
                     refuses.Add(int.Parse(m.Value, CultureInfo.InvariantCulture));
+                // « 80, c'est 8 dizaines. » (bout en bout final du lot groupé v3, série 7, conv. de test 1147) : un nombre de
+                // dizaines ou d'unités EXPLIQUE un nombre de la suite, ce n'est pas un autre exercice. Il fermait la question
+                // « après 80 » : au 3e essai, ni verdict ni réponse protégée, et « Après 80 vient 81. » est parti.
+                else if (Regex.IsMatch(texte[(m.Index + m.Length)..], @"^\s*(?:dizaines?|unit[ée]s?)(?!\p{L})", RegexOptions.IgnoreCase))
+                    refuses.Add(int.Parse(m.Value, CultureInfo.InvariantCulture));
             }
             return refuses;
         }

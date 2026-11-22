@@ -4568,7 +4568,7 @@ namespace SchoolWebApp.Api.Builders.impl
                         && !c!.TrimStart().StartsWith("[FICHE]", StringComparison.OrdinalIgnoreCase)
                         && !c.TrimStart().StartsWith("[RAPPORT]", StringComparison.OrdinalIgnoreCase))
                     .TakeLast(CalculAuTableau.MessagesRemontes))
-                ? new AnalogieDeSuite.Filtre(suiteCherchee.Question)
+                ? new AnalogieDeSuite.Filtre(suiteCherchee.Question, suiteCherchee.Valeur)
                 : null;
 
             // LE TEXTE BRUT DU MODÈLE, AU JOURNAL DE MISE AU POINT — contrôle d'Omar sur le lot groupé v2 (points 7 et 8) : pour
@@ -4879,7 +4879,7 @@ namespace SchoolWebApp.Api.Builders.impl
                 if (filtreFelicitation is not null) contenuPersiste = FelicitationRefusee.Retirer(contenuPersiste);
                 if (filtreDernierEssai is not null) contenuPersiste = DernierEssaiTropTot.Retirer(contenuPersiste, rangPourDernierEssai);
                 if (filtreAnalogie is not null && reponseCherchee is { } suiteProtegee)
-                    contenuPersiste = AnalogieDeSuite.Retirer(contenuPersiste, suiteProtegee.Question);
+                    contenuPersiste = AnalogieDeSuite.Retirer(contenuPersiste, suiteProtegee.Question, suiteProtegee.Valeur, out _);
 
                 // L'historique dit ce que l'élève a vu et entendu : le mot remplacé n'y revient pas.
                 if (filtreMots is not null) contenuPersiste = filtreMots.Corriger(contenuPersiste);

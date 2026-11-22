@@ -22,21 +22,41 @@ namespace SchoolWebApp.Api.Services
         /// « comme quand … », « comme après / avant … », « comme pour 20 », « comme vingt-et-un », « n'importe quel nombre »,
         /// « tu te souviens de 9, 10 », « c'est pareil qu'après 70 ». « Comme tout à l'heure », « comme moi » restent.
         /// </summary>
-        [GeneratedRegex(
+        private const string AnalogieTexte =
             @"^.*?(?:\bcomme\s+(?:quand|lorsque)\b|\bcomme\s+(?:après|apres|avant)\b|\bcomme\s+(?:pour|avec)\s+(?:le\s+|les\s+)?(?:nombres?\s+)?\d"
             + @"|\bcomme\s+(?:vingt|trente|quarante|cinquante|soixante|cent)\b|\bn['’]importe\s+quel(?:le)?\s+(?:nombre|dizaine)\b"
-            + @"|\btu\s+te\s+(?:souviens|rappelles)\s+(?:de\s+)?\d|\b(?:pareil|la\s+même\s+chose)\s+qu(?:e\s+|['’]\s*)(?:après|apres|avant|pour|quand|\d))[^\n]*$",
-            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+            + @"|\btu\s+te\s+(?:souviens|rappelles)\s+(?:de\s+)?\d|\b(?:pareil|la\s+même\s+chose)\s+qu(?:e\s+|['’]\s*)(?:après|apres|avant|pour|quand|\d))[^\n]*$";
+
+        [GeneratedRegex(AnalogieTexte, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
         private static partial Regex Analogie();
+
+        private static readonly string[] Unites = ["zéro", "(?:un|une)", "deux", "trois", "quatre", "cinq", "six", "sept", "huit", "neuf"];
+
+        /// <summary>
+        /// LA RÉPONSE DONNÉE EN DIZAINES ET UNITÉS — bout en bout final du lot groupé v3 (série 7, conv. de test 1147) : « 80,
+        /// c'est 8 dizaines. Le nombre juste après, c'est 8 dizaines et 1 : essaie de le dire. » (= 81, la réponse). La phrase
+        /// qui dit « D dizaines et U » égal au nombre cherché part aussi (U de 1 à 9, en chiffres ou en lettres).
+        /// </summary>
+        public static Regex Motif(decimal? valeur)
+        {
+            if (valeur is not { } v || v != Math.Floor(v) || v < 11 || v > 9999 || v % 10 == 0) return Analogie();
+            var d = (int)(v / 10);
+            var u = (int)(v % 10);
+            var dizaines = d < 10 ? $"(?:{d}|{Unites[d]})" : d.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            var decomposee = @"|^.*?(?<![\d,])" + dizaines + @"\s+dizaines?\s*(?:et|\+|,)\s*(?:" + u + "|" + Unites[u] + @")(?![\d\p{L}])[^\n]*$";
+            return new Regex(AnalogieTexte + decomposee, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        }
 
         /// <summary>« quel nombre vient juste après 80 » → « Quel nombre vient juste après 80 ? ».</summary>
         public static string QuestionDuCode(string enonce) =>
             string.IsNullOrWhiteSpace(enonce) ? string.Empty : char.ToUpperInvariant(enonce.Trim()[0]) + enonce.Trim()[1..] + " ?";
 
         /// <summary>Le texte entier (historique) : mêmes retraits que le flux, même question remise.</summary>
-        public static string Retirer(string? texte, string enonce, out int retraits)
+        public static string Retirer(string? texte, string enonce, out int retraits) => Retirer(texte, enonce, null, out retraits);
+
+        public static string Retirer(string? texte, string enonce, decimal? valeur, out int retraits)
         {
-            var r = FelicitationRefusee.ParPhrase(texte, Analogie(), out retraits);
+            var r = FelicitationRefusee.ParPhrase(texte, Motif(valeur), out retraits);
             if (retraits > 0 && texte!.Contains('?') && !r.Contains('?')) r += "\n\n" + QuestionDuCode(enonce);
             return r;
         }
@@ -44,9 +64,9 @@ namespace SchoolWebApp.Api.Services
         public static string Retirer(string? texte, string enonce) => Retirer(texte, enonce, out _);
 
         /// <summary>Le filtre du flux : phrase par phrase ; à la fin, la question du code si la seule question est partie.</summary>
-        public sealed class Filtre(string enonce)
+        public sealed class Filtre(string enonce, decimal? valeur = null)
         {
-            private readonly FelicitationRefusee.Filtre _phrases = new(Analogie());
+            private readonly FelicitationRefusee.Filtre _phrases = new(Motif(valeur));
             private bool _questionEntree;
             private bool _questionSortie;
 
