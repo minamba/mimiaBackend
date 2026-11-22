@@ -3636,6 +3636,7 @@ namespace SchoolWebApp.Api.Builders.impl
             // `ReponseChiffree` : le 19/09/2026, « six » pour 3 × 2 a été reçu
             // par « Presque ! », sans que le professeur ait rien calculé.
             CalculAuTableau.Verdict? verdictCalcul = null;
+            int? rangDeLErreur = null;
             if (ReponseChiffree.Contient(contenu))
             {
                 // LE VERDICT D'UN CALCUL SIMPLE, COMPTÉ PAR LE CODE — Minamba, le 20/11/2026, signalement #29 rouvert
@@ -3665,6 +3666,7 @@ namespace SchoolWebApp.Api.Builders.impl
                 if (faitCalcul is not null && CalculAuTableau.RangDeLErreur(
                         historique.Select(m => ((string?)m.Role, (string?)m.Contenu)).ToList(), verdictCalcul!) is int rangErreur)
                 {
+                    rangDeLErreur = rangErreur;
                     faitCalcul += "\n\n" + CalculAuTableau.FaitRangDeLErreur(rangErreur);
                     _logger.LogInformation("Calcul faux : erreur numero {Rang} sur la question (conversation {ConversationId}).", rangErreur, conversationId);
                 }
@@ -4546,6 +4548,9 @@ namespace SchoolWebApp.Api.Builders.impl
                 ? new FelicitationRefusee.Filtre()
                 : null;
 
+            // « DERNIER ESSAI » TROP TÔT — voir DernierEssaiTropTot : aux 1re et 2e erreurs comptées par le code, l'annonce part.
+            var filtreDernierEssai = DernierEssaiTropTot.TropTot(rangDeLErreur) ? DernierEssaiTropTot.Filtre() : null;
+
             await foreach (var fragment in _agent.RepondreAsync(
                 contexte.Eleve, contexte.Conversation, historique, declencheur, bilan,
                 TypeTache.Dialogue, typeAccueil, depuis, secondesRestantes,
@@ -4553,6 +4558,7 @@ namespace SchoolWebApp.Api.Builders.impl
             {
                 var accorde = filtreAccord.Passer(filtreApartes.Passer(fragment.Texte));
                 if (filtreFelicitation is not null) accorde = filtreFelicitation.Passer(accorde);
+                if (filtreDernierEssai is not null) accorde = filtreDernierEssai.Passer(accorde);
                 if (filtreMots is not null) accorde = filtreMots.Passer(accorde);
                 if (filtreVoixEnClair is not null) accorde = filtreVoixEnClair.Passer(accorde);
                 if (filtreNombres is not null) accorde = filtreNombres.Passer(accorde);
@@ -4578,6 +4584,15 @@ namespace SchoolWebApp.Api.Builders.impl
                 {
                     _logger.LogInformation("Felicitation retiree apres une traduction refusee ({Nombre}) (conversation {ConversationId}).",
                         filtreFelicitation.Retraits, conversationId);
+                }
+            }
+            if (filtreDernierEssai is not null)
+            {
+                finAccordee = filtreDernierEssai.Passer(finAccordee) + filtreDernierEssai.Terminer();
+                if (filtreDernierEssai.Retraits > 0)
+                {
+                    _logger.LogInformation("Dernier essai annonce trop tot (erreur numero {Rang}) : retire (conversation {ConversationId}).",
+                        rangDeLErreur, conversationId);
                 }
             }
             if (filtreMots is not null)
@@ -4821,6 +4836,7 @@ namespace SchoolWebApp.Api.Builders.impl
 
                 // Pas de félicitation gardée après une traduction refusée : l'écran ne l'a pas montrée (FelicitationRefusee).
                 if (filtreFelicitation is not null) contenuPersiste = FelicitationRefusee.Retirer(contenuPersiste);
+                if (filtreDernierEssai is not null) contenuPersiste = DernierEssaiTropTot.Retirer(contenuPersiste);
 
                 // L'historique dit ce que l'élève a vu et entendu : le mot remplacé n'y revient pas.
                 if (filtreMots is not null) contenuPersiste = filtreMots.Corriger(contenuPersiste);

@@ -29,7 +29,10 @@ namespace SchoolWebApp.Api.Services
         private static partial Regex Phrases();
 
         /// <summary>Le texte entier, phrase par phrase (même découpage que <see cref="Filtre"/>).</summary>
-        public static string Retirer(string? texte, out int retraits)
+        public static string Retirer(string? texte, out int retraits) => ParPhrase(texte, Felicitation(), out retraits);
+
+        /// <summary>Le motif retiré phrase par phrase, avec le même découpage que le filtre du flux.</summary>
+        internal static string ParPhrase(string? texte, Regex motif, out int retraits)
         {
             retraits = 0;
             if (string.IsNullOrEmpty(texte)) return texte ?? string.Empty;
@@ -37,14 +40,14 @@ namespace SchoolWebApp.Api.Services
             foreach (Match m in Phrases().Matches(texte))
             {
                 if (m.Length == 0) continue;
-                sortie.Append(RetirerDeLaPhrase(m.Value, ref retraits));
+                sortie.Append(RetirerDeLaPhrase(m.Value, motif, ref retraits));
             }
             return sortie.ToString();
         }
 
         public static string Retirer(string? texte) => Retirer(texte, out _);
 
-        private static string RetirerDeLaPhrase(string phrase, ref int retraits)
+        private static string RetirerDeLaPhrase(string phrase, Regex motif, ref int retraits)
         {
             // Les balises (voix, tableau) ne sont jamais touchées : la phrase qui en porte une part telle quelle.
             if (phrase.Contains('[')) return phrase;
@@ -55,7 +58,7 @@ namespace SchoolWebApp.Api.Services
             var corps = phrase[..fin.Index];
 
             var n = 0;
-            corps = Felicitation().Replace(corps, m =>
+            corps = motif.Replace(corps, m =>
             {
                 n++;
                 var v = m.Value.Trim();
@@ -80,8 +83,9 @@ namespace SchoolWebApp.Api.Services
         }
 
         /// <summary>Le filtre du flux : retient la phrase en cours, rend chaque phrase finie, nettoyée.</summary>
-        public sealed class Filtre
+        public sealed class Filtre(Regex? motif = null)
         {
+            private readonly Regex _motif = motif ?? Felicitation();
             private readonly StringBuilder _tampon = new();
             private int _retraits;
 
@@ -109,7 +113,7 @@ namespace SchoolWebApp.Api.Services
                 var fini = texte[..coupe];
                 _tampon.Remove(0, coupe);
                 var r = 0;
-                var sortie = Retirer(fini, out r);
+                var sortie = ParPhrase(fini, _motif, out r);
                 _retraits += r;
                 return sortie;
             }
@@ -118,7 +122,7 @@ namespace SchoolWebApp.Api.Services
             {
                 var reste = _tampon.ToString();
                 _tampon.Clear();
-                var sortie = Retirer(reste, out var r);
+                var sortie = ParPhrase(reste, _motif, out var r);
                 _retraits += r;
                 return sortie;
             }

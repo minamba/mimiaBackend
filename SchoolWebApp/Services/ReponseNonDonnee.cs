@@ -141,7 +141,9 @@ namespace SchoolWebApp.Api.Services
         /// <summary>Un nombre en lettres : des mots-nombres liés par des traits d'union, ou « vingt et un ».</summary>
         private const string MotNombre = @"(?:zéro|zero|un|une|deux|trois|quatre|cinq|six|sept|huit|neuf|dix|onze|douze|treize|quatorze|quinze|seize|vingts?|trente|quarante|cinquante|soixante|cents?|mille)";
 
-        [GeneratedRegex(@"(?<![\p{L}\d])(?:(?<chiffres>\d{1,9}(?:,\d{1,6})?)(?![\d\p{L}])|(?<lettres>" + MotNombre + @"(?:(?:-|-et-|\s+et\s+(?=(?:un|une|onze)(?!\p{L})))" + MotNombre + @")*)(?![\p{L}\d]))",
+        // « quatre-vingt... et un » (bout en bout du lot groupé, 22/11/2026, conv. de test 903) : des points de suspension
+        // avant « et un / et une / et onze » relient aussi les mots — sinon la réponse 81, dite en morceaux, partait.
+        [GeneratedRegex(@"(?<![\p{L}\d])(?:(?<chiffres>\d{1,9}(?:,\d{1,6})?)(?![\d\p{L}])|(?<lettres>" + MotNombre + @"(?:(?:-|-et-|(?:\s*(?:\.{2,}|…)\s*|\s+)et\s+(?=(?:un|une|onze)(?!\p{L})))" + MotNombre + @")*)(?![\p{L}\d]))",
             RegexOptions.IgnoreCase)]
         private static partial Regex Nombre();
 
@@ -400,7 +402,7 @@ namespace SchoolWebApp.Api.Services
                 else
                 {
                     // « un » ou « une » seuls : un article (même exclusion que NombresEnLettres).
-                    var lu = NombresEnLettres.Lire(m.Value);
+                    var lu = NombresEnLettres.Lire(Regex.Replace(m.Value, @"\s*(?:\.{2,}|…)\s*", " "));
                     if (lu.Count == 1) valeur = lu[0].Valeur;
                 }
                 if (valeur is not null) lus.Add(new Lu(m.Index, m.Length, valeur.Value));
