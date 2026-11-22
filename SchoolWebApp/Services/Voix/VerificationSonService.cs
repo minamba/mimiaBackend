@@ -1339,6 +1339,19 @@ namespace SchoolWebApp.Api.Services.Voix
             var relu = ImageAuTableau.SansSyllabeCitee(LignesVides().Replace(corps, "\n\n").Trim(), seulementCommeDans: langue != LanguesDesSons.Francais);
             if (langue == LanguesDesSons.Francais) relu = ImageAuTableau.CommeDans(relu, motDeLImage);
             if (relu is { Length: > 0 } reste) morceaux.Add(reste);
+
+            // LA TRADUCTION REFUSÉE S'EXPLIQUE TOUJOURS — contrôle d'Omar sur le lot groupé v2 (19abbfd, point 7 ; QE2, conv. de
+            // test 1106, tours 2 et 3) : après « Deux! » pour Two, il ne restait que « Je te le redis. [EN]Two[/EN] Qu'as-tu
+            // entendu ? », sans dire que « deux » est le mot français. Ce que le professeur écrit APRÈS le son part (la question
+            // du code le remplace), et une phrase qui contient « écoute bien / encore » ou « ce que tu entends » part entière :
+            // son explication pouvait y être. Quand le code a refusé une TRADUCTION (marque « (en français) ») et qu'il redit le
+            // même mot, une explication reste toujours : celle du professeur si elle parle du français, du sens ou de ce que le
+            // mot « veut dire », sinon une phrase du code. Générique : toute écoute de mots dans une langue étrangère, tout prof.
+            if (!arrivee && meme && ExplicationDeLaTraduction(messageDeLEleve, langue) is { } explication
+                && (relu is not { Length: > 0 } || !ExpliqueLaTraduction().IsMatch(relu)))
+            {
+                morceaux.Add(explication);
+            }
             if (annonce is not null) morceaux.Add(annonce);
             morceaux.Add(voix.Value);
 
@@ -1352,6 +1365,29 @@ namespace SchoolWebApp.Api.Services.Voix
 
         [GeneratedRegex(@"\bvoici\s+(?:la\s+(?:prochaine|première|premiere|nouvelle)\s+syllabe|le\s+(?:prochain|premier|nouveau)\s+mot)\b|\bje\s+te\s+l[ae]\s+redis\b", RegexOptions.IgnoreCase)]
         private static partial Regex AnnonceDuSon();
+
+        /// <summary>
+        /// La phrase du code quand le professeur n'a rien gardé qui explique le refus d'une traduction (voir EcouteDesMots) :
+        /// « Tu m'as dit « deux » : c'est le mot en français, tu as bien compris le sens. Mais moi, je cherche le mot en
+        /// anglais. » — « tu as compris le sens » reste (décision de Min's du 22/11, 00 h 04). Null hors d'une traduction
+        /// refusée dans une langue étrangère.
+        /// </summary>
+        public static string? ExplicationDeLaTraduction(string? messageDeLEleve, string langue)
+        {
+            if (langue != LanguesDesSons.Anglais || !EstUneTraductionEntendue(messageDeLEleve)) return null;
+            var m = MotTraduit().Match(messageDeLEleve!);
+            if (!m.Success) return null;
+            var mot = m.Groups["mot"].Value.Trim();
+            if (mot.Length == 0 || mot.Length > 30 || mot.Contains('[')) return null;
+            return $"Tu m'as dit « {mot} » : c'est le mot en français, tu as bien compris le sens. Mais moi, je cherche le mot en anglais.";
+        }
+
+        [GeneratedRegex(@"^\s*j\W?\s*ai\s+entendu\s+(?:le\s+mot|la\s+syllabe)\s+(?<mot>.+?)\s*\(en français\)\s*\.?\s*$", RegexOptions.IgnoreCase)]
+        private static partial Regex MotTraduit();
+
+        /// <summary>Sa phrase dit déjà pourquoi c'est refusé : le français, le sens, ce que le mot veut dire.</summary>
+        [GeneratedRegex(@"\bfran[çc]ais\b|\bsens\b|\bveut\s+dire\b|\bvoulait\s+dire\b|\bsignifie\b|\btradu\w*", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+        private static partial Regex ExpliqueLaTraduction();
 
         // « Pas de souci, je te la redis. Je te la redis. » : Adrien imite l'annonce du tour d'avant (message 9698, 05/11/2026).
         [GeneratedRegex(@"(\bje\s+te\s+l[ae]\s+redis\b[^.!?\n]*[.!?])\s*je\s+te\s+l[ae]\s+redis\s*[.!?]", RegexOptions.IgnoreCase)]
@@ -1373,9 +1409,13 @@ namespace SchoolWebApp.Api.Services.Voix
             RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
         private static partial Regex PhraseADireAvantLeSon();
 
-        /// <summary>« Je te redis le mot. », « Je te répète la syllabe. », « Je te le répète. » : seule dans sa phrase.</summary>
+        /// <summary>
+        /// « Je te redis le mot. », « Je te répète la syllabe. », « Je te le répète. » : seule dans sa phrase.
+        /// « Je te redis celui d'avant. » (écran mobile final du lot groupé v2, contrôle d'Omar, point 3) : suivi de « Je te le
+        /// redis. » du code, l'annonce était en double. « celui d'avant », « celui-là », « le mot d'avant », « le même mot » aussi.
+        /// </summary>
         [GeneratedRegex(
-            @"(?<=^|[.!?…\n])[^\S\n]*(?:je\s+te\s+(?:re)?(?:dis|répète|repete)\s+(?:(?:le|ce)\s+mot|(?:la|cette)\s+syllabe)|je\s+te\s+l[ae]\s+(?:répète|repete))(?:\s+encore(?:\s+une\s+fois)?)?[^\S\n]*[.!:…]+",
+            @"(?<=^|[.!?…\n])[^\S\n]*(?:je\s+te\s+(?:re)?(?:dis|répète|repete)\s+(?:(?:le|ce)\s+(?:même\s+)?mot(?:\s+d['’]avant)?|(?:la|cette)\s+(?:même\s+)?syllabe(?:\s+d['’]avant)?|(?:celui|celle)(?:\s+d['’]avant|-l[àa]|-ci)|(?:le|la)\s+même)|je\s+te\s+l[ae]\s+(?:répète|repete))(?:\s+encore(?:\s+une\s+fois)?)?[^\S\n]*[.!:…]+",
             RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
         private static partial Regex AnnonceLibre();
 
