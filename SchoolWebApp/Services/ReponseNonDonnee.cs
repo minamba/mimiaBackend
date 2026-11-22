@@ -429,12 +429,14 @@ namespace SchoolWebApp.Api.Services
         private static partial Regex GardeDeLAvantDernier();
 
         private static bool TermeDeCalcul(string texte, Lu n) =>
-            // Un opérateur entre deux nombres seulement : « pas : 11, 12 » et « 12 - essaie » ne calculent rien. Le « : »
-            // n'est une division qu'entre deux nombres en chiffres : « compte après 10 : onze, douze » ne divise rien.
-            Regex.IsMatch(texte[..n.Index], char.IsDigit(texte[n.Index])
-                ? @"\d\s*(?:[+\-−–×*:÷=]|(?<!\p{L})(?:x|plus|moins|fois)(?!\p{L}))\s*$"
-                : @"\d\s*(?:[+\-−–×*÷=]|(?<!\p{L})(?:x|plus|moins|fois)(?!\p{L}))\s*$", RegexOptions.IgnoreCase)
-            || Regex.IsMatch(texte[(n.Index + n.Longueur)..], @"^\s*(?:[+\-−–×*:÷=]|(?:x|plus|moins|fois)(?!\p{L}))\s*\d", RegexOptions.IgnoreCase);
+            // Un opérateur entre deux nombres seulement : « pas : 11, 12 » et « 12 - essaie » ne calculent rien.
+            Regex.IsMatch(texte[..n.Index], @"\d\s*(?:[+\-−–×*÷=]|(?<!\p{L})(?:x|plus|moins|fois)(?!\p{L}))\s*$", RegexOptions.IgnoreCase)
+            || Regex.IsMatch(texte[(n.Index + n.Longueur)..], @"^\s*(?:[+\-−–×*÷=]|(?:x|plus|moins|fois)(?!\p{L}))\s*\d", RegexOptions.IgnoreCase)
+            // Le « : » n'est une division que dans un calcul posé, « 12 : 3 = ? » ou « 12 : 3 ? » : « à partir de 10 : 11, 12 »
+            // (conv. 722) et « compte après 10 : onze, douze » ne divisent rien.
+            || (char.IsDigit(texte[n.Index])
+                && (Regex.IsMatch(texte[..n.Index], @"\d\s*[:÷]\s*$") && Regex.IsMatch(texte[(n.Index + n.Longueur)..], @"^\s*(?:=|\?)")
+                    || Regex.IsMatch(texte[(n.Index + n.Longueur)..], @"^\s*[:÷]\s*\d+(?:,\d+)?\s*(?:=|\?)")));
 
         /// <summary>Dans une parenthèse : « 8 (un doigt), 9 (deux doigts) » — le « deux » ne compte pas dans la suite.</summary>
         private static bool DansUneParenthese(string texte, int index)
