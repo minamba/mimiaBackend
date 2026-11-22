@@ -1363,7 +1363,7 @@ namespace SchoolWebApp.Api.Services.Voix
             return string.Join("\n\n", morceaux);
         }
 
-        [GeneratedRegex(@"\bvoici\s+(?:la\s+(?:prochaine|première|premiere|nouvelle)\s+syllabe|le\s+(?:prochain|premier|nouveau)\s+mot)\b|\bje\s+te\s+l[ae]\s+redis\b", RegexOptions.IgnoreCase)]
+        [GeneratedRegex(@"\bvoici\s+(?:la\s+(?:prochaine|première|premiere|nouvelle)\s+syllabe|le\s+(?:prochain|premier|nouveau)\s+mot)\b|\bje\s+(?:te\s+)?l[ae]\s+redis\b", RegexOptions.IgnoreCase)]
         private static partial Regex AnnonceDuSon();
 
         /// <summary>
@@ -1541,13 +1541,15 @@ namespace SchoolWebApp.Api.Services.Voix
         // partait, et il restait « c'est malin !encore une fois. » (collé). Les mêmes compléments sans contenu valent pour
         // « voici le mot » que pour « je te le redis », et l'annonce ne part que SEULE dans sa phrase (ponctuation ou fin de
         // ligne juste après) : sinon la phrase reste entière, jamais un morceau collé au « ! » d'avant.
-        [GeneratedRegex(@"(?<=^|[.!?…\n]\s*)\s*(?:voici\s+(?:la|le)\s+(?:(?:prochaine|première|premiere|nouvelle|prochain|premier|nouveau)(?:\s+(?:syllabe|mot)|(?=\s*(?:[.!:…\n,]|$)))|syllabe|mot)|voici\s+une?\s+(?:autre|nouveau|nouvelle)\s+(?:syllabe|mot)|je\s+te\s+l[ae]\s+dis|je\s+te\s+l[ae]\s+redis)(?:\s*,?\s+(?:en\s+(?:anglais|français|francais|espagnol|allemand|italien)|encore(?:\s+une\s+fois)?|une\s+(?:autre|dernière|derniere|nouvelle)\s+fois|une\s+fois\s+de\s+plus|tout\s+de\s+suite|maintenant|lentement|doucement|bien\s+lentement|pour\s+toi))*[^\S\n]*(?:[.!:…]+|(?=\n|$))", RegexOptions.IgnoreCase)]
+        [GeneratedRegex(@"(?<=^|[.!?…\n]\s*)\s*(?:voici\s+(?:la|le)\s+(?:(?:prochaine|première|premiere|nouvelle|prochain|premier|nouveau)(?:\s+(?:syllabe|mot)|(?=\s*(?:[.!:…\n,]|$)))|syllabe|mot)|voici\s+une?\s+(?:autre|nouveau|nouvelle)\s+(?:syllabe|mot)|je\s+te\s+l[ae]\s+dis|je\s+(?:te\s+)?l[ae]\s+redis)(?:\s*,?\s+(?:en\s+(?:anglais|français|francais|espagnol|allemand|italien)|encore(?:\s+une\s+fois)?|une\s+(?:autre|dernière|derniere|nouvelle)\s+fois|une\s+fois\s+de\s+plus|tout\s+de\s+suite|maintenant|lentement|doucement|bien\s+lentement|pour\s+toi))*[^\S\n]*(?:[.!:…]+|(?=\n|$))", RegexOptions.IgnoreCase)]
         private static partial Regex PhraseDAnnonce();
 
-        [GeneratedRegex(@"\bvoici\s+la\s+(?:(?:prochaine|première|premiere|nouvelle)\s+)?syllabe\b|\bje\s+te\s+la\s+redis\b", RegexOptions.IgnoreCase)]
+        // « Je le redis. » sans « te » (bout en bout final du lot groupé v4 sur b7624f2, QE2 conv. de test 1223) : l'annonce
+        // n'était pas reconnue et le code ajoutait la sienne, d'où « Je le redis. ⏎Je te le redis. ». « te » est facultatif.
+        [GeneratedRegex(@"\bvoici\s+la\s+(?:(?:prochaine|première|premiere|nouvelle)\s+)?syllabe\b|\bje\s+(?:te\s+)?la\s+redis\b", RegexOptions.IgnoreCase)]
         private static partial Regex AnnonceDeSyllabe();
 
-        [GeneratedRegex(@"\bvoici\s+le\s+(?:(?:prochain|premier|nouveau)\s+)?mot\b|\bje\s+te\s+le\s+redis\b", RegexOptions.IgnoreCase)]
+        [GeneratedRegex(@"\bvoici\s+le\s+(?:(?:prochain|premier|nouveau)\s+)?mot\b|\bje\s+(?:te\s+)?le\s+redis\b", RegexOptions.IgnoreCase)]
         private static partial Regex AnnonceDeMot();
 
         [GeneratedRegex(@"[^.!?…\n]*\b[ÉEée]coute\s+(?:bien|encore|attentivement|cette|ce|celle|celui)\b[^.!?…:\n]*[.!?…:]?", RegexOptions.IgnoreCase)]
