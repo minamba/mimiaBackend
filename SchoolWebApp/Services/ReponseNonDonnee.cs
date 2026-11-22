@@ -482,7 +482,9 @@ namespace SchoolWebApp.Api.Services
                     var avant = nombres[k - 2];
                     var pas = Math.Abs(dernier.Valeur - avant.Valeur);
                     var lien = texte[(avant.Index + avant.Longueur)..dernier.Index];
-                    if (longueur >= 3 ? pas <= 100 : pas == 1 || (pas <= 10 && LienDeComptage().IsMatch(lien)))
+                    // Des CHOIX ne sont pas un comptage : « Ça fait 11, 12 ou 13 ? » (bout en bout, conv. 740) reste entier.
+                    var choix = Regex.IsMatch(texte[(dernier.Index + dernier.Longueur)..], @"^\s*,?\s*ou\s+(?:[«""]\s*)?(?:\d|" + MotNombre + @"(?!\p{L}))", RegexOptions.IgnoreCase);
+                    if (!choix && (longueur >= 3 ? pas <= 100 : pas == 1 || (pas <= 10 && LienDeComptage().IsMatch(lien))))
                     {
                         var finAvant = avant.Index + avant.Longueur;
                         var apresDernier = dernier.Index + dernier.Longueur;
