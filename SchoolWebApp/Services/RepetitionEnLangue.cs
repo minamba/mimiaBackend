@@ -109,7 +109,10 @@ namespace SchoolWebApp.Api.Services
             + @"|(?<!\b(?:je|j['’]|que\s+je)\s*(?:(?:te|vous|le|la|les|l['’])\s*)*)\brépète(?:s|z)?\b"
             + @"|(?<!\bje\s+(?:vais|peux|veux|voudrais)\s+(?:(?:te|vous|le|la|les|l['’])\s*)*)\brépéter\b|\bredis[- ](?:le|la|les|moi)\b|\bredis\s+après\s+moi\b"
             + @"|\bà\s+toi\s*(?:[!.]|de\s+(?:le\s+|la\s+|les\s+)?(?:dire|répéter|redire|prononcer))"
-            + @"|\bà\s+ton\s+tour\b|\bessaie\s+de\s+(?:le\s+|la\s+|l['’]\s*)?(?:dire|répéter|redire|prononcer)\b|\bdis[- ](?:le|la)\b|\bcomme\s+moi\b"
+            // « Tu peux essayer de redire ce son-là ? », « Tu veux essayer de le redire ? » (accueils NATURELS du retour, bout en
+            // bout final du lot groupé v4 sur 8aa6e9d, QR1 conv. de test 1208, QR2 conv. 1210) : « essayer » n'était pas lu,
+            // « Bleu! » n'était pas jugé, et le professeur l'a validé (« Bravo, cette fois c'est le bon son ! »).
+            + @"|\bà\s+ton\s+tour\b|\bessa(?:ie|yer|yez)\s+de\s+(?:le\s+|la\s+|l['’]\s*)?(?:dire|répéter|redire|prononcer)\b|\bdis[- ](?:le|la)\b|\bcomme\s+moi\b"
             // « Essaie de faire le même son que moi. », « Essaie de dire ce son-là » (bout en bout de la tâche 1600) : des demandes
             // d'imitation, donc de répétition (le mot à redire reste celui de la balise : sans balise, rien n'est jugé).
             + @"|\bmême\s+(?:son|mot)\s+que\s+moi\b|\bpareil\s+que\s+moi\b"
