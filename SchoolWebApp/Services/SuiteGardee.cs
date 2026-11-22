@@ -46,12 +46,28 @@ namespace SchoolWebApp.Api.Services
         // exercice / jeu / calcul / activité / question / suite » ; pause avec incise avant « et (puis) on re… » ; « on le
         // garde en tête » ; « on laisse ce/ça » suivi de « sur l'ardoise », « au tableau » ou « et on re… » ; « Plus tard,
         // quand tu seras grand ». Mesure : 0 changement sur les 260 réponses réelles des séries #53 (v2 à v5).
+        //
+        // CONTRÔLE D'OMAR SUR LA v6 (088b0cd, point 1, émulateur ab6o.py) : 9 abandons francs passaient encore — « On passera à
+        // la question suivante. », « On mettra ça de côté. », « On fera ça une autre fois. », « On regardera ça une autre
+        // fois. », « Allez, question suivante ! », « On abandonne celle-ci. », « Tant pis, on oublie celle-là. », « On s'en
+        // tient là pour cette question. », « Une prochaine fois peut-être ! ». Ajouté (v7, tâche 2100) : futur de passer /
+        // mettre (passera, passerons, mettra, mettrons, mettons) ; fera / regardera devant « une autre fois / plus tard /
+        // demain » ; « question / nombre / calcul suivant(e) » SANS verbe, seulement en proposition entière (tête de phrase ou
+        // après allez / bon / alors / hop, puis fin de phrase « . ! … ») : « la dizaine suivante », « Le nombre suivant, c'est
+        // quoi ? » et « Quel est le nombre suivant ? » restent des relances ; « on abandonne » (pas « on n'abandonne pas ») ;
+        // « on oublie celle / celui / ce / cette / ça » (sauf « … et on recompte ») ; « on s'en tient là » ; « une prochaine
+        // fois ». Relances épargnées en plus : « On met de côté le 8 un instant et on regarde… » (« un instant » plus loin
+        // dans la même phrase), « Plus tard tu verras que c'est facile » (plus tard + tu verras / sauras / comprendras…),
+        // « On le reprendra ensemble : 78, 79, 80… » (« ensemble » ; « … ensemble demain » reste un abandon par « demain »).
+        // « Prends ton temps pour une autre fois » reste un abandon (accepté par Omar). Mesure : 0 changement sur les 318
+        // réponses réelles des séries #53 (v2 à v6).
         [GeneratedRegex(
             @"\bon\s+y\s+reviendra\b"
-            + @"|\bon\s+(?:va\s+)?(?:la|le)\s+(?:garde[rz]?|reprendra|laisse[rz]?)\b(?!\s+(?:bien\s+)?(?:en\s+t[êe]te|sur\s+l['’]\s*ardoise|au\s+tableau))"
-            + @"|\bplus\s+tard\b(?!\s*,?\s*quand\b)"
-            + @"|\bon\s+(?:va\s+)?pass(?:e|er)\s+à\s+(?:autre\s+chose|un\s+autre|une\s+autre|la\s+suite)\b|\bpassons\s+à\s+(?:autre\s+chose|un\s+autre|une\s+autre|la\s+suite)\b"
-            + @"|\b(?:on\s+(?:va\s+)?pass(?:e|er)|passons)\s+(?:à\s+la\s+(?:(?:question|activité|leçon|partie|série|consigne)\s+)?suivante|au\s+(?:(?:nombre|calcul|exercice|jeu|mot|problème|défi)\s+)?suivant)\b"
+            + @"|\bon\s+(?:va\s+)?(?:la|le)\s+(?:garde[rz]?|reprendra|laisse[rz]?)\b(?!\s+(?:bien\s+)?(?:en\s+t[êe]te|sur\s+l['’]\s*ardoise|au\s+tableau|ensemble\b))"
+            + @"|\bplus\s+tard\b(?!\s*,?\s*(?:quand\b|tu\s+(?:verras|sauras|comprendras|trouveras|pourras|seras)\b))"
+            + @"|\bon\s+(?:va\s+)?pass(?:e|er|era|erons)\s+à\s+(?:autre\s+chose|un\s+autre|une\s+autre|la\s+suite)\b|\bpassons\s+à\s+(?:autre\s+chose|un\s+autre|une\s+autre|la\s+suite)\b"
+            + @"|\b(?:on\s+(?:va\s+)?pass(?:e|er|era|erons)|passons)\s+(?:à\s+la\s+(?:(?:question|activité|leçon|partie|série|consigne)\s+)?suivante|au\s+(?:(?:nombre|calcul|exercice|jeu|mot|problème|défi)\s+)?suivant)\b"
+            + @"|(?:^|[.!?…:;]\s*|\b(?:allez|bon|alors|hop|ok|d['’]accord)\s*,?\s*)(?:et\s+)?(?:(?:à\s+)?la\s+|au\s+|le\s+)?(?:question|nombre|calcul)\s+suivante?\s*(?:[.!…]|$)"
             // « On garde ce nombre pour une autre fois. On continue autre chose maintenant. » (corpus réel v2, 3e essai) : « pour
             // une autre fois » et « continuer autre chose » sont des abandons (« essaie une autre fois » n'en est pas un).
             + @"|\b(?:on\s+(?:va\s+)?(?:fait|faire|continue[r]?)|faisons|continuons)\s+(?:avec\s+)?autre\s+chose\b(?!\s+qu)|\bpour\s+une\s+autre\s+fois\b"
@@ -59,18 +75,21 @@ namespace SchoolWebApp.Api.Services
             + @"|\b(?:un|une)\s+nouv(?:el|eau|elle)\s+(?:petit\s+|petite\s+)?(?:exercice|jeu|question|calcul|activité|suite)\b(?!\s+qu)"
             + @"|\b(?:on\s+(?:va\s+)?laisse[rz]?|laissons)\s+(?:cette|ce|cet|celle-ci|celle-là|celui-ci|celui-là|ça|tomber)\b"
             + @"(?![^.!?\n]{0,40}?(?:\bsur\s+l['’]\s*ardoise|\bau\s+tableau|\bet\s+(?:puis\s+)?on\s+re))"
-            + @"|\b(?:on\s+(?:va\s+)?(?:(?:la|le|les)\s+)?met(?:tre)?|mets|mettons)\s+(?:(?:cette|ce|cet|ça|la|le|les|l['’])\s*(?:[\w-]+\s+)?)?de\s+c[ôo]té\b"
-            + @"(?!\s+(?:un\s+(?:instant|moment|petit\s+instant)|une\s+seconde|deux\s+secondes))"
+            + @"|\b(?:on\s+(?:va\s+)?(?:(?:la|le|les)\s+)?met(?:s|tre|tra|trons|tons)?|mets|mettons)\s+(?:(?:cette|ce|cet|ça|la|le|les|l['’])\s*(?:[\w-]+\s+)?)?de\s+c[ôo]té\b"
+            + @"(?![^.!?\n]{0,30}?\b(?:un\s+(?:instant|moment|petit\s+instant)|une\s+seconde|deux\s+secondes)\b)"
             + @"|\b(?:on|qu['’]on)\s+s['’]\s*arr[êe]te\b"
             + @"|\bon\s+(?:va\s+)?arr[êe]te[rz]?\s+(?:là|ici|pour\s+(?:aujourd|cette|ce|l))|\barr[êe]tons(?:-nous)?\s+(?:là|ici)\b"
             // « On en reste là pour cette question, Adam, ce n'est pas grave. » (bout en bout v6 sur 1760617, série 4, 3e erreur).
             + @"|\bon\s+(?:va\s+)?en\s+rest(?:e|er|era)\s+là\b|\brestons-en\s+là\b"
+            + @"|\bon\s+(?:va\s+)?s['’]\s*en\s+t(?:ient|enir|iendra)\s+là\b|\btenons-nous-en\s+là\b"
+            + @"|\bon\s+(?:va\s+)?abandonne[rz]?\b|\babandonnons\b"
+            + @"|\bon\s+(?:va\s+)?oublie[rz]?\s+(?:celle|celui|cette|ce|cet|ça)\b(?![^.!?\n]{0,40}?\bet\s+(?:puis\s+)?on\s+re)"
             + @"|\bon\s+fait\s+une\s+pause\b(?![^.!?\n]{0,40}?\bet\s+(?:puis\s+)?on\s+re)"
             + @"|\bon\s+reviendra\b|\bon\s+reprendra\s+(?:ça|cela|ce|cette)\b"
-            + @"|\b(?:verra|reverra|reprendra|reprend|refera|essaiera|réessaiera|continuera|retentera|recommencera)\b[^.!?\n]{0,40}?\b(?:une\s+autre\s+fois|plus\s+tard|demain|la\s+prochaine\s+fois)\b"
-            + @"|\bla\s+prochaine\s+fois\b(?!\s+qu)"
+            + @"|\b(?:verra|reverra|reprendra|reprend|refera|fera|regardera|essaiera|réessaiera|continuera|retentera|recommencera)\b[^.!?\n]{0,40}?\b(?:une\s+autre\s+fois|plus\s+tard|demain|la\s+prochaine\s+fois)\b"
+            + @"|\b(?:la|une)\s+prochaine\s+fois\b(?!\s+qu)"
             + @"|\b(?:on\s+(?:va\s+)?change[rz]?|changeons)\s+(?:d['’]\s*(?:exercice|activité)|de\s+(?:jeu|calcul|question|sujet|leçon))\b",
-            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Multiline)]
         private static partial Regex Abandon();
 
         /// <summary>L'abandon lu par le code (harnais).</summary>
@@ -156,10 +175,19 @@ namespace SchoolWebApp.Api.Services
         // CONTRÔLE D'OMAR SUR LA v5 (point 4) : « Dis-le avec moi, et trouve ce qui vient juste après. » recevait la question du
         // code derrière (« ⏎⏎ 78, 79, 80, … ? »), en double. « trouve » seulement à l'impératif, en tête de proposition (après
         // une ponctuation, « et », « puis », « alors », « maintenant ») : « je sais que tu trouves ça dur. » n'est pas une demande.
+        //
+        // CONTRÔLE D'OMAR SUR LA v6 (088b0cd, point 2, dem.py) : « dis le » sans trait d'union prenait « Je te dis le début : 78,
+        // 79, 80. » et « Je te dis le mot en anglais : … » pour une demande (la question du code n'était pas ajoutée). v7 :
+        // « dis-le » / « redis-le » à l'impératif seulement (trait d'union) ; sans trait d'union, « dis le nombre / la réponse /
+        // le résultat / ce qui / combien / quel » seulement en tête de proposition, comme « trouve » (corpus réel v6 : « Pose ton
+        // doigt sur 80, et dis le nombre juste après » reste une demande). « compte … et dis / donne » aussi en tête de
+        // proposition (« Il compte et donne sa langue au chat. » n'est pas une demande).
         [GeneratedRegex(@"\b(?:dis|donne|écris|ecris|montre)[- ]moi\b|\bà\s+toi\s+de\s+(?:trouver|dire|me\s+dire)\b"
-            + @"|\bdis[- ]le\b|\bessaie\s+de\s+(?:trouver|(?:me\s+)?(?:le\s+)?dire|compter)\b"
+            + @"|\b(?:re)?dis[-‑]le\b"
+            + @"|(?:^|[.!:;,…]\s*|\b(?:et|puis|alors|maintenant)\s+)(?:re)?dis\s+(?:(?:le|la)\s+(?:nombre|réponse|résultat|chiffre|suivant)|ce\s+qui|combien|quel)\b"
+            + @"|\bessaie\s+de\s+(?:trouver|(?:me\s+)?(?:le\s+)?dire|compter)\b"
             + @"|(?:^|[.!:;,…]\s*|\b(?:et|puis|alors|maintenant)\s+)trouve(?:[- ]moi)?\s+(?:ce|le|la|quel|quelle|combien|qu|l['’])"
-            + @"|\bcompte\b[^.!?\n]{0,60}?\bet\s+(?:dis|donne)\b",
+            + @"|(?:^|[.!:;,…]\s*|\b(?:et|puis|alors|maintenant)\s+)compte\b[^.!?\n]{0,60}?\bet\s+(?:dis|donne)\b",
             RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Multiline)]
         private static partial Regex Demande();
     }
