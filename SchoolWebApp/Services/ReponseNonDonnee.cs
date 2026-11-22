@@ -547,7 +547,8 @@ namespace SchoolWebApp.Api.Services
             + @"|(?<!\p{L})redire\s+(?:ce\s+nombre\s*,?\s*|le\s+nombre\s+)?(?:[«""]\s*)?"
             // « Et après, on compte : 81. » (bout en bout du lot groupé, 22/11/2026, conv. de test 918) : un seul nombre
             // annoncé après « on compte : », c'est la réponse (une suite « on compte : 78, 79, 80 » ne finit pas sur elle).
-            + @"|(?<!\p{L})(?:on\s+)?(?:compte|comptes|comptons|comptez)\s*:\s*"
+            // « on compte encore un : 81 » (conv. de test 957) : jusqu'à trois petits mots entre « compte » et « : ».
+            + @"|(?<!\p{L})(?:on\s+)?(?:compte|comptes|comptons|comptez)(?:\s+[\p{L}'’-]+){0,3}?\s*:\s*"
             // « les nombres qui viennent juste après : quatre-vingt-un, quatre-vingt-deux... » (conv. de test 941) : le
             // nombre annoncé après « après : » est celui qu'on cherche.
             + @"|(?<!\p{L})(?:après|apres)\s*:\s*"

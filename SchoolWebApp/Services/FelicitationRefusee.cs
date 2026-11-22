@@ -19,8 +19,9 @@ namespace SchoolWebApp.Api.Services
     {
         /// <summary>« , c'est très bien ! », « et c'est super, », « — ça c'est top », « , bravo ! », « Bravo ! », « Très bien ! ».</summary>
         [GeneratedRegex(
-            @"(?:\s*,\s*|\s*[—–]\s*|\s+)?(?:\bet\s+)?(?:\bça\s+|\bca\s+)?\bc['’]est\s+(?:vraiment\s+|trop\s+)?(?:très\s+bien|bien\s+joué|super|top|génial|genial|parfait|formidable|excellent|chouette|bravo)\b(?:\s+de\s+ta\s+part)?\s*(?:[!]+|,)?"
-            + @"|(?:\s*,\s*|(?<=^|[.!?…\n])\s*)\b(?:bravo|très\s+bien|super|génial|parfait|bien\s+joué)\b(?:\s+\p{Lu}\p{Ll}+)?\s*(?:!+|,|\.(?!\.))?(?=\s|$)",
+            @"(?:\s*,\s*|\s*[—–]\s*|\s+)?(?:\bet\s+)?(?:\bça\s+|\bca\s+)?\bc['’]est\s+(?:vraiment\s+|trop\s+)?(?:très\s+bien|bien\s+joué|super|top|génial|genial|parfait|formidable|excellent|chouette|bravo)\b(?:\s+de\s+ta\s+part|\s+pour\s+[^!.?,;:\n\[]{1,40})?\s*(?:[!]+|,)?(?=\s|$|[.!?…])"
+            // « Bon, et bravo pour l'effort de répéter ! » (bout en bout QR2, conv. de test 949) : « et » devant, « pour … » derrière.
+            + @"|(?:\s*,\s*|(?<=^|[.!?…\n])\s*)(?:\bet\s+)?\b(?:bravo|très\s+bien|super|génial|parfait|bien\s+joué)\b(?:\s+pour\s+[^!.?,;:\n\[]{1,40}|\s+\p{Lu}\p{Ll}+)?\s*(?:!+|,|\.(?!\.))?(?=\s|$)",
             RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
         private static partial Regex Felicitation();
 
@@ -72,7 +73,9 @@ namespace SchoolWebApp.Api.Services
             corps = Regex.Replace(corps, @"^[\s,;:—–-]+", string.Empty);
             corps = Regex.Replace(corps, @"[^\S\n]{2,}", " ");
             corps = Regex.Replace(corps, @"\s+,", ",");
-            if (!corps.Any(char.IsLetterOrDigit))
+            // Il ne reste qu'une interjection (« Bon », « Alors », « Ah ») : elle ne dit plus rien, elle part avec.
+            if (!corps.Any(char.IsLetterOrDigit)
+                || Regex.IsMatch(corps, @"^(?:bon|alors|ah|oh|eh\s+bien|ok|okay|d['’]accord|allez)$", RegexOptions.IgnoreCase))
             {
                 // Une phrase qui n'était que la félicitation (« Bravo ! ») part entière ; ses sauts de ligne restent.
                 return blancs.Contains('\n') ? blancs[blancs.IndexOf('\n')..] : string.Empty;
