@@ -3526,11 +3526,11 @@ namespace SchoolWebApp.Api.Builders.impl
                             // nouvel accueil, et elle aurait écarté le verdict du
                             // travail fait juste avant. Même contrôle, retour moins
                             // d'une minute après la sortie : la séance continue.
-                            var rechargement = sujetPrecedent is not null
+                            var rechargementDuControle = sujetPrecedent is not null
                                 && !SujetDeSeance.Change(sujetPrecedent, SujetDeSeance.De(mode, controleMode, epreuveMode))
                                 && Services.Voix.LectureDesNombres.EstUnRechargement(typeAccueil, absenceApresSortie);
 
-                            if (!rechargement)
+                            if (!rechargementDuControle)
                             {
                                 await MarquerPreparationControleAsync(
                                     contexte.Eleve.Id, controleMode.Value, ct);
