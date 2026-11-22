@@ -507,8 +507,15 @@ namespace SchoolWebApp.Api.Services
                 var garde = GardeDeLAvantDernier().Match(sortie[debut..fin]);
                 var debutCoupe = debut + garde.Length;
                 var suite = sortie[fin..];
+
+                // Le guillemet qui fermait la suite part avec le dernier nombre : on le remet (« huit, neuf, dix, onze… »),
+                // sinon l'enfant lit un guillemet ouvert jamais fermé (bout en bout final, conv. 761).
+                var coupe = sortie[debutCoupe..fin];
+                var fermante = coupe.Count(c => c == '»') > coupe.Count(c => c == '«') ? " »"
+                    : coupe.Count(c => c == '"') % 2 == 1 ? "\"" : "";
+
                 var liaison = suite.Length > 0 && !char.IsWhiteSpace(suite[0]) && suite[0] is not (',' or ')') ? " " : "";
-                sortie = sortie[..debutCoupe] + "…" + liaison + suite;
+                sortie = sortie[..debutCoupe] + "…" + fermante + liaison + suite;
                 retraits++;
             }
             return sortie;
@@ -520,6 +527,8 @@ namespace SchoolWebApp.Api.Services
             + @"=\s*"
             // « ça fait 12 », « 7 + 5 font 12 », « ça donne bien 12 », « 7 + 5 égale 12 »
             + @"|(?<!\p{L})(?:fait|font|donne|donnent|vaut|valent|égale|égalent|fera|feront|faisait|faisaient|donnera|donnerait|ferait)\s+(?:(?:bien|donc|alors|exactement|juste|tout\s+juste|pile)\s+)?"
+            // « on ne peut pas dépasser 12 » (bout en bout final, conv. 752) : la borne, c'est la réponse.
+            + @"|(?<!\p{L})(?:dépasser|dépasse|dépasses|dépassera)\s+"
             // « 6 et 4, c'est un couple qui fait tout rond, 10 ! » (corpus de test)
             + @"|(?<!\p{L})(?:fait|font|donne|donnent)\s+(?:tout\s+rond|une\s+dizaine|une\s+dizaine\s+pile)\s*,?\s*(?:[:=]\s*)?"
             // « on arrive à 12 », « tu tombes sur 12 », « on s'arrête à 12 »
