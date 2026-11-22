@@ -15,10 +15,18 @@ namespace SchoolWebApp.Api.Services
     /// enregistré, et dans l'historique relu (sinon le professeur imite son propre aparté au tour suivant).
     ///
     /// PRUDENCE : les parenthèses pédagogiques restent — « (3 + 4) × 2 », « (le chat) », « (bleu + jaune → vert) »,
-    /// « (dernier essai !) ». Un aparté n'est retiré que s'il porte AU MOINS DEUX familles d'indices de régie parmi :
-    /// un compteur d'essais (« 3e réponse », « 2e erreur »), un verdict technique (« réponse fausse », « FAUX »), un mot de
-    /// régie (« on garde », « je compte », « règle des », « réexplication », « l'élève », « → indice »), et des symboles
-    /// télégraphiques (flèche, « mot + mot »), qui ne comptent jamais pour plus d'une famille.
+    /// « (dernier essai !) ». Un aparté n'est retiré que s'il remplit DEUX conditions :
+    /// 1. au moins DEUX familles d'indices de régie parmi : un compteur d'essais (« 3e réponse », « dernier essai »), un
+    ///    verdict technique (« réponse fausse », ou « FAUX » en capitales dans la forme d'un fait seulement), un mot de régie
+    ///    (« on garde », « règle des », « réexplication », « l'élève », « → indice »), et des symboles télégraphiques
+    ///    (flèche, « mot + mot »), qui ne comptent jamais pour plus d'une famille ;
+    /// 2. au moins UN indice FORT, qu'on ne dit jamais à un enfant : un compteur numéroté qui ne lui est pas adressé
+    ///    (« 3e réponse », pas « ta 2e réponse » ni « ton dernier essai »), « on garde » (hors retenue : « on garde 1 »),
+    ///    « règle des essais », « réexplication », « je compte les essais », « vérifié par l'application », « note pour moi »,
+    ///    « passage à la suite ».
+    /// Revue d'Omar (21/11/2026) : sans la condition 2, « (on compte les dizaines → 3) », « (VRAI ou FAUX → à toi) »,
+    /// « (l'élève → les élèves) » ou « (c'est ton dernier essai → concentre-toi !) » étaient retirés. En cas de doute, on
+    /// GARDE : un aparté qui passe est un défaut rare (aucun en ligne depuis le 11/11), une phrase coupée chez l'enfant non.
     ///
     /// UN SEUL CODE POUR LE FLUX ET LE TEXTE ENTIER : <see cref="Retirer"/> passe le texte entier dans le même
     /// <see cref="Filtre"/>, donc l'écran, la voix et l'historique disent exactement la même chose.
@@ -46,27 +54,50 @@ namespace SchoolWebApp.Api.Services
         }
 
         /// <summary>
-        /// Le contenu ENTRE les parenthèses (ou avec elles) est-il une note de régie ? Au moins deux familles d'indices.
+        /// Le contenu ENTRE les parenthèses (ou avec elles) est-il une note de régie ? Au moins un indice FORT, et au moins
+        /// deux familles d'indices.
         /// </summary>
         public static bool EstUnAparte(string contenu)
         {
             if (string.IsNullOrWhiteSpace(contenu)) return false;
 
+            var compteurFort = CompteurFort().IsMatch(contenu);
+            var regieForte = RegieForte().IsMatch(contenu);
+
+            // Sans indice fort, on garde : un mot de régie isolé (« l'élève », « on compte », « FAUX », « dernier
+            // essai ») peut appartenir à une phrase dite à l'enfant.
+            if (!compteurFort && !regieForte) return false;
+
             var familles = 0;
-            if (Compteur().IsMatch(contenu)) familles++;
-            if (VerdictTechnique().IsMatch(contenu) || VerdictMajuscules().IsMatch(contenu)) familles++;
-            if (Regie().IsMatch(contenu)) familles++;
+            if (compteurFort || Compteur().IsMatch(contenu)) familles++;
+            if (VerdictTechnique().IsMatch(contenu) || VerdictDeFait().IsMatch(contenu)) familles++;
+            if (regieForte || Regie().IsMatch(contenu)) familles++;
             if (Fleche().IsMatch(contenu) || PlusEntreMots().IsMatch(contenu)) familles++;
 
             // Les symboles seuls ne suffisent jamais : il faut au moins un indice en mots.
             return familles >= 2;
         }
 
-        // « 3e réponse », « 2ème essai », « troisième erreur », « dernier essai », « réponse n°2 », « 3 réponses fausses »,
-        // « essai 3/4 ».
+        // Ce qui n'est pas dit à l'enfant : « ta 2e réponse », « ton troisième essai » lui sont adressés.
+        private const string PasAdresseALEnfant = @"(?<!(?<!\p{L})(?:ta|ton|tes|votre|vos)\s+)";
+
+        // INDICE FORT — un compteur numéroté : « 3e réponse », « 1re erreur », « troisième erreur », « réponse fausse n°2 »,
+        // « 3 réponses fausses », « essai 3/4 ». « Premier » et « dernier » n'en sont pas : « c'est ton dernier essai » est
+        // justement ce que la règle demande de dire.
+        [GeneratedRegex(
+            PasAdresseALEnfant
+            + @"(?:(?<![\p{L}\d])(?:\d+\s*(?:e|ème|eme|re|ère|er)|deuxi[eè]me|seconde?|troisi[eè]me|quatri[eè]me|cinqui[eè]me)\s+(?:réponses?|essais?|erreurs?|tentatives?|fautes?)(?!\p{L})"
+            + @"|(?<!\p{L})(?:réponses?|essais?|erreurs?|tentatives?)(?:\s+(?:fausses?|faux|ratée?s?|manquée?s?))?\s+(?:n°|no\.?|numéro|#)\s*\d"
+            + @"|(?<![\p{L}\d])\d+\s+(?:réponses?|essais?|erreurs?|tentatives?)\s+(?:fausses?|faux|ratée?s?|manquée?s?)(?!\p{L})"
+            + @"|(?<!\p{L})essais?\s+\d\s*/\s*\d)",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+        private static partial Regex CompteurFort();
+
+        // Famille « compteur » (indice faible) : tout compteur, y compris « premier essai », « dernier essai », « ta 2e
+        // réponse ».
         [GeneratedRegex(
             @"(?<![\p{L}\d])(?:\d+\s*(?:e|ème|eme|re|ère|er)|premi[eè]re?|deuxi[eè]me|seconde?|troisi[eè]me|quatri[eè]me|cinqui[eè]me|derni[eè]re?)\s+(?:réponses?|essais?|erreurs?|tentatives?|fautes?)(?!\p{L})"
-            + @"|(?<!\p{L})(?:réponses?|essais?|erreurs?|tentatives?)\s+(?:n°|no\.?|numéro|#)\s*\d"
+            + @"|(?<!\p{L})(?:réponses?|essais?|erreurs?|tentatives?)(?:\s+(?:fausses?|faux|ratée?s?|manquée?s?))?\s+(?:n°|no\.?|numéro|#)\s*\d"
             + @"|(?<![\p{L}\d])\d+\s+(?:réponses?|essais?|erreurs?|tentatives?)\s+(?:fausses?|faux|ratée?s?|manquée?s?)(?!\p{L})"
             + @"|(?<!\p{L})essais?\s+\d\s*/\s*\d",
             RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
@@ -78,13 +109,32 @@ namespace SchoolWebApp.Api.Services
             RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
         private static partial Regex VerdictTechnique();
 
-        // Le verdict en capitales des faits du code (« … → FAUX »), sensible à la casse : « c'est juste » reste.
-        [GeneratedRegex(@"(?<!\p{L})(?:FAUX|FAUSSE|JUSTE)(?!\p{L})", RegexOptions.CultureInvariant)]
-        private static partial Regex VerdictMajuscules();
-
-        // Les mots de la régie : ce que le professeur décide, compte ou applique, et les fiches qu'on lui donne.
+        // Le verdict en capitales SEULEMENT dans la forme d'un fait du code : « Vérifié par l'application … FAUX », ou
+        // « … → FAUX » en fin de parenthèse. « (VRAI ou FAUX → à toi) » n'en est pas un. Capitales exigées : « c'est juste »
+        // reste.
         [GeneratedRegex(
-            @"(?<!\p{L})(?:on\s+garde|je\s+garde|on\s+reste\s+sur|je\s+reste\s+sur|je\s+compte|on\s+compte|compteur|compte\s+des\s+essais"
+            @"(?i:v[ée]rifi[ée]\s+par\s+l['’]application)[^)]*?(?<!\p{L})(?:FAUX|FAUSSE|JUSTE)(?!\p{L})"
+            + @"|(?:→|->|=>|⇒|:)\s*(?:FAUX|FAUSSE|JUSTE)\s*[.!]?\s*\)?\s*$",
+            RegexOptions.CultureInvariant)]
+        private static partial Regex VerdictDeFait();
+
+        // INDICE FORT — les mots de la régie qu'on ne dit jamais à un enfant. « On garde » au sens de la retenue (« on
+        // garde 1 », « on garde la retenue ») n'en est pas un ; « réexpliquer » non plus (« je vais te réexpliquer »).
+        [GeneratedRegex(
+            @"(?<!\p{L})(?:(?:on|je)\s+garde(?![^)]{0,25}?(?:retenue|(?<![\p{L}\d])\d+(?![\p{L}\d])))"
+            + @"|r[eè]gle\s+des\s+(?:(?:trois|3|quatre|4)\s+)?(?:essais|erreurs)"
+            + @"|r[ée]-?explications?"
+            + @"|(?:je|on)\s+compte\s+(?:les|mes|ses|des)\s+(?:essais|erreurs|r[ée]ponses)"
+            + @"|compteur\s+(?:d['’]|des\s+)(?:essais|erreurs)|compte\s+des\s+(?:essais|erreurs)"
+            + @"|v[ée]rifi[ée]\s+par\s+l['’]application|note\s+pour\s+moi|pour\s+moi\s+seule?"
+            + @"|passage\s+[àa]\s+la\s+(?:suite|question))(?!\p{L})",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+        private static partial Regex RegieForte();
+
+        // Famille « régie » (indice faible) : ce que le professeur décide, compte ou applique, et les fiches qu'on lui
+        // donne. « On compte » / « je compte » seuls n'y sont plus (« (on compte les dizaines → 3) », revue d'Omar).
+        [GeneratedRegex(
+            @"(?<!\p{L})(?:on\s+garde|je\s+garde|on\s+reste\s+sur|je\s+reste\s+sur|compteur|compte\s+des\s+essais"
             + @"|r[eè]gle\s+des|selon\s+la\s+r[eè]gle|r[ée]-?explications?|r[ée]-?expliquer|l'[ée]l[eè]ve|l’[ée]l[eè]ve"
             + @"|historique|indice\s+exact|v[ée]rifi[ée]\s+par\s+l|note\s+pour\s+moi|pour\s+moi\s+seul|sans\s+donner\s+la\s+r[ée]ponse"
             + @"|ne\s+pas\s+donner\s+la\s+r[ée]ponse|passage\s+[àa]\s+la\s+(?:suite|question)|je\s+passe\s+[àa]\s+la\s+(?:suite|question))(?!\p{L})"
