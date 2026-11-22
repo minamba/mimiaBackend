@@ -545,8 +545,13 @@ namespace SchoolWebApp.Api.Services
             // « Dis-le avec moi : soixante-quatorze », « répète après moi : 75 », « tu peux me redire 75 ? »
             + @"|(?<!\p{L})(?:avec\s+moi|après\s+moi|(?:re)?dire|redis|répète|répéter)\s*:\s*(?:[«""]\s*)?"
             + @"|(?<!\p{L})redire\s+(?:ce\s+nombre\s*,?\s*|le\s+nombre\s+)?(?:[«""]\s*)?"
+            // « Et après, on compte : 81. » (bout en bout du lot groupé, 22/11/2026, conv. de test 918) : un seul nombre
+            // annoncé après « on compte : », c'est la réponse (une suite « on compte : 78, 79, 80 » ne finit pas sur elle).
+            + @"|(?<!\p{L})(?:on\s+)?(?:compte|comptes|comptons|comptez)\s*:\s*"
             // « il y en a 12 en tout » : voir AvecEnTout.
-            + @")";
+            + @")"
+            // Entre guillemets aussi : « le mot juste après 80, c'est « quatre-vingt-un » » (conv. de test 926), « on dit « 81 » ».
+            + @"(?:[«""]\s*)?";
 
         /// <summary>« 12 » n'est pas la réponse s'il est suivi d'un rang, d'un pourcentage ou d'un autre calcul.</summary>
         private const string ApresR = @"(?!\s*(?:dizaines?|unités?|centaines?|%|[+\-−–×x*:÷]\s*\d|ans\b|euros?\b))";
