@@ -149,11 +149,15 @@ namespace SchoolWebApp.Api.Services
         /// test 1272) : l'accueil du retour commençait par « Bleu, c'est le mot en français : tu as compris le sens. », recopié
         /// de l'historique, alors que l'enfant n'avait encore rien dit. Générique : tous les professeurs, à chaque tour d'arrivée
         /// d'un retour (<see cref="AuRetour"/>), donné en dernier dans les consignes. Pas de nombre.
+        /// Contrôle d'Omar sur la v6 (088b0cd, point 3 ; bout en bout QR1-a, conv. de test 1320 : « Pas grave, Testlecture ! On
+        /// réécoute… ») : « pas grave », « ce n'est pas grave » et « bravo » sont aussi des ouvertures interdites (une consolation
+        /// ou un compliment portent sur une réponse que l'enfant n'a pas encore donnée).
         /// </summary>
         public const string FaitRienReponduAuRetour =
             "[Fait pour ce tour, pour toi seul : l'élève n'a encore rien répondu à ce tour, il vient d'arriver. Ne commente aucune "
-            + "réponse : ne commence pas par « …, c'est le mot en français », ni par un verdict (« juste », « pas tout à fait »), "
-            + "et ne recopie pas une phrase de tes messages d'avant.]";
+            + "réponse : ne commence pas par « …, c'est le mot en français », ni par un verdict ni une consolation (« juste », "
+            + "« bravo », « pas tout à fait », « pas grave », « ce n'est pas grave »), et ne recopie pas une phrase de tes messages "
+            + "d'avant.]";
 
         /// <summary>Un filtre à poser dès que le code a compté une erreur (rang non nul). Plus branché dans le flux (0000o).</summary>
         public static bool AFiltrer(int? rang) => rang is not null;
