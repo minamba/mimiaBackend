@@ -1367,7 +1367,8 @@ namespace SchoolWebApp.Api.Services.Voix
         private static partial Regex AnnonceDuSon();
 
         /// <summary>Le mot français d'un verdict d'écoute refusé pour traduction (« J'ai entendu le mot deux (en français). » →
-        /// « deux ») ; null sinon. Sert au rappel de fin de consignes (RepetitionEnLangue.RappelTraductionRefusee, tâche 0000o).</summary>
+        /// « deux ») ; null sinon. Sert au rappel de fin de consignes (<see cref="RepetitionEnLangue.RappelTraductionRefuseeAuRang"/>,
+        /// tâches 0000o et 0000q).</summary>
         public static string? MotDeLaTraduction(string? messageDeLEleve)
         {
             if (!EstUneTraductionEntendue(messageDeLEleve)) return null;

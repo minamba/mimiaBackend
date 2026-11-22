@@ -450,6 +450,10 @@ namespace SchoolWebApp.Api.Services
             + "nulle part dans ton message, même en fin de phrase"
             + (sensCompris ? " ; tu peux seulement lui dire qu'il a bien compris le sens." : ".");
 
+        /// <summary>Signature v5, rang 1 (les harnais des versions précédentes l'appellent par réflexion) : voir <see cref="RappelTraductionRefuseeAuRang"/>.</summary>
+        public static string RappelTraductionRefusee(string langue, bool sensCompris = true, bool redemander = true, string? mot = null) =>
+            RappelTraductionRefuseeAuRang(langue, sensCompris, redemander, mot, 1);
+
         /// <summary>
         /// LE RAPPEL DE FIN DE CONSIGNES, AU TOUR D'UNE TRADUCTION REFUSÉE — tâche 0000o (22/11/2026, décision du coordinateur,
         /// règle de Min's « des consignes plutôt que des filtres ») : le filtre <see cref="FelicitationRefusee"/> n'est plus
@@ -461,14 +465,12 @@ namespace SchoolWebApp.Api.Services
         /// la compréhension du SENS (« tu as bien compris le sens, c'est super ! », « tu connais bien le sens, bravo ! »). Quand
         /// le code connaît le mot français (<paramref name="mot"/>), il donne la PREMIÈRE phrase, sobre, à dire telle quelle
         /// (une consigne, rien n'est retiré de la réponse) ; et le compliment sur le sens est nommé dans l'interdit.
+        ///
+        /// Contrôle d'Omar sur la v5 (point 3) : la phrase revenait MOT POUR MOT à chaque refus (« Deux, c'est le mot en
+        /// français : tu as compris le sens. » ×3 dans QE1). Trois variantes sobres selon <paramref name="rang"/>, le rang du
+        /// refus lu par <see cref="RangDuRappel"/> (<see cref="PhraseDuRefus"/> : 1, 2, 3, puis on recommence), toujours sans
+        /// compliment ; le rang 1 est la phrase de la v5.
         /// </summary>
-        // CONTRÔLE D'OMAR SUR LA v5 (point 3) : la phrase revenait MOT POUR MOT à chaque refus (« Deux, c'est le mot en
-        // français : tu as compris le sens. » ×3 dans QE1). Trois variantes sobres selon le rang du refus (<paramref name="rang"/>,
-        // voir RangDuRappel), toujours sans compliment ; la 1re est celle de la v5.
-        // La signature v5 reste (rang 1) : les harnais des versions précédentes l'appellent par réflexion avec 4 paramètres.
-        public static string RappelTraductionRefusee(string langue, bool sensCompris = true, bool redemander = true, string? mot = null) =>
-            RappelTraductionRefuseeAuRang(langue, sensCompris, redemander, mot, 1);
-
         public static string RappelTraductionRefuseeAuRang(string langue, bool sensCompris, bool redemander, string? mot, int rang)
         {
             var propre = mot?.Trim().TrimEnd('!', '.', '?', ',').Trim() ?? string.Empty;
