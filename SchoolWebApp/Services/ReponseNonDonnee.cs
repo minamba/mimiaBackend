@@ -579,6 +579,10 @@ namespace SchoolWebApp.Api.Services
                 var droite = texte[(n.Index + n.Longueur)..];
                 if (!apres.IsMatch(droite)) continue;
 
+                // « et après 80 c'est... 81 » (retest KO #53, bout en bout du 22/11, conversation de test 808) : les points de
+                // suspension JUSTE avant le nombre sont une pause, pas une fin de phrase (FinDePhrase ne coupe pas là non plus).
+                gauche = Regex.Replace(gauche, @"(?:\.{2,}|…)\s*$", m => new string(' ', m.Length));
+
                 // À gauche, on ne regarde que la phrase en cours (le texte après la dernière ponctuation forte).
                 var debutPhrase = Math.Max(Math.Max(gauche.LastIndexOf('.'), gauche.LastIndexOf('!')), Math.Max(gauche.LastIndexOf('?'), gauche.LastIndexOf('\n')));
                 var proche = gauche[(debutPhrase + 1)..];

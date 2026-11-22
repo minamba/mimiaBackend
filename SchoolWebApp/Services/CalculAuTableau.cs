@@ -437,9 +437,9 @@ namespace SchoolWebApp.Api.Services
                 // Une relance ne félicite pas : « Bravo, tu as trouvé le résultat ! Tu en veux un autre ? » clôt la question.
                 var rangs = RangDemande().Matches(message).Select(m => char.ToLowerInvariant(m.Groups["u"].Value[0])).Distinct().ToList();
 
-                // Un refus en tête (« Non, regarde : 78, 79, 80… ») relance aussi une SUITE (retest #53) ; un calcul garde
-                // ses seuls mots de relance.
-                var refus = OuvertureQuiRefuse().IsMatch(message.TrimStart());
+                // Un refus en tête (« Non, regarde : 78, 79, 80… ») ou une relance douce (« Pas grave, tu peux me le
+                // redire ? ») relance aussi une SUITE (retest #53) ; un calcul garde ses seuls mots de relance.
+                var refus = (OuvertureQuiRefuse().IsMatch(message.TrimStart()) || RelanceDeSuite().IsMatch(message)) && !AutreChose().IsMatch(message);
                 if (!(RelanceDeCalcul().IsMatch(message) || rangs.Count > 0 || refus) || Felicite().IsMatch(message)) return null;
                 if (tableauReecrit && rangs.Count > 0) return null;
                 if (tableauReecrit || !(RelanceDeCalcul().IsMatch(message) || rangs.Count > 0)) seulementUneSuite = true;

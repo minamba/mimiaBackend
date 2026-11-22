@@ -93,6 +93,22 @@ namespace SchoolWebApp.Api.Services
             RegexOptions.IgnoreCase)]
         private static partial Regex DemandeQuiRenvoie();
 
+        /// <summary>
+        /// LA RELANCE DOUCE D'UNE SUITE — retest KO #53, bout en bout du 22/11 (conversations de test 807 et 810) : après
+        /// le 2e refus, Nora relance avec douceur, « Pas grave, Adam. Tu peux me le redire ? », « Pas grave ! On va le dire
+        /// ensemble, tout doucement. [ARDOISE]78, 79, 80…[/ARDOISE] » : ni mot de relance d'un calcul, ni refus en tête,
+        /// donc la question était perdue et le 3e essai partait sans verdict. Ne vaut que pour une SUITE.
+        /// </summary>
+        [GeneratedRegex(@"^\W*(?:(?:c['’]est\s+|ce\s+n['’]est\s+)?pas\s+grave|pas\s+de\s+souci|pas\s+d['’]inqui[ée]tude)(?!\p{L})"
+            + @"|(?<!\p{L})(?:redire|redis|répète|répéter|repete|relis|relit|relisons|réessaie|reessaie|recommence|encore\s+une\s+fois)(?!\p{L})",
+            RegexOptions.IgnoreCase)]
+        private static partial Regex RelanceDeSuite();
+
+        /// <summary>« Pas grave ! On fait autre chose. » ferme la suite, même avec un mot de relance.</summary>
+        [GeneratedRegex(@"(?<!\p{L})(?:autre\s+(?:chose|exercice|activité|activite|jeu)|on\s+change|on\s+arrête|on\s+arrete|on\s+s['’]arrête|pause)(?!\p{L})",
+            RegexOptions.IgnoreCase)]
+        private static partial Regex AutreChose();
+
         private static bool EstPosee(string phrase) =>
             phrase.TrimEnd().EndsWith('?') || DemandeALImperatif().IsMatch(phrase) || DemandeQuiRenvoie().IsMatch(phrase);
 
