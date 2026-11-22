@@ -29,6 +29,17 @@ namespace SchoolWebApp.Api.Controllers
         public int? TestId { get; set; }
     }
 
+    public class RattachementJeuRequest
+    {
+        public int? JeuId { get; set; }
+
+        public int? TestId { get; set; }
+
+        /// <summary>La compétence de la ligne ; vide = celle déjà écrite dans le signalement.</summary>
+        [StringLength(1000, ErrorMessage = "La compétence ne peut pas dépasser 1 000 caractères.")]
+        public string? Competence { get; set; }
+    }
+
     /// <summary>
     /// LES SIGNALEMENTS DES ADMINISTRATEURS — Camara, le 05/11/2026 : « le but c'est que les signalements soient
     /// reliés aux jeux de test ». Le bouton à côté du bouclier les crée ; l'onglet « Signalements Admin » les liste.
@@ -81,6 +92,58 @@ namespace SchoolWebApp.Api.Controllers
             }
 
             return Ok(liste);
+        }
+
+        /// <summary>
+        /// RATTACHER APRÈS COUP — Min's, le 22/11/2026 : « TOUT signalement admin doit faire l'objet d'un test ». Un
+        /// signalement créé sans jeu de test (ex. #62) se relie ici à un bloc, comme à la création : la ligne posée
+        /// porte sa compétence et sa description, en KO. Déjà TRAITÉ, la ligne part directement « à tester » (c'est
+        /// ce que fait le passage à « Traité »). Refusé s'il est déjà relié à une ligne qui existe encore.
+        /// </summary>
+        [HttpPut("{id:int}/jeu")]
+        [SwaggerResponse(200, "Signalement relié, sa ligne posée dans le bloc.", typeof(Signalement))]
+        [SwaggerResponse(400, "Jeu, bloc ou compétence manquant.")]
+        [SwaggerResponse(404, "Signalement admin inexistant.")]
+        [SwaggerResponse(409, "Déjà relié à une ligne de jeu de test.")]
+        public async Task<IActionResult> Rattacher(
+            int id, [FromBody] RattachementJeuRequest requete, [FromServices] ISignalementRepository depot, CancellationToken ct)
+        {
+            if (!ModelState.IsValid) return BadRequest(ModelState);
+            if (requete.JeuId is null || requete.TestId is null) return BadRequest(new { message = "Choisis le jeu de test et son bloc." });
+
+            var signalement = await _signalements.GetByIdAsync(id, ct);
+            if (signalement is null || !signalement.EstAdmin) return NotFound(new { message = "Ce signalement admin n'existe plus." });
+
+            if (signalement.LigneDeTestId is int deja && (await _jeux.LignesDeSignalementAsync([deja], ct)).Count > 0)
+            {
+                return Conflict(new { message = "Ce signalement est déjà relié à une ligne de jeu de test." });
+            }
+
+            var competence = string.IsNullOrWhiteSpace(requete.Competence) ? signalement.Competence?.Trim() : requete.Competence.Trim();
+            if (string.IsNullOrEmpty(competence))
+            {
+                return BadRequest(new { message = "La compétence / test à réaliser est obligatoire pour l'ajouter au jeu de test." });
+            }
+
+            var description = signalement.Description?.Trim() ?? string.Empty;
+            var ligneId = await _jeux.PoserLigneDeSignalementAsync(requete.JeuId.Value, requete.TestId.Value, competence, description, ct);
+            if (ligneId is null) return BadRequest(new { message = "Ce bloc n'existe plus dans ce jeu de test." });
+
+            if (signalement.Etat == "traite") await _jeux.RemettreATesterAsync(ligneId.Value, ct);
+
+            var relie = await depot.RelierALigneDeTestAsync(id, ligneId.Value, competence, ct);
+            if (relie is null)
+            {
+                // Supprimé entre-temps : la ligne posée pour lui ne doit pas rester orpheline.
+                await _jeux.SupprimerLigneAsync(requete.JeuId.Value, ligneId.Value, ct);
+                return NotFound(new { message = "Ce signalement admin n'existe plus." });
+            }
+
+            _evenementsAdmin.Publier("signalement");
+            _logger.LogInformation("Signalement admin {Id} rattache apres coup a la ligne de test {Ligne}.", id, ligneId);
+
+            relie.Test = (await _jeux.LignesDeSignalementAsync([ligneId.Value], ct)).FirstOrDefault();
+            return Ok(relie);
         }
 
         [HttpPost]

@@ -59,6 +59,12 @@ namespace SchoolWebApp.Domain.Repositories
         /// </summary>
         Task<Signalement?> RouvrirApresTestAsync(int ligneId, DateTime maintenant, CancellationToken ct = default);
 
+        /// <summary>
+        /// RATTACHER APRÈS COUP (22/11/2026) : un signalement admin créé sans jeu de test (ou dont la ligne a été
+        /// supprimée) est relié à cette ligne, avec sa compétence. Null s'il n'existe pas ou n'est pas un signalement admin.
+        /// </summary>
+        Task<Signalement?> RelierALigneDeTestAsync(int id, int ligneId, string competence, CancellationToken ct = default);
+
         /// <summary>Le signalement admin relié à cette ligne de test, ou null (06/11/2026).</summary>
         Task<Signalement?> GetAdminDeLigneAsync(int ligneId, CancellationToken ct = default);
     }

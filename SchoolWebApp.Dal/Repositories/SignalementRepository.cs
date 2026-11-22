@@ -287,6 +287,20 @@ namespace SchoolWebApp.Dal.Repositories
                 Reouvertures = s.Reouvertures,
             };
 
+        public async Task<DomainSignalement?> RelierALigneDeTestAsync(
+            int id, int ligneId, string competence, CancellationToken ct = default)
+        {
+            var entite = await _context.Signalements.FirstOrDefaultAsync(s => s.Id == id && s.EstAdmin, ct);
+            if (entite is null) return null;
+
+            entite.LigneDeTestId = ligneId;
+            entite.Competence = competence;
+            entite.DateMiseAJour = DateTime.UtcNow;
+            await _context.SaveChangesAsync(ct);
+
+            return await _context.Signalements.AsNoTracking().Where(s => s.Id == id).Select(Projection).FirstAsync(ct);
+        }
+
         public Task<DomainSignalement?> GetAdminDeLigneAsync(int ligneId, CancellationToken ct = default) =>
             _context.Signalements.AsNoTracking()
                 .Where(s => s.EstAdmin && s.LigneDeTestId == ligneId)
