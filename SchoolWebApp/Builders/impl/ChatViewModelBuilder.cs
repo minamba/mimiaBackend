@@ -4166,7 +4166,11 @@ namespace SchoolWebApp.Api.Builders.impl
             // ou à l'annonce « cinq minutes », le dernier mot dit attend encore sa réponse. Marine jugeait une réponse qui
             // n'existait pas (« Juste ! C'est bien cat. », « Pas tout à fait ! »), citait le mot (« Ce mot, c'était le mot que
             // je viens de te dire. ») ou en dictait un autre. Le fait le lui dit, et le filtre redit le MÊME mot, sans verdict.
-            var filSonsTextes = filSons.Select(m => m.Contenu ?? string.Empty).ToList();
+            // Comme pour la lecture des nombres (option rechargement, tâche 0140) : un [RAPPORT]/[FIN_SEANCE] ferme l'écoute
+            // (« Quitter », séance conclue), sauf au RECHARGEMENT, où le worker de départ l'écrit juste après le mot.
+            var rechargement = Services.Voix.LectureDesNombres.EstUnRechargement(typeAccueil, absenceApresSortie);
+            var filSonsTextes = filSons.Select(m => m.Contenu ?? string.Empty)
+                .Where(t => !rechargement || !Services.Voix.RegleVerificationSon.EstUneCloture(t)).ToList();
             var motAReprendre = typeAccueil is TypeAccueil.Retour or TypeAccueil.FinProche
                 && enExerciceDeSons && !change && langueDuSon is not null && lectureDuTour is null && etatDuMot is null
                 && poserLeChoix is null && !controleOuvert
