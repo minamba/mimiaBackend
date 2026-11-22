@@ -78,6 +78,16 @@ namespace SchoolWebApp.Api.Services
         private const string PasDeDernierEssai =
             "N'annonce pas de « dernier essai » à ce tour, ni « une dernière fois », ni « dernière chance ».";
 
+        /// <summary>
+        /// LE RAPPEL DE FIN DE CONSIGNES AUX 1re ET 2e ERREURS — tâche 0000o, bout en bout #53 ×10 sur dc8c86b : sans le filtre,
+        /// « dernier essai » revenait au 2e essai 3 fois sur 10 (« Dernier essai : dis-moi… », « une dernière fois »). Le fait du
+        /// rang est loin dans les consignes, et « trois essais » se lit « le troisième est le dernier » : ce rappel vient en
+        /// DERNIER, juste avant qu'il réponde, et dit qu'il reste plus d'un essai. Pas de chiffre.
+        /// </summary>
+        public const string RappelPasEncoreDernierEssai =
+            "[Rappel pour ce tour : ce n'est PAS son dernier essai, il lui en reste encore au moins deux. N'écris ni « dernier "
+            + "essai », ni « une dernière fois », ni « dernière chance », et reste sur la même question.]";
+
         public static string FaitRangDeLErreur(int rang) => rang switch
         {
             1 => PourToiSeul + "PREMIÈRE erreur sur cette question. Ce n'est pas son dernier essai : aide-le par un indice, et "

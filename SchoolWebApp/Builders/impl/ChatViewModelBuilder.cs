@@ -4565,8 +4565,13 @@ namespace SchoolWebApp.Api.Builders.impl
 
             // « DERNIER ESSAI » TROP TÔT AU RETOUR (décision de Min's du 22/11, 07h58 : au retour, le compte repart de zéro ;
             // conv. de test 1055 et 1089) : au tour d'arrivée d'un retour et à sa première réponse depuis, le fait du code. Pendant
-            // un calcul ou une suite, le rang compté par le code a déjà son fait (CalculAuTableau.FaitRangDeLErreur).
-            if (rangDeLErreur is null && (DernierEssaiTropTot.AuRetour(typeAccueil)
+            // un calcul ou une suite, le rang compté par le code a déjà son fait (CalculAuTableau.FaitRangDeLErreur), et aux 1re et
+            // 2e erreurs le rappel court, en dernier (bout en bout #53 ×10 sur dc8c86b : « dernier essai » au 2e essai 3 fois sur 10).
+            if (rangDeLErreur is 1 or 2)
+            {
+                declencheur += "\n\n" + CalculAuTableau.RappelPasEncoreDernierEssai;
+            }
+            else if (rangDeLErreur is null && (DernierEssaiTropTot.AuRetour(typeAccueil)
                 || DernierEssaiTropTot.TropTotApresLeRetour(historique.Select(m => ((string?)m.Role, (string?)m.Contenu)).ToList())))
             {
                 declencheur += "\n\n" + DernierEssaiTropTot.FaitAuRetour;

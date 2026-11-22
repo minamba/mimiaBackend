@@ -117,7 +117,16 @@ namespace SchoolWebApp.Api.Services
         /// du code à la fin, sur sa propre ligne. Rien n'est retiré ni réécrit : un ajout seulement, que le juge relit au tour
         /// suivant. Le texte enregistré reçoit le même ajout (même méthode).
         /// </summary>
+        // « Dis-moi ce qui vient juste après. » (bout en bout #53 sur dc8c86b, séries 8 et 10) : une demande sans « ? » est déjà une
+        // question pour l'élève ; la question du code s'ajoutait derrière (« … juste après.  78, 79, 80… ? »), en double.
         public static string AvecLaQuestion(string texte, string enonce) =>
-            texte.Contains('?') || string.IsNullOrWhiteSpace(enonce) ? texte : texte.TrimEnd() + "\n\n" + AnalogieDeSuite.QuestionDuCode(enonce);
+            texte.Contains('?') || string.IsNullOrWhiteSpace(enonce) || Demande().IsMatch(texte)
+                ? texte
+                : texte.TrimEnd() + "\n\n" + AnalogieDeSuite.QuestionDuCode(enonce);
+
+        /// <summary>Une demande qui attend sa réponse : « dis-moi », « donne-moi », « écris-moi », « à toi de trouver / de dire ».</summary>
+        [GeneratedRegex(@"\b(?:dis|donne|écris|ecris|montre)[- ]moi\b|\bà\s+toi\s+de\s+(?:trouver|dire|me\s+dire)\b",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+        private static partial Regex Demande();
     }
 }
