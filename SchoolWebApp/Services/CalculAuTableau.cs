@@ -304,6 +304,9 @@ namespace SchoolWebApp.Api.Services
             // qu'aucune relance n'en demande, null si elle en demande plusieurs.
             char? rangDeLaRelance = '\0';
 
+            // Une relance traversée ne peut relancer qu'une suite des nombres (tableau réécrit, ou simple refus en tête).
+            var seulementUneSuite = false;
+
             var recents = messagesDuProfesseur.Reverse().Take(MessagesRemontes).ToList();
             for (var j = 0; j < recents.Count; j++)
             {
@@ -369,11 +372,13 @@ namespace SchoolWebApp.Api.Services
                     }
 
                     // Une relance ne cite que les nombres de la suite (« Compte avec moi : 71, 72, 73… »), son pas, 1 ou 10.
-                    var permis = s.Cites.Select(c => (decimal)c).Append(1).Append(10).ToHashSet();
-                    return nombresDesRelances.All(permis.Contains)
+                    return nombresDesRelances.All(NombresDUneRelanceDeSuite(s).Contains)
                         ? new Question(null, s.Attendu.ToString(CultureInfo.InvariantCulture), null, s)
                         : null;
                 }
+
+                // Un tableau réécrit, ou une relance qui n'est qu'un refus (« Non, … »), ne laisse ouverte qu'une SUITE.
+                if (seulementUneSuite && calculs.Count + decompositions.Count > 0) return null;
 
                 if (calculs.Count == 1)
                 {
@@ -406,13 +411,22 @@ namespace SchoolWebApp.Api.Services
                     return new Question(null, d.N.ToString(CultureInfo.InvariantCulture), d);
                 }
 
-                // Un tableau réécrit ou effacé sans qu'on lise de question : l'exercice d'avant n'est plus affiché.
-                if (Regex.IsMatch(message, @"\[(?:ARDOISE|TABLEAU_EFFACE)\]", RegexOptions.IgnoreCase)) return null;
+                // Un tableau effacé sans qu'on lise de question : l'exercice d'avant n'est plus affiché.
+                if (Regex.IsMatch(message, @"\[TABLEAU_EFFACE\]", RegexOptions.IgnoreCase)) return null;
+
+                // UN TABLEAU RÉÉCRIT POUR RECOMPTER — retest KO #53 (Adam, 22/11/2026, en ligne b5dfd9f) : au 2e essai,
+                // Nora a refusé « Sept » en réécrivant la suite, « Pas tout à fait, Adam. On relit ensemble : 78, 79, 80...
+                // [ARDOISE]78, 79, 80, ...[/ARDOISE] … », sans question qu'on lise. Un tableau réécrit fermait la question :
+                // aucun verdict, et le 2e « sept » a été validé (« c'est bien 81 ! », 2 fois sur 2). Un tableau réécrit
+                // laisse donc ouverte une question de SUITE posée plus haut, si le message la relance (mots de relance ou
+                // refus en tête) et ne cite que des nombres du recomptage (vérifié quand on la retrouve). Pour un calcul ou
+                // une décomposition, rien ne change : le tableau réécrit sans question ferme l'exercice d'avant.
+                var tableauReecrit = Regex.IsMatch(message, @"\[ARDOISE\]", RegexOptions.IgnoreCase);
 
                 // Le message le plus récent ne pose rien, ne parle d'aucun nombre : la question d'avant reste ouverte
                 // (« Ce n'est pas encore ça. C'est ton dernier essai. »).
                 var nombres = NombresDuMessage(message);
-                if (!message.Contains('?') && nombres.Count == 0) continue;
+                if (!tableauReecrit && !message.Contains('?') && nombres.Count == 0) continue;
 
                 // LA RELANCE DE LA MÊME QUESTION — Minamba, le 20/11/2026, signalement #45 : après « 8 - 3 = ? » au
                 // tableau, Nora a relancé « Non, pas tout à fait Adam… Combien il en reste ? », sans réécrire le calcul.
@@ -422,7 +436,13 @@ namespace SchoolWebApp.Api.Services
                 // calcul. Sinon (« Maintenant, calcule 9 - 4. », « Combien de billes a Paul ? ») : on ne remonte plus.
                 // Une relance ne félicite pas : « Bravo, tu as trouvé le résultat ! Tu en veux un autre ? » clôt la question.
                 var rangs = RangDemande().Matches(message).Select(m => char.ToLowerInvariant(m.Groups["u"].Value[0])).Distinct().ToList();
-                if (!(RelanceDeCalcul().IsMatch(message) || rangs.Count > 0) || Felicite().IsMatch(message)) return null;
+
+                // Un refus en tête (« Non, regarde : 78, 79, 80… ») relance aussi une SUITE (retest #53) ; un calcul garde
+                // ses seuls mots de relance.
+                var refus = OuvertureQuiRefuse().IsMatch(message.TrimStart());
+                if (!(RelanceDeCalcul().IsMatch(message) || rangs.Count > 0 || refus) || Felicite().IsMatch(message)) return null;
+                if (tableauReecrit && rangs.Count > 0) return null;
+                if (tableauReecrit || !(RelanceDeCalcul().IsMatch(message) || rangs.Count > 0)) seulementUneSuite = true;
 
                 // UNE RELANCE QUI POSE UNE SOUS-QUESTION — contrôle d'Omar, 20/11/2026 : « Pas encore. Lève 8 doigts.
                 // Combien de doigts tu as levés ? » après « 8 - 3 = ? ». L'élève répond 8, juste à CETTE question, et le

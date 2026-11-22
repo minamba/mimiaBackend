@@ -82,7 +82,19 @@ namespace SchoolWebApp.Api.Services
             RegexOptions.IgnoreCase)]
         private static partial Regex DemandeALImperatif();
 
-        private static bool EstPosee(string phrase) => phrase.TrimEnd().EndsWith('?') || DemandeALImperatif().IsMatch(phrase);
+        /// <summary>
+        /// LA DEMANDE QUI RENVOIE À LA PHRASE D'AVANT — retest KO #53 (Adam, 22/11/2026 06h08, en ligne b5dfd9f) :
+        /// après un premier « Sept » refusé, Nora a relancé « Après 80, on continue d'avancer d'un petit pas. Dis-moi ce
+        /// nombre. » : la demande (« ce nombre », « dis-le-moi ») ne cite aucun nombre, la phrase d'avant dit lequel.
+        /// Rien n'était lu, aucun verdict ne partait, et le 2e « sept » a reçu « Oui ! Bravo Adam, c'est bien 81 ! ».
+        /// Une telle demande, sans nombre à elle, se lit avec la phrase qui la précède dans le même message.
+        /// </summary>
+        [GeneratedRegex(@"^\W*(?:\p{L}+\s*,\s*)?(?:(?:et|alors|maintenant)\s*,?\s+)?(?:(?:dis|donne|écris|ecris|trouve|cherche)(?:-moi|-nous)?\s+ce\s+nombre(?:-l[àa])?|(?:dis|donne|écris|ecris|trouve|cherche)-le(?:-moi|-nous)?)(?!\p{L})",
+            RegexOptions.IgnoreCase)]
+        private static partial Regex DemandeQuiRenvoie();
+
+        private static bool EstPosee(string phrase) =>
+            phrase.TrimEnd().EndsWith('?') || DemandeALImperatif().IsMatch(phrase) || DemandeQuiRenvoie().IsMatch(phrase);
 
         /// <summary>Les mots qui disent qu'on parle de la suite des nombres.</summary>
         [GeneratedRegex(@"(?<!\p{L})(?:vient|viennent|arrive|arrivent|suit|suivent|suivant|ensuite|après|apres|dis|dit|dire|il\s+y\s+a|quel\s+nombre|qu['’]est-ce\s+qui|manque|continue|précède|precede|précédent|avant)(?!\p{L})",
@@ -177,9 +189,17 @@ namespace SchoolWebApp.Api.Services
             }
 
             // 2. « après 73 », « avant 80 », « suit 73 », « entre 72 et 74 », dans une question.
-            foreach (var phrase in phrases)
+            for (var i = 0; i < phrases.Count; i++)
             {
-                if (!EstPosee(phrase) || PasUneSuite().IsMatch(phrase)) continue;
+                var phrase = phrases[i];
+                if (!EstPosee(phrase)) continue;
+
+                // « Après 80, on continue d'avancer d'un petit pas. Dis-moi ce nombre. » : la demande se lit avec la phrase
+                // d'avant (retest #53 du 22/11), seulement si elle ne cite aucun nombre elle-même.
+                if (i > 0 && DemandeQuiRenvoie().IsMatch(phrase) && !Regex.IsMatch(phrase, @"\d"))
+                    phrase = phrases[i - 1].TrimEnd() + " " + phrase.TrimStart();
+
+                if (PasUneSuite().IsMatch(phrase)) continue;
 
                 var aRebours = Rebours().IsMatch(texte);
                 foreach (var m in ApresOuAvant().Matches(phrase).Concat(SuitOuPrecede().Matches(phrase)))
@@ -231,6 +251,26 @@ namespace SchoolWebApp.Api.Services
             }
 
             return trouvees;
+        }
+
+        /// <summary>
+        /// Les nombres qu'une RELANCE d'une question de suite peut citer sans parler d'autre chose : ceux de la question,
+        /// son pas, 1 et 10, et — retest KO #53 du 22/11 — les nombres de la même suite autour du trou, de part et
+        /// d'autre (« On relit ensemble : 78, 79, 80… » pour « après 80 » ; « 77, 78… » pour « avant 80 », l'indice
+        /// fait compter en montant). Le recomptage n'ajoute jamais le nombre attendu : un message qui le cite a donné
+        /// la réponse, la question est fermée (1 et 10 restent permis comme avant, même quand ils sont la réponse).
+        /// </summary>
+        private static HashSet<decimal> NombresDUneRelanceDeSuite(SuitePosee s)
+        {
+            var permis = s.Cites.Select(c => (decimal)c).Append(1).Append(10).ToHashSet();
+            for (var k = 1; k <= 20; k++)
+            {
+                foreach (var n in new[] { s.Attendu - k * s.Pas, s.Attendu + k * s.Pas })
+                {
+                    if (n >= 0 && n <= SuiteMaximum && n != s.Attendu) permis.Add(n);
+                }
+            }
+            return permis;
         }
 
         /// <summary>Deux lectures qui attendent le même nombre sont la même question ; on garde la plus parlante.</summary>
