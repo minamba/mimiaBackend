@@ -507,8 +507,10 @@ namespace SchoolWebApp.Api.Services
         {
             var permis = Operandes(expression);
             permis.UnionWith(operandesEnPlus);
-
             var bornes = permis.Append(resultat).ToList();
+
+            // « 1 de plus », « on avance de 1 en 1 » (le pas d'une suite qui compte vers le résultat, conversation 696).
+            permis.Add(1);
             var (min, max) = (bornes.Min(), bornes.Max());
             if (bornes.All(b => b == Math.Floor(b)) && min >= 0 && max - min <= 30)
             {
