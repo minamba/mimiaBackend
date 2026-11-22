@@ -123,10 +123,15 @@ namespace SchoolWebApp.Api.Services
             var corps = phrase[..fin.Index];
 
             var n = 0;
+            // « …le son au début :⏎⏎[EN]Blue[/EN] » (bout en bout QR2 sur 5c685bd) : les deux-points qui annoncent la ligne
+            // suivante restent, s'ils ne faisaient pas partie de ce qui part.
+            var origine = corps.TrimEnd();
+            var finDuDernier = 0;
             corps = motif.Replace(corps, m =>
             {
                 if (options?.Garder is { } garder && m.Groups[garder].Success && options.Vues++ == 0) return m.Value;
                 n++;
+                finDuDernier = m.Index + m.Length;
                 var v = m.Value.Trim();
                 // Au milieu, entre deux virgules (« …en français, et c'est très bien, tu as compris ») : une virgule reste.
                 if ((v.StartsWith(',') || v.StartsWith('—') || v.StartsWith('–')) && v.EndsWith(',') && m.Index > 0) return ", ";
@@ -154,6 +159,7 @@ namespace SchoolWebApp.Api.Services
                 // Une phrase qui n'était que la félicitation (« Bravo ! ») part entière ; ses sauts de ligne restent.
                 return blancs.Contains('\n') ? blancs[blancs.IndexOf('\n')..] : string.Empty;
             }
+            if (origine.EndsWith(':') && finDuDernier < origine.Length && !corps.EndsWith(':')) corps += " :";
             if (char.IsLower(corps[0])) corps = char.ToUpperInvariant(corps[0]) + corps[1..];
             if (Regex.IsMatch(corps, @"[.!?…]$")) ponctuation = string.Empty;
             return corps + ponctuation + blancs;

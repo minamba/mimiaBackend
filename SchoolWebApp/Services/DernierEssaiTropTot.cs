@@ -56,12 +56,14 @@ namespace SchoolWebApp.Api.Services
 
         /// <summary>
         /// « ÉCOUTE UNE DERNIÈRE FOIS » TROP TÔT — contrôle d'Omar sur le lot groupé v2 (point 4, QR2 final : au 1er essai après
-        /// le retour, compteur à zéro). Aux rangs trop tôt, « une dernière fois » derrière écoute / essaie / répète / redis part
+        /// le retour, compteur à zéro). Aux rangs trop tôt, « une dernière fois » part, quel que soit le verbe
         /// (« Écoute une dernière fois le son anglais : » → « Écoute le son anglais : »), même dans une phrase qui porte la
         /// balise de voix (hors de la balise). « Comme la dernière fois » reste.
         /// </summary>
+        // « Je te fais réécouter le mot une dernière fois, » (accueil du retour, bout en bout QR2 sur 5c685bd, conv. de test 1124) :
+        // le verbe n'était pas dans la liste. À ces rangs, aucun « une dernière fois » n'est juste : il part partout (hors balise).
         private const string DerniereFoisTexte =
-            @"(?<=\b(?:[ÉEée]coute|[ÉEée]coutons|essaie|essaye|essayons|r[ée]essaie|r[ée]p[èe]te|r[ée]p[ée]tons|redis|dis|r[ée]ponds)(?:-(?:le|la|les|moi|nous))?\b[^.!?…\n,;:\[\]]{0,40}?)\s+une\s+derni[eè]re\s+fois\b";
+            @"(?:^(?:pour\s+)?une\s+derni[eè]re\s+fois\b\s*,?|\s+(?:pour\s+)?une\s+derni[eè]re\s+fois\b)";
 
         /// <summary>
         /// Les mêmes retraits dans une phrase qui porte une balise (voix, ardoise), hors de la balise : « [/ARDOISE] C'est ton
