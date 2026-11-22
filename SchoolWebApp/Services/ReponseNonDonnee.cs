@@ -267,13 +267,22 @@ namespace SchoolWebApp.Api.Services
                 var ponctuation = texte[j..p];
                 if (ponctuation.Contains('…') || ponctuation.Contains(".."))
                 {
-                    var mot = Regex.Match(texte[suite..], @"^[«""(]*[\p{L}\d-]+");
+                    // « onze... et douze », « 10... puis 11 » : le petit mot de liaison ne coupe pas non plus.
+                    var regard = suite;
+                    var liaison = Regex.Match(texte[suite..], @"^(?:et|puis|encore)\s+", RegexOptions.IgnoreCase);
+                    if (liaison.Success && suite + liaison.Length < texte.Length) regard += liaison.Length;
+                    else if (liaison.Success && !fin)
+                    {
+                        sure = false;
+                        return texte.Length;
+                    }
+                    var mot = Regex.Match(texte[regard..], @"^[«""(]*[\p{L}\d-]+");
                     if (!mot.Success)
                     {
                         sure = true;
                         return suite;
                     }
-                    if (suite + mot.Length >= texte.Length && !fin)
+                    if (regard + mot.Length >= texte.Length && !fin)
                     {
                         // Le mot suivant n'est peut-être pas fini.
                         sure = false;
@@ -282,7 +291,7 @@ namespace SchoolWebApp.Api.Services
                     var motSeul = mot.Value.TrimStart('«', '"', '(');
                     if (Nombre().Match(motSeul) is { Success: true } n && n.Index == 0 && n.Length == motSeul.Length)
                     {
-                        j = suite - 1;
+                        j = regard - 1;
                         continue;
                     }
                 }
@@ -420,8 +429,11 @@ namespace SchoolWebApp.Api.Services
         private static partial Regex GardeDeLAvantDernier();
 
         private static bool TermeDeCalcul(string texte, Lu n) =>
-            // Un opérateur entre deux nombres seulement : « pas : 11, 12 » et « 12 - essaie » ne calculent rien.
-            Regex.IsMatch(texte[..n.Index], @"\d\s*(?:[+\-−–×*:÷=]|(?<!\p{L})(?:x|plus|moins|fois)(?!\p{L}))\s*$", RegexOptions.IgnoreCase)
+            // Un opérateur entre deux nombres seulement : « pas : 11, 12 » et « 12 - essaie » ne calculent rien. Le « : »
+            // n'est une division qu'entre deux nombres en chiffres : « compte après 10 : onze, douze » ne divise rien.
+            Regex.IsMatch(texte[..n.Index], char.IsDigit(texte[n.Index])
+                ? @"\d\s*(?:[+\-−–×*:÷=]|(?<!\p{L})(?:x|plus|moins|fois)(?!\p{L}))\s*$"
+                : @"\d\s*(?:[+\-−–×*÷=]|(?<!\p{L})(?:x|plus|moins|fois)(?!\p{L}))\s*$", RegexOptions.IgnoreCase)
             || Regex.IsMatch(texte[(n.Index + n.Longueur)..], @"^\s*(?:[+\-−–×*:÷=]|(?:x|plus|moins|fois)(?!\p{L}))\s*\d", RegexOptions.IgnoreCase);
 
         /// <summary>Dans une parenthèse : « 8 (un doigt), 9 (deux doigts) » — le « deux » ne compte pas dans la suite.</summary>

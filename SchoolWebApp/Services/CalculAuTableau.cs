@@ -39,7 +39,8 @@ namespace SchoolWebApp.Api.Services
         // un mot aussi (« Calcule 4 + 3 »), le crochet de [ARDOISE] aussi.
         // La virgule qui suit un MOT n'en fait pas partie : « Alors ça fait combien, 10 + 2 ? » (tâche 1941) ; celle d'un
         // nombre, si : « 2,5 + 1 », « 12, 4 + 3 ».
-        private const string PasDeSuiteAvant = @"(?<![\d./()^²³+\-−–×*÷=]\s*)(?<!(?<!\p{L}),\s*)(?<![\p{L}\d])";
+        // Un saut de ligne sépare aussi : au tableau, « 7 + 3 = 10⏎10 + 2 = ? » pose bien « 10 + 2 » (tâche 1941, conv. 703).
+        private const string PasDeSuiteAvant = @"(?<![\d./()^²³+\-−–×*÷=][ \t]*)(?<!(?<!\p{L}),\s*)(?<![\p{L}\d])";
         private const string PasDeSuiteApres = @"(?!\s*[\d/^²³(])";
 
         /// <summary>« 4 + 3 = ? », « 23 × 14 = … », « 9 - 4 = ___ », « 10 + 2 = combien ? ».</summary>
@@ -509,8 +510,13 @@ namespace SchoolWebApp.Api.Services
             permis.UnionWith(operandesEnPlus);
             var bornes = permis.Append(resultat).ToList();
 
-            // « 1 de plus », « on avance de 1 en 1 » (le pas d'une suite qui compte vers le résultat, conversation 696).
+            // « 1 de plus », « on avance de 1 en 1 » (le pas d'une suite qui compte vers le résultat, conversation 696), et
+            // les doigts d'un terme qu'on compte un par un : « ajoute 1, 2, 3, 4, 5 en comptant : 8, 9, 10, 11… » (693).
             permis.Add(1);
+            foreach (var terme in Operandes(expression).Where(t => t == Math.Floor(t) && t >= 1 && t <= 20))
+            {
+                for (var n = 1m; n <= terme; n++) permis.Add(n);
+            }
             var (min, max) = (bornes.Min(), bornes.Max());
             if (bornes.All(b => b == Math.Floor(b)) && min >= 0 && max - min <= 30)
             {
