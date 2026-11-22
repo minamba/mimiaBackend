@@ -53,7 +53,11 @@ namespace SchoolWebApp.Api.Services
         public const string PasDAnalogie =
             " N'explique jamais le nom d'un nombre en le comparant au nom d'un autre nombre (« ça continue comme …, mais avec "
             + "… devant ») : les noms des nombres ne se construisent pas tous pareil, et l'élève en tirerait un nom qui "
-            + "n'existe pas. Fais-le seulement compter.";
+            + "n'existe pas. Fais-le seulement compter."
+            // « après 80, c'est un petit nombre tout seul », « c'est tout petit comme nombre, comme quand tu comptais 8, 9, 10 »
+            // (bout en bout ×10 sur 03a659d, conv. de test 1059 et 1058) : le nombre cherché est le PLUS GRAND de la suite.
+            + " Ne décris pas non plus le nombre cherché (« un petit nombre », « tout petit », « comme quand tu comptais … ») : "
+            + "il vient juste après, il est plus grand que tous ceux du tableau.";
 
         private static string Recompte(IEnumerable<int> nombres) =>
             "« " + string.Join(", ", nombres.Where(x => x >= 0).Select(x => x.ToString(CultureInfo.InvariantCulture))) + "… »";

@@ -43,7 +43,16 @@ namespace SchoolWebApp.Api.Services
         private const string MentionTexte =
             @"(?:\s*,\s*|\s*[—–]\s*|\s+)?(?:\bet\s+)?(?:\b(?:allez|alors|bon|ok)\s*,?\s*)?(?:\bpour\s+)?(?:\bc['’](?:est|était)\s+)?(?:\b(?:ton|ta|le|un|une)\s+)?"
             + @"\b(?:dernier\s+essai|derni[eè]re\s+(?:chance|tentative))\b"
-            + @"(?:\s+pour\s+(?:celui-ci|celui-là|celle-ci|celle-là|cette\s+question|ce\s+nombre|ce\s+calcul|cette\s+fois|aujourd['’]hui))?\s*(?:!+|,|:)?";
+            // « C'est ton dernier essai sur ce mot, tu es prêt ? » (accueil du retour, conv. de test 1055) : « sur ce mot » part avec.
+            + @"(?:\s+(?:pour|sur)\s+(?:celui-ci|celui-là|celle-ci|celle-là|cette\s+question|ce\s+nombre|ce\s+calcul|cette\s+fois|aujourd['’]hui|ce\s+mot|cette\s+syllabe|cette\s+couleur|ce\s+son))?\s*(?:!+|,|:)?";
+
+        /// <summary>
+        /// LE TOUR D'ARRIVÉE D'UN RETOUR — décision de Min's du 22/11/2026 (07h58) : au retour, le compte des essais repart de
+        /// zéro (EssaisRates.FinDeSeance). Le prochain essai est le premier : « c'est ton dernier essai » ne se dit pas à
+        /// l'accueil (bout en bout QR1 du lot groupé, conv. de test 1055). Générique : tout exercice, tout professeur.
+        /// </summary>
+        public static bool AuRetour(TypeAccueil type) =>
+            type is TypeAccueil.Retour or TypeAccueil.NouvelleSeance or TypeAccueil.RetourDicteeInterrompue or TypeAccueil.RetourControleAbandonne;
 
         /// <summary>Un filtre à poser dès que le code a compté une erreur (rang non nul).</summary>
         public static bool AFiltrer(int? rang) => rang is not null;
