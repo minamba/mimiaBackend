@@ -21,7 +21,7 @@ namespace SchoolWebApp.Api.Services
         [GeneratedRegex(
             @"(?:\s*,\s*|\s*[—–]\s*|\s+)?(?:\bet\s+)?(?:\bça\s+|\bca\s+)?\bc['’]est\s+(?:(?:vraiment|trop|déjà|deja|quand\s+même|tout\s+de\s+même)\s+)?(?:très\s+bien|bien\s+joué|super|top|génial|genial|parfait|formidable|excellent|chouette|bravo)\b(?:\s+de\s+ta\s+part|\s+pour\s+[^!.?,;:\n\[]{1,40})?\s*(?:[!]+|,)?(?=\s|$|[.!?…])"
             // « Bon, et bravo pour l'effort de répéter ! » (bout en bout QR2, conv. de test 949) : « et » devant, « pour … » derrière.
-            + @"|(?:\s*,\s*|(?<=^|[.!?…\n])\s*)(?:\bet\s+)?\b(?:bravo|très\s+bien|super|génial|parfait|bien\s+joué)\b(?:\s+pour\s+[^!.?,;:\n\[]{1,40}|\s+\p{Lu}\p{Ll}+)?\s*(?:!+|,|\.(?!\.))?(?=\s|$)",
+            + @"|(?:\s*,\s*|(?<=^|[.!?…\n])\s*)(?:\bet\s+)?\b(?:bravo|très\s+bien|super|génial|parfait|bien\s+joué)\b(?:\s+pour\s+[^!.?,;:\n\[]{1,40}|(?-i:\s+\p{Lu}\p{Ll}+))?\s*(?:!+|,|\.(?!\.))?(?=\s|$)",
             RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
         private static partial Regex Felicitation();
 
@@ -64,18 +64,27 @@ namespace SchoolWebApp.Api.Services
                 n++;
                 var v = m.Value.Trim();
                 // Au milieu, entre deux virgules (« …en français, et c'est très bien, tu as compris ») : une virgule reste.
-                return (v.StartsWith(',') || v.StartsWith('—') || v.StartsWith('–')) && v.EndsWith(',') && m.Index > 0 ? ", " : string.Empty;
+                if ((v.StartsWith(',') || v.StartsWith('—') || v.StartsWith('–')) && v.EndsWith(',') && m.Index > 0) return ", ";
+                // Entre deux mots, jamais rien : « ça vient, c'est ton dernier essai pour… » ne devient pas « ça vientpour… »
+                // (bout en bout du lot groupé sur 7039668, conv. de test 990).
+                var avant = m.Index > 0 ? corps[m.Index - 1] : ' ';
+                var apres = m.Index + m.Length < corps.Length ? corps[m.Index + m.Length] : ' ';
+                return !char.IsWhiteSpace(avant) && !char.IsWhiteSpace(apres) && m.Index > 0 ? " " : string.Empty;
             });
             if (n == 0) return phrase;
             retraits += n;
 
+            corps = Regex.Replace(corps, @"\(\s*\)", string.Empty);
             corps = Regex.Replace(corps, @"[\s,;:—–-]+$", string.Empty);
             corps = Regex.Replace(corps, @"^[\s,;:—–-]+", string.Empty);
             corps = Regex.Replace(corps, @"[^\S\n]{2,}", " ");
             corps = Regex.Replace(corps, @"\s+,", ",");
-            // Il ne reste qu'une interjection (« Bon », « Alors », « Ah ») : elle ne dit plus rien, elle part avec.
+            // Il ne reste qu'une interjection (« Bon », « Alors », « Ah »), ou le seul prénom de l'élève (« C'est ton dernier
+            // essai, Adam. » → « Adam. », conv. de test 984) : elle ne dit plus rien, elle part avec.
             if (!corps.Any(char.IsLetterOrDigit)
-                || Regex.IsMatch(corps, @"^(?:bon|alors|ah|oh|eh\s+bien|ok|okay|d['’]accord|allez)$", RegexOptions.IgnoreCase))
+                || Regex.IsMatch(corps, @"^(?:bon|alors|ah|oh|eh\s+bien|ok|okay|d['’]accord|allez)$", RegexOptions.IgnoreCase)
+                || (Regex.IsMatch(corps, @"^\p{Lu}\p{Ll}+(?:-\p{Lu}\p{Ll}+)?$")
+                    && !Regex.IsMatch(corps, @"^(?:non|oui|presque|attention|regarde|écoute|ecoute|courage|voilà|voila|exactement|pas|encore|essaie|réessaie|vas-y)$", RegexOptions.IgnoreCase)))
             {
                 // Une phrase qui n'était que la félicitation (« Bravo ! ») part entière ; ses sauts de ligne restent.
                 return blancs.Contains('\n') ? blancs[blancs.IndexOf('\n')..] : string.Empty;

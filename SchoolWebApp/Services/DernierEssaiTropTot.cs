@@ -14,8 +14,10 @@ namespace SchoolWebApp.Api.Services
     public static partial class DernierEssaiTropTot
     {
         [GeneratedRegex(
-            @"(?:\s*,\s*|\s*[—–]\s*|\s+)?(?:\bet\s+)?(?:\b(?:allez|alors|bon|ok)\s*,?\s*)?(?:\bpour\s+)?(?:\bc['’]est\s+)?(?:\b(?:ton|ta|le|un|une)\s+)?"
-            + @"\b(?:dernier\s+essai|derni[eè]re\s+(?:chance|tentative))\b\s*(?:!+|,|:)?",
+            @"(?:\s*,\s*|\s*[—–]\s*|\s+)?(?:\bet\s+)?(?:\b(?:allez|alors|bon|ok)\s*,?\s*)?(?:\bpour\s+)?(?:\bc['’](?:est|était)\s+)?(?:\b(?:ton|ta|le|un|une)\s+)?"
+            + @"\b(?:dernier\s+essai|derni[eè]re\s+(?:chance|tentative))\b"
+            // « dernier essai pour celui-là » (conv. de test 990) : le complément part avec la mention.
+            + @"(?:\s+pour\s+(?:celui-ci|celui-là|celle-ci|celle-là|cette\s+question|ce\s+nombre|ce\s+calcul|cette\s+fois|aujourd['’]hui))?\s*(?:!+|,|:)?",
             RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
         private static partial Regex Mention();
 
