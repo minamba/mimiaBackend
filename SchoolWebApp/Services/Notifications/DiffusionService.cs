@@ -174,12 +174,16 @@ namespace SchoolWebApp.Api.Services.Notifications
         /// #141414, les couleurs du bouton du thème Black Friday du site
         /// (contraste ≈ 10:1). Hauteur 14 + 20 + 14 = 48 px, au-dessus des 44 px
         /// d'une cible tactile.
+        ///
+        /// `data-adresse-en-texte` (contrôle d'Omar sur le lot groupé, 22/11/2026) : la version TEXTE du courriel garde
+        /// l'adresse du bouton, « Voir les formules : https://… » (voir TexteBrut.Depuis) ; sans elle, il ne restait que
+        /// « Voir les formules », sans lien, pour qui lit le texte brut.
         /// </summary>
         private static string ComposerBouton(string texte, string adresse) =>
             "<table role=\"presentation\" align=\"center\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" "
             + "style=\"margin:6px auto 24px auto;\"><tr>"
             + "<td align=\"center\" bgcolor=\"#f5b301\" style=\"background-color:#f5b301; border-radius:12px;\">"
-            + $"<a href=\"{WebUtility.HtmlEncode(adresse)}\" style=\"display:inline-block; padding:14px 28px; "
+            + $"<a href=\"{WebUtility.HtmlEncode(adresse)}\" {TexteBrut.AttributAdresseEnTexte} style=\"display:inline-block; padding:14px 28px; "
             + "font-family:-apple-system,'Segoe UI',Helvetica,Arial,sans-serif; font-size:16px; line-height:20px; "
             + "font-weight:700; color:#141414; text-decoration:none; border-radius:12px;\">"
             + $"{WebUtility.HtmlEncode(texte)}</a>"

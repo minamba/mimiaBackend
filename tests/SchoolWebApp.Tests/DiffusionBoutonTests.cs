@@ -36,7 +36,7 @@ namespace SchoolWebApp.Tests
             "<table role=\"presentation\" align=\"center\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" "
             + "style=\"margin:6px auto 24px auto;\"><tr>"
             + "<td align=\"center\" bgcolor=\"#f5b301\" style=\"background-color:#f5b301; border-radius:12px;\">"
-            + $"<a href=\"{adresseHtml}\" style=\"display:inline-block; padding:14px 28px; "
+            + $"<a href=\"{adresseHtml}\" data-adresse-en-texte=\"1\" style=\"display:inline-block; padding:14px 28px; "
             + "font-family:-apple-system,'Segoe UI',Helvetica,Arial,sans-serif; font-size:16px; line-height:20px; "
             + "font-weight:700; color:#141414; text-decoration:none; border-radius:12px;\">"
             + $"{texteHtml}</a>"
@@ -107,6 +107,23 @@ namespace SchoolWebApp.Tests
                 BoutonAttendu("&lt;b&gt;Go&lt;/b&gt; &amp; &lt;img src=x onerror=alert(1)&gt;", "https://mimia.fr/tarifs"), html);
             Assert.DoesNotContain("<b>", html);
             Assert.DoesNotContain("<img", html);
+        }
+
+        /// <summary>
+        /// LA VERSION TEXTE GARDE L'ADRESSE DU BOUTON (contrôle d'Omar sur le lot groupé, 22/11/2026) : « Voir les formules :
+        /// https://… », adresse décodée (&amp; redevient &). Un lien ordinaire ne change pas.
+        /// </summary>
+        [Fact]
+        public void La_version_texte_garde_l_adresse_du_bouton()
+        {
+            var html = Service().ComposerCorps(
+                "Bonjour,\n\n[[Voir les formules]](https://mimia.fr/tarifs?offre=bf&duree=12)\n\n[le site](https://mimia.fr/a)", 0);
+            var texte = TexteBrut.Depuis(html);
+
+            Assert.Contains("Voir les formules : https://mimia.fr/tarifs?offre=bf&duree=12", texte);
+            Assert.Contains("le site", texte);
+            Assert.DoesNotContain("https://mimia.fr/a", texte);
+            Assert.DoesNotContain("data-adresse", texte);
         }
 
         [Fact]

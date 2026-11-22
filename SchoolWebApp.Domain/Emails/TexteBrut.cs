@@ -24,12 +24,24 @@ namespace SchoolWebApp.Domain.Emails
 
         private static readonly Regex Balises = new("<[^>]+>", RegexOptions.Singleline | RegexOptions.Compiled);
 
+        /// <summary>
+        /// L'ADRESSE D'UN BOUTON RESTE DANS LE TEXTE — contrôle d'Omar sur le lot groupé (22/11/2026) : le bouton du message
+        /// de diffusion devenait « Voir les formules », sans adresse, dans la version texte. Un lien qui porte cet attribut
+        /// s'écrit « texte : adresse ». Les autres liens ne changent pas (rien ne bouge pour les courriels existants).
+        /// </summary>
+        public const string AttributAdresseEnTexte = "data-adresse-en-texte=\"1\"";
+
+        private static readonly Regex LienAdresseEnTexte = new(
+            @"<a\b(?=[^>]*\bdata-adresse-en-texte=""1"")[^>]*\bhref=""(?<adresse>https?://[^""]+)""[^>]*>(?<texte>.*?)</a>",
+            RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.Compiled);
+
         /// <summary>Le texte lisible d'un HTML : sans en-tête, style, script ni texte caché.</summary>
         public static string Depuis(string? html)
         {
             if (string.IsNullOrWhiteSpace(html)) return string.Empty;
 
             var texte = ATaire.Replace(html, " ");
+            texte = LienAdresseEnTexte.Replace(texte, m => $"{m.Groups["texte"].Value} : {m.Groups["adresse"].Value}");
 
             // Les retours à la ligne du SOURCE ne sont pas ceux du texte : seules les
             // balises de fin de paragraphe en font.
