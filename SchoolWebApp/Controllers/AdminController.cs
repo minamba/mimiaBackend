@@ -3373,13 +3373,13 @@ namespace SchoolWebApp.Api.Controllers
 
             static string Html(string? texte) => System.Net.WebUtility.HtmlEncode(texte ?? string.Empty);
             var nom = ligne.Competence.Length > 90 ? ligne.Competence[..90].TrimEnd() + "…" : ligne.Competence;
-            var section = ligne.Section switch { "elementaire" => "Élémentaire", "college" => "Collège", "lycee" => "Lycée", _ => ligne.Section };
+            var sectionEtClasse = StatutsDeTest.SectionEtClasse(ligne.Section, ligne.Classe);
 
             var valeurs = new Dictionary<string, string>
             {
                 ["competence"] = Html(ligne.Competence),
-                ["jeu"] = Html(string.IsNullOrWhiteSpace(ligne.JeuTitre) ? $"{section} · {ligne.Classe}" : ligne.JeuTitre),
-                ["classe"] = Html($"{section} · {ligne.Classe}"),
+                ["jeu"] = Html(string.IsNullOrWhiteSpace(ligne.JeuTitre) ? sectionEtClasse : ligne.JeuTitre),
+                ["classe"] = Html(sectionEtClasse),
                 ["bloc"] = Html($"{ligne.TestTitre} · {ligne.Matiere}"),
                 ["description"] = Html(ligne.Commentaire ?? signalement.Description),
                 ["auteur"] = Html(signalement.ParentMail),

@@ -21,6 +21,50 @@ namespace SchoolWebApp.Domain.Models
         public const string SectionCollege = "college";
         public const string SectionLycee = "lycee";
 
+        /// <summary>
+        /// « TESTS GÉNÉRAUX » — Min's, le 22/11/2026 : une section ET une classe pour tout ce qui n'est ni un cours ni
+        /// un professeur (compte parent, ajout d'enfant, abonnements, administration…). Rangée dans les mêmes colonnes
+        /// texte que les autres sections (aucune migration) : section « generaux », classe « Tests Généraux ».
+        /// </summary>
+        public const string SectionGeneraux = "generaux";
+        public const string NiveauGeneraux = "GENERAUX";
+        public const string ClasseGeneraux = "Tests Généraux";
+
+        /// <summary>
+        /// UN BLOC DES TESTS GÉNÉRAUX N'A PAS DE MATIÈRE MAIS UNE CATÉGORIE, écrite librement (UX, Admin, Technique…) :
+        /// son libellé va dans la colonne de la matière, avec ce code à la place du code de matière. Les catégories
+        /// déjà employées sont reproposées (<c>IJeuxDeTestsRepository.CategoriesAsync</c>).
+        /// </summary>
+        public const string CodeCategorie = "categorie";
+
+        /// <summary>La longueur d'une catégorie : un mot ou deux, pas une phrase.</summary>
+        public const int CategorieMax = 100;
+
+        public static bool EstGeneraux(string? section) => section == SectionGeneraux;
+
+        /// <summary>« Élémentaire · CP », et pour les tests généraux « Tests Généraux » une seule fois (mails, Telegram).</summary>
+        public static string SectionEtClasse(string? section, string? classe) => section switch
+        {
+            SectionGeneraux => ClasseGeneraux,
+            SectionElementaire => $"Élémentaire · {classe}",
+            SectionCollege => $"Collège · {classe}",
+            SectionLycee => $"Lycée · {classe}",
+            _ => $"{section} · {classe}",
+        };
+
+        /// <summary>
+        /// Une catégorie écrite à la main, mise au propre : espaces en trop retirés. Null si vide ou trop longue. Une
+        /// catégorie DÉJÀ EMPLOYÉE à la casse près reprend son orthographe (« ux » → « UX ») : pas de doublon de groupe.
+        /// </summary>
+        public static string? Categorie(string? saisie, IEnumerable<string>? existantes = null)
+        {
+            var propre = string.Join(' ', (saisie ?? string.Empty).Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+            if (propre.Length == 0 || propre.Length > CategorieMax) return null;
+
+            var deja = existantes?.FirstOrDefault(c => string.Equals(c, propre, StringComparison.CurrentCultureIgnoreCase));
+            return deja ?? propre;
+        }
+
         /// <summary>Au plus autant de lignes créées d'un coup : une faute de frappe ne doit pas en créer dix mille.</summary>
         public const int LignesMaxParAjout = 50;
 
@@ -87,7 +131,7 @@ namespace SchoolWebApp.Domain.Models
     {
         public int Id { get; set; }
 
-        /// <summary>elementaire / college / lycee.</summary>
+        /// <summary>elementaire / college / lycee / generaux.</summary>
         public string Section { get; set; } = string.Empty;
 
         /// <summary>Le nom donné au carnet ; vide pour ceux d'avant le 05/11/2026.</summary>

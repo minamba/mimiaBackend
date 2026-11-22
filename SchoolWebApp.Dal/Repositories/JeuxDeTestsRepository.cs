@@ -158,6 +158,24 @@ namespace SchoolWebApp.Dal.Repositories
             return true;
         }
 
+        public async Task<IReadOnlyList<string>> CategoriesAsync(CancellationToken ct = default)
+        {
+            var lues = await _context.TestsDesJeux
+                .AsNoTracking()
+                .Where(t => t.MatiereCode == StatutsDeTest.CodeCategorie)
+                .Select(t => t.Matiere)
+                .Distinct()
+                .ToListAsync(ct);
+
+            // Le tri et le dédoublonnage à la casse près se font ici : la collation de la base n'est pas celle du français.
+            return lues
+                .Where(c => !string.IsNullOrWhiteSpace(c))
+                .GroupBy(c => c.Trim(), StringComparer.CurrentCultureIgnoreCase)
+                .Select(g => g.Key)
+                .OrderBy(c => c, StringComparer.Create(new System.Globalization.CultureInfo("fr-FR"), ignoreCase: true))
+                .ToList();
+        }
+
         public async Task<DomainJeu?> AjouterTestAsync(
             int jeuId, string titre, string matiereCode, string matiere, IReadOnlyList<string> competences,
             CancellationToken ct = default)

@@ -17,8 +17,15 @@ namespace SchoolWebApp.Api.Controllers
         [Required(ErrorMessage = "Le titre est obligatoire."), StringLength(200, ErrorMessage = "Le titre ne peut pas dépasser 200 caractères.")]
         public string? Titre { get; set; }
 
-        [Range(1, int.MaxValue, ErrorMessage = "La classe est obligatoire.")]
+        /// <summary>
+        /// La classe, dans le référentiel. Ignorée pour les tests généraux (<see cref="Section"/> = « generaux ») ; pour
+        /// les autres, la section se déduit d'elle.
+        /// </summary>
         public int NiveauId { get; set; }
+
+        /// <summary>« generaux » pour un jeu de TESTS GÉNÉRAUX (22/11/2026) ; vide ou autre : la classe décide.</summary>
+        [StringLength(20)]
+        public string? Section { get; set; }
     }
 
     public class TestDuJeuRequest
@@ -26,8 +33,12 @@ namespace SchoolWebApp.Api.Controllers
         [Required(ErrorMessage = "Le titre est obligatoire."), StringLength(200, ErrorMessage = "Le titre ne peut pas dépasser 200 caractères.")]
         public string? Titre { get; set; }
 
-        [Range(1, int.MaxValue, ErrorMessage = "La matière est obligatoire.")]
+        /// <summary>La matière d'un bloc de classe. Ignorée dans un jeu de tests généraux.</summary>
         public int MatiereId { get; set; }
+
+        /// <summary>La CATÉGORIE d'un bloc des tests généraux, écrite librement (22/11/2026). Ignorée ailleurs.</summary>
+        [StringLength(StatutsDeTest.CategorieMax, ErrorMessage = "La catégorie ne peut pas dépasser 100 caractères.")]
+        public string? Categorie { get; set; }
 
         /// <summary>Combien de lignes créer. Ignoré quand on modifie un test existant.</summary>
         [Range(1, StatutsDeTest.LignesMaxParAjout, ErrorMessage = "Le nombre de tests va de 1 à 50.")]
@@ -119,12 +130,17 @@ namespace SchoolWebApp.Api.Controllers
             var titre = requete.Titre?.Trim();
             if (string.IsNullOrEmpty(titre)) return BadRequest(new { message = "Le titre est obligatoire." });
 
-            var classe = await ClasseAsync(requete.NiveauId);
-            if (classe is null) return BadRequest(new { message = "Cette classe n'existe pas." });
+            var classe = await ClasseAsync(requete);
+            if (classe is null) return BadRequest(new { message = ClasseManquante(requete) });
 
             var jeu = await _jeux.CreerAsync(titre, classe.Value.Section, classe.Value.Code, classe.Value.Libelle, Auteur(), ct);
             return StatusCode(StatusCodes.Status201Created, jeu);
         }
+
+        [HttpGet("categories")]
+        [SwaggerResponse(200, "Les catégories déjà employées dans les tests généraux, par ordre alphabétique.", typeof(IReadOnlyList<string>))]
+        public async Task<IActionResult> Categories(CancellationToken ct) =>
+            Ok(await _jeux.CategoriesAsync(ct));
 
         [HttpPut("{id:int}")]
         [SwaggerResponse(200, "Jeu modifié.", typeof(JeuDeTest))]
@@ -135,8 +151,8 @@ namespace SchoolWebApp.Api.Controllers
             var titre = requete.Titre?.Trim();
             if (string.IsNullOrEmpty(titre)) return BadRequest(new { message = "Le titre est obligatoire." });
 
-            var classe = await ClasseAsync(requete.NiveauId);
-            if (classe is null) return BadRequest(new { message = "Cette classe n'existe pas." });
+            var classe = await ClasseAsync(requete);
+            if (classe is null) return BadRequest(new { message = ClasseManquante(requete) });
 
             return Rendre(await _jeux.ModifierAsync(id, titre, classe.Value.Section, classe.Value.Code, classe.Value.Libelle, ct), JeuIntrouvable);
         }
@@ -156,14 +172,17 @@ namespace SchoolWebApp.Api.Controllers
             var titre = requete.Titre?.Trim();
             if (string.IsNullOrEmpty(titre)) return BadRequest(new { message = "Le titre est obligatoire." });
 
-            var matiere = await MatiereAsync(requete.MatiereId);
-            if (matiere is null) return BadRequest(new { message = "Cette matière n'existe pas." });
+            var jeu = await _jeux.GetAsync(id, ct);
+            if (jeu is null) return NotFound(new { message = JeuIntrouvable });
+
+            var matiere = await MatiereOuCategorieAsync(jeu, requete, ct);
+            if (matiere.Faute is not null) return BadRequest(new { message = matiere.Faute });
 
             var competences = Competences(requete.Competences, requete.Nombre);
             if (competences is null) return BadRequest(new { message = "Une compétence ne peut pas dépasser 1 000 caractères." });
 
             return Rendre(
-                await _jeux.AjouterTestAsync(id, titre, matiere.Value.Code, matiere.Value.Libelle, competences, ct),
+                await _jeux.AjouterTestAsync(id, titre, matiere.Code, matiere.Libelle, competences, ct),
                 JeuIntrouvable);
         }
 
@@ -177,11 +196,14 @@ namespace SchoolWebApp.Api.Controllers
             var titre = requete.Titre?.Trim();
             if (string.IsNullOrEmpty(titre)) return BadRequest(new { message = "Le titre est obligatoire." });
 
-            var matiere = await MatiereAsync(requete.MatiereId);
-            if (matiere is null) return BadRequest(new { message = "Cette matière n'existe pas." });
+            var jeu = await _jeux.GetAsync(id, ct);
+            if (jeu is null) return NotFound(new { message = TestIntrouvable });
+
+            var matiere = await MatiereOuCategorieAsync(jeu, requete, ct);
+            if (matiere.Faute is not null) return BadRequest(new { message = matiere.Faute });
 
             return Rendre(
-                await _jeux.ModifierTestAsync(id, testId, titre, matiere.Value.Code, matiere.Value.Libelle, ct),
+                await _jeux.ModifierTestAsync(id, testId, titre, matiere.Code, matiere.Libelle, ct),
                 TestIntrouvable);
         }
 
@@ -295,14 +317,14 @@ namespace SchoolWebApp.Api.Controllers
             }
 
             static string Html(string? texte) => System.Net.WebUtility.HtmlEncode(texte ?? string.Empty);
-            var section = ligne.Section switch { "elementaire" => "Élémentaire", "college" => "Collège", "lycee" => "Lycée", _ => ligne.Section };
+            var sectionEtClasse = StatutsDeTest.SectionEtClasse(ligne.Section, ligne.Classe);
             var nom = ligne.Competence.Length > 90 ? ligne.Competence[..90].TrimEnd() + "…" : ligne.Competence;
 
             var valeurs = new Dictionary<string, string>
             {
                 ["competence"] = Html(ligne.Competence),
-                ["jeu"] = Html(string.IsNullOrWhiteSpace(ligne.JeuTitre) ? $"{section} · {ligne.Classe}" : ligne.JeuTitre),
-                ["classe"] = Html($"{section} · {ligne.Classe}"),
+                ["jeu"] = Html(string.IsNullOrWhiteSpace(ligne.JeuTitre) ? sectionEtClasse : ligne.JeuTitre),
+                ["classe"] = Html(sectionEtClasse),
                 ["bloc"] = Html($"{ligne.TestTitre} · {ligne.Matiere}"),
                 ["commentaire"] = Html(ligne.Commentaire ?? signalement.Description),
                 ["testeur"] = Html(Auteur()),
@@ -348,6 +370,48 @@ namespace SchoolWebApp.Api.Controllers
             if (nom.Length > 0) return nom.Length <= 255 ? nom : nom[..255];
 
             return string.IsNullOrWhiteSpace(_utilisateur.Mail) ? "Administrateur" : _utilisateur.Mail;
+        }
+
+        /// <summary>
+        /// La section et la classe d'un jeu. TESTS GÉNÉRAUX (22/11/2026) : la section « generaux » et la classe
+        /// « Tests Généraux », sans passer par le référentiel. Sinon, la classe choisie.
+        /// </summary>
+        private async Task<(string Section, string Code, string Libelle)?> ClasseAsync(JeuDeTestRequest requete)
+        {
+            if (StatutsDeTest.EstGeneraux(requete.Section?.Trim()))
+            {
+                return (StatutsDeTest.SectionGeneraux, StatutsDeTest.NiveauGeneraux, StatutsDeTest.ClasseGeneraux);
+            }
+
+            return requete.NiveauId > 0 ? await ClasseAsync(requete.NiveauId) : null;
+        }
+
+        private static string ClasseManquante(JeuDeTestRequest requete) =>
+            requete.NiveauId > 0 ? "Cette classe n'existe pas." : "La classe est obligatoire.";
+
+        /// <summary>
+        /// Ce qui se range dans la colonne « matière » d'un bloc. Un jeu de TESTS GÉNÉRAUX n'a pas de matière : une
+        /// catégorie écrite librement, qui reprend l'orthographe d'une catégorie déjà employée (« ux » → « UX »).
+        /// </summary>
+        private async Task<(string Code, string Libelle, string? Faute)> MatiereOuCategorieAsync(
+            JeuDeTest jeu, TestDuJeuRequest requete, CancellationToken ct)
+        {
+            if (StatutsDeTest.EstGeneraux(jeu.Section))
+            {
+                if (string.IsNullOrWhiteSpace(requete.Categorie)) return (string.Empty, string.Empty, "La catégorie est obligatoire.");
+
+                var categorie = StatutsDeTest.Categorie(requete.Categorie, await _jeux.CategoriesAsync(ct));
+                return categorie is null
+                    ? (string.Empty, string.Empty, "La catégorie ne peut pas dépasser 100 caractères.")
+                    : (StatutsDeTest.CodeCategorie, categorie, null);
+            }
+
+            if (requete.MatiereId <= 0) return (string.Empty, string.Empty, "La matière est obligatoire.");
+
+            var matiere = await MatiereAsync(requete.MatiereId);
+            return matiere is null
+                ? (string.Empty, string.Empty, "Cette matière n'existe pas.")
+                : (matiere.Value.Code, matiere.Value.Libelle, null);
         }
 
         /// <summary>Une classe qui peut accueillir un élève ; les troncs communs n'en sont pas.</summary>

@@ -20,6 +20,12 @@ namespace SchoolWebApp.Domain.Repositories
 
         Task<bool> SupprimerAsync(int id, CancellationToken ct = default);
 
+        /// <summary>
+        /// LES CATÉGORIES DÉJÀ EMPLOYÉES dans les blocs des tests généraux (22/11/2026), sans doublon, par ordre
+        /// alphabétique : la liste les repropose.
+        /// </summary>
+        Task<IReadOnlyList<string>> CategoriesAsync(CancellationToken ct = default);
+
         /// <summary>Crée le test et une ligne par compétence, toutes « à tester ».</summary>
         Task<JeuDeTest?> AjouterTestAsync(
             int jeuId, string titre, string matiereCode, string matiere, IReadOnlyList<string> competences,
