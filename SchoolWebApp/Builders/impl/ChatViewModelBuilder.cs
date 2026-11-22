@@ -4548,8 +4548,9 @@ namespace SchoolWebApp.Api.Builders.impl
                 ? new FelicitationRefusee.Filtre()
                 : null;
 
-            // « DERNIER ESSAI » TROP TÔT — voir DernierEssaiTropTot : aux 1re et 2e erreurs comptées par le code, l'annonce part.
-            var filtreDernierEssai = DernierEssaiTropTot.TropTot(rangDeLErreur) ? DernierEssaiTropTot.Filtre() : null;
+            // « DERNIER ESSAI » TROP TÔT ET COMPTE DES ERREURS — voir DernierEssaiTropTot : aux 1re et 2e erreurs comptées par le
+            // code, l'annonce part ; à toute erreur comptée, une phrase qui dit le compte à l'élève part (« c'est sa troisième erreur »).
+            var filtreDernierEssai = DernierEssaiTropTot.AFiltrer(rangDeLErreur) ? DernierEssaiTropTot.Filtre(rangDeLErreur) : null;
 
             await foreach (var fragment in _agent.RepondreAsync(
                 contexte.Eleve, contexte.Conversation, historique, declencheur, bilan,
@@ -4591,7 +4592,7 @@ namespace SchoolWebApp.Api.Builders.impl
                 finAccordee = filtreDernierEssai.Passer(finAccordee) + filtreDernierEssai.Terminer();
                 if (filtreDernierEssai.Retraits > 0)
                 {
-                    _logger.LogInformation("Dernier essai annonce trop tot (erreur numero {Rang}) : retire (conversation {ConversationId}).",
+                    _logger.LogInformation("Dernier essai trop tot ou compte des erreurs (erreur numero {Rang}) : retire (conversation {ConversationId}).",
                         rangDeLErreur, conversationId);
                 }
             }
@@ -4836,7 +4837,7 @@ namespace SchoolWebApp.Api.Builders.impl
 
                 // Pas de félicitation gardée après une traduction refusée : l'écran ne l'a pas montrée (FelicitationRefusee).
                 if (filtreFelicitation is not null) contenuPersiste = FelicitationRefusee.Retirer(contenuPersiste);
-                if (filtreDernierEssai is not null) contenuPersiste = DernierEssaiTropTot.Retirer(contenuPersiste);
+                if (filtreDernierEssai is not null) contenuPersiste = DernierEssaiTropTot.Retirer(contenuPersiste, rangDeLErreur);
 
                 // L'historique dit ce que l'élève a vu et entendu : le mot remplacé n'y revient pas.
                 if (filtreMots is not null) contenuPersiste = filtreMots.Corriger(contenuPersiste);

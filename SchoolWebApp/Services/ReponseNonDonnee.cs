@@ -551,7 +551,8 @@ namespace SchoolWebApp.Api.Services
             + @"|(?<!\p{L})(?:on\s+)?(?:compte|comptes|comptons|comptez)(?:\s+[\p{L}'’-]+){0,3}?\s*:\s*"
             // « les nombres qui viennent juste après : quatre-vingt-un, quatre-vingt-deux... » (conv. de test 941) : le
             // nombre annoncé après « après : » est celui qu'on cherche.
-            + @"|(?<!\p{L})(?:après|apres)\s*:\s*"
+            // « Alors juste après 80 : 81, 82... » (conv. de test 1012) : « après N : » aussi.
+            + @"|(?<!\p{L})(?:après|apres)(?:\s+\d{1,9})?\s*:\s*"
             // « il y en a 12 en tout » : voir AvecEnTout.
             + @")"
             // Entre guillemets aussi : « le mot juste après 80, c'est « quatre-vingt-un » » (conv. de test 926), « on dit « 81 » ».

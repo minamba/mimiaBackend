@@ -33,7 +33,7 @@ namespace SchoolWebApp.Api.Services
         public static string Retirer(string? texte, out int retraits) => ParPhrase(texte, Felicitation(), out retraits);
 
         /// <summary>Le motif retiré phrase par phrase, avec le même découpage que le filtre du flux.</summary>
-        internal static string ParPhrase(string? texte, Regex motif, out int retraits)
+        internal static string ParPhrase(string? texte, Regex motif, out int retraits, bool debut = true)
         {
             retraits = 0;
             if (string.IsNullOrEmpty(texte)) return texte ?? string.Empty;
@@ -43,7 +43,10 @@ namespace SchoolWebApp.Api.Services
                 if (m.Length == 0) continue;
                 sortie.Append(RetirerDeLaPhrase(m.Value, motif, ref retraits));
             }
-            return sortie.ToString();
+            // La 1re phrase du message partie (« C'est sa troisième erreur sur cette question.⏎… », conv. de test 1015) : ses
+            // sauts de ligne ne restent pas en tête du message. Le flux fait pareil tant qu'il n'a rien envoyé (debut).
+            var resultat = sortie.ToString();
+            return debut && retraits > 0 && !char.IsWhiteSpace(texte[0]) ? resultat.TrimStart() : resultat;
         }
 
         public static string Retirer(string? texte) => Retirer(texte, out _);
@@ -103,6 +106,9 @@ namespace SchoolWebApp.Api.Services
 
             public int Retraits => _retraits;
 
+            /// <summary>Rien n'est encore parti : une phrase retirée en tête ne laisse pas ses sauts de ligne.</summary>
+            private bool _rienEnvoye = true;
+
             public string Passer(string? fragment)
             {
                 if (string.IsNullOrEmpty(fragment)) return string.Empty;
@@ -124,9 +130,9 @@ namespace SchoolWebApp.Api.Services
 
                 var fini = texte[..coupe];
                 _tampon.Remove(0, coupe);
-                var r = 0;
-                var sortie = ParPhrase(fini, _motif, out r);
+                var sortie = ParPhrase(fini, _motif, out var r, _rienEnvoye);
                 _retraits += r;
+                if (sortie.Length > 0) _rienEnvoye = false;
                 return sortie;
             }
 
@@ -134,8 +140,9 @@ namespace SchoolWebApp.Api.Services
             {
                 var reste = _tampon.ToString();
                 _tampon.Clear();
-                var sortie = ParPhrase(reste, _motif, out var r);
+                var sortie = ParPhrase(reste, _motif, out var r, _rienEnvoye);
                 _retraits += r;
+                if (sortie.Length > 0) _rienEnvoye = false;
                 return sortie;
             }
 
