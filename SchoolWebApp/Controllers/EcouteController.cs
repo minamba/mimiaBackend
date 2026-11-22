@@ -307,10 +307,7 @@ namespace SchoolWebApp.Api.Controllers
                         ? fragment
                         : fragment with
                         {
-                            Texte = typeDEcoute == RegleVerificationSon.Syllabe
-                                || (typeDEcoute is null && RegleVerificationSon.EstEcouteDeSyllabe(ecoute.Attendu, parole, fragment.Texte))
-                                ? $"J'ai entendu la syllabe {ecoute.Entendu}."
-                                : $"J'ai entendu le mot {ecoute.Entendu}.",
+                            Texte = RegleVerificationSon.TexteDEcoute(ecoute, typeDEcoute, parole, fragment.Texte),
                             Son = true,
                             Juste = ecoute.Juste,
                         };

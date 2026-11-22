@@ -12,10 +12,29 @@ namespace SchoolWebApp.Api.Services.Voix
     ///
     /// ET LE FILET QUI NE DÉPEND D'AUCUN VERDICT (08/11/2026) : voir MontreSansFin. La même image montrée 3 fois, le même
     /// son dicté 5 fois : on passe au suivant, même si rien n'a été jugé.
+    ///
+    /// LE COMPTE REPART DE ZÉRO QUAND L'ENFANT REVIENT — décision de Min's (22/11/2026, 07 h 58) : après « Quitter » puis
+    /// un retour (nouvelle séance, relance), le premier essai raté sur le même mot est le PREMIER, plus le troisième. Avant,
+    /// le compte suivait la conversation. La frontière : le message de fin de séance du professeur (<see cref="FinDeSeance"/>),
+    /// écrit au départ par le worker ([FICHE]…[RAPPORT]…[FIN_SEANCE]) ou par le professeur lui-même (au revoir, minuteur).
+    /// Il peut arriver APRÈS l'accueil du retour (course de 1 à 10 s) : où qu'il soit entre deux essais, il les sépare. Les
+    /// deux compteurs (essais jugés faux, filet <see cref="MontreSansFin"/>) et celui de la répétition en langue
+    /// (<c>RepetitionEnLangue.EssaisDeSuite</c>) s'arrêtent à cette frontière. Un rechargement de page écrit le même
+    /// message de départ que « Quitter » (le serveur ne les distingue pas dans l'historique) : il remet aussi à zéro.
     /// </summary>
     public static class EssaisRates
     {
         public const int Maximum = 3;
+
+        /// <summary>
+        /// Un message du professeur qui CLÔT une séance : il porte [RAPPORT] ou [FIN_SEANCE], où que ce soit (le message
+        /// technique de départ, l'au revoir, la conclusion du minuteur). Entre deux essais, il les sépare : le compte repart
+        /// de zéro (décision de Min's, 22/11/2026).
+        /// </summary>
+        public static bool FinDeSeance(string? role, string? contenu) =>
+            role == "assistant" && !string.IsNullOrEmpty(contenu)
+            && (contenu.Contains("[FIN_SEANCE]", StringComparison.OrdinalIgnoreCase)
+                || contenu.Contains("[RAPPORT]", StringComparison.OrdinalIgnoreCase));
 
         /// <summary>
         /// LE MÊME SON DICTÉ TANT DE FOIS DE SUITE, à l'écoute ou à la prononciation : plus large qu'en lecture, car un enfant
@@ -49,6 +68,8 @@ namespace SchoolWebApp.Api.Services.Voix
             for (var i = historique.Count - 1; i >= 0 && essais < Maximum; i--)
             {
                 var (role, dit, juste) = historique[i];
+                // L'enfant est parti puis revenu entre cet essai et le suivant : le compte repart de zéro (Min's, 22/11/2026).
+                if (FinDeSeance(role, dit)) break;
                 if (role != "user") continue;
                 if (juste is null && LectureDImage.EstMotEntier(dit)) juste = false;
                 if (juste is null) continue;
@@ -72,6 +93,9 @@ namespace SchoolWebApp.Api.Services.Voix
             for (var i = historique.Count - 1; i >= 0; i--)
             {
                 var (role, dit, juste) = historique[i];
+                // Ce qui a été montré AVANT un départ ne compte plus au retour (Min's, 22/11/2026) : sinon, l'image montrée
+                // deux fois avant « Quitter » et remontrée à l'accueil serait abandonnée dès le premier essai du retour.
+                if (FinDeSeance(role, dit)) break;
                 if (role == "user")
                 {
                     if (juste == true) break;
@@ -94,11 +118,27 @@ namespace SchoolWebApp.Api.Services.Voix
             return son is not null && fois >= limite ? new Abandon(son, fois) : null;
         }
 
-        public static string Fait(Abandon abandon, bool syllabe) =>
+        /// <summary>
+        /// `francais` : son dernier essai était la TRADUCTION française du mot entendu (« deux » pour two, contrôle d'Omar sur le
+        /// #57 v2, 21/11/2026) ; avant de passer, le professeur réexplique ce qui était attendu (règle des trois essais :
+        /// réexplication, puis passage), sans redire le mot abandonné.
+        /// </summary>
+        public static string Fait(Abandon abandon, bool syllabe, string? francais = null, string langue = "anglais") =>
             $"[Fait pour ce tour, qui l'emporte sur tous les faits précédents : c'est son {abandon.Essais}e essai raté sur « {abandon.Son} ». "
-            + "NE LE LUI REDEMANDE PAS. Dis-lui, chaleureusement et en une phrase, que ce n'est pas grave, que vous y reviendrez un peu plus "
+            + "NE LE LUI REDEMANDE PAS. "
+            // Au bout en bout, « réexplique-lui d'abord » seul était fondu dans « Pas de souci ! » : la phrase attendue est
+            // donnée telle quelle (le modèle recopie ce qu'on lui donne — ici, c'est voulu).
+            + (francais is null ? string.Empty
+                : $"Il a répondu « {francais} », le mot en FRANÇAIS : ne dis pas que c'est juste. Ta PREMIÈRE phrase le lui réexplique, "
+                  + $"sans le gronder, par exemple : « {Majuscule(francais)}, c'est le sens du mot en français ; ici, il fallait redire le mot "
+                  + $"{langue} que tu as entendu. » Ensuite seulement, ")
+            + (francais is null ? "Dis-lui" : "dis-lui")
+            + ", chaleureusement et en une phrase, que ce n'est pas grave, que vous y reviendrez un peu plus "
             + $"tard, puis passe {(syllabe ? "à la syllabe suivante" : "au mot suivant")}, une autre que « {abandon.Son} ». Ne lui dis pas combien d'essais il a faits, "
             + $"et n'écris pas « {abandon.Son} » dans ta phrase : ta voix le lirait mal.]";
+
+        private static string Majuscule(string mot) =>
+            string.IsNullOrEmpty(mot) ? mot : char.ToUpperInvariant(mot[0]) + mot[1..];
 
         /// <summary>Le son du dernier message du professeur avant l'index `avant`.</summary>
         private static string? SonDemande(IReadOnlyList<(string Role, string? Contenu, bool? SonJuste)> historique, int avant)

@@ -109,7 +109,10 @@ namespace SchoolWebApp.Api.Services
             + @"|(?<!\b(?:je|j['’]|que\s+je)\s*(?:(?:te|vous|le|la|les|l['’])\s*)*)\brépète(?:s|z)?\b"
             + @"|(?<!\bje\s+(?:vais|peux|veux|voudrais)\s+(?:(?:te|vous|le|la|les|l['’])\s*)*)\brépéter\b|\bredis[- ](?:le|la|les|moi)\b|\bredis\s+après\s+moi\b"
             + @"|\bà\s+toi\s*(?:[!.]|de\s+(?:le\s+|la\s+|les\s+)?(?:dire|répéter|redire|prononcer))"
-            + @"|\bà\s+ton\s+tour\b|\bessaie\s+de\s+le\s+(?:dire|répéter|redire|prononcer)\b|\bdis[- ](?:le|la)\b|\bcomme\s+moi\b"
+            + @"|\bà\s+ton\s+tour\b|\bessaie\s+de\s+(?:le\s+|la\s+|l['’]\s*)?(?:dire|répéter|redire|prononcer)\b|\bdis[- ](?:le|la)\b|\bcomme\s+moi\b"
+            // « Essaie de faire le même son que moi. », « Essaie de dire ce son-là » (bout en bout de la tâche 1600) : des demandes
+            // d'imitation, donc de répétition (le mot à redire reste celui de la balise : sans balise, rien n'est jugé).
+            + @"|\bmême\s+(?:son|mot)\s+que\s+moi\b|\bpareil\s+que\s+moi\b"
             + @"|\brepeat\b|\byour\s+turn\b|\brepite\b|\brepítelo\b|\bripeti\b|\bwiederhol|\bsprich\s+nach\b"
             // L'ÉCOUTE DES MOTS (retest KO #57, 21/11/2026, 15h05) : « [EN]Two[/EN]. Qu'as-tu entendu ? » — « Deux! » validé.
             // Là, l'enfant doit dire le mot ENTENDU (« two »), pas son sens : c'est une répétition. La question est celle que
@@ -123,11 +126,29 @@ namespace SchoolWebApp.Api.Services
         /// juge rien.
         /// </summary>
         [GeneratedRegex(
-            @"veut\s+dire\s+quoi|que\s+(?:ça|ca|cela)\s+veut\s+dire|qu['’]est[- ]ce\s+que\s+(?:ça|ca|c['’]est|cela)|c['’]est\s+quoi"
+            // « c'est pile ce que ça veut dire, bravo ! » est une AFFIRMATION, pas une question sur le sens (bout en bout de la
+            // tâche 1600 : le juge se taisait, et l'essai suivant n'était plus compté).
+            @"veut\s+dire\s+quoi|(?<!c['’]est\s+(?:\p{L}+\s+){0,2}ce\s+)que\s+(?:ça|ca|cela)\s+veut\s+dire|qu['’]est[- ]ce\s+que\s+(?:ça|ca|c['’]est|cela)|c['’]est\s+quoi"
             + @"|que\s+signifie|ça\s+signifie\s+quoi|en\s+français\s*\?|traduis|traduire|\bdis[- ]?(?:le|la|moi)?\s+en\s+français|comment\s+(?:on\s+dit|dit[- ]on|tu\s+dis)[^?]*\ben\s+français"
             + @"|quel(?:le)?\s+couleur|quel\s+(?:animal|nombre|chiffre|mot)",
             RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
         private static partial Regex SensDemande();
+
+        /// <summary>
+        /// LE SENS EST-IL DEMANDÉ ? Seulement dans une QUESTION : une phrase finie par « ? », ou qui interroge sans le point
+        /// (« tu sais… », « dis-moi… », « explique… », « traduis… »). Au bout en bout de la tâche 1600, le professeur AFFIRMAIT
+        /// (« Tu as bien compris que ça veut dire bleu, c'est super ! », « c'est pile ce que ça veut dire, bravo ! ») et le juge
+        /// se taisait : l'essai suivant n'était plus compté, et le professeur a fini par valider « Bleu! ».
+        /// </summary>
+        private static bool DemandeLeSens(string texte) =>
+            Phrases().Matches(texte).Any(p => SensDemande().IsMatch(p.Value)
+                && (p.Value.TrimEnd().EndsWith('?') || QuestionSansPoint().IsMatch(p.Value)));
+
+        [GeneratedRegex(@"[^.!?…\n]+[.!?…]*")]
+        private static partial Regex Phrases();
+
+        [GeneratedRegex(@"\btu\s+sais\b|\bsais[- ]tu\b|\b(?:dis|explique|traduis|devine)[- ]moi\b|\btraduis\b|\btraduire\b|\bexplique\b|\bdis[- ]?(?:le|la|les|moi)?\s+en\s+français\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+        private static partial Regex QuestionSansPoint();
 
         /// <summary>Une consigne seule, dans la langue : « [EN]Repeat![/EN] » n'est pas le mot à répéter.</summary>
         [GeneratedRegex(
@@ -176,6 +197,8 @@ namespace SchoolWebApp.Api.Services
         /// </summary>
         public static Tour? Juger(string? agentSlug, IReadOnlyList<string?> messagesDuProfesseur, string? messageEleve)
         {
+            // Une réponse déjà jugée et gardée sous sa forme marquée (« J'ai répété : Bleu! ») se relit sans la marque.
+            messageEleve = SansLaMarque(messageEleve);
             if (!Concerne(agentSlug) || string.IsNullOrWhiteSpace(messageEleve) || messagesDuProfesseur.Count == 0) return null;
             var dernier = messagesDuProfesseur[^1];
             if (string.IsNullOrWhiteSpace(dernier)) return null;
@@ -190,7 +213,7 @@ namespace SchoolWebApp.Api.Services
             var contenuDit = SansRemplissage(motsDits);
 
             var texte = Tableau().Replace(dernier, " ");
-            if (SensDemande().IsMatch(SansBalises(texte))) return null;
+            if (DemandeLeSens(SansBalises(texte))) return null;
 
             var demande = DemandeDeRepetition().Match(texte);
             if (demande.Success)
@@ -276,6 +299,98 @@ namespace SchoolWebApp.Api.Services
             return null;
         }
 
+        /// <summary>
+        /// LA TRADUCTION TAPÉE EST UN ESSAI RATÉ, AVEC SON VERDICT À L'ÉCRAN — contrôle d'Omar sur le #57 v2, accord de Min's
+        /// (21/11/2026, 16 h : « oui faut modifier l'écran pour compter 3 essais au lieu de 5 »). Tapée au clavier, « Bleu! »
+        /// pour « [EN]Blue[/EN]. Tu répètes ? » n'avait aucun verdict : la bulle restait « Bleu! », rien n'était compté, et le
+        /// professeur pouvait redemander le même mot sans fin. Elle est désormais jugée au serveur avant d'être enregistrée,
+        /// comme une lecture tapée (#49) : la bulle dit « On réessaie », et l'essai compte.
+        ///
+        /// LE MESSAGE GARDÉ PORTE UNE MARQUE, « J'ai répété : » suivi de ce qu'il a tapé. Un verdict enregistré fait croire au
+        /// code qu'un exercice de sons est en cours (<see cref="RegleVerificationSon.EnExerciceDeSons(IEnumerable{ValueTuple{string, bool?}})"/>) :
+        /// sans cette marque, une simple répétition hors exercice aurait ouvert, aux tours suivants, les filtres et le juge
+        /// des sons. La marque sert aussi à compter les essais (<see cref="EssaisDeSuite"/>). Le professeur lit la réponse
+        /// de l'enfant telle quelle, après la marque.
+        /// </summary>
+        public const string MarqueDeLaReponse = "J'ai répété : ";
+
+        /// <summary>Les essais ratés sur le même mot, au-delà desquels on passe : la règle commune des trois essais (EssaisRates).</summary>
+        public const int EssaisMax = EssaisRates.Maximum;
+
+        /// <summary>Ce qui s'enregistre à la place de ce qu'il a tapé, quand sa réponse est jugée : voir <see cref="MarqueDeLaReponse"/>.</summary>
+        public static string TexteDeLEleve(string tape) => MarqueDeLaReponse + tape.Trim();
+
+        /// <summary>Une réponse tapée déjà jugée, gardée sous sa forme marquée ?</summary>
+        public static bool EstUneReponseJugee(string? contenu) =>
+            contenu is not null && contenu.StartsWith(MarqueDeLaReponse, StringComparison.Ordinal);
+
+        private static string? SansLaMarque(string? contenu) =>
+            EstUneReponseJugee(contenu) ? contenu![MarqueDeLaReponse.Length..] : contenu;
+
+        /// <summary>
+        /// LES ESSAIS RATÉS DE SUITE SUR LE MÊME MOT, celui de ce tour compris. <paramref name="historique"/> : les messages
+        /// AVANT le sien, du plus ancien au plus récent. Ne comptent que ses réponses JUGÉES fausses (forme marquée, verdict
+        /// faux) au même mot, chacune relue contre la demande du professeur qui la précède. Le décompte s'arrête au premier
+        /// message de l'enfant qui n'en est pas une (une bonne réponse, une question, autre chose) ou à un autre mot :
+        /// prudent, on ne passe jamais un mot trop tôt.
+        /// </summary>
+        public static int EssaisDeSuite(string? agentSlug, IReadOnlyList<(string? Role, string? Contenu, bool? SonJuste)> historique, Tour tour)
+        {
+            var essais = 1;
+            for (var i = historique.Count - 1; i >= 0 && essais < EssaisMax; i--)
+            {
+                var (role, contenu, juste) = historique[i];
+                // Parti puis revenu entre deux essais (message de fin de séance, avant ou après l'accueil) : le compte repart
+                // de zéro (décision de Min's, 22/11/2026, la même règle que EssaisRates).
+                if (EssaisRates.FinDeSeance(role, contenu)) break;
+                if (role != "user") continue;
+                if (juste != false || !EstUneReponseJugee(contenu)) break;
+
+                var demandes = historique.Take(i)
+                    .Where(m => m.Role == "assistant" && !EstTechnique(m.Contenu))
+                    .Select(m => m.Contenu)
+                    .TakeLast(MessagesLus)
+                    .ToList();
+                var avant = Juger(agentSlug, demandes, contenu);
+                if (avant is null || avant.Nature != tour.Nature || !string.Equals(avant.Attendu, tour.Attendu, StringComparison.OrdinalIgnoreCase)) break;
+                essais++;
+            }
+
+            return essais;
+        }
+
+        /// <summary>Un message technique du professeur (fiche, rapport) : il ne pose aucune question.</summary>
+        internal static bool EstTechnique(string? contenu) =>
+            string.IsNullOrWhiteSpace(contenu)
+            || contenu.TrimStart().StartsWith("[FICHE]", StringComparison.OrdinalIgnoreCase)
+            || contenu.TrimStart().StartsWith("[RAPPORT]", StringComparison.OrdinalIgnoreCase);
+
+        /// <summary>
+        /// LE TROISIÈME ESSAI RATÉ : RÉEXPLIQUER, PUIS PASSER — la règle commune des trois essais (Camara, 07/11/2026 : « au
+        /// bout de 3 essais il faut passer à la suivante, en lui disant que c'est pas grave et qu'on reviendra dessus »).
+        /// Remplace <see cref="Fait"/> à ce tour : on ne lui redemande plus ce mot. Ni « avec douceur » ni « chaleureusement »
+        /// (le modèle recopie ces mots chez l'enfant : « Doux moment »), et pas le nombre d'essais.
+        /// </summary>
+        public static string FaitDernierEssai(Tour tour) => tour.Nature switch
+        {
+            Demande.Traduire =>
+                $"[Fait pour ce tour, qui l'emporte sur tous les faits précédents : vérifié par l'application, il a encore répondu "
+                + $"« {tour.Dit} », le mot FRANÇAIS, à la place du mot en {tour.Langue}, et c'était son dernier essai sur ce mot. Ce n'est "
+                + "pas la réponse : ne commence ni par « Oui », ni par « Parfait », ni par « Bravo ». NE LUI REDEMANDE PAS ce mot. Ta PREMIÈRE "
+                + $"phrase le lui réexplique, sans le gronder, par exemple : « {Majuscule(tour.Attendu)}, c'est le mot en français ; je "
+                + $"t'avais demandé de le dire en {tour.Langue}. » Ensuite seulement, dis-lui que ce n'est pas grave, que vous y reviendrez "
+                + "un peu plus tard, et passe à la suite "
+                + "avec un autre mot. Ne lui dis pas combien d'essais il a faits.]",
+            _ =>
+                $"[Fait pour ce tour, qui l'emporte sur tous les faits précédents : vérifié par l'application, il a encore répondu "
+                + $"« {tour.Dit} », le mot en FRANÇAIS (« {tour.Francais} »), à la place de [{tour.Balise}]{tour.Attendu}[/{tour.Balise}], "
+                + "et c'était son dernier essai sur ce mot. Ce n'est pas la répétition demandée : ne commence ni par « Oui », ni par "
+                + "« Parfait », ni par « Bravo ». NE LUI REDEMANDE PAS ce mot. Ta PREMIÈRE phrase lui réexplique la différence, sans "
+                + $"le gronder, par exemple : « {Majuscule(tour.Francais)}, c'est le mot en français ; en {tour.Langue}, il fallait redire le "
+                + "mot comme je le prononce. » Ensuite seulement, dis-lui que ce n'est pas grave, que vous y reviendrez un peu plus "
+                + "tard, et passe à la suite avec un autre mot. Ne lui dis pas combien d'essais il a faits.]",
+        };
+
         /// <summary>Le fait donné au professeur à ce tour.</summary>
         public static string Fait(Tour tour) => tour.Nature switch
         {
@@ -288,7 +403,7 @@ namespace SchoolWebApp.Api.Services
             _ =>
                 $"[Vérifié par l'application : tu lui as demandé de répéter [{tour.Balise}]{tour.Attendu}[/{tour.Balise}], et il a "
                 + $"répondu « {tour.Dit} » : c'est le mot en FRANÇAIS (« {tour.Francais} »), pas le mot en {tour.Langue}. Ce n'est "
-                + "PAS la répétition demandée : ne commence ni par « Oui », ni par « Parfait », ni par « Bravo », et ne dis pas "
+                + "PAS la répétition demandée : ne commence ni par « Oui », ni par « Parfait », ni par « Bravo », ni par « C'est bien ça », et ne dis pas "
                 + "que c'est juste. Sans le gronder, dis-lui que ça, c'est le mot en français — il en a bien compris le sens —, puis "
                 + $"redis LE MÊME MOT en {tour.Langue}, dans ta balise : [{tour.Balise}]{tour.Attendu}[/{tour.Balise}], et demande-lui "
                 + "de le répéter comme toi. NE PASSE PAS à un autre mot à ce tour : aucun autre mot en "
@@ -445,6 +560,9 @@ namespace SchoolWebApp.Api.Services
         }
 
         private static string SansBalises(string texte) => Balise().Replace(texte, " ");
+
+        private static string Majuscule(string mot) =>
+            string.IsNullOrEmpty(mot) ? mot : char.ToUpperInvariant(mot[0]) + mot[1..];
 
         private static string Court(string dit) => dit.Length <= 60 ? dit : dit[..60].TrimEnd() + "…";
 

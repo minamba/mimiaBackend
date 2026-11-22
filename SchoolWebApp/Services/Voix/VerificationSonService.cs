@@ -14,7 +14,12 @@ namespace SchoolWebApp.Api.Services.Voix
     /// Un mot que l'oreille ne sait pas reconnaître : ni juste ni faux, voir
     /// <see cref="RegleVerificationSon.Inreconnaissable"/>.
     /// </param>
-    public sealed record VerdictSon(string Attendu, string Entendu, bool Juste, bool SansJugement = false);
+    /// <param name="Francais">
+    /// À l'écoute d'un mot en langue étrangère : la traduction française reconnue dans sa réponse (« deux » pour two), ou
+    /// null. Le refus vient alors d'une traduction, pas d'une mauvaise écoute (décision de Min's du 22/11/2026, voir
+    /// <see cref="RegleVerificationSon.TexteDEcoute"/>).
+    /// </param>
+    public sealed record VerdictSon(string Attendu, string Entendu, bool Juste, bool SansJugement = false, string? Francais = null);
 
     /// <summary>
     /// LA VÉRIFICATION DES SYLLABES AU PRIMAIRE — Camara, le 04/11/2026 : « on doit envoyer
@@ -721,7 +726,10 @@ namespace SchoolWebApp.Api.Services.Voix
         public static bool EnExerciceDeSons(IEnumerable<(string? Contenu, bool? SonJuste)> messagesRecents)
         {
             var messages = messagesRecents.ToList();
-            return messages.Any(m => m.SonJuste is not null) || EnExerciceDeSons(messages.Select(m => m.Contenu));
+            // SAUF LA RÉPÉTITION EN LANGUE TAPÉE (21/11/2026, voir RepetitionEnLangue.MarqueDeLaReponse) : son verdict est posé
+            // HORS de tout exercice de sons, il ne doit pas en ouvrir un.
+            return messages.Any(m => m.SonJuste is not null && !RepetitionEnLangue.EstUneReponseJugee(m.Contenu))
+                || EnExerciceDeSons(messages.Select(m => m.Contenu));
         }
 
         /// <summary>
@@ -1065,12 +1073,13 @@ namespace SchoolWebApp.Api.Services.Voix
             const string faux = "Mauvaise écoute";
 
             // LE MOT FRANÇAIS (retest KO #57, 21/11/2026) : la même consigne qu'au clavier (RepetitionEnLangue.Fait), sans
-            // « Oui » ni « Bravo », et le même mot redit.
+            // « Oui » ni « Bravo », et le même mot redit. Son écran dit « On réessaie », pas « Mauvaise écoute » : décision de
+            // Min's du 22/11/2026, voir TexteDEcoute.
             if (!verdict.Juste && francais is not null)
             {
                 return $"[Fait pour ce tour, qui l'emporte sur le rappel précédent : tu as dit « {verdict.Attendu} » et il a répondu "
                     + $"« {verdict.Entendu} » : c'est le mot en FRANÇAIS (« {francais} »), pas le mot qu'il a entendu. Son écran affiche "
-                    + $"« {faux} ». Ce n'est pas la réponse : ne commence ni par « Oui », ni par « Parfait », ni par « Bravo », et ne dis "
+                    + "« On réessaie ». Ce n'est pas la réponse : ne commence ni par « Oui », ni par « Parfait », ni par « Bravo », ni par « C'est bien ça », et ne dis "
                     + "pas que c'est juste. Sans le gronder, dis-lui que ça, c'est le mot en français — il en a bien compris le sens —, "
                     + $"puis redis LE MÊME MOT « {verdict.Attendu} » dans ta balise de voix et redemande ce qu'il a entendu. NE PASSE PAS à "
                     + "un autre mot à ce tour. Ne parle jamais de cet outil à l'élève.]";
@@ -1079,6 +1088,57 @@ namespace SchoolWebApp.Api.Services.Voix
             return verdict.Juste
                 ? $"[Fait pour ce tour, qui l'emporte sur le rappel précédent : il a bien entendu « {verdict.Attendu} ». Son écran affiche déjà « {bon} » en vert : valide-le en une phrase et dis {autre} dans ta balise de voix. Ne parle jamais de cet outil à l'élève.]"
                 : $"[Fait pour ce tour, qui l'emporte sur le rappel précédent : tu as dit « {verdict.Attendu} » et il dit avoir entendu « {verdict.Entendu} ». Son écran affiche « {faux} ». Encourage-le, n'écris pas {nom}, ne passe pas à autre chose : redis-la dans ta balise de voix et redemande ce qu'il a entendu. Ne parle jamais de cet outil à l'élève.]".Replace("redis-la", syllabe ? "redis-la" : "redis-le");
+        }
+
+        /// <summary>
+        /// Ce qui s'enregistre à la place de sa réponse d'écoute jugée : « J'ai entendu le mot two. » (ou « la syllabe »). Le
+        /// MÊME texte au micro (EcouteController) et au clavier (ChatViewModelBuilder) : c'est ce début que l'écran lit pour
+        /// écrire « Bonne écoute » ou « Mauvaise écoute », et le compte des essais relit le mot dans la balise du professeur.
+        ///
+        /// LE REFUS QUI VIENT D'UNE TRADUCTION — décision de Min's (22/11/2026, 00 h 04) : « deux » pour two n'est pas une
+        /// mauvaise écoute (il a compris le mot), l'écran dit « On réessaie ». Le texte gardé porte alors la marque
+        /// <see cref="MarqueDeTraduction"/> (« J'ai entendu le mot deux (en français). ») : c'est elle que l'écran lit, aussi
+        /// après rechargement, sans rien changer en base. Le début reste le même : le compte des essais, la reprise du mot et
+        /// le classement de l'exercice ne changent pas. Au micro comme au clavier.
+        /// </summary>
+        public static string TexteDEcoute(VerdictSon ecoute, string? typeDEcoute, string? parole, string? texte) =>
+            (typeDEcoute == Syllabe || (typeDEcoute is null && EstEcouteDeSyllabe(ecoute.Attendu, parole, texte))
+                ? $"J'ai entendu la syllabe {ecoute.Entendu}"
+                : $"J'ai entendu le mot {ecoute.Entendu}")
+            + (!ecoute.Juste && ecoute.Francais is not null ? MarqueDeTraduction : string.Empty)
+            + ".";
+
+        /// <summary>
+        /// Ce qui suit le mot dans le texte gardé quand sa réponse était la traduction française du mot à écouter. Le même
+        /// texte côté écran (src/components/VerdictSon.js, `estTraductionEntendue`) : ne pas le changer d'un seul côté.
+        /// </summary>
+        public const string MarqueDeTraduction = " (en français)";
+
+        /// <summary>Un verdict d'écoute gardé avec la marque de traduction ?</summary>
+        public static bool EstUneTraductionEntendue(string? contenu) =>
+            contenu is not null && DebutJaiEntendu().IsMatch(contenu)
+            && contenu.TrimEnd().TrimEnd('.').EndsWith(MarqueDeTraduction, StringComparison.Ordinal);
+
+        [GeneratedRegex(@"^\s*j\W?\s*ai\s+entendu\s", RegexOptions.IgnoreCase)]
+        private static partial Regex DebutJaiEntendu();
+
+        /// <summary>
+        /// L'ÉCOUTE DES MOTS, TAPÉE AU CLAVIER — contrôle d'Omar sur le #57 v2, accord de Min's (21/11/2026, 16 h : « oui faut
+        /// modifier l'écran pour compter 3 essais au lieu de 5 »). Seul le relais du micro jugeait l'écoute : une réponse tapée
+        /// n'avait ni verdict à l'écran ni essai compté (« Deux! » pour Two, cinq fois de suite, jusqu'au filet des cinq
+        /// dictées). Ce qu'il tape est maintenant jugé au serveur par le même service que le micro (VerifierEcouteAsync).
+        ///
+        /// Est-ce une TENTATIVE à juger ? Oui : un ou deux mots (« Deux! », « two ? »), ou « j'ai entendu le mot … ». Non : une
+        /// demande (« je sais pas », « tu peux répéter ? », « c'est quoi ? », « ok »), un changement d'exercice, un au revoir,
+        /// un message marqué par l'écran (« [EXERCICE CHOISI : …] »), plusieurs lignes. Comme la lecture tapée (#49) : au
+        /// clavier, rien ne déforme, une demande part telle quelle au professeur et ne compte pas.
+        /// </summary>
+        public static bool EstUneEcouteTapee(string? message)
+        {
+            if (string.IsNullOrWhiteSpace(message) || message.Contains('[') || message.Contains('\n')) return false;
+            if (ChangementDExercice.Demande(message) || LectureDImage.ChangeDExercice(message) || LecteurAuRevoir.DitAuRevoir(message)) return false;
+            if (DebutJaiEntendu().IsMatch(message)) return message.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).Length <= 7;
+            return MotsDUneReponseCourte(message) is { } mots && !LectureDImage.EstUneDemande(mots);
         }
 
         /// <summary>La réponse attend que l'enfant dise ce qu'il a entendu, à l'oral, sans écrire.</summary>
@@ -1317,7 +1377,11 @@ namespace SchoolWebApp.Api.Services.Voix
         /// Une annonce seule dans sa phrase : « Voici la syllabe. », « Voici le prochain mot : », « Je te la redis. », et la forme
         /// courte « Voici la prochaine. » (Camara, capture du 07/11/2026 : elle restait, et l'annonce du code suivait — en double).
         /// </summary>
-        [GeneratedRegex(@"(?<=^|[.!?…\n]\s*)\s*(?:voici\s+(?:la|le)\s+(?:(?:prochaine|première|premiere|nouvelle|prochain|premier|nouveau)(?:\s+(?:syllabe|mot)|(?=\s*(?:[.!:…\n]|$)))|syllabe|mot)|je\s+te\s+l[ae]\s+redis)\s*[.!:…]?", RegexOptions.IgnoreCase)]
+        // « Je te le redis en anglais. » : la phrase avec son complément SANS CONTENU (tâche 1600, 21/11/2026, bout en bout) —
+        // seul « Je te le redis » partait, et il restait « c'est pas grave !en anglais. ». Le code remet sa propre annonce
+        // juste avant le son. Un autre complément (un indice : « …, écoute bien le début ») reste, comme avant.
+        // « Voici un autre mot. » et « Je te le dis. » (même tâche) : deux autres annonces, en double avec celle du code.
+        [GeneratedRegex(@"(?<=^|[.!?…\n]\s*)\s*(?:voici\s+(?:la|le)\s+(?:(?:prochaine|première|premiere|nouvelle|prochain|premier|nouveau)(?:\s+(?:syllabe|mot)|(?=\s*(?:[.!:…\n]|$)))|syllabe|mot)|voici\s+une?\s+(?:autre|nouveau|nouvelle)\s+(?:syllabe|mot)(?=\s*[.!:…\n])|je\s+te\s+l[ae]\s+dis(?=\s*[.!…\n])|je\s+te\s+l[ae]\s+redis(?:\s*,?\s+(?:en\s+(?:anglais|français|francais|espagnol|allemand|italien)|encore(?:\s+une\s+fois)?|une\s+(?:autre|dernière|derniere|nouvelle)\s+fois|une\s+fois\s+de\s+plus|tout\s+de\s+suite|maintenant|lentement|doucement|bien\s+lentement|pour\s+toi))*)\s*[.!:…]?", RegexOptions.IgnoreCase)]
         private static partial Regex PhraseDAnnonce();
 
         [GeneratedRegex(@"\bvoici\s+la\s+(?:(?:prochaine|première|premiere|nouvelle)\s+)?syllabe\b|\bje\s+te\s+la\s+redis\b", RegexOptions.IgnoreCase)]
@@ -1468,9 +1532,23 @@ namespace SchoolWebApp.Api.Services.Voix
 
             var cible = CibleSansModele(reponse, langue);
 
-            if (cible is null || EstTenu(cible)) return null;
+            if (cible is null || EstTenu(cible) || CiteCommeMotFrancais(reponse, cible)) return null;
             return fiables.Contains(cible, StringComparer.OrdinalIgnoreCase) ? null : cible;
         }
+
+        /// <summary>
+        /// LE MOT FRANÇAIS CITÉ POUR LE RÉEXPLIQUER N'EST PAS UN MOT À FAIRE DIRE (tâche 1600, 21/11/2026, bout en bout) :
+        /// « « Bleu », c'est le mot français — on y reviendra » devenait « « Homework », c'est le mot français » (remplacé par un
+        /// mot de la liste). Un mot cité dans une phrase qui parle du « mot (en) français » ou du « sens en français » reste.
+        /// </summary>
+        private static bool CiteCommeMotFrancais(string reponse, string cible) =>
+            PhraseDuTexte().Matches(reponse).Any(p => Contient(p.Value, cible) && MotFrancaisCite().IsMatch(p.Value));
+
+        [GeneratedRegex(@"[^.!?…\n]+")]
+        private static partial Regex PhraseDuTexte();
+
+        [GeneratedRegex(@"\b(?:mot|sens)\s+(?:en\s+)?français\b|\ben\s+français\b", RegexOptions.IgnoreCase)]
+        private static partial Regex MotFrancaisCite();
 
         /// <summary>Le mot qui le remplace : du même son d'abord, jamais déjà demandé si on peut l'éviter.</summary>
         public static string? MotPermis(string cible, IReadOnlyCollection<string> fiables, IReadOnlyList<string> recents, int graine, string langue = LanguesDesSons.Francais)
@@ -1888,7 +1966,7 @@ namespace SchoolWebApp.Api.Services.Voix
                 }
             }
 
-            var verdict = new VerdictSon(mot, dit, juste);
+            var verdict = new VerdictSon(mot, dit, juste, Francais: juste ? null : francais);
             var syllabe = typeDEcoute == RegleVerificationSon.Syllabe
                 || (typeDEcoute is null && RegleVerificationSon.EstEcouteDeSyllabe(mot, paroleDuProfesseur, texte));
             _cache.Set(CleFait(conversationId), RegleVerificationSon.FaitEcoute(verdict, syllabe, francais), DureeDuFait);
