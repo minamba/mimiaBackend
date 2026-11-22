@@ -14,6 +14,12 @@ namespace SchoolWebApp.Api.Services
     /// Générique : tous les professeurs de langue. Phrase par phrase, avec le même découpage dans le flux et sur le texte
     /// enregistré (écran = historique). Ne touche ni « c'est bien le mot pour deux » (« bien » seul n'est pas retiré), ni une
     /// balise de voix, ni « ce n'est pas très bien ».
+    ///
+    /// TÂCHE 0000o (22/11/2026) — DÉCISION DU COORDINATEUR, règle de Min's « des consignes plutôt que des filtres » : 4e tour de
+    /// contrôle où ce retrait cassait des phrases (« Ce que tu as dit, c'est très bien, mais c'est le mot français. » → « Ce
+    /// que tu as dit, mais c'est le mot français. »). Le filtre n'est PLUS BRANCHÉ dans le flux ni dans l'historique : la
+    /// consigne est donnée au professeur au tour concerné (<see cref="RepetitionEnLangue.SansFelicitation"/>, et
+    /// <see cref="RepetitionEnLangue.RappelTraductionRefusee"/> en fin de consignes). <see cref="ParPhrase"/> reste (harnais).
     /// </summary>
     public static partial class FelicitationRefusee
     {

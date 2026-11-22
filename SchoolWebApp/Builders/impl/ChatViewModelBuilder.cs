@@ -4540,56 +4540,50 @@ namespace SchoolWebApp.Api.Builders.impl
             // ouverte et que l'élève n'a pas trouvé : ailleurs, pas le moindre retard sur la voix. Dernier filtre du texte.
             var filtreReponse = reponseCherchee is { } cherchee ? new ReponseNonDonnee(cherchee.Valeur) : null;
 
-            // UNE TRADUCTION REFUSÉE NE SE FÉLICITE PAS — voir FelicitationRefusee (contrôle d'Omar sur le lot groupé, point 5 :
-            // « c'est très bien ! », « c'est top ! » malgré le fait). Seulement au tour où sa réponse est la traduction française
-            // du mot (écoute au micro ou au clavier, répétition en langue) : ailleurs, pas de filtre, pas de retard.
-            var filtreFelicitation = (sonJuste == false && Services.Voix.RegleVerificationSon.EstUneTraductionEntendue(contenu))
-                || repetitionEnLangue is not null
-                ? new FelicitationRefusee.Filtre()
-                : null;
+            // DES CONSIGNES PLUTÔT QUE DES FILTRES — tâche 0000o (22/11/2026), décision du coordinateur selon la règle de Min's :
+            // 4e tour de contrôle d'Omar où les filtres de PHRASES cassaient des phrases (« Ce que tu as dit, mais c'est le mot
+            // français. », « Ce n'est pas encore, prends ton temps. », « Tu te souviens ? Et après 80 ? », « Tu répètes ? »
+            // ajouté à une demande déjà là). FelicitationRefusee, DernierEssaiTropTot (retrait), AnalogieDeSuite (retrait) et
+            // RepetitionEnLangue.SansBaliseEnDouble ne sont plus branchés : le professeur reçoit le FAIT au tour concerné, EN
+            // DERNIER dans ses consignes (juste avant qu'il réponde). Restent dans le flux les règles dures seulement : réponse
+            // jamais donnée (ReponseNonDonnee), suite gardée (SuiteGardee), mots vérifiés, tournures fautives.
 
-            // « DERNIER ESSAI » TROP TÔT ET COMPTE DES ERREURS — voir DernierEssaiTropTot : aux 1re et 2e erreurs comptées par le
-            // code, l'annonce part ; à toute erreur comptée, une phrase qui dit le compte à l'élève part (« c'est sa troisième erreur »).
-            // AU RETOUR, LE COMPTE REPART DE ZÉRO (décision de Min's du 22/11, 07h58 ; lot groupé, bout en bout QR1 sur 03a659d,
-            // conv. de test 1055) : à l'accueil du retour, « C'est ton dernier essai sur ce mot, tu es prêt ? » — le prochain
-            // essai est le PREMIER. Au tour d'arrivée d'un retour, la mention part comme à la 1re erreur (DernierEssaiTropTot.AuRetour).
-            // Ni à sa première réponse depuis le retour (DernierEssaiTropTot.TropTotApresLeRetour, conv. de test 1089).
-            var rangPourDernierEssai = rangDeLErreur ?? (DernierEssaiTropTot.AuRetour(typeAccueil)
-                || DernierEssaiTropTot.TropTotApresLeRetour(historique.Select(m => ((string?)m.Role, (string?)m.Contenu)).ToList()) ? 1 : null);
-            var filtreDernierEssai = DernierEssaiTropTot.AFiltrer(rangPourDernierEssai) ? DernierEssaiTropTot.Filtre(rangPourDernierEssai) : null;
+            // UNE TRADUCTION REFUSÉE NE SE FÉLICITE PAS (contrôle d'Omar sur le lot groupé, point 5) : au tour où sa réponse est la
+            // traduction française du mot (écoute au micro ou au clavier, répétition ou traduction en langue). Au dernier essai
+            // (on passe à un autre mot), on ne lui redemande pas le mot.
+            if ((sonJuste == false && Services.Voix.RegleVerificationSon.EstUneTraductionEntendue(contenu)) || repetitionEnLangue is not null)
+            {
+                declencheur += "\n\n" + RepetitionEnLangue.RappelTraductionRefusee(
+                    repetitionEnLangue?.Langue ?? (langueDuSon == SchoolWebApp.Domain.Repositories.LanguesDesSons.Anglais ? "anglais" : "langue étudiée"),
+                    sensCompris: repetitionEnLangue?.Nature != RepetitionEnLangue.Demande.Traduire,
+                    redemander: !repetitionAuDernierEssai && abandon is null);
+            }
 
-            // PAS D'INDICE PAR COMPARAISON DANS UNE SUITE — voir AnalogieDeSuite (contrôle d'Omar sur le lot groupé v2, point 6 :
-            // « comme quand tu comptais avant » malgré le fait). Seulement quand la question ouverte est une SUITE de nombres que
-            // l'élève n'a pas trouvée : ailleurs, pas de filtre, pas de retard.
-            var filtreAnalogie = reponseCherchee is { } suiteCherchee
-                && CalculAuTableau.EstUneSuite(historique.Where(m => m.Role == "assistant")
-                    .Select(m => m.Contenu)
-                    .Where(c => !string.IsNullOrWhiteSpace(c)
-                        && !c!.TrimStart().StartsWith("[FICHE]", StringComparison.OrdinalIgnoreCase)
-                        && !c.TrimStart().StartsWith("[RAPPORT]", StringComparison.OrdinalIgnoreCase))
-                    .TakeLast(CalculAuTableau.MessagesRemontes))
-                ? new AnalogieDeSuite.Filtre(suiteCherchee.Question, suiteCherchee.Valeur) { AutresRetraits = () => filtreDernierEssai?.Retraits ?? 0 }
-                : null;
+            // « DERNIER ESSAI » TROP TÔT AU RETOUR (décision de Min's du 22/11, 07h58 : au retour, le compte repart de zéro ;
+            // conv. de test 1055 et 1089) : au tour d'arrivée d'un retour et à sa première réponse depuis, le fait du code. Pendant
+            // un calcul ou une suite, le rang compté par le code a déjà son fait (CalculAuTableau.FaitRangDeLErreur).
+            if (rangDeLErreur is null && (DernierEssaiTropTot.AuRetour(typeAccueil)
+                || DernierEssaiTropTot.TropTotApresLeRetour(historique.Select(m => ((string?)m.Role, (string?)m.Contenu)).ToList())))
+            {
+                declencheur += "\n\n" + DernierEssaiTropTot.FaitAuRetour;
+            }
 
             // PENDANT UNE SUITE NON TROUVÉE, ON NE CHANGE PAS D'EXERCICE — voir SuiteGardee (contrôle d'Omar sur le lot groupé v3,
             // point 6 : « on y reviendra… un autre petit exercice », « On passe à autre chose ! Qu'est-ce qui vient juste avant
             // 10 ? [ARDOISE]9, 10[/ARDOISE] » à la 3e erreur, 2 séries sur 10). Aux 1re-3e erreurs d'une suite seulement : la
-            // réponse est retenue en entier, puis rendue telle quelle ou remplacée par le message du code.
-            var gardeSuite = filtreAnalogie is not null && SuiteGardee.AGarder(rangDeLErreur) && reponseCherchee is { } suiteGardee
-                ? new SuiteGardee.Filtre(
-                    historique.Where(m => m.Role == "assistant")
-                        .Select(m => m.Contenu)
-                        .Where(c => !string.IsNullOrWhiteSpace(c)
-                            && !c!.TrimStart().StartsWith("[FICHE]", StringComparison.OrdinalIgnoreCase)
-                            && !c.TrimStart().StartsWith("[RAPPORT]", StringComparison.OrdinalIgnoreCase))
-                        .TakeLast(CalculAuTableau.MessagesRemontes).ToList(),
-                    suiteGardee.Question, suiteGardee.Valeur, rangDeLErreur!.Value)
+            // réponse est retenue en entier, puis rendue telle quelle (avec la question du code à la fin si elle n'en posait
+            // aucune) ou remplacée par le message du code (abandon, autre question, réponse donnée). Jamais de phrase coupée.
+            var messagesDeLaSuite = historique.Where(m => m.Role == "assistant")
+                .Select(m => m.Contenu)
+                .Where(c => !string.IsNullOrWhiteSpace(c)
+                    && !c!.TrimStart().StartsWith("[FICHE]", StringComparison.OrdinalIgnoreCase)
+                    && !c.TrimStart().StartsWith("[RAPPORT]", StringComparison.OrdinalIgnoreCase))
+                .TakeLast(CalculAuTableau.MessagesRemontes)
+                .ToList();
+            var gardeSuite = reponseCherchee is { } suiteGardee && SuiteGardee.AGarder(rangDeLErreur)
+                && CalculAuTableau.EstUneSuite(messagesDeLaSuite)
+                ? new SuiteGardee.Filtre(messagesDeLaSuite, suiteGardee.Question, suiteGardee.Valeur, rangDeLErreur!.Value)
                 : null;
-
-            // LE MOT DIT DEUX FOIS, DONT UNE EN TÊTE — voir RepetitionEnLangue.SansBaliseEnDouble (contrôle d'Omar sur le lot
-            // groupé v3, point 10). Seulement au tour d'une répétition en langue, et seul un message qui COMMENCE par une
-            // balise de voix est retenu.
-            var filtreBaliseEnDouble = repetitionEnLangue is not null ? new RepetitionEnLangue.FiltreBaliseEnDouble() : null;
 
             // LE TEXTE BRUT DU MODÈLE, AU JOURNAL DE MISE AU POINT — contrôle d'Omar sur le lot groupé v2 (points 7 et 8) : pour
             // savoir quel filtre a retiré quoi, le texte tel que le modèle l'a écrit, avant tout filtre. Niveau Debug seulement
@@ -4603,11 +4597,7 @@ namespace SchoolWebApp.Api.Builders.impl
             {
                 texteBrut?.Append(fragment.Texte);
                 var accorde = filtreAccord.Passer(filtreApartes.Passer(fragment.Texte));
-                if (filtreFelicitation is not null) accorde = filtreFelicitation.Passer(accorde);
-                if (filtreDernierEssai is not null) accorde = filtreDernierEssai.Passer(accorde);
-                if (filtreAnalogie is not null) accorde = filtreAnalogie.Passer(accorde);
                 if (gardeSuite is not null) accorde = gardeSuite.Passer(accorde);
-                if (filtreBaliseEnDouble is not null) accorde = filtreBaliseEnDouble.Passer(accorde);
                 if (filtreMots is not null) accorde = filtreMots.Passer(accorde);
                 if (filtreVoixEnClair is not null) accorde = filtreVoixEnClair.Passer(accorde);
                 if (filtreNombres is not null) accorde = filtreNombres.Passer(accorde);
@@ -4626,33 +4616,6 @@ namespace SchoolWebApp.Api.Builders.impl
             }
 
             var finAccordee = filtreAccord.Passer(filtreApartes.Terminer()) + (filtreAccord.Terminer() ?? string.Empty);
-            if (filtreFelicitation is not null)
-            {
-                finAccordee = filtreFelicitation.Passer(finAccordee) + filtreFelicitation.Terminer();
-                if (filtreFelicitation.Retraits > 0)
-                {
-                    _logger.LogInformation("Felicitation retiree apres une traduction refusee ({Nombre}) (conversation {ConversationId}).",
-                        filtreFelicitation.Retraits, conversationId);
-                }
-            }
-            if (filtreDernierEssai is not null)
-            {
-                finAccordee = filtreDernierEssai.Passer(finAccordee) + filtreDernierEssai.Terminer();
-                if (filtreDernierEssai.Retraits > 0)
-                {
-                    _logger.LogInformation("Dernier essai trop tot ou compte des erreurs (erreur numero {Rang}) : retire (conversation {ConversationId}).",
-                        rangPourDernierEssai, conversationId);
-                }
-            }
-            if (filtreAnalogie is not null)
-            {
-                finAccordee = filtreAnalogie.Passer(finAccordee) + filtreAnalogie.Terminer();
-                if (filtreAnalogie.Retraits > 0)
-                {
-                    _logger.LogInformation("Analogie retiree d'une relance de suite ({Nombre}) (conversation {ConversationId}).",
-                        filtreAnalogie.Retraits, conversationId);
-                }
-            }
             if (gardeSuite is not null)
             {
                 finAccordee = gardeSuite.Passer(finAccordee) + gardeSuite.Terminer();
@@ -4661,13 +4624,10 @@ namespace SchoolWebApp.Api.Builders.impl
                     _logger.LogInformation("Suite gardee : la reponse quittait la question (erreur numero {Rang}), message du code (conversation {ConversationId}).",
                         rangDeLErreur, conversationId);
                 }
-            }
-            if (filtreBaliseEnDouble is not null)
-            {
-                finAccordee = filtreBaliseEnDouble.Passer(finAccordee) + filtreBaliseEnDouble.Terminer();
-                if (filtreBaliseEnDouble.ARetire)
+                else if (gardeSuite.QuestionAjoutee)
                 {
-                    _logger.LogInformation("Repetition en langue : balise de voix en double retiree en tete (conversation {ConversationId}).", conversationId);
+                    _logger.LogInformation("Suite gardee : la reponse ne posait pas de question (erreur numero {Rang}), question du code ajoutee (conversation {ConversationId}).",
+                        rangDeLErreur, conversationId);
                 }
             }
             if (texteBrut is not null)
@@ -4914,23 +4874,11 @@ namespace SchoolWebApp.Api.Builders.impl
                 // la reprendrait à la séance suivante — voir TournuresFautives.
                 contenuPersiste = TournuresFautives.Corriger(contenuPersiste);
 
-                // Pas de félicitation gardée après une traduction refusée : l'écran ne l'a pas montrée (FelicitationRefusee).
-                if (filtreFelicitation is not null) contenuPersiste = FelicitationRefusee.Retirer(contenuPersiste);
-                var retraitsDernierEssai = 0;
-                if (filtreDernierEssai is not null) contenuPersiste = DernierEssaiTropTot.Retirer(contenuPersiste, rangPourDernierEssai, out retraitsDernierEssai);
-                if (filtreAnalogie is not null && reponseCherchee is { } suiteProtegee)
-                {
-                    contenuPersiste = AnalogieDeSuite.Retirer(contenuPersiste, suiteProtegee.Question, suiteProtegee.Valeur, out var retraitsAnalogie);
-                    // Un « dernier essai » retiré ne laisse pas non plus le message sans la question (même règle que le flux).
-                    if (retraitsAnalogie == 0 && retraitsDernierEssai > 0) contenuPersiste = AnalogieDeSuite.AvecLaQuestion(contenuPersiste, suiteProtegee.Question);
-                }
-                // Le message du code a remplacé celui du professeur à l'écran : l'historique garde le même.
+                // Le message du code a remplacé celui du professeur à l'écran : l'historique garde le même. Sinon, la question du
+                // code ajoutée à l'écran l'est aussi ici (même méthode, SuiteGardee.AvecLaQuestion).
                 if (gardeSuite?.Remplacement is { } remplacement) contenuPersiste = enTete + remplacement;
-                if (filtreBaliseEnDouble is not null)
-                {
-                    var tete = enTete.Length > 0 && contenuPersiste.StartsWith(enTete, StringComparison.Ordinal) ? enTete : string.Empty;
-                    contenuPersiste = tete + RepetitionEnLangue.SansBaliseEnDouble(contenuPersiste[tete.Length..]);
-                }
+                else if (gardeSuite?.QuestionAjoutee == true && reponseCherchee is { } suiteRelancee)
+                    contenuPersiste = SuiteGardee.AvecLaQuestion(contenuPersiste, suiteRelancee.Question);
 
                 // L'historique dit ce que l'élève a vu et entendu : le mot remplacé n'y revient pas.
                 if (filtreMots is not null) contenuPersiste = filtreMots.Corriger(contenuPersiste);

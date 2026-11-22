@@ -428,6 +428,10 @@ namespace SchoolWebApp.Api.Services
                 + $"redis LE MÊME MOT en {tour.Langue}, dans ta balise : [{tour.Balise}]{tour.Attendu}[/{tour.Balise}], et demande-lui "
                 + "de le répéter comme toi. NE PASSE PAS à un autre mot à ce tour : aucun autre mot en "
                 + $"{tour.Langue} dans ton message, ni « voici le prochain mot », ni « on continue » ; il doit d'abord redire celui-ci."
+                // UNE SEULE BALISE, APRÈS L'EXPLICATION — tâche 0000o (décision du coordinateur : la consigne remplace le filtre
+                // SansBaliseEnDouble, plus branché) : « [EN]Blue[/EN] C'est le mot en français… écoute : [EN]Blue[/EN] » (QR2, v3).
+                + " Ton message dit d'abord l'explication, puis le mot UNE SEULE FOIS dans ta balise, puis ta demande de le "
+                + "répéter, en dernier : ne commence pas ton message par la balise, et ne la redis pas une deuxième fois."
                 + SansFelicitation() + "]",
         };
 
@@ -440,9 +444,23 @@ namespace SchoolWebApp.Api.Services
         /// redit le mot français qu'on lui donnait à traduire (<paramref name="sensCompris"/> faux).
         /// </summary>
         public static string SansFelicitation(bool sensCompris = true) =>
-            " Une réponse refusée ne se félicite pas : ni « bravo », ni « très bien », ni « super », ni « c'est top », ni « parfait », "
+            " Une réponse refusée ne se félicite pas : ni « bravo », ni « très bien », ni « super », ni « c'est top », ni « parfait », ni « bien joué », "
             + "nulle part dans ton message, même en fin de phrase"
             + (sensCompris ? " ; tu peux seulement lui dire qu'il a bien compris le sens." : ".");
+
+        /// <summary>
+        /// LE RAPPEL DE FIN DE CONSIGNES, AU TOUR D'UNE TRADUCTION REFUSÉE — tâche 0000o (22/11/2026, décision du coordinateur,
+        /// règle de Min's « des consignes plutôt que des filtres ») : le filtre <see cref="FelicitationRefusee"/> n'est plus
+        /// branché (il cassait des phrases, 4e tour de contrôle d'Omar). Le fait du tour le disait déjà, mais loin dans les
+        /// consignes : ce rappel court vient en DERNIER, juste avant que le professeur réponde. Pas de phrase toute faite à
+        /// recopier, pas de nombre. Générique : écoute des mots (micro, clavier) et répétition / traduction en langue.
+        /// </summary>
+        public static string RappelTraductionRefusee(string langue, bool sensCompris = true, bool redemander = true) =>
+            "[Rappel pour ce tour : sa réponse est le mot FRANÇAIS, elle est refusée. Aucune félicitation dans ton message, "
+            + "nulle part (ni « bravo », ni « très bien », ni « super », ni « parfait », ni « bien joué », ni « c'est top »)"
+            + (sensCompris ? " ; tu peux seulement lui dire qu'il a compris le sens" : string.Empty)
+            + (redemander ? $". Dis-lui que c'est le mot en français, puis redemande-lui le mot en {langue}.]"
+                : ". Dis-lui que c'est le mot en français, puis fais ce que le fait de ce tour demande (on ne lui redemande pas ce mot).]");
 
         /// <summary>
         /// Les mots à répéter du dernier message : ceux de la balise de la langue (sans les consignes « Repeat! »), et, en

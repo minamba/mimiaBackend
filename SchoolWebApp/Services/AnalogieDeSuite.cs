@@ -15,6 +15,12 @@ namespace SchoolWebApp.Api.Services
     /// <see cref="FelicitationRefusee"/>). Si c'était elle qui posait la question (plus aucun « ? » dans le message), la question
     /// du code est remise à la fin (« Quel nombre vient juste après 80 ? ») : le juge la relit au tour suivant. Une phrase
     /// qui porte une balise (l'ardoise) ne se touche pas. Générique : tous les professeurs, toute suite jugée par le code.
+    ///
+    /// TÂCHE 0000o (22/11/2026, décision du coordinateur, règle de Min's « des consignes plutôt que des filtres ») : le retrait
+    /// de phrase n'est PLUS BRANCHÉ dans le flux ni dans l'historique (« Comme quand tu comptais avant… tu te souviens ? »
+    /// devenait « Tu te souviens ? », une phrase sans objet). L'interdit reste dit par le fait <see cref="CalculAuTableau.PasDAnalogie"/> ;
+    /// la réponse donnée en dizaines et unités (règle dure) est lue par <see cref="DonneEnDizaines"/> pour <see cref="SuiteGardee"/>, et
+    /// <see cref="QuestionDuCode"/> / <see cref="AvecLaQuestion"/> servent toujours. Les méthodes de retrait restent pour les harnais.
     /// </summary>
     public static partial class AnalogieDeSuite
     {
@@ -54,6 +60,22 @@ namespace SchoolWebApp.Api.Services
             var dizaines = d < 10 ? $"(?:{d}|{Unites[d]})" : d.ToString(System.Globalization.CultureInfo.InvariantCulture);
             var decomposee = @"|^.*?(?<![\d,])" + dizaines + @"\s+dizaines?\s*(?:et|\+|,)\s*(?:" + u + "|" + Unites[u] + @")(?![\d\p{L}])[^\n]*$";
             return new Regex(AnalogieTexte + decomposee, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        }
+
+        /// <summary>
+        /// LA RÉPONSE DONNÉE EN DIZAINES ET UNITÉS, SEULE (sans les comparaisons) — tâche 0000o (22/11/2026, décision du
+        /// coordinateur « des consignes plutôt que des filtres ») : le retrait de phrase par comparaison n'est plus branché dans
+        /// le flux ; seule cette forme reste lue, parce qu'elle DONNE la réponse (règle dure). Elle sert à
+        /// <see cref="SuiteGardee"/>, qui remplace alors le message en entier (jamais de phrase coupée).
+        /// </summary>
+        public static bool DonneEnDizaines(string? texte, decimal valeur)
+        {
+            if (string.IsNullOrEmpty(texte) || valeur != Math.Floor(valeur) || valeur < 11 || valeur > 9999 || valeur % 10 == 0) return false;
+            var d = (int)(valeur / 10);
+            var u = (int)(valeur % 10);
+            var dizaines = d < 10 ? $"(?:{d}|{Unites[d]})" : d.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            return Regex.IsMatch(texte, @"(?<![\d,])" + dizaines + @"\s+dizaines?\s*(?:et|\+|,)\s*(?:" + u + "|" + Unites[u] + @")(?![\d\p{L}])",
+                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
         }
 
         /// <summary>« quel nombre vient juste après 80 » → « Quel nombre vient juste après 80 ? ».</summary>

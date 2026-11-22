@@ -17,6 +17,10 @@ namespace SchoolWebApp.Api.Services
         /// l'explication reste) ; s'il ne finit pas par une demande, le code ajoute « Tu répètes ? ». Rien d'autre ne bouge :
         /// une balise unique, ou en tête mais seule, reste telle quelle. Générique : tout professeur de langue, toute
         /// répétition en langue.
+        ///
+        /// TÂCHE 0000o (22/11/2026) — DÉCISION DU COORDINATEUR, règle de Min's « des consignes plutôt que des filtres » : plus
+        /// branché dans le flux ni dans l'historique (la demande ajoutée par le code doublait celle du professeur, point 7
+        /// d'Omar sur la v4). La consigne « une seule balise, après l'explication » est dans le fait (<see cref="Fait"/>).
         /// </summary>
         public static string SansBaliseEnDouble(string? texte)
         {

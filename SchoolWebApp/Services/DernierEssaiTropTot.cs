@@ -11,6 +11,13 @@ namespace SchoolWebApp.Api.Services
     /// de sa phrase, à l'écran, dans la voix et dans l'historique (même découpage par phrase que <see cref="FelicitationRefusee"/>).
     /// Générique : tous les professeurs, tout calcul ou suite jugé par le code. À la 3e erreur et au-delà, la mention reste ;
     /// seul le compte des erreurs dit à l'élève part (voir <c>Compte</c>), à tous les rangs.
+    ///
+    /// TÂCHE 0000o (22/11/2026) — DÉCISION DU COORDINATEUR, règle de Min's « des consignes plutôt que des filtres » : 4e tour de
+    /// contrôle où ce retrait cassait des phrases (« Ce n'est pas encore pour ton dernier essai, prends ton temps. » → « Ce
+    /// n'est pas encore, prends ton temps. »). Plus rien de ce qui RÉÉCRIT une phrase n'est branché dans le flux ni dans
+    /// l'historique : le rang est dit par le fait (<see cref="CalculAuTableau.FaitRangDeLErreur"/>), le retour par
+    /// <see cref="FaitAuRetour"/>. Restent utilisés : <see cref="AuRetour"/> et <see cref="TropTotApresLeRetour"/> (quand
+    /// donner le fait). Les méthodes de retrait restent pour les harnais des versions précédentes.
     /// </summary>
     public static partial class DernierEssaiTropTot
     {
@@ -127,7 +134,17 @@ namespace SchoolWebApp.Api.Services
             return false;
         }
 
-        /// <summary>Un filtre à poser dès que le code a compté une erreur (rang non nul).</summary>
+        /// <summary>
+        /// LE FAIT DU RETOUR — tâche 0000o (22/11/2026, décision du coordinateur « des consignes plutôt que des filtres ») : au
+        /// tour d'arrivée d'un retour (<see cref="AuRetour"/>) et à sa première réponse depuis (<see cref="TropTotApresLeRetour"/>),
+        /// le professeur reçoit le fait ; plus rien n'est retiré de sa phrase. Pas de nombre, pas de phrase à recopier.
+        /// </summary>
+        public const string FaitAuRetour =
+            "[Fait pour ce tour, pour toi seul : l'élève revient, et le compte de ses essais repart de zéro. Son prochain essai "
+            + "est un PREMIER essai : n'annonce pas de « dernier essai » dans ce message, ni « une dernière fois », ni « dernière "
+            + "chance », et ne lui dis pas combien d'essais il a déjà faits.]";
+
+        /// <summary>Un filtre à poser dès que le code a compté une erreur (rang non nul). Plus branché dans le flux (0000o).</summary>
         public static bool AFiltrer(int? rang) => rang is not null;
 
         public static string Retirer(string? texte, int? rang, out int retraits) => FelicitationRefusee.ParPhrase(texte, Motif(rang), out retraits, options: Options(rang));

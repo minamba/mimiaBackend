@@ -68,21 +68,30 @@ namespace SchoolWebApp.Api.Services
         /// Le fait à ajouter au verdict faux : à quelle erreur il en est, et ce que la règle demande À CE TOUR. Pas de
         /// chiffre à recopier pour l'élève (« ne lui dis pas combien de fois », règle des essais).
         /// </summary>
+        // TÂCHE 0000o (22/11/2026, décision du coordinateur « des consignes plutôt que des filtres ») : le retrait de « dernier
+        // essai » et du compte des erreurs n'est plus branché dans le flux. Le fait le dit donc lui-même, sans phrase à recopier
+        // (« c'est sa troisième erreur sur cette question » avait été recopié tel quel, conv. de test 1015) : le compte est
+        // pour le professeur seul, et l'interdit est nommé à chaque rang.
+        private const string PourToiSeul =
+            "[Fait pour ce tour, compté par l'application, pour toi seul (ne dis jamais à l'élève combien d'erreurs ou d'essais il a faits) : ";
+
+        private const string PasDeDernierEssai =
+            "N'annonce pas de « dernier essai » à ce tour, ni « une dernière fois », ni « dernière chance ».";
+
         public static string FaitRangDeLErreur(int rang) => rang switch
         {
-            1 => "[Fait pour ce tour, compté par l'application : c'est sa PREMIÈRE erreur sur cette question. Ce n'est pas son "
-                 + "dernier essai : aide-le par un indice, et ne lui parle pas de « dernier essai ».]",
-            2 => "[Fait pour ce tour, compté par l'application : c'est sa DEUXIÈME erreur sur cette question. Ce n'est PAS "
-                 + "encore son dernier essai : ne dis surtout pas « dernier essai » à ce tour. Aide-le par un indice, et laisse-le "
-                 + "réessayer.]",
-            3 => "[Fait pour ce tour, compté par l'application : c'est sa TROISIÈME erreur sur cette question. Reprends avec lui "
-                 + "la notion, sans donner la réponse, puis laisse-lui UN DERNIER essai et dis-le-lui clairement : « c'est ton "
-                 + "dernier essai ». Ne passe pas encore à une autre question : pas de « on y reviendra », pas de « on laisse "
-                 + "celle-là », pas d'autre exercice à ce tour. Ta réponse finit en lui reposant LA MÊME question, par exemple : "
-                 + "« C'est ton dernier essai : … ? »]",
-            _ => "[Fait pour ce tour, compté par l'application : c'est sa QUATRIÈME erreur sur cette question (son dernier essai "
-                 + "est passé). Ne t'acharne pas : dis-lui que ce n'est pas grave, passe à la question suivante SANS lui donner "
-                 + "la réponse de celle-ci, et propose-lui d'y revenir plus tard s'il le souhaite.]",
+            1 => PourToiSeul + "PREMIÈRE erreur sur cette question. Ce n'est pas son dernier essai : aide-le par un indice, et "
+                 + "laisse-le réessayer. " + PasDeDernierEssai + "]",
+            2 => PourToiSeul + "DEUXIÈME erreur sur cette question. Ce n'est PAS encore son dernier essai : aide-le par un "
+                 + "indice, et laisse-le réessayer. " + PasDeDernierEssai + "]",
+            3 => PourToiSeul + "TROISIÈME erreur sur cette question. Reprends avec lui la notion, sans donner la réponse, puis "
+                 + "laisse-lui UN DERNIER essai et dis-le-lui clairement, une seule fois : « c'est ton dernier essai ». Ne passe "
+                 + "pas encore à une autre question : pas de « on y reviendra », pas de « on laisse celle-là », pas d'autre "
+                 + "exercice à ce tour. Ta réponse finit en lui reposant LA MÊME question, par exemple : « C'est ton dernier "
+                 + "essai : … ? »]",
+            _ => PourToiSeul + "QUATRIÈME erreur sur cette question (son dernier essai est passé). Ne t'acharne pas : dis-lui "
+                 + "que ce n'est pas grave, passe à la question suivante SANS lui donner la réponse de celle-ci, et propose-lui "
+                 + "d'y revenir plus tard s'il le souhaite.]",
         };
     }
 }
