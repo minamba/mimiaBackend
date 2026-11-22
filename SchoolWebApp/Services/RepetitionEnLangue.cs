@@ -380,7 +380,7 @@ namespace SchoolWebApp.Api.Services
                 + $"phrase le lui réexplique, sans le gronder, par exemple : « {Majuscule(tour.Attendu)}, c'est le mot en français ; je "
                 + $"t'avais demandé de le dire en {tour.Langue}. » Ensuite seulement, dis-lui que ce n'est pas grave, que vous y reviendrez "
                 + "un peu plus tard, et passe à la suite "
-                + "avec un autre mot. Ne lui dis pas combien d'essais il a faits.]",
+                + "avec un autre mot. Ne lui dis pas combien d'essais il a faits." + SansFelicitation(sensCompris: false) + "]",
             _ =>
                 $"[Fait pour ce tour, qui l'emporte sur tous les faits précédents : vérifié par l'application, il a encore répondu "
                 + $"« {tour.Dit} », le mot en FRANÇAIS (« {tour.Francais} »), à la place de [{tour.Balise}]{tour.Attendu}[/{tour.Balise}], "
@@ -388,7 +388,7 @@ namespace SchoolWebApp.Api.Services
                 + "« Parfait », ni par « Bravo ». NE LUI REDEMANDE PAS ce mot. Ta PREMIÈRE phrase lui réexplique la différence, sans "
                 + $"le gronder, par exemple : « {Majuscule(tour.Francais)}, c'est le mot en français ; en {tour.Langue}, il fallait redire le "
                 + "mot comme je le prononce. » Ensuite seulement, dis-lui que ce n'est pas grave, que vous y reviendrez un peu plus "
-                + "tard, et passe à la suite avec un autre mot. Ne lui dis pas combien d'essais il a faits.]",
+                + "tard, et passe à la suite avec un autre mot. Ne lui dis pas combien d'essais il a faits." + SansFelicitation() + "]",
         };
 
         /// <summary>Le fait donné au professeur à ce tour.</summary>
@@ -399,7 +399,7 @@ namespace SchoolWebApp.Api.Services
                 + $"répondu « {tour.Dit} » : c'est le mot FRANÇAIS que tu lui as donné, pas le mot en {tour.Langue}. Ce n'est pas "
                 + "la réponse : ne commence ni par « Oui », ni par « Parfait », ni par « Bravo », et ne dis pas que c'est juste. "
                 + $"Sans le gronder, dis-lui qu'il a redit le mot en français, puis redemande-lui de le dire en {tour.Langue}, sans lui "
-                + "donner la réponse.]",
+                + "donner la réponse." + SansFelicitation(sensCompris: false) + "]",
             _ =>
                 $"[Vérifié par l'application : tu lui as demandé de répéter [{tour.Balise}]{tour.Attendu}[/{tour.Balise}], et il a "
                 + $"répondu « {tour.Dit} » : c'est le mot en FRANÇAIS (« {tour.Francais} »), pas le mot en {tour.Langue}. Ce n'est "
@@ -407,8 +407,22 @@ namespace SchoolWebApp.Api.Services
                 + "que c'est juste. Sans le gronder, dis-lui que ça, c'est le mot en français — il en a bien compris le sens —, puis "
                 + $"redis LE MÊME MOT en {tour.Langue}, dans ta balise : [{tour.Balise}]{tour.Attendu}[/{tour.Balise}], et demande-lui "
                 + "de le répéter comme toi. NE PASSE PAS à un autre mot à ce tour : aucun autre mot en "
-                + $"{tour.Langue} dans ton message, ni « voici le prochain mot », ni « on continue » ; il doit d'abord redire celui-ci.]",
+                + $"{tour.Langue} dans ton message, ni « voici le prochain mot », ni « on continue » ; il doit d'abord redire celui-ci."
+                + SansFelicitation() + "]",
         };
+
+        /// <summary>
+        /// UNE TRADUCTION REFUSÉE NE SE FÉLICITE PAS — contrôle d'Omar sur le lot groupé (22/11/2026, e2e QE1) : le fait
+        /// interdisait seulement de COMMENCER par « Oui » ou « Bravo », et le professeur finissait sa phrase par « c'est très
+        /// bien ! », « bravo ! » ou « ça c'est top », sous une bulle « On réessaie ». Générique : écoute des mots (micro et
+        /// clavier), répétition et traduction en langue, essai ordinaire et dernier essai, tous les professeurs de langue.
+        /// Reconnaître qu'il a compris le SENS reste permis (décision de Min's du 22/11, 00 h 04), sauf quand il a seulement
+        /// redit le mot français qu'on lui donnait à traduire (<paramref name="sensCompris"/> faux).
+        /// </summary>
+        public static string SansFelicitation(bool sensCompris = true) =>
+            " Une réponse refusée ne se félicite pas : ni « bravo », ni « très bien », ni « super », ni « c'est top », ni « parfait », "
+            + "nulle part dans ton message, même en fin de phrase"
+            + (sensCompris ? " ; tu peux seulement lui dire qu'il a bien compris le sens." : ".");
 
         /// <summary>
         /// Les mots à répéter du dernier message : ceux de la balise de la langue (sans les consignes « Repeat! »), et, en

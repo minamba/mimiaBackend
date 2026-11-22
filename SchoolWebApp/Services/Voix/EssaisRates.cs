@@ -135,7 +135,8 @@ namespace SchoolWebApp.Api.Services.Voix
             + (francais is null ? "Dis-lui" : "dis-lui")
             + ", chaleureusement et en une phrase, que ce n'est pas grave, que vous y reviendrez un peu plus "
             + $"tard, puis passe {(syllabe ? "à la syllabe suivante" : "au mot suivant")}, une autre que « {abandon.Son} ». Ne lui dis pas combien d'essais il a faits, "
-            + $"et n'écris pas « {abandon.Son} » dans ta phrase : ta voix le lirait mal.]";
+            + $"et n'écris pas « {abandon.Son} » dans ta phrase : ta voix le lirait mal."
+            + (francais is null ? string.Empty : RepetitionEnLangue.SansFelicitation()) + "]";
 
         private static string Majuscule(string mot) =>
             string.IsNullOrEmpty(mot) ? mot : char.ToUpperInvariant(mot[0]) + mot[1..];

@@ -426,6 +426,16 @@ namespace SchoolWebApp.Api.Services.Voix
             contenu is not null
             && (contenu.Contains("[FIN_SEANCE]", StringComparison.Ordinal) || contenu.Contains("[RAPPORT]", StringComparison.Ordinal));
 
+        /// <summary>
+        /// UNE NOTE DE SÉANCE ([FICHE], [RAPPORT], [FIN_SEANCE]) N'EST NI UN EXERCICE NI UN CHOIX — contrôle d'Omar sur le lot
+        /// groupé (22/11/2026, e2e QE1/QR1). Écrite pour les parents au départ de l'élève, elle résume la séance avec ses
+        /// propres mots : « répéter un mot avec les sons anglais », « reproduire le son anglais ». Lue comme un message du fil,
+        /// elle faisait d'un MOT une syllabe au retour (« Je te la redis. [EN]Two[/EN] ») et ouvrait un exercice de sons
+        /// après une simple répétition de couleurs (la carte « [CHOIX_EXERCICE_SONS] » à la place de « Blue »).
+        /// </summary>
+        public static bool EstUneNoteDeSeance(string? contenu) =>
+            EstUneCloture(contenu) || (contenu is not null && contenu.Contains("[FICHE]", StringComparison.OrdinalIgnoreCase));
+
         public static bool ACompareAuSon(VerdictSon verdict) =>
             !verdict.Juste && !string.IsNullOrEmpty(verdict.Entendu) && !EstTenu(verdict.Attendu);
 
@@ -712,7 +722,8 @@ namespace SchoolWebApp.Api.Services.Voix
         /// de passer. HORS DE CET EXERCICE : ni juge, ni liste, ni filtre, ni rappel, le micro normal.
         /// </summary>
         public static bool EnExerciceDeSons(IEnumerable<string?> messagesRecents) =>
-            messagesRecents.Any(m => m is not null
+            // Une note de séance ne parle que de la séance finie (voir EstUneNoteDeSeance) : « reproduire le son anglais ».
+            messagesRecents.Any(m => m is not null && !EstUneNoteDeSeance(m)
                 && (m.Contains(Prompts.PromptsPedagogiques.SonFait, StringComparison.Ordinal) || MentionDeSons().IsMatch(m)
                     // LA LECTURE EN IMAGES (07/11/2026) : l'image montrée, ou « je veux lire des mots », qui ne nomme aucun son.
                     || LectureDImage.Affiche(m) is not null || LectureDImage.ChoixDeLEnfant(m) is not null));
@@ -786,16 +797,17 @@ namespace SchoolWebApp.Api.Services.Voix
             if (ParleDeSyllabe().IsMatch(courant)) return true;
 
             // Sinon la dernière consigne donnée, puis le dernier message qui tranche.
+            // Une note de séance ne tranche rien (voir EstUneNoteDeSeance) : « des mots entiers » écrit pour les parents.
             foreach (var t in textes.Skip(1).Reverse())
             {
-                if (t is null) continue;
+                if (t is null || EstUneNoteDeSeance(t)) continue;
                 if (ConsigneDeLaSyllabe().IsMatch(t)) return true;
                 if (ConsigneDeLEcoute().IsMatch(t)) return false;
             }
 
             foreach (var t in textes.Skip(1).Reverse())
             {
-                if (t is null) continue;
+                if (t is null || EstUneNoteDeSeance(t)) continue;
                 var propre = BaliseEtMotsOtes(t);
                 if (ParleDeMot().IsMatch(propre)) return false;
                 if (ParleDeSyllabe().IsMatch(propre)) return true;
@@ -849,7 +861,11 @@ namespace SchoolWebApp.Api.Services.Voix
         /// </summary>
         public static string? TypeDEcoute(IEnumerable<string?> recents)
         {
-            var liste = recents as IReadOnlyList<string?> ?? recents.ToList();
+            // LE TYPE SE LIT DANS LE FIL D'AVANT LA NOTE DE SÉANCE — contrôle d'Omar sur le lot groupé (22/11/2026, e2e QE1) :
+            // au retour après « Quitter », la fiche de fin (« répéter un mot avec les sons anglais ») passait pour le choix
+            // de l'enfant (« des/les sons » = syllabes), et l'écoute de Two reprenait en « Je te la redis. ». Une note de
+            // séance n'est ni un choix ni une consigne : elle est sautée, le fil d'avant décide. Voir EstUneNoteDeSeance.
+            IReadOnlyList<string?> liste = recents.Where(r => !EstUneNoteDeSeance(r)).ToList();
 
             // L'EXERCICE QUE LE PROFESSEUR TIENT EN CE MOMENT — production, le 07/11/2026 : en pleine lecture en images,
             // « change de syllabe » ou « je suis bloqué sur cette syllabe » faisait basculer vers l'ÉCOUTE des syllabes
@@ -1082,7 +1098,7 @@ namespace SchoolWebApp.Api.Services.Voix
                     + "« On réessaie ». Ce n'est pas la réponse : ne commence ni par « Oui », ni par « Parfait », ni par « Bravo », ni par « C'est bien ça », et ne dis "
                     + "pas que c'est juste. Sans le gronder, dis-lui que ça, c'est le mot en français — il en a bien compris le sens —, "
                     + $"puis redis LE MÊME MOT « {verdict.Attendu} » dans ta balise de voix et redemande ce qu'il a entendu. NE PASSE PAS à "
-                    + "un autre mot à ce tour. Ne parle jamais de cet outil à l'élève.]";
+                    + "un autre mot à ce tour. Ne parle jamais de cet outil à l'élève." + RepetitionEnLangue.SansFelicitation() + "]";
             }
 
             return verdict.Juste

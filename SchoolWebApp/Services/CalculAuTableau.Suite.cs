@@ -41,7 +41,19 @@ namespace SchoolWebApp.Api.Services
         /// </summary>
         private static string IndiceDeSuite(string comment, int attendu) =>
             "Indice à donner : " + comment + " C'est LUI qui doit dire le nombre qui manque : ne dis et n'écris pas "
-            + attendu.ToString(CultureInfo.InvariantCulture) + " toi-même à ce tour-ci, ni en chiffres ni en lettres.";
+            + attendu.ToString(CultureInfo.InvariantCulture) + " toi-même à ce tour-ci, ni en chiffres ni en lettres."
+            + PasDAnalogie;
+
+        /// <summary>
+        /// LE NOM D'UN NOMBRE NE SE FABRIQUE PAS PAR ANALOGIE — contrôle d'Omar sur le lot groupé (#53, 22/11/2026, conv. de
+        /// test 873) : « ça continue comme vingt-et-un, mais avec quatre-vingts devant » mène à « quatre-vingts-et-un », qui
+        /// n'existe pas (on dit quatre-vingt-un). Les noms des nombres ne suivent pas tous la même règle (et, tirets, « s » de
+        /// vingt et cent, soixante-dix, quatre-vingts) : aucune comparaison de nom n'est sûre. Pour toutes les suites.
+        /// </summary>
+        public const string PasDAnalogie =
+            " N'explique jamais le nom d'un nombre en le comparant au nom d'un autre nombre (« ça continue comme …, mais avec "
+            + "… devant ») : les noms des nombres ne se construisent pas tous pareil, et l'élève en tirerait un nom qui "
+            + "n'existe pas. Fais-le seulement compter.";
 
         private static string Recompte(IEnumerable<int> nombres) =>
             "« " + string.Join(", ", nombres.Where(x => x >= 0).Select(x => x.ToString(CultureInfo.InvariantCulture))) + "… »";

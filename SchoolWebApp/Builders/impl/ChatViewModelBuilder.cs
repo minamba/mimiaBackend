@@ -3660,6 +3660,15 @@ namespace SchoolWebApp.Api.Builders.impl
                     _logger.LogInformation("Calcul juge (conversation {ConversationId}) : {Fait}", conversationId, faitCalcul);
                 }
 
+                // À QUELLE ERREUR IL EN EST, COMPTÉ PAR LE CODE — voir CalculAuTableau.RangDeLErreur (contrôle d'Omar sur le
+                // lot groupé : « dernier essai » annoncé dès la 2e erreur, 1 séance sur 3).
+                if (faitCalcul is not null && CalculAuTableau.RangDeLErreur(
+                        historique.Select(m => ((string?)m.Role, (string?)m.Contenu)).ToList(), verdictCalcul!) is int rangErreur)
+                {
+                    faitCalcul += "\n\n" + CalculAuTableau.FaitRangDeLErreur(rangErreur);
+                    _logger.LogInformation("Calcul faux : erreur numero {Rang} sur la question (conversation {ConversationId}).", rangErreur, conversationId);
+                }
+
                 declencheur += "\n\n" + (controleOuvert
                     ? ReponseChiffree.RappelControle
                     : faitCalcul ?? ReponseChiffree.RappelPour(contenu));
