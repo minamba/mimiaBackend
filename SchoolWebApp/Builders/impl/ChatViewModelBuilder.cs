@@ -4195,6 +4195,14 @@ namespace SchoolWebApp.Api.Builders.impl
             // et la rouvrirait pour une dictée que le professeur déclare perdue.
             if (marquerAbandonDictee) yield return LecteurDictee.Abandon;
 
+            // UNE DICTÉE AU TABLEAU POUR SA CORRECTION : ses mots ne se cachent plus (signalement #61, voir VoixEnClair).
+            // Remise par l'application à l'arrivée, correction ouverte, ou copie tapée qui vient d'arriver. Ce n'est
+            // pas un exercice de sons : la liste blanche ne s'applique pas (bout en bout du 22/11 : un historique qui
+            // parlait de « sons » l'allumait à la reprise, et « chaton » devenait « pomme » ou « savon »).
+            var dicteeAuTableau = (nouvelleArrivee && tableauRepris is not null)
+                || correctionDictee.Ouverte
+                || blocDicteeAjoute is not null;
+
             // PENDANT UNE ÉCOUTE, LE TEXTE LU NE PASSE PAS AU TABLEAU — voir
             // EcouteAuTableau. Le filtre n'existe que si une écoute est ouverte :
             // en dehors, le flux part tel quel, sans retenue ni retard.
@@ -4208,14 +4216,6 @@ namespace SchoolWebApp.Api.Builders.impl
             // l'écran ET la voix.
             var filtreAccord = new CorrectionsDuFlux(
                 PromptsPedagogiques.EstUneProfesseure(contexte.Conversation.ProfAvatar));
-
-            // UNE DICTÉE AU TABLEAU POUR SA CORRECTION : ses mots ne se cachent plus (signalement #61, voir VoixEnClair).
-            // Remise par l'application à l'arrivée, correction ouverte, ou copie tapée qui vient d'arriver. Ce n'est
-            // pas un exercice de sons : la liste blanche ne s'applique pas (bout en bout du 22/11 : un historique qui
-            // parlait de « sons » l'allumait à la reprise, et « chaton » devenait « pomme » ou « savon »).
-            var dicteeAuTableau = (nouvelleArrivee && tableauRepris is not null)
-                || correctionDictee.Ouverte
-                || blocDicteeAjoute is not null;
 
             // IL PIOCHE DANS LA LISTE BLANCHE — voir FiltreMotsVerifies. Le français et l'anglais au
             // primaire, l'interrupteur allumé, et seulement dans un exercice de sons ou de syllabes :
