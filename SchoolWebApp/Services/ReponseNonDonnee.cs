@@ -548,6 +548,9 @@ namespace SchoolWebApp.Api.Services
             // « Et après, on compte : 81. » (bout en bout du lot groupé, 22/11/2026, conv. de test 918) : un seul nombre
             // annoncé après « on compte : », c'est la réponse (une suite « on compte : 78, 79, 80 » ne finit pas sur elle).
             + @"|(?<!\p{L})(?:on\s+)?(?:compte|comptes|comptons|comptez)\s*:\s*"
+            // « les nombres qui viennent juste après : quatre-vingt-un, quatre-vingt-deux... » (conv. de test 941) : le
+            // nombre annoncé après « après : » est celui qu'on cherche.
+            + @"|(?<!\p{L})(?:après|apres)\s*:\s*"
             // « il y en a 12 en tout » : voir AvecEnTout.
             + @")"
             // Entre guillemets aussi : « le mot juste après 80, c'est « quatre-vingt-un » » (conv. de test 926), « on dit « 81 » ».

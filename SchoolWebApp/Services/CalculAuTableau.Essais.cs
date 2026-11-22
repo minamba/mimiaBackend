@@ -77,7 +77,9 @@ namespace SchoolWebApp.Api.Services
                  + "réessayer.]",
             3 => "[Fait pour ce tour, compté par l'application : c'est sa TROISIÈME erreur sur cette question. Reprends avec lui "
                  + "la notion, sans donner la réponse, puis laisse-lui UN DERNIER essai et dis-le-lui clairement : « c'est ton "
-                 + "dernier essai ». Ne passe pas encore à une autre question.]",
+                 + "dernier essai ». Ne passe pas encore à une autre question : pas de « on y reviendra », pas de « on laisse "
+                 + "celle-là », pas d'autre exercice à ce tour. Ta réponse finit en lui reposant LA MÊME question, par exemple : "
+                 + "« C'est ton dernier essai : … ? »]",
             _ => "[Fait pour ce tour, compté par l'application : c'est sa QUATRIÈME erreur sur cette question (son dernier essai "
                  + "est passé). Ne t'acharne pas : dis-lui que ce n'est pas grave, passe à la question suivante SANS lui donner "
                  + "la réponse de celle-ci, et propose-lui d'y revenir plus tard s'il le souhaite.]",

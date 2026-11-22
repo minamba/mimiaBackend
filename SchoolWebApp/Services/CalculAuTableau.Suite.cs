@@ -132,8 +132,11 @@ namespace SchoolWebApp.Api.Services
         /// <summary>
         /// Une autre question que « quel nombre vient après » : combien (« combien de nombres entre 70 et 80 ? »), les
         /// rangs (« quelle dizaine vient après 70 ? »), la parité, les durées, les calculs.
+        /// « ça fait combien ? » / « c'est combien ? » SANS « de » demande le nombre lui-même : « soixante-dix-huit,
+        /// soixante-dix-neuf, quatre-vingts... et après, ça fait combien ? » relance la suite (bout en bout du lot groupé,
+        /// 22/11/2026, conv. de test 941 : la question était perdue au 3e essai, ni verdict ni réponse protégée).
         /// </summary>
-        [GeneratedRegex(@"(?<!\p{L})(?:combien|dizaines?|centaines?|unit[ée]s?|pairs?|impairs?|multiples?|plus\s+(?:grand|petit)|lettres?|jours?|mois|heures?|minutes?|ans)(?!\p{L})"
+        [GeneratedRegex(@"(?<!\p{L})(?:(?<!(?:fait|font|donne|donnent|c['’]est|ça\s+sera|ce\s+sera)\s+)combien|combien\s+d(?:e|['’])|dizaines?|centaines?|unit[ée]s?|pairs?|impairs?|multiples?|plus\s+(?:grand|petit)|lettres?|jours?|mois|heures?|minutes?|ans)(?!\p{L})"
             + @"|\d\s*[+\-−–×x*:÷=]\s*\d", RegexOptions.IgnoreCase)]
         private static partial Regex PasUneSuite();
 
