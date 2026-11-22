@@ -886,6 +886,45 @@ namespace SchoolWebApp.Api.Builders.impl
         }
 
         /// <summary>
+        /// Le fait « cette séance ne continue pas la précédente », avec le
+        /// titre du contrôle d'avant quand il y en avait un (encore à cet
+        /// élève) — voir SujetDeSeance. Null si la séance porte sur la même
+        /// chose. Silencieux : sans titre, le fait part quand même.
+        /// </summary>
+        private async Task<string?> FaitAutreSujetAsync(
+            int eleveId, SujetDeSeance.Sujet avant, SujetDeSeance.Sujet apres, CancellationToken ct)
+        {
+            if (!SujetDeSeance.Change(avant, apres)) return null;
+
+            string? titreAvant = null;
+
+            if (avant.ControleId is int controleAvant)
+            {
+                try
+                {
+                    titreAvant = (await _controles.GetAsync(eleveId, controleAvant, ct))?.Sujet;
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    _logger.LogWarning(ex,
+                        "Titre du controle precedent {ControleId} illisible (eleve {EleveId}).", controleAvant, eleveId);
+                }
+            }
+
+            var fait = SujetDeSeance.Fait(avant, apres, titreAvant);
+
+            if (fait is not null)
+            {
+                _logger.LogInformation(
+                    "Seance d'un autre sujet que la precedente ({ModeAvant} {CibleAvant} -> {ModeApres} {CibleApres}).",
+                    avant.Mode, (object?)avant.ControleId ?? avant.EpreuveCode,
+                    apres.Mode, (object?)apres.ControleId ?? apres.EpreuveCode);
+            }
+
+            return fait;
+        }
+
+        /// <summary>
         /// UN CONTRÔLE À VENIR SE PROPOSE À CHAQUE ARRIVÉE — voulu par
         /// Camara le 12/09/2026, TANT QUE la date n'est pas dépassée.
         /// Contrairement à la dictée en attente, il n'y a pas de garde
@@ -2423,10 +2462,14 @@ namespace SchoolWebApp.Api.Builders.impl
 
             // LE MODE AUSSI, ET POUR LA MÊME RAISON : chaque tour de la séance,
             // le minuteur et la conclusion après un départ le relisent.
-            await DefinirModeSeanceAsync(conversationId, mode, controleId, epreuveCode, ct);
+            //
+            // ET CE QU'ÉTAIT LA SÉANCE D'AVANT, lu juste avant d'être réécrit :
+            // si elle portait sur autre chose, le tour d'arrivée le dit (retest
+            // #54 d'Adam, voir SujetDeSeance).
+            var precedent = await DefinirModeSeanceAsync(conversationId, mode, controleId, epreuveCode, ct);
 
             await foreach (var fragment in StreamTourAsync(
-                conversationId, contenu: null, accueil: true, ct))
+                conversationId, contenu: null, accueil: true, ct, sujetPrecedent: precedent))
             {
                 yield return fragment;
             }
@@ -2443,14 +2486,22 @@ namespace SchoolWebApp.Api.Builders.impl
         /// Toute arrivée repose le mode, cours normal compris : c'est ce qui
         /// fait qu'un élève revenu par la carte de sa matière n'entend plus
         /// parler de la préparation d'hier.
+        ///
+        /// Rend le sujet de la séance PRÉCÉDENTE (mode et cible d'avant la
+        /// réécriture), ou null si on ne le sait pas — voir SujetDeSeance.
         /// </summary>
-        private async Task DefinirModeSeanceAsync(
+        private async Task<SujetDeSeance.Sujet?> DefinirModeSeanceAsync(
             int conversationId, string? mode, int? controleId, string? epreuveCode, CancellationToken ct)
         {
             try
             {
                 var contexte = await _resolver.ResoudreConversationAsync(conversationId);
-                if (contexte is null) return;
+                if (contexte is null) return null;
+
+                var precedent = SujetDeSeance.De(
+                    contexte.Conversation.ModeSeance,
+                    contexte.Conversation.ModeControleId,
+                    contexte.Conversation.ModeEpreuveCode);
 
                 // Un ancien écran n'envoyait que le contrôle : c'était une préparation.
                 var demande = string.IsNullOrWhiteSpace(mode) && controleId is not null
@@ -2501,11 +2552,14 @@ namespace SchoolWebApp.Api.Builders.impl
 
                 await _conversationService.DefinirModeSeanceAsync(
                     conversationId, retenu, controleRetenu, epreuveRetenue, ct);
+
+                return precedent;
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex,
                     "Echec de la definition du mode de seance (conversation {ConversationId}).", conversationId);
+                return null;
             }
         }
 
@@ -2803,7 +2857,8 @@ namespace SchoolWebApp.Api.Builders.impl
             string? vitesseEcoute = null,
             bool? sonJuste = null,
             IReadOnlyList<string>? figureIncomprise = null,
-            VerdictDuTour? verdictDuTour = null)
+            VerdictDuTour? verdictDuTour = null,
+            SujetDeSeance.Sujet? sujetPrecedent = null)
         {
             var contexte = await _resolver.ResoudreConversationAsync(conversationId)
                 ?? throw new UnauthorizedAccessException(
@@ -3334,6 +3389,18 @@ namespace SchoolWebApp.Api.Builders.impl
             // d'aucun contrôle ni d'aucun examen.
             if (nouvelleArrivee)
             {
+                // LA SÉANCE D'AVANT PORTAIT-ELLE SUR AUTRE CHOSE ? Retest #54
+                // d'Adam (21/11/2026) : préparation d'un 2e contrôle de sciences
+                // ouverte quelques minutes après celle d'un 1er, et le professeur
+                // commençait par « On reprend : une plante… », la question restée
+                // en bas de l'historique. Voir SujetDeSeance.
+                string? autreSujet = null;
+                if (typeAccueil != TypeAccueil.PremiereSeance && sujetPrecedent is not null)
+                {
+                    autreSujet = await FaitAutreSujetAsync(
+                        contexte.Eleve.Id, sujetPrecedent, SujetDeSeance.De(mode, controleMode, epreuveMode), ct);
+                }
+
                 switch (mode)
                 {
                     case ModesSeance.Controle:
@@ -3345,8 +3412,25 @@ namespace SchoolWebApp.Api.Builders.impl
                             declencheur += "\n\n[L'élève ouvre cette séance POUR préparer ce "
                                 + "contrôle : c'est le sujet de la séance, commence par là.]";
 
-                            await MarquerPreparationControleAsync(
-                                contexte.Eleve.Id, controleMode.Value, ct);
+                            if (autreSujet is not null) declencheur += "\n\n" + autreSujet;
+
+                            // UN RECHARGEMENT NE ROUVRE PAS LA PRÉPARATION. Son
+                            // ouverture (`DernierePreparationLe`) dit depuis quand
+                            // l'enfant doit avoir répondu pour qu'un verdict
+                            // s'écrive (VerdictsDuTour) ; or la conclusion de départ
+                            // d'un rechargement arrive quelques secondes APRÈS ce
+                            // nouvel accueil, et elle aurait écarté le verdict du
+                            // travail fait juste avant. Même contrôle, retour moins
+                            // d'une minute après la sortie : la séance continue.
+                            var rechargement = sujetPrecedent is not null
+                                && !SujetDeSeance.Change(sujetPrecedent, SujetDeSeance.De(mode, controleMode, epreuveMode))
+                                && Services.Voix.LectureDesNombres.EstUnRechargement(typeAccueil, absenceApresSortie);
+
+                            if (!rechargement)
+                            {
+                                await MarquerPreparationControleAsync(
+                                    contexte.Eleve.Id, controleMode.Value, ct);
+                            }
 
                             declencheur += "\n\n" + controleAVenir;
                         }
@@ -3357,7 +3441,12 @@ namespace SchoolWebApp.Api.Builders.impl
                         var bilanControle = await ControleABilanAsync(
                             contexte.Eleve.Id, contexte.Conversation.MatiereId, controleMode!.Value, ct);
 
-                        if (bilanControle is not null) declencheur += "\n\n" + bilanControle;
+                        if (bilanControle is not null)
+                        {
+                            if (autreSujet is not null) declencheur += "\n\n" + autreSujet;
+                            declencheur += "\n\n" + bilanControle;
+                        }
+
                         break;
 
                     case ModesSeance.Examen:
@@ -3365,7 +3454,12 @@ namespace SchoolWebApp.Api.Builders.impl
                             contexte.Eleve.Id, contexte.Eleve.NiveauCode, contexte.Conversation.MatiereId,
                             epreuveMode!, ct);
 
-                        if (examenAVenir is not null) declencheur += "\n\n" + examenAVenir;
+                        if (examenAVenir is not null)
+                        {
+                            if (autreSujet is not null) declencheur += "\n\n" + autreSujet;
+                            declencheur += "\n\n" + examenAVenir;
+                        }
+
                         break;
                 }
             }
@@ -4642,15 +4736,37 @@ namespace SchoolWebApp.Api.Builders.impl
                 // ailleurs — en cours normal, ou sur un autre numéro — est
                 // ignoré : c'est le code qui tient le cloisonnement, pas la
                 // mémoire du modèle.
+                //
+                // ET PAS TANT QUE L'ENFANT N'A RIEN RÉPONDU DANS CETTE
+                // PRÉPARATION (retest #54 d'Adam, 21/11/2026 : carte d'un
+                // contrôle neuf à 60 % « Pas encore prêt » sans une réponse —
+                // verdict du tour d'arrivée ou de la conclusion de départ). Le
+                // programme posé avant — lu dans son cours, par exemple — entre
+                // au périmètre, mais ses notions ne sont pas « travaillées » et
+                // aucun verdict ne s'écrit. Voir VerdictsDuTour.
                 if (mode == ModesSeance.Controle)
                 {
+                    var aRepondu = await EnfantARepondu(
+                        contexte.Eleve.Id, controleMode!.Value, nouvelleArrivee, typeAccueil, historique, ct);
+
                     await EnregistrerControleNotionsAsync(
                         conversationId, contexte.Eleve.Id, contexte.Conversation.MatiereId,
-                        contexte.Eleve.NiveauScolaireId, controleMode!.Value, resultat.TexteComplet, ct);
+                        contexte.Eleve.NiveauScolaireId, controleMode.Value, resultat.TexteComplet, ct,
+                        travaillee: aRepondu);
 
-                    await EnregistrerControlePretAsync(
-                        conversationId, contexte.Eleve.Id, contexte.Conversation.MatiereId,
-                        contexte.Eleve.NiveauScolaireId, controleMode.Value, resultat.TexteComplet, ct);
+                    if (aRepondu)
+                    {
+                        await EnregistrerControlePretAsync(
+                            conversationId, contexte.Eleve.Id, contexte.Conversation.MatiereId,
+                            contexte.Eleve.NiveauScolaireId, controleMode.Value, resultat.TexteComplet, ct);
+                    }
+                    else if (LecteurControlePret.Lire(resultat.TexteComplet) is not null)
+                    {
+                        _logger.LogWarning(
+                            "Verdict ignore : l'eleve n'a rien repondu dans cette preparation "
+                            + "(controle {ControleId}, conversation {ConversationId}, tour {Type}).",
+                            controleMode.Value, conversationId, typeAccueil);
+                    }
                 }
 
                 // Le résultat, lui, est un fait rapporté par l'élève : il
@@ -4659,7 +4775,10 @@ namespace SchoolWebApp.Api.Builders.impl
                     conversationId, contexte.Eleve.Id, contexte.Conversation.MatiereId,
                     contexte.Eleve.NiveauScolaireId, resultat.TexteComplet, ct);
 
-                if (mode == ModesSeance.Examen)
+                // L'épreuve n'a pas de date d'ouverture lue ici : seule la règle
+                // du tour d'arrivée s'applique (personne n'a encore parlé).
+                if (mode == ModesSeance.Examen
+                    && VerdictsDuTour.EnfantARepondu(nouvelleArrivee, typeAccueil == TypeAccueil.Aucun, null, []))
                 {
                     await EnregistrerExamenPretAsync(
                         conversationId, contexte.Eleve.Id, contexte.Eleve.NiveauCode,
@@ -5593,6 +5712,37 @@ namespace SchoolWebApp.Api.Builders.impl
         }
 
         /// <summary>
+        /// L'enfant a-t-il répondu depuis l'ouverture de CETTE préparation ?
+        /// Voir VerdictsDuTour. L'ouverture est relue en base (posée à
+        /// l'arrivée par MarquerPreparationControleAsync) ; si elle est
+        /// illisible, on ne bloque rien.
+        /// </summary>
+        private async Task<bool> EnfantARepondu(
+            int eleveId, int controleId, bool tourDArrivee, TypeAccueil typeAccueil,
+            IReadOnlyList<DomainMessage> historique, CancellationToken ct)
+        {
+            DateTime? ouverture = null;
+
+            if (!tourDArrivee && typeAccueil != TypeAccueil.Aucun)
+            {
+                try
+                {
+                    ouverture = (await _controles.GetAsync(eleveId, controleId, ct))?.DernierePreparationLe;
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    _logger.LogWarning(ex, "Ouverture de la preparation {ControleId} illisible.", controleId);
+                }
+            }
+
+            return VerdictsDuTour.EnfantARepondu(
+                tourDArrivee,
+                tourDeLEleve: typeAccueil == TypeAccueil.Aucun,
+                ouverture,
+                historique.Select(m => ((string?)m.Role, m.DateCreation)));
+        }
+
+        /// <summary>
         /// Le professeur vient de dire si l'élève est prêt pour son contrôle.
         ///
         /// POURQUOI CE VERDICT EST DEMANDÉ AU MODÈLE ET NON CALCULÉ. C'est
@@ -5715,7 +5865,8 @@ namespace SchoolWebApp.Api.Builders.impl
 
         private async Task EnregistrerControleNotionsAsync(
             int conversationId, int eleveId, int matiereId,
-            int? niveauScolaireId, int controleCible, string texte, CancellationToken ct)
+            int? niveauScolaireId, int controleCible, string texte, CancellationToken ct,
+            bool travaillee = true)
         {
             var declare = LecteurControleNotions.Lire(texte);
             if (declare is null) return;
@@ -5755,7 +5906,7 @@ namespace SchoolWebApp.Api.Builders.impl
                 var posees = declare.Notions.Count > 0
                     ? await AjouterNotionsAsync(
                         eleveId, declare.Controle, matiereId, niveauScolaireId,
-                        declare.Notions, travaillee: true, ct)
+                        declare.Notions, travaillee, ct)
                     : 0;
 
                 // Le sujet vient d'être précisé mais le professeur n'a pas

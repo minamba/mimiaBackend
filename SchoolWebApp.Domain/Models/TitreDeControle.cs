@@ -85,19 +85,111 @@ namespace SchoolWebApp.Domain.Models
         public static string NouveauTitre(string? sujetActuel, string precision, string? matiereLibelle)
         {
             var propre = precision.Trim();
-            if (string.IsNullOrWhiteSpace(sujetActuel)) return propre;
+            if (string.IsNullOrWhiteSpace(sujetActuel)) return UnSeulDeuxPoints(propre);
 
             var actuel = sujetActuel.Trim();
-            if (!EstGenerique(actuel, matiereLibelle)) return propre;
+            if (!EstGenerique(actuel, matiereLibelle)) return UnSeulDeuxPoints(propre);
 
+            // Le titre de la famille, rendu tel quel : on ne réécrit pas ce
+            // qu'elle a tapé.
             if (EstGenerique(propre, matiereLibelle)) return actuel;
 
             var cleActuel = Cle(actuel);
-            if (Cle(propre).StartsWith(cleActuel, StringComparison.Ordinal)) return propre;
+            if (Cle(propre).StartsWith(cleActuel, StringComparison.Ordinal)) return UnSeulDeuxPoints(propre);
 
             // ESPACE INSÉCABLE AVANT LES DEUX-POINTS : sur une carte étroite, le
             // titre se coupait juste avant « : », qui commençait la ligne suivante.
+            //
+            // LA PRÉCISION N'APPORTE PAS SES PROPRES DEUX-POINTS (retest #54 d'Adam,
+            // 21/11/2026) : « Contrôle de sciences : les animaux et leur
+            // alimentation : herbivores, carnivores, omnivores ». Les deux-points
+            // du titre complété sont les seuls ; ceux de la précision se
+            // reformulent — voir SansDeuxPoints.
+            propre = SansDeuxPoints(propre);
             return $"{actuel.TrimEnd(' ', ' ', ':', '-', '–', '—', '.')}{Insecable}: {propre}";
+        }
+
+        /// <summary>
+        /// UN SEUL « : » DANS UN TITRE. Le premier reste (c'est lui qui sépare
+        /// le contrôle de son sujet) ; ce qui suit passe par
+        /// <see cref="SansDeuxPoints"/>.
+        /// </summary>
+        public static string UnSeulDeuxPoints(string titre)
+        {
+            var i = IndexDeuxPoints(titre, 0);
+            if (i < 0) return titre;
+
+            var suite = SansDeuxPoints(titre[(i + 1)..].TrimStart(' ', ' '));
+            return suite.Length == 0 ? titre[..(i + 1)] : $"{titre[..(i + 1)]} {suite}";
+        }
+
+        /// <summary>
+        /// Le texte sans aucun « : » de ponctuation. Le DERNIER, suivi d'une
+        /// suite sans parenthèses, devient une parenthèse — « les animaux et
+        /// leur alimentation (herbivores, carnivores, omnivores) » ; les autres
+        /// deviennent un tiret « – ». Un « : » entre deux chiffres (« 10:30 »)
+        /// n'est pas de la ponctuation : il reste.
+        /// </summary>
+        public static string SansDeuxPoints(string texte)
+        {
+            var positions = new List<int>();
+            for (var i = IndexDeuxPoints(texte, 0); i >= 0; i = IndexDeuxPoints(texte, i + 1)) positions.Add(i);
+            if (positions.Count == 0) return texte;
+
+            var dernier = positions[^1];
+            var gaucheDuDernier = texte[..dernier].TrimEnd(' ', ' ');
+            var suite = texte[(dernier + 1)..].Trim(' ', ' ');
+
+            string resultat;
+            if (suite.Length == 0)
+            {
+                // « … : » en bout de texte : il n'annonce rien, il part.
+                resultat = gaucheDuDernier;
+            }
+            else if (gaucheDuDernier.Length == 0)
+            {
+                resultat = suite;
+            }
+            else if (!suite.Contains('(') && !suite.Contains(')') && !gaucheDuDernier.EndsWith(')'))
+            {
+                resultat = $"{gaucheDuDernier} ({suite.TrimEnd('.', ' ', ' ')})";
+            }
+            else
+            {
+                resultat = $"{gaucheDuDernier} – {suite}";
+            }
+
+            // Les précédents, de droite à gauche : un tiret. Leurs positions
+            // n'ont pas bougé, tout ce qui a changé est à leur droite.
+            for (var k = positions.Count - 2; k >= 0; k--)
+            {
+                var p = positions[k];
+                var gauche = resultat[..p].TrimEnd(' ', ' ');
+                var droite = resultat[(p + 1)..].TrimStart(' ', ' ');
+                resultat = gauche.Length == 0 ? droite : droite.Length == 0 ? gauche : $"{gauche} – {droite}";
+            }
+
+            return resultat;
+        }
+
+        /// <summary>
+        /// La position du prochain « : » (ou « ： ») de ponctuation à partir de
+        /// <paramref name="depart"/>, -1 s'il n'y en a plus. Entre deux
+        /// chiffres, ce n'est pas de la ponctuation (une heure, un rapport).
+        /// </summary>
+        private static int IndexDeuxPoints(string texte, int depart)
+        {
+            for (var i = depart; i < texte.Length; i++)
+            {
+                if (texte[i] is not (':' or '：')) continue;
+
+                var entreChiffres = i > 0 && i + 1 < texte.Length
+                    && char.IsDigit(texte[i - 1]) && char.IsDigit(texte[i + 1]);
+
+                if (!entreChiffres) return i;
+            }
+
+            return -1;
         }
 
         /// <summary>L'espace insécable posée devant les deux-points du titre complété.</summary>
