@@ -89,6 +89,38 @@ namespace SchoolWebApp.Dal.Repositories
             return _comptesProteges.Protege(mail);
         }
 
+        /// <summary>
+        /// Ce parent peut-il enregistrer des enfants SANS NOMBRE ? Le
+        /// super-administrateur, et désormais tout administrateur qui a le
+        /// droit « Création d'enfant » — Min's, le 22/11/2026 : « en tant
+        /// qu'admin qui a le droit de créer des enfants, on peut créer des
+        /// enfants à l'infini ».
+        ///
+        /// SÉPARÉ DE <see cref="SansLimiteDEnfantsAsync"/> À DESSEIN : celui-là
+        /// lève AUSSI la limite des minutes (pot, plafond par enfant) pour le
+        /// super-administrateur. Un administrateur délégué garde le forfait de
+        /// sa formule : seul le NOMBRE d'enfants est levé (inscription et
+        /// place à l'usage), rien d'autre.
+        ///
+        /// LE DROIT SE LIT COMME POUR L'ADMINISTRATION (`GetOngletsAdminParMailAsync`) :
+        /// compte `EstAdministrateur`, onglets de son rôle, ou à défaut ses
+        /// onglets d'avant les rôles. Un parent non administrateur n'est jamais
+        /// concerné : sa formule fait foi, comme avant.
+        /// </summary>
+        private async Task<bool> SansLimiteDeNombreDEnfantsAsync(int parentId, CancellationToken ct)
+        {
+            if (await SansLimiteDEnfantsAsync(parentId, ct)) return true;
+
+            var compte = await _context.Parents
+                .AsNoTracking()
+                .Where(p => p.Id == parentId && p.EstAdministrateur)
+                .Select(p => new { Onglets = p.Role != null ? p.Role.Onglets : p.OngletsAdmin })
+                .FirstOrDefaultAsync(ct);
+
+            return compte is not null
+                   && OngletsAdmin.Lire(compte.Onglets).Contains(OngletsAdmin.CreationEnfant);
+        }
+
         // ------------------------------------------------------------ catalogue
         public async Task<IEnumerable<OffreTarif>> GetOffresAsync(CancellationToken ct = default) =>
             await _context.Offres
@@ -708,7 +740,11 @@ namespace SchoolWebApp.Dal.Repositories
             // à l'inscription (voir CapaciteAsync), ils le sont aussi à l'usage —
             // sinon le cinquième profil ajouté serait refusé à sa première
             // séance, ce qui se lirait comme une panne.
-            if (!await SansLimiteDEnfantsAsync(parentId.Value, ct)
+            //
+            // ET POUR L'ADMINISTRATEUR QUI A LE DROIT « Création d'enfant »
+            // (22/11/2026) : ses enfants en plus de la formule doivent pouvoir
+            // travailler, sur le forfait de minutes de la formule.
+            if (!await SansLimiteDeNombreDEnfantsAsync(parentId.Value, ct)
                 && !await PlaceDisponibleAsync(abonnement, eleveId, offre.NombreEnfantsMax, ct))
             {
                 return VerdictQuota.Refus(MotifRefus.TropDEnfants);
@@ -802,7 +838,10 @@ namespace SchoolWebApp.Dal.Repositories
             // « il peut en ajouter à l'infini, quel que soit son abonnement ».
             // Ni la formule ni le droit retiré ne le concernent ; l'exception
             // ne vaut que pour ce compte-là.
-            if (await SansLimiteDEnfantsAsync(parentId, ct))
+            //
+            // ÉTENDU LE 22/11/2026 (Min's) à tout administrateur qui a le droit
+            // « Création d'enfant » : voir SansLimiteDeNombreDEnfantsAsync.
+            if (await SansLimiteDeNombreDEnfantsAsync(parentId, ct))
             {
                 return new CapaciteEnfants(actuels, int.MaxValue, abonnement?.Offre?.Libelle);
             }
@@ -822,8 +861,19 @@ namespace SchoolWebApp.Dal.Repositories
                 .Select(p => !p.PeutAjouterEnfant)
                 .FirstOrDefaultAsync(ct);
 
+            // AUCUNE FORMULE PLUS LARGE ? (signalement #62, 22/11/2026) — une
+            // famille pleine en Famille se voyait proposer « une formule plus
+            // large » qui n'existe pas : l'écran doit le savoir pour ne pas
+            // l'envoyer aux tarifs. Lu dans le catalogue actif plutôt que figé
+            // à 4 : une formule plus grande ajoutée demain rouvrirait le lien.
+            var formuleLaPlusLarge = abonnement is not null
+                && abonnement.Statut != StatutAbonnement.Resilie
+                && !await _context.Offres
+                    .AsNoTracking()
+                    .AnyAsync(o => o.Active && !o.EstEssai && o.NombreEnfantsMax > maximum, ct);
+
             return new CapaciteEnfants(
-                actuels, maximum, abonnement?.Offre?.Libelle, droitRetire);
+                actuels, maximum, abonnement?.Offre?.Libelle, droitRetire, formuleLaPlusLarge);
         }
 
         // ------------------------------------------------------------ décompte

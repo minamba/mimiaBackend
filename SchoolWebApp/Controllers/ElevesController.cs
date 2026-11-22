@@ -1786,8 +1786,17 @@ namespace SchoolWebApp.Api.Controllers
                 //
                 // LE SUPER-ADMINISTRATEUR PASSE OUTRE — Camara, le 20/09/2026 : rien
                 // ne doit jamais l'empêcher d'ajouter un enfant, ni la formule ni ce
-                // droit. La capacité, lue juste après, l'exempte de la même façon.
-                if (!parent.PeutAjouterEnfant && !comptesProteges.Protege(parent.Mail))
+                // droit. La capacité l'exempte de la même façon.
+                //
+                // ET L'ADMINISTRATEUR QUI A LE DROIT « Création d'enfant » AUSSI —
+                // Min's, le 22/11/2026 : « on peut créer des enfants à l'infini ».
+                // La capacité le dit (`SansLimite`) ; elle est donc lue AVANT ce
+                // contrôle, sans rien changer pour les autres parents.
+                var capacite = await abonnements.CapaciteAsync(parent.Id);
+
+                if (!parent.PeutAjouterEnfant
+                    && !capacite.SansLimite
+                    && !comptesProteges.Protege(parent.Mail))
                 {
                     _logger.LogInformation(
                         "Ajout d'enfant REFUSE pour le parent {ParentId} : droit retire.",
@@ -1800,8 +1809,6 @@ namespace SchoolWebApp.Api.Controllers
                     });
                 }
 
-                var capacite = await abonnements.CapaciteAsync(parent.Id);
-
                 if (!capacite.PeutAjouter)
                 {
                     _logger.LogInformation(
@@ -1813,7 +1820,11 @@ namespace SchoolWebApp.Api.Controllers
                         message = capacite.OffreLibelle is null
                             ? "Choisissez une formule pour enregistrer d'autres enfants."
                             : $"Votre formule {capacite.OffreLibelle} couvre {capacite.Maximum} enfant"
-                              + $"{(capacite.Maximum > 1 ? "s" : "")}. Changez de formule pour en ajouter un de plus.",
+                              + $"{(capacite.Maximum > 1 ? "s" : "")}"
+                              // #62 : pas de « changez de formule » quand c'est la plus grande.
+                              + (capacite.FormuleLaPlusLarge
+                                  ? " au maximum par compte. Écrivez-nous pour une famille plus nombreuse."
+                                  : ". Changez de formule pour en ajouter un de plus."),
                         actuels = capacite.Actuels,
                         maximum = capacite.Maximum,
                     });

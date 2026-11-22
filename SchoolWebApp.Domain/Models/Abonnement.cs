@@ -209,9 +209,21 @@ namespace SchoolWebApp.Domain.Models
     /// Un second champ transporté en parallèle aurait fini par être oublié
     /// sur l'un des deux.
     /// </param>
+    /// <param name="FormuleLaPlusLarge">
+    /// Aucune formule active ne couvre plus d'enfants que celle-ci
+    /// (signalement #62, 22/11/2026) : l'écran ne doit pas renvoyer vers les
+    /// tarifs une famille déjà dans la plus grande formule.
+    /// </param>
     public record CapaciteEnfants(
-        int Actuels, int Maximum, string? OffreLibelle, bool DroitRetire = false)
+        int Actuels, int Maximum, string? OffreLibelle, bool DroitRetire = false,
+        bool FormuleLaPlusLarge = false)
     {
+        /// <summary>
+        /// Pas de limite de nombre : super-administrateur, ou administrateur
+        /// qui a le droit « Création d'enfant » (Min's, 22/11/2026).
+        /// </summary>
+        public bool SansLimite => Maximum == int.MaxValue;
+
         /// <summary>
         /// DEUX RAISONS DE REFUSER, UN SEUL DRAPEAU. La formule peut couvrir
         /// trois enfants pendant que ce compte n'a plus le droit d'en ajouter :
