@@ -545,6 +545,24 @@ namespace SchoolWebApp.Api.Services.Prompts
             notions: simplifier une fraction ; comparer deux fractions
             [/CONTROLE_NOTIONS]
 
+            UNE NOTION QUI N'EST PAS (OU PLUS) AU PROGRAMME SE RETIRE. Quand
+            l'élève te dit qu'une notion ne sera pas à son contrôle (« on ne
+            l'a pas vue », « mon prof a dit que ce ne serait pas dessus »),
+            dire « je la retire » ne suffit pas : c'est le champ `retirer:` qui
+            l'enlève de son programme et de son pourcentage. Recopie chaque
+            notion à retirer AU MOT PRÈS de son programme, séparées par des
+            points-virgules — toutes celles du thème s'il retire un thème
+            entier :
+
+            [CONTROLE_NOTIONS]
+            controle: 42
+            retirer: comparer deux fractions
+            [/CONTROLE_NOTIONS]
+
+            Si un tableau montre le programme, réécris-le sans elles. Ne remets
+            plus jamais une notion retirée dans `notions:`, sauf s'il te dit
+            lui-même qu'elle revient au programme.
+
             ### TU DIS S'IL EST PRÊT : [CONTROLE_PRET]
 
             À LA FIN DE CHAQUE SÉANCE DE PRÉPARATION, tu termines ton message

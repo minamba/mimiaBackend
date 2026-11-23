@@ -1552,13 +1552,28 @@ namespace SchoolWebApp.Api.Builders.impl
             + (programmeValide
                 ? "SON PROGRAMME EST VALIDÉ : révise-le notion par notion en t'appuyant sur ses documents. Les notions "
                   + $"travaillées vont dans [CONTROLE_NOTIONS] controle: {controleId} ; ta conclusion porte "
-                  + $"[CONTROLE_PRET] controle: {controleId}."
+                  + $"[CONTROLE_PRET] controle: {controleId}. "
+                  + RetraitDeNotion(controleId)
                 : "SON PROGRAMME N'EST PAS ENCORE VALIDÉ : propose-le AU TABLEAU ([ARDOISE], la liste des dossiers), "
                   + "demande-lui s'il est d'accord, s'il veut retirer ou ajouter une notion, et attends sa réponse. NE "
                   + "COMMENCE AUCUNE RÉVISION avant son accord. Dès qu'il est d'accord, écris dans ce message "
                   + $"[CONTROLE_NOTIONS] controle: {controleId} avec les notions retenues recopiées au mot près — c'est ce "
-                  + "qui valide son programme —, dis-lui que son programme est prêt, puis commence.")
+                  + "qui valide son programme —, dis-lui que son programme est prêt, puis commence. S'IL A DEMANDÉ D'EN "
+                  + "RETIRER UNE (« enlève les espèces amphotères ») : elle n'est PAS dans `notions:`, elle va dans "
+                  + "`retirer:` (au mot près du dossier), et tu réécris le tableau sans elle.")
             + "]";
+
+        /// <summary>
+        /// LE RETRAIT D'UNE NOTION, RAPPELÉ À CHAQUE TOUR D'UNE PRÉPARATION — signalement #67 (23/11/2026). Le
+        /// professeur répondait « je retire complètement les titrages » sans rien écrire qui les retire : le bloc ne savait
+        /// qu'ajouter. La consigne vit dans le noyau (« UNE NOTION QUI N'EST PAS (OU PLUS) AU PROGRAMME SE RETIRE »), mais
+        /// la demande arrive au milieu d'une séance, à quinze cents lignes de là : elle voyage avec chaque tour.
+        /// </summary>
+        private static string RetraitDeNotion(int? controleId) =>
+            "S'IL TE DIT QU'UNE NOTION NE SERA PAS (OU PLUS) À SON CONTRÔLE, retire-la : écris dans ce message "
+            + $"[CONTROLE_NOTIONS] controle: {controleId} avec `retirer:` et chaque notion concernée recopiée au mot près "
+            + "de son programme (toutes celles du thème s'il retire un thème entier), et réécris le tableau sans elles. "
+            + "Dire « je la retire » sans ce bloc ne la retire pas.";
 
         private static string MarqueurModeSeance(string mode, int? controleId, string? epreuveCode, int? nbCours = null, int nbIllisibles = 0, bool programmeInconnu = false) => mode switch
         {
@@ -1594,6 +1609,8 @@ namespace SchoolWebApp.Api.Builders.impl
                           + $"controle: {controleId} avec un `sujet:` court et précis (ex. « additions avec "
                           + "retenue » — il complète le titre de son contrôle) et les notions correspondantes, "
                           + "puis commence la préparation.")
+                // Un programme connu peut perdre une notion en cours de route (signalement #67).
+                + (programmeInconnu ? "" : " " + RetraitDeNotion(controleId))
                 + "]",
 
             ModesSeance.Bilan =>
@@ -6314,6 +6331,61 @@ namespace SchoolWebApp.Api.Builders.impl
                 return;
             }
 
+            // UN BLOC QUI NE FAIT QUE RETIRER (signalement #67) n'ajoute rien.
+            if (declare.Sujet is not null || declare.Notions.Count > 0)
+            {
+                await CompleterProgrammeAsync(conversationId, eleveId, matiereId, niveauScolaireId, declare, travaillee, ct);
+            }
+
+            // CE QUE L'ÉLÈVE A FAIT RETIRER SORT DU PROGRAMME — signalement #67 : « enlève les espèces amphotères »,
+            // « retire complètement les titrages ». APRÈS l'ajout, et c'est voulu : le premier bloc d'un examen blanc
+            // valide le programme en y recopiant les dossiers, et le professeur y laisse parfois le dossier que l'élève
+            // vient de refuser (« Dosage par titrage d'une espèce amphotère » recopié, « les espèces amphotères » à
+            // retirer) — le retrait passe derrière et l'enlève. Une notion écrite telle quelle dans `notions:` est
+            // protégée : un rapprochement souple ne retire jamais ce que le même bloc vient de poser.
+            if (declare.NotionsRetirees.Count > 0)
+            {
+                await RetirerDuProgrammeAsync(conversationId, eleveId, matiereId, declare, ct);
+            }
+        }
+
+        /// <summary>
+        /// Retire du programme du contrôle les notions du champ `retirer:` (signalement #67). Silencieux : un retrait
+        /// raté ne doit pas faire perdre la séance ; il se voit dans le journal.
+        /// </summary>
+        private async Task RetirerDuProgrammeAsync(
+            int conversationId, int eleveId, int matiereId, ControleNotionsDeclarees declare, CancellationToken ct)
+        {
+            try
+            {
+                var retirees = await _controles.RetirerNotionsAsync(
+                    eleveId, declare.Controle, matiereId, declare.NotionsRetirees, garder: declare.Notions, ct: ct);
+
+                if (retirees.Count == 0)
+                {
+                    _logger.LogWarning(
+                        "Retrait demande mais AUCUNE notion retiree du controle {ControleId} (eleve {EleveId}) : «{Demandees}» "
+                        + "ne correspond a aucune ligne du programme.",
+                        declare.Controle, eleveId, string.Join(" ; ", declare.NotionsRetirees));
+                    return;
+                }
+
+                _logger.LogInformation(
+                    "Controle {ControleId} (eleve {EleveId}) : {Nombre} notion(s) retiree(s) du programme ({Libelles}).",
+                    declare.Controle, eleveId, retirees.Count, string.Join(" ; ", retirees));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex,
+                    "Echec du retrait de notions du programme (conversation {ConversationId}).", conversationId);
+            }
+        }
+
+        /// <summary>Le sujet et les notions d'un bloc [CONTROLE_NOTIONS] : validation d'un examen blanc, ou ajout.</summary>
+        private async Task CompleterProgrammeAsync(
+            int conversationId, int eleveId, int matiereId, int? niveauScolaireId,
+            ControleNotionsDeclarees declare, bool travaillee, CancellationToken ct)
+        {
             try
             {
                 // LE PROGRAMME D'UN EXAMEN BLANC (23/11/2026) : son premier bloc le valide. Traité à part, puis on s'arrête.

@@ -84,6 +84,17 @@ namespace SchoolWebApp.Domain.Repositories
             CancellationToken ct = default);
 
         /// <summary>
+        /// RETIRE DES NOTIONS DU PROGRAMME d'un contrôle, à la demande de l'élève (signalement #67) : « on ne les a pas
+        /// vues », « ce ne sera pas au bac blanc ». Cloisonné comme l'ajout (élève ET matière). Une notion déjà jugée
+        /// sur une copie corrigée (résultat posé) n'est jamais retirée, ni une notion de <paramref name="garder"/> (posée
+        /// au mot près par le même bloc). Rend les libellés des lignes supprimées.
+        /// </summary>
+        Task<IReadOnlyList<string>> RetirerNotionsAsync(
+            int eleveId, int controleId, int matiereId,
+            IReadOnlyList<string> libelles, IReadOnlyList<string>? garder = null,
+            CancellationToken ct = default);
+
+        /// <summary>
         /// Remplace le sujet d'un contrôle par ce que le professeur en a
         /// appris en séance.
         ///

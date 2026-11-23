@@ -1150,11 +1150,15 @@ namespace SchoolWebApp.Api.Services
                     + "2. Demande-lui s'il est d'accord, s'il veut en retirer une, ou en ajouter une qui sera à son "
                     + "examen blanc. Une seule question, puis tu attends sa réponse.\n"
                     + "3. Quand il est d'accord, VALIDE le programme : termine ton message par ce bloc, avec les notions "
-                    + "retenues recopiées AU MOT PRÈS de la liste (une notion ajoutée à sa demande : avec ses mots) :\n"
+                    + "retenues recopiées AU MOT PRÈS de la liste (une notion ajoutée à sa demande : avec ses mots). UNE "
+                    + "NOTION QU'IL A FAIT RETIRER n'est PAS dans `notions:` : elle va dans `retirer:` (au mot près de la "
+                    + "liste), et tu réécris le tableau sans elle :\n"
                     + "[CONTROLE_NOTIONS]\n"
                     + $"controle: {id}\n"
                     + "notions: première notion ; deuxième notion\n"
+                    + "retirer: notion qu'il a fait retirer\n"
                     + "[/CONTROLE_NOTIONS]\n"
+                    + "(sans ligne `retirer:` s'il n'a rien retiré)\n"
                     + "C'est ce bloc qui officialise son programme et fait apparaître ses pourcentages. Dis-lui que son "
                     + "programme est prêt.\n"
                     + "4. Ensuite seulement, commence les révisions, notion par notion, dans l'ordre du programme.");
@@ -1164,7 +1168,10 @@ namespace SchoolWebApp.Api.Services
                 texte.AppendLine();
                 texte.AppendLine(
                     $"Son programme a été validé avec lui le {valide.ToLocalTime():dd/MM} : ce sont les notions de ce "
-                    + "contrôle. Ne le lui reproposes pas ; révise-le en t'appuyant sur ses documents.");
+                    + "contrôle (pas forcément tous les dossiers ci-dessus : ceux qu'il a fait retirer n'y sont plus, et "
+                    + "n'y reviennent pas). Ne le lui reproposes pas ; révise-le en t'appuyant sur ses documents. "
+                    + "S'il te dit qu'une notion ne sera finalement pas à son examen blanc, retire-la avec "
+                    + $"[CONTROLE_NOTIONS] controle: {id} et `retirer:` (au mot près de son programme).");
             }
 
             // LE TEXTE DES DOCUMENTS, par dossier, dans la limite du contexte : le professeur prépare avec SES cours.

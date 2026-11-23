@@ -591,6 +591,85 @@ namespace SchoolWebApp.Dal.Repositories
             return touchees;
         }
 
+        public async Task<IReadOnlyList<string>> RetirerNotionsAsync(
+            int eleveId, int controleId, int matiereId,
+            IReadOnlyList<string> libelles, IReadOnlyList<string>? garder = null,
+            CancellationToken ct = default)
+        {
+            if (libelles.Count == 0) return [];
+
+            // Même cloisonnement que l'ajout : le programme d'un contrôle ne se touche que chez lui.
+            var sien = await _context.ControlesScolaires
+                .AnyAsync(c => c.Id == controleId && c.EleveId == eleveId && c.MatiereId == matiereId, ct);
+
+            if (!sien) return [];
+
+            // Une notion jugée sur la copie corrigée est une MESURE : elle reste.
+            var lignes = await _context.ControlesNotions
+                .Include(n => n.Competence)
+                .Where(n => n.ControleId == controleId && n.Resultat == null)
+                .ToListAsync(ct);
+
+            // Ce que le MÊME bloc vient de poser au mot près (`garder`) ne part jamais par un rapprochement souple.
+            var gardees = (garder ?? []).Select(LibelleNotion.CleSouple).Where(c => c.Length > 0).ToHashSet();
+
+            var aRetirer = new List<ControleNotion>();
+            foreach (var libelle in libelles)
+            {
+                foreach (var ligne in LignesARetirer(lignes, libelle))
+                {
+                    var protegee = gardees.Contains(LibelleNotion.CleSouple(ligne.Libelle))
+                        || gardees.Contains(LibelleNotion.CleSouple(ligne.Competence?.Libelle));
+
+                    if (!protegee && !aRetirer.Contains(ligne)) aRetirer.Add(ligne);
+                }
+            }
+
+            if (aRetirer.Count == 0) return [];
+
+            _context.ControlesNotions.RemoveRange(aRetirer);
+            await _context.SaveChangesAsync(ct);
+
+            return aRetirer.Select(n => n.Libelle).ToList();
+        }
+
+        /// <summary>
+        /// Les lignes du programme que nomme un libellé à retirer (signalement #67).
+        ///
+        /// 1. À LA PLUME PRÈS (<see cref="LibelleNotion.CleSouple"/>), sur le libellé de la ligne ou celui de sa
+        ///    compétence : le cas normal, le professeur recopie la notion du programme qu'il a sous les yeux.
+        /// 2. Sinon, la ligne CONTENUE dans le libellé écrit (il a ajouté des mots autour) : seulement si UNE seule
+        ///    ligne répond, comme partout ailleurs (<c>TrouverParLibelle</c>).
+        /// 3. Sinon, le libellé écrit CONTENU dans des lignes, MOT POUR MOT et avec deux mots de 4 lettres au moins (« dosage par
+        ///    titrage » dans « Réaliser un dosage par titrage colorimétrique » ET « … pH-métrique ») : l'élève a retiré
+        ///    tout un thème (« retire complètement les titrages »), toutes ses notions sortent. Un seul mot ne suffit
+        ///    jamais (« fraction » ne vide pas un contrôle sur les fractions).
+        /// </summary>
+        private static List<ControleNotion> LignesARetirer(List<ControleNotion> lignes, string libelle)
+        {
+            var cle = LibelleNotion.CleSouple(libelle);
+            if (cle.Length == 0) return [];
+
+            string[] Cles(ControleNotion n) =>
+                new[] { LibelleNotion.CleSouple(n.Libelle), LibelleNotion.CleSouple(n.Competence?.Libelle) }
+                    .Where(c => c.Length > 0).Distinct().ToArray();
+
+            var exactes = lignes.Where(n => Cles(n).Contains(cle)).ToList();
+            if (exactes.Count > 0) return exactes;
+
+            var contenues = lignes.Where(n => Cles(n).Any(c => ContientMots(cle, c))).ToList();
+            if (contenues.Count == 1) return contenues;
+
+            // Deux VRAIS mots au moins (4 lettres et plus) : « une fraction », « de la » ne vident jamais un programme.
+            if (cle.Split(' ').Count(m => m.Length >= 4) < 2) return [];
+
+            return lignes.Where(n => Cles(n).Any(c => ContientMots(c, cle))).ToList();
+        }
+
+        /// <summary>« a b c » contient « b c » mot pour mot (pas « titrages » pour « titrage », pas un bout de mot).</summary>
+        private static bool ContientMots(string texte, string morceau) =>
+            morceau.Length > 0 && $" {texte} ".Contains($" {morceau} ", StringComparison.Ordinal);
+
         public async Task<PrecisionDuSujet> PreciserSujetAsync(
             int eleveId, int controleId, int matiereId, string sujet,
             CancellationToken ct = default)
