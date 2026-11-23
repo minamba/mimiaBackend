@@ -3235,9 +3235,32 @@ namespace SchoolWebApp.Api.Services.Prompts
                     + "Si l'heure passe, l'écran lui laisse le temps de finir "
                     + "(un dépassement est prévu pour un contrôle en cours). Pas "
                     + "de bilan de séance, pas d'au revoir, et pas un mot sur le "
-                    + "temps qui manque : tu poses la question suivante, ou, s'il "
-                    + "a répondu à la dernière, tu rends sa note avec le bloc "
-                    + "[EVALUATION].",
+                    + "temps qui manque. À l'ordinateur, tu poses la question "
+                    + "suivante, ou, s'il a répondu à la dernière, tu rends sa "
+                    + "note avec le bloc [EVALUATION]. Au cahier, tu ne poses "
+                    + "rien de plus : tu attends la photo de sa copie, et quand "
+                    + "elle arrive, tu rends sa note avec le bloc [EVALUATION]. "
+                    + "Toutes les questions annoncées comptent : tu n'en retires "
+                    + "aucune pour le temps.",
+
+                // ENGAGÉE DANS LES 90 DERNIÈRES SECONDES (#68 v3, Omar point 4).
+                // Le « oui » a été tenu, le support est demandé ou choisi, et le
+                // compteur passe sous 90 s avant le top départ : la branche du
+                // dessous lui disait « Trop court… Fais le bilan », c'est-à-dire
+                // de la retirer. On la mène : dès le top départ, le contrôle est
+                // ouvert pour l'écran, qui accorde son dépassement.
+                <= DerniereLigneDroite when evaluationEngagee =>
+                    "L'ÉVALUATION NOTÉE EST ENGAGÉE (proposée et acceptée, le "
+                    + "choix cahier ou ordinateur est demandé ou fait) : tu la "
+                    + "mènes quand même, avec son déroulé habituel. Pas de bilan "
+                    + "de séance, pas d'au revoir, pas un mot sur le temps. Dès "
+                    + "qu'il est prêt, c'est le top départ, avec la balise "
+                    + "[DEBUT_EVALUATION] dans ton message : l'écran lui laisse "
+                    + "alors le temps de finir (un dépassement est prévu pour un "
+                    + "contrôle en cours). Elle compte TROIS questions, toutes "
+                    + "posées, jusqu'à la note. Seule exception : s'il y renonce "
+                    + "lui-même, tu la reportes au prochain cours avec le bloc "
+                    + "[EVALUATION_PREVUE], puis tu fais le bilan.",
 
                 <= DerniereLigneDroite =>
                     "Trop court pour une question de plus : elle resterait sans "
@@ -3383,7 +3406,23 @@ namespace SchoolWebApp.Api.Services.Prompts
         /// </summary>
         private static string ConsigneDEvaluation(int secondes, bool evaluationEnCours, bool evaluationEngagee)
         {
-            if (evaluationEnCours) return "";
+            // UN CONTRÔLE OUVERT NE S'ÉCOURTE PAS (#68 v3, Omar point 1). Au
+            // banc : « la dernière question qu'on avait le temps de faire », 2
+            // questions notées sur 3 annoncées ; « il te reste une minute » à
+            // 5 min. La phrase au-dessus (« ce que tu lances doit tenir… ») se
+            // lisait aussi pour le contrôle en cours. Le dépassement de l'écran
+            // existe pour ça (school_ia, Chat.js, `depassement`).
+            if (evaluationEnCours)
+            {
+                return "UN CONTRÔLE NOTÉ EST OUVERT : ce qui précède sur ce que tu "
+                    + "lances ne le concerne pas. Tu poses TOUTES les questions "
+                    + "que tu as annoncées, une par une, jusqu'à la note : tu "
+                    + "n'en retires aucune, tu n'en fusionnes aucune, et tu ne "
+                    + "dis RIEN du temps (ni « la dernière qu'on a le temps de "
+                    + "faire », ni « il te reste une minute », ni « vu le temps "
+                    + "qui reste »). Si l'heure passe, l'écran lui laisse le "
+                    + "temps de finir.\n";
+            }
 
             // ENGAGÉE, CE N'EST PLUS UNE PROPOSITION (#68 v2, Omar point 1).
             // Le « oui » est passé, le choix du support est demandé ou fait, le
@@ -3404,7 +3443,16 @@ namespace SchoolWebApp.Api.Services.Prompts
                     + "l'écran (ni chrono, ni temps de dépassement si l'heure "
                     + "passe). Tu ne la reportes pas, tu ne la retires pas, et tu "
                     + "ne dis RIEN du temps : ni qu'il manque, ni qu'elle doit "
-                    + "tenir. C'est une évaluation NOTÉE, pas un entraînement."
+                    + "tenir. Toutes les questions que tu annonces seront posées "
+                    + "et notées. C'est une évaluation NOTÉE, pas un entraînement. "
+                    // L'ÉLÈVE PEUT SE RAVISER (#68 v3, Omar point 3) : sans cette
+                    // sortie, « tu ne la reportes pas » le retenait, et rien ne
+                    // levait l'état engagé. [EVALUATION_PREVUE] le lève
+                    // (LecteurEvaluation.EstEngagee), et garde le rendez-vous.
+                    + "Seule exception : s'il y renonce LUI-MÊME (il dit qu'il ne "
+                    + "veut plus la faire, ou la préfère au prochain cours), tu "
+                    + "ne le forces pas : tu la reportes au prochain cours, avec "
+                    + "le bloc [EVALUATION_PREVUE] à la fin de ton message."
                     + (secondes < DureeEvaluation
                         ? " Elle compte TROIS questions, pas quatre.\n"
                         : "\n");
@@ -3760,6 +3808,12 @@ namespace SchoolWebApp.Api.Services.Prompts
             + "L'IDENTIQUE, juste ou faux — « d'accord », « c'est noté » — et tu "
             + "poses la question suivante. S'il hésite, tu n'aides pas ; tu ne "
             + "réclames pas de calcul écrit ni de justification.\n"
+            // #68 v3 (Omar point 1) : des contrôles écourtés « faute de temps »
+            // au banc (2 questions notées sur 3 annoncées).
+            + "TOUTES LES QUESTIONS QUE TU AS ANNONCÉES SONT POSÉES ET NOTÉES : tu "
+            + "n'en retires aucune et tu n'abrèges rien pour le temps, tu n'en "
+            + "parles même pas. Si l'heure passe, l'écran lui laisse le temps de "
+            + "finir.\n"
             + "DÈS QU'IL A RÉPONDU À TA DERNIÈRE QUESTION, CE MESSAGE-CI EST LA "
             + "REMISE DE LA NOTE, ET L'INTERDICTION S'ARRÊTE ICI. Dans CE MÊME "
             + "message — pas au tour suivant : l'enfant attend en silence —, tu "

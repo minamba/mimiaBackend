@@ -3982,17 +3982,19 @@ namespace SchoolWebApp.Api.Builders.impl
             //
             // Il n'est pas persisté : le message de l'élève reste propre en base
             // et à l'affichage.
+            // Avec l'état du contrôle : un contrôle déjà ouvert ne doit pas
+            // lire « PAS d'évaluation » dès que le compteur passe sous dix
+            // minutes (#68, voir ConsigneDEvaluation). Ni une évaluation
+            // ENGAGÉE (support demandé ou choisi, pas encore de top départ) :
+            // c'est le code qui le sait, pas la mémoire du modèle (#68 v2).
+            // Le message de ce tour n'est pas encore dans l'historique : il
+            // compte aussi (le fait du support choisi y voyage). Calculé hors
+            // du minuteur : le filet du top départ s'en sert aussi (#68 v3).
+            var evaluationEngagee = !controleOuvert && LecteurEvaluation.EstEngagee(
+                historique.Select(m => (string?)m.Contenu).Append(contenu));
+
             if (secondesRestantes is int restant && restant > 0)
             {
-                // Avec l'état du contrôle : un contrôle déjà ouvert ne doit pas
-                // lire « PAS d'évaluation » dès que le compteur passe sous dix
-                // minutes (#68, voir ConsigneDEvaluation). Ni une évaluation
-                // ENGAGÉE (support demandé ou choisi, pas encore de top départ) :
-                // c'est le code qui le sait, pas la mémoire du modèle (#68 v2).
-                // Le message de ce tour n'est pas encore dans l'historique : il
-                // compte aussi (le fait du support choisi y voyage).
-                var evaluationEngagee = !controleOuvert && LecteurEvaluation.EstEngagee(
-                    historique.Select(m => (string?)m.Contenu).Append(contenu));
                 declencheur += "\n\n" + PromptsPedagogiques.MarqueurTempsDuTour(
                     restant, contexte.Eleve.NiveauCycle, contexte.Eleve.Age, controleOuvert,
                     evaluationEngagee);
@@ -4915,6 +4917,26 @@ namespace SchoolWebApp.Api.Builders.impl
                 }
             }
 
+            // LE FILET DU TOP DÉPART (#68 v3, Omar point 2) — même patron que
+            // celui de la copie : l'évaluation est ENGAGÉE (calculé avant la
+            // réponse), le professeur pose la première question sans
+            // [DEBUT_EVALUATION] ; le code écrit la balise à la fin de sa
+            // réponse. Invisible et muette à l'écran, elle y ouvre le contrôle
+            // (chrono, dépassement) et, au tour suivant, `EstOuvert` donne au
+            // professeur la consigne du contrôle jusqu'à la note.
+            string? debutAjoute = null;
+            if (evaluationEngagee && bilan.Task.IsCompletedSuccessfully
+                && LecteurEvaluation.TopDepartSansBalise((await bilan.Task).TexteComplet))
+            {
+                debutAjoute = "\n" + LecteurEvaluation.Debut;
+
+                _logger.LogInformation(
+                    "Top depart sans [DEBUT_EVALUATION] : balise ajoutee (conversation {ConversationId}).",
+                    conversationId);
+
+                yield return debutAjoute;
+            }
+
             // Le flux est terminé : on persiste la réponse et la consommation.
             // Si le client s'est déconnecté en cours de route, on enregistre quand
             // même ce qui a été produit — les tokens sont facturés dans tous les cas.
@@ -4971,6 +4993,10 @@ namespace SchoolWebApp.Api.Builders.impl
                 {
                     contenuPersiste = contenuPersiste.Replace("[DEMANDE_DOCUMENT]", string.Empty) + blocCopieAjoute;
                 }
+
+                // La balise du top départ ajoutée par le filet rejoint aussi le
+                // texte persisté : c'est là que `EstOuvert` la relira.
+                if (debutAjoute is not null) contenuPersiste += debutAjoute;
 
                 if (copieOuverte is not null
                     && LecteurCopieControle.LireDemande(contenuPersiste) == copieOuverte.Id)

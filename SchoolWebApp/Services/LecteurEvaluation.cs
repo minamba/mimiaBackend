@@ -288,9 +288,20 @@ namespace SchoolWebApp.Api.Services
         /// On lit TOUT le fil (les deux rôles), du plus récent au plus ancien,
         /// et on s'arrête au premier marqueur. Une ouverture ([DEBUT_EVALUATION])
         /// rend faux : c'est alors `EstOuvert` qui prend le relais.
+        ///
+        /// #68 v3 (Omar point 3) — L'ENGAGEMENT SE LÈVE AUSSI :
+        /// - si l'élève y renonce lui-même : le professeur la reporte avec le
+        ///   bloc [EVALUATION_PREVUE] (la sortie balisée, déjà lue ci-dessous) ;
+        /// - si la séance se termine ([FIN_SEANCE] ou [RAPPORT]) ;
+        /// - s'il n'y a pas eu de top départ en <see cref="ToursSansTopDepart"/>
+        ///   réponses du professeur après le marqueur : le fil a changé de
+        ///   sujet, la consigne « tu la mènes à son terme » n'a plus d'objet.
+        ///   Compté en messages (deux par échange), le message de l'élève en
+        ///   cours compris : marqueur à 2 × N messages de la fin ou plus = levé.
         /// </summary>
         public static bool EstEngagee(IEnumerable<string?> messagesDuFil)
         {
+            var distance = 0;
             foreach (var message in messagesDuFil.Reverse())
             {
                 if (string.IsNullOrEmpty(message)) continue;
@@ -298,18 +309,54 @@ namespace SchoolWebApp.Api.Services
                 if (message.Contains(Abandon, StringComparison.Ordinal)) return false;
                 if (message.Contains("[/EVALUATION]", StringComparison.OrdinalIgnoreCase)) return false;
                 if (message.Contains(Debut, StringComparison.Ordinal)) return false;
-                // Reportée au prochain cours : l'engagement est levé.
+                // Reportée au prochain cours (ou l'élève y a renoncé) : l'engagement est levé.
                 if (message.Contains("[EVALUATION_PREVUE]", StringComparison.OrdinalIgnoreCase)) return false;
+                // Séance terminée.
+                if (message.Contains("[FIN_SEANCE]", StringComparison.Ordinal)
+                    || message.Contains("[RAPPORT]", StringComparison.OrdinalIgnoreCase)) return false;
 
-                if (message.Contains(BaliseSupport, StringComparison.OrdinalIgnoreCase)) return true;
-                if (message.Contains("[ÉVALUATION AU CAHIER", StringComparison.Ordinal)
+                if (message.Contains(BaliseSupport, StringComparison.OrdinalIgnoreCase)
+                    || message.Contains("[ÉVALUATION AU CAHIER", StringComparison.Ordinal)
                     || message.Contains("[ÉVALUATION À L’ORDINATEUR", StringComparison.Ordinal)
                     || message.Contains("[ÉVALUATION À L'ORDINATEUR", StringComparison.Ordinal))
-                    return true;
+                    return distance < 2 * ToursSansTopDepart;
+
+                distance++;
             }
 
             return false;
         }
+
+        /// <summary>
+        /// Combien de réponses du professeur, après le choix du support, sans
+        /// top départ, avant que l'évaluation ne compte plus comme engagée
+        /// (#68 v3). Le déroulé normal en prend deux (consignes et « prêt ? »,
+        /// puis le top départ) ; quatre laisse deux tours de questions sur les
+        /// consignes.
+        /// </summary>
+        public const int ToursSansTopDepart = 4;
+
+        /// <summary>
+        /// La première question d'un contrôle, écrite comme telle (« Question 1 : »,
+        /// « **Question 1** — », « Première question : », « Q1 : »).
+        /// </summary>
+        [GeneratedRegex(@"(?:\bQuestion\s*(?:n°\s*)?(?:1|une)\b\**\s*[:.)\-–—]|\bPremière\s+question\**\s*[:\-–—]|\bQ\s?1\s*[:.)\-–—])",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+        private static partial Regex PremiereQuestion();
+
+        /// <summary>
+        /// LE FILET DU TOP DÉPART — #68 v3, Omar point 2 : 3 parcours sur 45 à
+        /// l'ordinateur posaient « Question 1 » sans [DEBUT_EVALUATION]. Pour
+        /// l'écran, le contrôle n'existait pas (ni chrono ni dépassement), et
+        /// pour le serveur non plus (`EstOuvert` faux : pas de consigne du
+        /// contrôle, pas de note). Même patron que le filet de la copie de
+        /// contrôle : quand l'évaluation est ENGAGÉE et que la réponse pose la
+        /// première question sans la balise, le code l'écrit pour lui.
+        /// </summary>
+        public static bool TopDepartSansBalise(string? reponse) =>
+            !string.IsNullOrEmpty(reponse)
+            && !reponse.Contains(Debut, StringComparison.Ordinal)
+            && PremiereQuestion().IsMatch(reponse);
 
         /// <summary>La balise du choix du support (deux boutons à l'écran).</summary>
         public const string BaliseSupport = "[SUPPORT_EVALUATION]";
