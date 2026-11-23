@@ -6446,7 +6446,7 @@ namespace SchoolWebApp.Api.Builders.impl
                     + "pas de oui clair a la question fermee ({Nombre} notion(s)).",
                     controleId, eleveId, conversationId, demandees.Count);
 
-                return FaitDuRetrait(controleId, BilanRetrait.Vide, demandees, ouiClair: false);
+                return FaitDuRetrait(controleId, BilanRetrait.Vide, demandees, ouiClair: false, programme);
             }
 
             try
@@ -6469,13 +6469,19 @@ namespace SchoolWebApp.Api.Builders.impl
                         + "«{Demande}» — motif {Motif}.", controleId, eleveId, conversationId, r.Demande, r.Motif);
                 }
 
-                return FaitDuRetrait(controleId, bilan, demandees, ouiClair: true);
+                // LE PROGRAMME RELU APRÈS LE RETRAIT, EN ENTIER (#67 v5, bout en bout v5R-2 : l'ardoise réécrite « sans
+                // les titrages » oubliait aussi la 864, restée au programme) : le professeur recopie cette liste.
+                var apres = bilan.Retirees.Count == 0 ? programme
+                    : (await _controles.GetPreparationAsync(eleveId, controleId, ct))?.Notions.Select(n => n.Libelle).ToList()
+                      ?? programme;
+
+                return FaitDuRetrait(controleId, bilan, demandees, ouiClair: true, apres);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 _logger.LogError(ex,
                     "Echec du retrait de notions du programme (conversation {ConversationId}).", conversationId);
-                return FaitDuRetrait(controleId, BilanRetrait.Vide, demandees, ouiClair: true);
+                return FaitDuRetrait(controleId, BilanRetrait.Vide, demandees, ouiClair: true, programme);
             }
         }
 
@@ -6484,9 +6490,18 @@ namespace SchoolWebApp.Api.Builders.impl
         /// tableau à réécrire sans elle), ou toujours dans son programme (pas de oui clair, programme qui se viderait,
         /// libellé qui ne correspond plus à aucune ligne).
         /// </summary>
-        internal static string FaitDuRetrait(int controleId, BilanRetrait bilan, IReadOnlyList<string> demandees, bool ouiClair)
+        internal static string FaitDuRetrait(
+            int controleId, BilanRetrait bilan, IReadOnlyList<string> demandees, bool ouiClair,
+            IReadOnlyList<string>? programme = null)
         {
             if (demandees.Count == 0) return "";
+
+            // Ce qui EST, relu en base : tout tableau du programme reprend exactement cette liste.
+            var liste = programme is { Count: > 0 }
+                ? " SON PROGRAMME, RELU APRÈS CE TOUR : " + string.Join(" ; ", programme.Select(n => $"« {n} »"))
+                  + ". Tout tableau de son programme reprend EXACTEMENT ces notions, ni plus ni moins, et tu ne dis pas "
+                  + "qu'il en reste moins."
+                : "";
 
             if (!ouiClair)
             {
@@ -6494,17 +6509,14 @@ namespace SchoolWebApp.Api.Builders.impl
                     + "PAS répondu par un oui clair. RIEN N'A ÉTÉ RETIRÉ : ces notions sont TOUJOURS DANS SON PROGRAMME, "
                     + "entières. Ne dis pas qu'elles sont retirées. Réponds à ce qu'il te dit ; s'il veut toujours en "
                     + "retirer une, repose la question fermée, seule dans sa phrase : « Je retire toute la notion « … » de "
-                    + "ton programme ? » (libellé exact de son programme), et attends son oui.]";
+                    + "ton programme ? » (libellé exact de son programme), et attends son oui." + liste + "]";
             }
 
-            var cleRetirees = bilan.Retirees
-                .SelectMany(r => new[] { LibelleNotion.CleSouple(r.Libelle) })
-                .ToHashSet();
-
+            var refusees = bilan.Refus.Select(r => r.Demande).ToHashSet();
             var phrases = new List<string>();
             if (bilan.Retirees.Count > 0)
             {
-                phrases.Add("il a dit oui : « " + string.Join(" » et « ", demandees.Where(d => !bilan.Refus.Any(r => r.Demande == d)))
+                phrases.Add("il a dit oui : « " + string.Join(" » et « ", demandees.Where(d => !refusees.Contains(d)))
                     + " » N'EST PLUS DANS SON PROGRAMME (c'est fait, par le serveur). Dis-le-lui en une phrase et réécris "
                     + "le tableau du programme sans elle. N'écris pas de `retirer:`");
             }
@@ -6514,10 +6526,12 @@ namespace SchoolWebApp.Api.Builders.impl
                 phrases.Add(r.Motif == MotifRefusRetrait.Plancher
                     ? $"retirer « {r.Demande} » aurait laissé son programme VIDE : rien n'a été retiré, elle est TOUJOURS "
                       + "dans son programme ; demande-lui ce qu'il y aura à la place"
-                    : $"« {r.Demande} » ne correspond plus à aucune notion de son programme : rien d'autre n'a été retiré");
+                    : $"« {r.Demande} » n'est PAS le libellé exact d'une notion de son programme : ce libellé n'a RIEN "
+                      + "retiré. Ne dis pas qu'il est retiré ; si c'est un morceau d'une notion de la liste ci-dessous, "
+                      + "cette notion est TOUJOURS là");
             }
 
-            return "\n\n[RETRAIT : " + string.Join(" ; ", phrases) + ".]";
+            return "\n\n[RETRAIT : " + string.Join(" ; ", phrases) + "." + liste + "]";
         }
 
         /// <summary>
@@ -6533,14 +6547,26 @@ namespace SchoolWebApp.Api.Builders.impl
             if (string.IsNullOrWhiteSpace(texte) || programme.Count == 0) return null;
 
             var declare = LecteurControleNotions.Lire(texte);
-            if (declare is null) return null;
+            var demandes = declare is null ? [] : declare.NotionsRetirees.Concat(declare.NotionsEnConflit).ToList();
 
-            var demandes = declare.NotionsRetirees.Concat(declare.NotionsEnConflit).ToList();
-            if (demandes.Count == 0) return null;
-
-            var dejaPosees = ConfirmationDeRetrait.NotionsDemandees(texte).Select(LibelleNotion.CleSouple).ToHashSet();
+            var posees = ConfirmationDeRetrait.NotionsDemandees(texte);
+            var dejaPosees = posees.Select(LibelleNotion.CleSouple).ToHashSet();
+            var cles = programme.Select(LibelleNotion.CleSouple).ToHashSet();
             var phrases = new List<string>();
             var vues = new HashSet<string>();
+
+            // UNE QUESTION FERMÉE AU LIBELLÉ INEXACT (#67 v5, bout en bout v5R-1 : « Identifier un couple acide-base de
+            // Brønsted », tronqué) : un oui n'y retirerait rien. Si UNE seule notion du programme répond, la question au
+            // libellé exact est ajoutée : c'est elle que le oui confirmera.
+            foreach (var inexacte in posees.Where(p => !cles.Contains(LibelleNotion.CleSouple(p))))
+            {
+                var visees = NotionsVisees(inexacte, programme).ToList();
+                if (visees.Count != 1 || dejaPosees.Contains(LibelleNotion.CleSouple(visees[0]))) continue;
+                if (!vues.Add(LibelleNotion.CleSouple(visees[0]))) continue;
+
+                phrases.Add($"Le nom exact de cette notion dans ton programme est « {visees[0]} ». "
+                    + ConfirmationDeRetrait.QuestionFermee(visees[0]));
+            }
 
             foreach (var notion in demandes.SelectMany(d => NotionsVisees(d, programme)))
             {
