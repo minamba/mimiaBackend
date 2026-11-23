@@ -6714,9 +6714,11 @@ namespace SchoolWebApp.Api.Builders.impl
         }
 
         /// <summary>
-        /// La réponse annonce-t-elle un retrait comme fait (« c'est fait », « c'est noté », « je retire », « je la
-        /// retire », « j'ai retiré », « est retirée », « sont retirés », « on enlève ») ? La question fermée elle-même
-        /// (« Je retire toute la notion « X » de ton programme ? ») n'en est pas une.
+        /// La réponse annonce-t-elle un retrait comme FAIT (« c'est fait », « c'est noté », « je la retire », « on les
+        /// retire », « j'ai retiré », « est retirée », « sont retirés », « sortent de ton programme », « n'est plus dans ton
+        /// programme ») ? Bout en bout v6 (de5cfbd) : une négation n'en est pas une (« rien n'a été retiré », « je n'ai
+        /// rien retiré »), ni une explication au présent sans pronom (« ça veut dire qu'on retire toute la notion… ») ; la
+        /// question fermée elle-même non plus.
         /// </summary>
         internal static bool AnnonceUnRetrait(string? texte)
         {
@@ -6728,7 +6730,7 @@ namespace SchoolWebApp.Api.Builders.impl
         [GeneratedRegex(@"Je retire toute la notion[\s  ]*«[^«»\r\n]+»[\s  ]*de ton programme[\s  ]*\?", RegexOptions.IgnoreCase)]
         private static partial Regex QuestionFermeeTexte();
 
-        [GeneratedRegex(@" (c est fait|c est note|je (la |le |les |l |te la |te le |te les )?(retire|enleve|supprime)|j ai (bien )?(retire|enleve|supprime)|on (a )?(bien )?(retire|enleve)|(est|sont|a ete|ont ete|bien) (bien )?(retire|retiree|retires|retirees|enleve|enlevee|enleves|enlevees|supprime|supprimee|supprimes|supprimees)|sort\w* (bien )?(de|du) (ton )?programme|(n est|ne sont|ne fait|ne font) plus (dans|partie)) ")]
+        [GeneratedRegex(@" (c est fait|c est note|(je|on) (la|le|les|l|te la|te le|te les) (retire|enleve|supprime)|je (retire|enleve|supprime) (les|la|le|l|du|des)|j ai (bien )?(retire|enleve|supprime)|on a (bien )?(retire|enleve)|(?<! (n|ne|rien n|pas)) (est|sont|a ete|ont ete) (bien )?(retire|retiree|retires|retirees|enleve|enlevee|enleves|enlevees|supprime|supprimee|supprimes|supprimees)|bien (retire|retiree|retires|retirees|enleve|enlevee|enleves|enlevees)|sort\w* (bien )?(de|du) (ton )?programme|(n est|ne sont|ne fait|ne font) plus (dans|partie)) ")]
         private static partial Regex AnnonceRetrait();
 
         /// <summary>
