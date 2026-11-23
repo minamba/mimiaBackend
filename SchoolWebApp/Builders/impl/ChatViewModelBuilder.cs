@@ -6378,7 +6378,18 @@ namespace SchoolWebApp.Api.Builders.impl
             // n'est supprimé, verdict d'Omar v2), une notion ne part qu'ENTIÈRE, et le programme ne se vide pas.
             if (declare.NotionsRetirees.Count > 0)
             {
-                refus.AddRange(await RetirerDuProgrammeAsync(conversationId, eleveId, matiereId, declare, ct));
+                var bilan = await RetirerDuProgrammeAsync(conversationId, eleveId, matiereId, declare, ct);
+
+                // DÉJÀ RETIRÉE DANS CETTE SÉANCE : le professeur recopie parfois, dans le bloc suivant, une notion qu'il a
+                // retirée au tour d'avant. « Introuvable » serait vrai mais trompeur au tour suivant (« rien n'a été
+                // retiré ») : on la tait. Les clés retirées de la conversation sont gardées avec le reste (6 h, mémoire).
+                var cleRetirees = $"notions-retirees:{conversationId}";
+                var dejaRetirees = _retraitsRefuses?.Get<HashSet<string>>(cleRetirees) ?? [];
+                foreach (var ligne in bilan.Retirees) dejaRetirees.Add(LibelleNotion.CleSouple(ligne.Libelle));
+                if (bilan.Retirees.Count > 0) _retraitsRefuses?.Set(cleRetirees, dejaRetirees, TimeSpan.FromHours(6));
+
+                refus.AddRange(bilan.Refus.Where(r =>
+                    r.Motif != MotifRefusRetrait.Introuvable || !dejaRetirees.Contains(LibelleNotion.CleSouple(r.Demande))));
             }
 
             foreach (var r in refus)
@@ -6405,11 +6416,11 @@ namespace SchoolWebApp.Api.Builders.impl
         private static string CleRetraitsRefuses(int conversationId) => $"retraits-refuses:{conversationId}";
 
         /// <summary>
-        /// Retire du programme du contrôle les notions du champ `retirer:` (signalement #67) et rend les refus.
+        /// Retire du programme du contrôle les notions du champ `retirer:` (signalement #67) et rend le bilan.
         /// Silencieux : un retrait raté ne doit pas faire perdre la séance ; il se voit dans le journal. CHAQUE LIGNE
         /// SUPPRIMÉE Y EST ÉCRITE EN ENTIER (journal restaurable, #67 v2) : de quoi la réinsérer à l'identique.
         /// </summary>
-        private async Task<IReadOnlyList<RetraitRefuse>> RetirerDuProgrammeAsync(
+        private async Task<BilanRetrait> RetirerDuProgrammeAsync(
             int conversationId, int eleveId, int matiereId, ControleNotionsDeclarees declare, CancellationToken ct)
         {
             try
@@ -6433,13 +6444,13 @@ namespace SchoolWebApp.Api.Builders.impl
                         declare.Controle, eleveId, bilan.Retirees.Count, string.Join(" ; ", bilan.Retirees.Select(r => r.Libelle)));
                 }
 
-                return bilan.Refus;
+                return bilan;
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex,
                     "Echec du retrait de notions du programme (conversation {ConversationId}).", conversationId);
-                return [];
+                return BilanRetrait.Vide;
             }
         }
 
