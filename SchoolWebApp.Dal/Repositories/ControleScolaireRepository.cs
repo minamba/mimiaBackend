@@ -105,6 +105,8 @@ namespace SchoolWebApp.Dal.Repositories
                 .Where(c => c.EleveId == eleveId
                     && c.DateControle >= debut
                     && c.DateControle < finExclusive)
+                // Les contrôles cachés des examens blancs : le calendrier montre l'examen blanc lui-même.
+                .Where(c => !_context.ExamensBlancsMatieres.Any(m => m.ControleId == c.Id))
                 .OrderBy(c => c.DateControle)
                 .Select(Projection)
                 .ToListAsync(ct);
@@ -151,6 +153,9 @@ namespace SchoolWebApp.Dal.Repositories
             return await _context.ControlesScolaires
                 .AsNoTracking()
                 .Where(c => c.EleveId == eleveId && c.DateControle >= maintenant.Date)
+                // LES CONTRÔLES CACHÉS DES EXAMENS BLANCS (23/11/2026) n'apparaissent dans aucune liste : l'examen blanc a
+                // sa propre carte. Le professeur, lui, les connaît par ailleurs.
+                .Where(c => !_context.ExamensBlancsMatieres.Any(m => m.ControleId == c.Id))
                 .OrderBy(c => c.DateControle)
                 .Take(limite)
                 .Select(Projection)
@@ -163,6 +168,9 @@ namespace SchoolWebApp.Dal.Repositories
             return await _context.ControlesScolaires
                 .AsNoTracking()
                 .Where(c => c.EleveId == eleveId && c.DateControle < maintenant.Date)
+                // LES CONTRÔLES CACHÉS DES EXAMENS BLANCS (23/11/2026) n'apparaissent dans aucune liste : l'examen blanc a
+                // sa propre carte. Le professeur, lui, les connaît par ailleurs.
+                .Where(c => !_context.ExamensBlancsMatieres.Any(m => m.ControleId == c.Id))
                 .OrderByDescending(c => c.DateControle)
                 .Take(limite)
                 .Select(Projection)
@@ -239,6 +247,31 @@ namespace SchoolWebApp.Dal.Repositories
             var parCompetence = maitrises.ToDictionary(m => m.CompetenceId);
             var maintenant = DateTime.UtcNow;
 
+            // LE DERNIER JUGEMENT DU PROFESSEUR SUR UNE NOTION VAUT POUR TOUS SES CONTRÔLES — Camara, le 23/11/2026,
+            // après avoir vu « Utiliser le théorème de Thalès » à 100 % dans son brevet blanc (jugée « tenue » par Nora)
+            // et à 86 % dans son contrôle sur Thalès (aucun jugement, la mesure seule) : « on fait le partage, comme ça
+            // tout est cohérent ». Le jugement le plus récent posé sur cette compétence, dans N'IMPORTE QUEL contrôle ou
+            // examen blanc de l'élève, s'applique à chaque ligne rattachée — avec les mêmes garde-fous qu'avant (une
+            // mesure de plus de 12 h après lui repasse devant, une copie notée ne descend jamais). Une notion en texte
+            // libre (sans compétence) garde son jugement à elle : rien ne dit qu'elle est la même ailleurs.
+            var jugementsPartages = competenceIds.Count == 0
+                ? new Dictionary<int, (string Etat, DateTime Le)>()
+                : (await _context.ControlesNotions
+                        .AsNoTracking()
+                        .Where(n => n.Controle!.EleveId == eleveId
+                            && n.CompetenceId != null
+                            && competenceIds.Contains(n.CompetenceId.Value)
+                            && n.EtatProfesseur != null
+                            && n.EtatProfesseurLe != null)
+                        .Select(n => new { CompetenceId = n.CompetenceId!.Value, n.EtatProfesseur, n.EtatProfesseurLe })
+                        .ToListAsync(ct))
+                    .GroupBy(n => n.CompetenceId)
+                    .ToDictionary(
+                        g => g.Key,
+                        g => g.OrderByDescending(n => n.EtatProfesseurLe)
+                            .Select(n => (Etat: n.EtatProfesseur!, Le: n.EtatProfesseurLe!.Value))
+                            .First());
+
             var resultat = new Dictionary<int, PreparationControle>();
 
             foreach (var controle in controles)
@@ -309,6 +342,15 @@ namespace SchoolWebApp.Dal.Repositories
                     {
                         jugement = lu;
                         jugeLe = controle.PretLe;
+                    }
+
+                    // Le jugement partagé (voir plus haut), s'il est plus récent que celui de ce contrôle.
+                    if (ligne.CompetenceId is int competencePartagee
+                        && jugementsPartages.TryGetValue(competencePartagee, out var partage)
+                        && (jugement is null || jugeLe is null || partage.Le > jugeLe))
+                    {
+                        jugement = partage.Etat;
+                        jugeLe = partage.Le;
                     }
 
                     if (jugement is not null

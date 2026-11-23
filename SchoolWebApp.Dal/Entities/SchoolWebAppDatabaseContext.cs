@@ -88,6 +88,10 @@ namespace SchoolWebApp.Dal.Entities
         public virtual DbSet<ControleScolaire> ControlesScolaires { get; set; }
         public virtual DbSet<ControleNotion> ControlesNotions { get; set; }
         public virtual DbSet<ControleDocument> ControlesDocuments { get; set; }
+        public virtual DbSet<ExamenBlanc> ExamensBlancs { get; set; }
+        public virtual DbSet<ExamenBlancMatiere> ExamensBlancsMatieres { get; set; }
+        public virtual DbSet<ExamenBlancDocument> ExamensBlancsDocuments { get; set; }
+        public virtual DbSet<ExamenBlancNotion> ExamensBlancsNotions { get; set; }
         public virtual DbSet<Offre> Offres { get; set; }
         public virtual DbSet<OffreRecharge> OffresRecharge { get; set; }
         public virtual DbSet<Abonnement> Abonnements { get; set; }
@@ -2800,6 +2804,108 @@ namespace SchoolWebApp.Dal.Entities
                 entity.Property(e => e.Active).HasColumnName("active");
 
                 entity.HasIndex(e => e.Code).IsUnique();
+            });
+
+            // ---------------------------------------------------------------
+            // EXAMENS BLANCS (23/11/2026) — une date, ses matières, leurs documents
+            // ---------------------------------------------------------------
+            modelBuilder.Entity<ExamenBlanc>(entity =>
+            {
+                entity.ToTable("ExamenBlanc");
+                entity.HasKey(e => e.Id);
+
+                entity.Property(e => e.Id).HasColumnName("id");
+                entity.Property(e => e.EleveId).HasColumnName("eleve_id");
+                entity.Property(e => e.Type).IsRequired().HasMaxLength(20).HasColumnName("type");
+                entity.Property(e => e.DateExamen).HasColumnName("date_examen");
+                entity.Property(e => e.HeureExamen).HasColumnName("heure_examen");
+                entity.Property(e => e.DateCreation).HasColumnName("date_creation");
+                entity.Property(e => e.DateModification).HasColumnName("date_modification");
+
+                entity.HasOne(e => e.Eleve)
+                      .WithMany()
+                      .HasForeignKey(e => e.EleveId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasIndex(e => new { e.EleveId, e.DateExamen });
+            });
+
+            modelBuilder.Entity<ExamenBlancMatiere>(entity =>
+            {
+                entity.ToTable("ExamenBlancMatiere");
+                entity.HasKey(e => e.Id);
+
+                entity.Property(e => e.Id).HasColumnName("id");
+                entity.Property(e => e.ExamenBlancId).HasColumnName("examen_blanc_id");
+                entity.Property(e => e.MatiereId).HasColumnName("matiere_id");
+                entity.Property(e => e.DateCreation).HasColumnName("date_creation");
+                entity.Property(e => e.DocumentsModifiesLe).HasColumnName("documents_modifies_le");
+                entity.Property(e => e.NotionsLe).HasColumnName("notions_le");
+                entity.Property(e => e.ControleId).HasColumnName("controle_id");
+                entity.Property(e => e.ProgrammeValideLe).HasColumnName("programme_valide_le");
+
+                entity.HasOne(e => e.ExamenBlanc)
+                      .WithMany(x => x.Matieres)
+                      .HasForeignKey(e => e.ExamenBlancId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(e => e.Matiere)
+                      .WithMany()
+                      .HasForeignKey(e => e.MatiereId)
+                      .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasIndex(e => new { e.ExamenBlancId, e.MatiereId }).IsUnique();
+            });
+
+            modelBuilder.Entity<ExamenBlancDocument>(entity =>
+            {
+                entity.ToTable("ExamenBlancDocument");
+                entity.HasKey(e => e.Id);
+
+                entity.Property(e => e.Id).HasColumnName("id");
+                entity.Property(e => e.ExamenBlancMatiereId).HasColumnName("examen_blanc_matiere_id");
+                entity.Property(e => e.NomFichier).IsRequired().HasMaxLength(255).HasColumnName("nom_fichier");
+                entity.Property(e => e.TypeMime).IsRequired().HasMaxLength(120).HasColumnName("type_mime");
+                entity.Property(e => e.Taille).HasColumnName("taille");
+                entity.Property(e => e.NombrePages).HasColumnName("nombre_pages");
+                entity.Property(e => e.Chemin).HasMaxLength(300).HasColumnName("chemin");
+                entity.Property(e => e.FichierEffaceLe).HasColumnName("fichier_efface_le");
+                entity.Property(e => e.Transcription).HasColumnName("transcription");
+                entity.Property(e => e.Tentatives).HasColumnName("tentatives");
+                entity.Property(e => e.DateCreation).HasColumnName("date_creation");
+
+                entity.HasOne(e => e.ExamenBlancMatiere)
+                      .WithMany(x => x.Documents)
+                      .HasForeignKey(e => e.ExamenBlancMatiereId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasIndex(e => e.ExamenBlancMatiereId);
+            });
+
+            modelBuilder.Entity<ExamenBlancNotion>(entity =>
+            {
+                entity.ToTable("ExamenBlancNotion");
+                entity.HasKey(e => e.Id);
+
+                entity.Property(e => e.Id).HasColumnName("id");
+                entity.Property(e => e.ExamenBlancMatiereId).HasColumnName("examen_blanc_matiere_id");
+                entity.Property(e => e.CompetenceId).HasColumnName("competence_id");
+                entity.Property(e => e.Libelle).IsRequired().HasMaxLength(300).HasColumnName("libelle");
+                entity.Property(e => e.Ordre).HasColumnName("ordre");
+                entity.Property(e => e.DocumentIds).IsRequired().HasMaxLength(1000).HasColumnName("document_ids");
+                entity.Property(e => e.DateCreation).HasColumnName("date_creation");
+
+                entity.HasOne(e => e.ExamenBlancMatiere)
+                      .WithMany(x => x.Notions)
+                      .HasForeignKey(e => e.ExamenBlancMatiereId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(e => e.Competence)
+                      .WithMany()
+                      .HasForeignKey(e => e.CompetenceId)
+                      .OnDelete(DeleteBehavior.NoAction);
+
+                entity.HasIndex(e => e.ExamenBlancMatiereId);
             });
 
             // FICHES OU PODCASTS (15/11/2026) — voir `NatureCours.cs`.

@@ -310,6 +310,11 @@ builder.Services.AddScoped<IExpressionOraleRepository, ExpressionOraleRepository
 builder.Services.AddScoped<IExpressionEcriteRepository, ExpressionEcriteRepository>();
 builder.Services.AddScoped<IEvaluationPrevueRepository, EvaluationPrevueRepository>();
 builder.Services.AddScoped<IControleScolaireRepository, ControleScolaireRepository>();
+// LES EXAMENS BLANCS (23/11/2026) : leurs lignes en base, leurs fichiers dans le sous-dossier examens-blancs/.
+builder.Services.AddScoped<IExamenBlancRepository, ExamenBlancRepository>();
+builder.Services.AddScoped<SchoolWebApp.Api.Services.ExamensBlancsService>();
+// Étape 2 : lire les photos et PDF, ranger les documents en dossiers par notion (ExamensBlancsWorker).
+builder.Services.AddScoped<SchoolWebApp.Api.Services.LecteurExamensBlancs>();
 builder.Services.AddScoped<IExamenRepository, ExamenRepository>();
 builder.Services.AddScoped<ISignalementRepository, SignalementRepository>();
 builder.Services.AddScoped<IJeuxDeTestsRepository, JeuxDeTestsRepository>();
@@ -376,6 +381,8 @@ builder.Services.AddSingleton<SchoolWebApp.Domain.Services.IStockageModelesMail,
 // LE COURS DES CONTRÔLES SUR LE DISQUE (04/11/2026) : consultable par l'élève, purgé une semaine après.
 builder.Services.AddSingleton<SchoolWebApp.Domain.Services.IStockageCoursControles,
     SchoolWebApp.Dal.Stockage.StockageCoursControlesDisque>();
+builder.Services.AddSingleton<SchoolWebApp.Domain.Services.IStockageExamensBlancs,
+    SchoolWebApp.Dal.Stockage.StockageExamensBlancsDisque>();
 // Sans état, et appuyé sur le service de diffusion qui est lui-même un
 // singleton : un template se compose comme un message tapé à la main.
 builder.Services.AddSingleton<SchoolWebApp.Api.Services.Notifications.IComposeurModeleMail,
@@ -693,6 +700,8 @@ builder.Services.AddHostedService<SchoolWebApp.Api.Workers.DeplacementPlanchesWo
 builder.Services.AddHostedService<SchoolWebApp.Api.Workers.DeplacementPiecesModelesWorker>();
 builder.Services.AddHostedService<SchoolWebApp.Api.Workers.PurgePiecesSignalementsWorker>();
 builder.Services.AddHostedService<SchoolWebApp.Api.Workers.PurgeCoursControlesWorker>();
+builder.Services.AddHostedService<SchoolWebApp.Api.Workers.PurgeExamensBlancsWorker>();
+builder.Services.AddHostedService<SchoolWebApp.Api.Workers.ExamensBlancsWorker>();
 
 // Décrire les planches importées : sans ça, le professeur affiche une figure
 // qu'il n'a jamais vue et interroge dessus au hasard de ce qu'il croit y être.

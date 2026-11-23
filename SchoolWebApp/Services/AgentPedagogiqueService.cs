@@ -85,6 +85,7 @@ namespace SchoolWebApp.Api.Services
         private readonly IControleScolaireRepository _controles;
         private readonly PiecesJointes.TranscripteurDocuments _transcripteur;
         private readonly IStockageCoursControles _stockageCours;
+        private readonly IExamenBlancRepository? _examensBlancs;
 
         /// <summary>L'offre des lycées, pour la seule conseillère d'orientation (11/10/2026).</summary>
         private readonly IOrientationRepository _offresLycees;
@@ -113,8 +114,10 @@ namespace SchoolWebApp.Api.Services
             IAdminRepository fichesEleves,
             IEvaluationRepository evaluations,
             IStockageCoursControles stockageCours,
-            IMotsVerifiesRepository motsVerifies)
+            IMotsVerifiesRepository motsVerifies,
+            IExamenBlancRepository? examensBlancs = null)
         {
+            _examensBlancs = examensBlancs;
             _motsVerifies = motsVerifies ?? throw new ArgumentNullException(nameof(motsVerifies));
             _stockageCours = stockageCours ?? throw new ArgumentNullException(nameof(stockageCours));
             _offresLycees = offresLycees ?? throw new ArgumentNullException(nameof(offresLycees));
@@ -837,8 +840,12 @@ namespace SchoolWebApp.Api.Services
                 }
             }
 
+            // L'EXAMEN BLANC ENTRE DANS LA CLÉ (23/11/2026) : des dossiers rangés pendant la séance, ou le programme
+            // validé au tableau, changent ce que le professeur doit lire au tour suivant.
+            var etatExamenBlanc = await EtatExamenBlancAsync(conversation, ct);
+
             var cle = $"contexte-seance:{conversation.Id}:{eleve.Id}:{eleve.NiveauScolaireId}:{conversation.MatiereId}"
-                + $":{conversation.ModeSeance}:{conversation.ModeControleId}:{nbCours}";
+                + $":{conversation.ModeSeance}:{conversation.ModeControleId}:{nbCours}{etatExamenBlanc}";
 
             var debutDeSeance = accueil is TypeAccueil.PremiereSeance
                 or TypeAccueil.Retour
@@ -851,6 +858,10 @@ namespace SchoolWebApp.Api.Services
 
             var contexte = await ConstruireContexteEleveAsync(eleve, conversation, ct)
                 + await CoursDuControleAsync(conversation, ct)
+                + (etatExamenBlanc.Length == 0
+                    ? string.Empty
+                    : ContexteExamenBlanc(await ExamenBlancDeLaSeanceAsync(conversation, ct), conversation.ModeControleId,
+                        ModesSeance.Normaliser(conversation.ModeSeance)))
                 + await ContexteOrientationAsync(eleve, conversation, ct)
                 + await ProjetPourLeProfesseurAsync(eleve, conversation, ct);
 
@@ -1044,6 +1055,151 @@ namespace SchoolWebApp.Api.Services
         /// pèserait sur chaque tour de la séance.
         /// </summary>
         private const int CoursMaxCaracteres = 30_000;
+
+        /// <summary>Le texte des documents d'un examen blanc donné au professeur, par séance (comme le cours d'un contrôle).</summary>
+        private const int ExamenBlancMaxCaracteres = 30_000;
+
+        /// <summary>
+        /// L'état de l'examen blanc de la séance pour la clé du contexte (dossiers, programme validé), LÉGER : il est lu à
+        /// chaque tour, le texte des documents ne l'est qu'à la reconstruction. Vide hors examen blanc.
+        /// </summary>
+        private async Task<string> EtatExamenBlancAsync(Conversation conversation, CancellationToken ct)
+        {
+            if (_examensBlancs is null || conversation.ModeControleId is not int controleId) return string.Empty;
+
+            var mode = ModesSeance.Normaliser(conversation.ModeSeance);
+            if (mode != ModesSeance.Controle && mode != ModesSeance.Bilan) return string.Empty;
+
+            try
+            {
+                return await _examensBlancs.GetEtatParControleAsync(controleId, ct) is { } etat
+                    ? $":eb{etat.Notions}-{etat.ProgrammeValideLe?.Ticks ?? 0}"
+                    : string.Empty;
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogWarning(ex, "Etat de l'examen blanc du controle {ControleId} illisible.", controleId);
+                return string.Empty;
+            }
+        }
+
+        /// <summary>L'examen blanc dont la séance prépare le contrôle caché, ou null (séance ordinaire, contrôle ordinaire).</summary>
+        private async Task<ExamenBlancPourSeance?> ExamenBlancDeLaSeanceAsync(Conversation conversation, CancellationToken ct)
+        {
+            if (_examensBlancs is null || conversation.ModeControleId is not int controleId) return null;
+
+            var mode = ModesSeance.Normaliser(conversation.ModeSeance);
+            if (mode != ModesSeance.Controle && mode != ModesSeance.Bilan) return null;
+
+            try
+            {
+                return await _examensBlancs.GetParControleAsync(controleId, ct);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogWarning(ex, "Examen blanc du controle {ControleId} illisible pour le contexte.", controleId);
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// EXAMENS BLANCS, ÉTAPE 3 — Camara, le 23/11/2026 : « le professeur propose un programme de révision au tableau ;
+        /// si l'enfant est d'accord, on officialise le programme ». La séance est celle du contrôle caché de la matière
+        /// (sa préparation, ses pourcentages, son verdict sont ceux d'un contrôle) ; ce bloc dit au professeur que c'est
+        /// un examen blanc, lui donne les dossiers tirés des documents de l'élève et leur texte, et, tant que le
+        /// programme n'est pas validé, la marche à suivre : le proposer au tableau, puis le valider par
+        /// [CONTROLE_NOTIONS] (voir ChatViewModelBuilder : ce premier bloc officialise le programme).
+        /// </summary>
+        private static string ContexteExamenBlanc(ExamenBlancPourSeance? examen, int? controleId, string mode)
+        {
+            if (examen is null || controleId is not int id) return string.Empty;
+
+            var texte = new StringBuilder();
+            var jour = examen.DateExamen.ToString("dddd d MMMM", new System.Globalization.CultureInfo("fr-FR"));
+
+            texte.AppendLine();
+            texte.AppendLine($"## Ce contrôle est son {examen.Libelle.ToUpperInvariant()} ({jour})");
+            texte.AppendLine();
+            texte.AppendLine(
+                $"C'est l'examen blanc de l'élève en {examen.MatiereLibelle}. Il t'a envoyé TOUS ses cours pour le "
+                + "préparer, et tu les as rangés en dossiers, un par notion. Ce sont SES cours : prépare en les suivant.");
+
+            if (examen.Notions.Count > 0)
+            {
+                texte.AppendLine();
+                texte.AppendLine("Les dossiers (le programme proposé, dans cet ordre) :");
+                foreach (var notion in examen.Notions)
+                {
+                    texte.AppendLine($"- {notion.Libelle} ({notion.DocumentIds.Count} document{(notion.DocumentIds.Count > 1 ? "s" : "")})");
+                }
+            }
+            else
+            {
+                texte.AppendLine();
+                texte.AppendLine(
+                    "Ses documents ne sont pas encore rangés (ou il n'en a pas envoyé). Demande-lui sur quoi porte son "
+                    + "examen blanc, et propose un programme à partir de ce qu'il te dit.");
+            }
+
+            if (mode == ModesSeance.Controle && examen.ProgrammeValideLe is null)
+            {
+                texte.AppendLine();
+                texte.AppendLine("### AVANT DE RÉVISER : PROPOSE-LUI CE PROGRAMME");
+                texte.AppendLine(
+                    "1. Écris-le au tableau : un [ARDOISE] avec la liste des notions, dans l'ordre des dossiers.\n"
+                    + "2. Demande-lui s'il est d'accord, s'il veut en retirer une, ou en ajouter une qui sera à son "
+                    + "examen blanc. Une seule question, puis tu attends sa réponse.\n"
+                    + "3. Quand il est d'accord, VALIDE le programme : termine ton message par ce bloc, avec les notions "
+                    + "retenues recopiées AU MOT PRÈS de la liste (une notion ajoutée à sa demande : avec ses mots) :\n"
+                    + "[CONTROLE_NOTIONS]\n"
+                    + $"controle: {id}\n"
+                    + "notions: première notion ; deuxième notion\n"
+                    + "[/CONTROLE_NOTIONS]\n"
+                    + "C'est ce bloc qui officialise son programme et fait apparaître ses pourcentages. Dis-lui que son "
+                    + "programme est prêt.\n"
+                    + "4. Ensuite seulement, commence les révisions, notion par notion, dans l'ordre du programme.");
+            }
+            else if (examen.ProgrammeValideLe is DateTime valide)
+            {
+                texte.AppendLine();
+                texte.AppendLine(
+                    $"Son programme a été validé avec lui le {valide.ToLocalTime():dd/MM} : ce sont les notions de ce "
+                    + "contrôle. Ne le lui reproposes pas ; révise-le en t'appuyant sur ses documents.");
+            }
+
+            // LE TEXTE DES DOCUMENTS, par dossier, dans la limite du contexte : le professeur prépare avec SES cours.
+            var parId = examen.Documents
+                .Where(d => !string.IsNullOrWhiteSpace(d.Texte)
+                    && !d.Texte!.StartsWith(DocumentControle.PrefixeIllisible, StringComparison.Ordinal))
+                .ToDictionary(d => d.Id);
+
+            if (parId.Count > 0)
+            {
+                texte.AppendLine();
+                texte.AppendLine("### Ses documents");
+
+                var restant = ExamenBlancMaxCaracteres;
+                var vus = new HashSet<int>();
+                var ordre = examen.Notions.SelectMany(n => n.DocumentIds).Concat(parId.Keys).Distinct().ToList();
+                var parDocument = Math.Max(1_500, restant / Math.Max(1, ordre.Count));
+
+                foreach (var docId in ordre)
+                {
+                    if (restant <= 0 || !parId.TryGetValue(docId, out var doc) || !vus.Add(docId)) continue;
+
+                    var dossiers = examen.Notions.Where(n => n.DocumentIds.Contains(docId)).Select(n => n.Libelle).ToList();
+                    var extrait = doc.Texte!.Length > parDocument ? doc.Texte[..parDocument] + " […]" : doc.Texte;
+                    if (extrait.Length > restant) extrait = extrait[..restant] + " […]";
+                    restant -= extrait.Length;
+
+                    texte.AppendLine();
+                    texte.AppendLine($"#### {doc.Nom}{(dossiers.Count > 0 ? $" — {string.Join(", ", dossiers)}" : string.Empty)}");
+                    texte.AppendLine(extrait);
+                }
+            }
+
+            return texte.ToString();
+        }
 
         /// <summary>
         /// LE COURS DE L'ÉLÈVE, IMPORTÉ AVEC SON CONTRÔLE — voulu par Camara le

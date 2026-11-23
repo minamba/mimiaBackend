@@ -105,6 +105,7 @@ namespace SchoolWebApp.Api.Builders.impl
         private readonly IExamenRepository _examens;
         private readonly IMaitriseRepository _maitrises;
         private readonly IPlanificateurControleService _planificateur;
+        private readonly IExamenBlancRepository? _examensBlancs;
         private readonly IAbonnementRepository _abonnements;
         private readonly Services.Paiement.AccesForfaitService _acces;
         private readonly IFileAlertesQuota _fileAlertes;
@@ -165,8 +166,10 @@ namespace SchoolWebApp.Api.Builders.impl
             Services.Voix.IVerificationSonService verificationSon,
             Services.Paiement.AccesForfaitService acces,
             IConfiguration configuration,
-            IHostEnvironment environnement)
+            IHostEnvironment environnement,
+            IExamenBlancRepository? examensBlancs = null)
         {
+            _examensBlancs = examensBlancs;
             _texteBrutAuJournal = TexteBrutAuJournalPermis(configuration, environnement);
             _acces = acces ?? throw new ArgumentNullException(nameof(acces));
             _verificationSon = verificationSon ?? throw new ArgumentNullException(nameof(verificationSon));
@@ -1033,7 +1036,11 @@ namespace SchoolWebApp.Api.Builders.impl
                         .Count(d => d.Exploitable);
                 }
 
-                return MarqueurControle(prochain, joursRestants, preparation, maintenantParis, nbCours);
+                // LE CONTRÔLE CACHÉ D'UN EXAMEN BLANC (23/11/2026) : ses documents sont du côté de l'examen blanc,
+                // rangés en dossiers ; on ne demande pas à l'élève sur quoi il porte.
+                var etatExamenBlanc = _examensBlancs is null ? null : await _examensBlancs.GetEtatParControleAsync(prochain.Id, ct);
+
+                return MarqueurControle(prochain, joursRestants, preparation, maintenantParis, nbCours, etatExamenBlanc);
             }
             catch (Exception ex)
             {
@@ -1529,6 +1536,30 @@ namespace SchoolWebApp.Api.Builders.impl
         /// chaque tour tant que le programme manque : ne pas préparer avant
         /// de savoir, et écrire le bloc qui complète le titre dès qu'on sait.
         /// </param>
+        /// <summary>
+        /// LE RAPPEL DE CHAQUE TOUR, POUR UN EXAMEN BLANC — Camara, le 23/11/2026. La séance prépare le contrôle caché
+        /// d'une matière d'examen blanc : ses documents sont rangés en dossiers ; tant que le programme n'est pas validé,
+        /// le professeur le propose au tableau et le valide par [CONTROLE_NOTIONS] ; ensuite, révisions et verdict comme
+        /// pour un contrôle.
+        /// </summary>
+        private static string MarqueurExamenBlanc(int controleId, int dossiers, bool programmeValide) =>
+            $"[SÉANCE DE PRÉPARATION DE SON EXAMEN BLANC (contrôle n° {controleId}) : l'élève est entré par le bouton de "
+            + "son examen blanc, c'est de lui qu'on parle (tu peux l'appeler brevet blanc ou bac blanc). "
+            + (dossiers > 0
+                ? "SES DOCUMENTS SONT LUS ET RANGÉS EN DOSSIERS (section « Ce contrôle est son … ») : NE LUI DEMANDE PAS "
+                  + "sur quoi il porte ni ses cours. "
+                : "Ses documents ne sont pas encore rangés : demande-lui sur quoi porte son examen blanc. ")
+            + (programmeValide
+                ? "SON PROGRAMME EST VALIDÉ : révise-le notion par notion en t'appuyant sur ses documents. Les notions "
+                  + $"travaillées vont dans [CONTROLE_NOTIONS] controle: {controleId} ; ta conclusion porte "
+                  + $"[CONTROLE_PRET] controle: {controleId}."
+                : "SON PROGRAMME N'EST PAS ENCORE VALIDÉ : propose-le AU TABLEAU ([ARDOISE], la liste des dossiers), "
+                  + "demande-lui s'il est d'accord, s'il veut retirer ou ajouter une notion, et attends sa réponse. NE "
+                  + "COMMENCE AUCUNE RÉVISION avant son accord. Dès qu'il est d'accord, écris dans ce message "
+                  + $"[CONTROLE_NOTIONS] controle: {controleId} avec les notions retenues recopiées au mot près — c'est ce "
+                  + "qui valide son programme —, dis-lui que son programme est prêt, puis commence.")
+            + "]";
+
         private static string MarqueurModeSeance(string mode, int? controleId, string? epreuveCode, int? nbCours = null, int nbIllisibles = 0, bool programmeInconnu = false) => mode switch
         {
             ModesSeance.Controle =>
@@ -1830,7 +1861,7 @@ namespace SchoolWebApp.Api.Builders.impl
         /// </summary>
         private static string MarqueurControle(
             ControleScolaireEleve controle, int joursRestants, PreparationControle? preparation,
-            DateTime maintenantParis, int nbCours = 0)
+            DateTime maintenantParis, int nbCours = 0, (int Notions, DateTime? ProgrammeValideLe)? examenBlanc = null)
         {
             var intention = joursRestants switch
             {
@@ -1853,6 +1884,16 @@ namespace SchoolWebApp.Api.Builders.impl
 
             var etat = preparation switch
             {
+                // UN EXAMEN BLANC (Camara, le 23/11/2026 : « pourquoi la prof me pose la question alors que j'ai envoyé
+                // des documents ») : le programme vide n'est pas un programme inconnu — il attend l'accord de l'élève
+                // sur celui que ses dossiers proposent. Voir AgentPedagogiqueService.ContexteExamenBlanc.
+                { PerimetreConnu: false } when examenBlanc is { Notions: > 0 } =>
+                    "C'EST SON EXAMEN BLANC, ET SES DOCUMENTS SONT LUS ET RANGÉS EN DOSSIERS (section « Ce contrôle est "
+                    + "son … »). NE LUI DEMANDE PAS sur quoi il porte, ni ses cours. Dans ce premier message, propose-lui "
+                    + "AU TABLEAU le programme tiré de ses dossiers, demande-lui s'il est d'accord, puis attends sa "
+                    + $"réponse ; dès qu'il l'est, écris [CONTROLE_NOTIONS] avec controle: {controle.Id} et les notions "
+                    + "retenues — c'est ce qui valide son programme —, puis commence les révisions.",
+
                 // LE PROGRAMME MANQUE : C'EST LA PREMIÈRE CHOSE À OBTENIR.
                 // Sans lui, il n'y a rien à préparer, rien à mesurer, et la
                 // barre de l'élève reste à zéro quoi qu'il travaille.
@@ -3266,6 +3307,26 @@ namespace SchoolWebApp.Api.Builders.impl
                 _ => "[L'élève vient d'ouvrir la séance et met son casque.]",
             };
 
+            // L'ARRIVÉE DANS LA PRÉPARATION D'UN EXAMEN BLANC NE REPREND PAS LE COURS D'AVANT — Camara, le 23/11/2026 :
+            // « je suis entré dans la préparation d'un examen blanc, et elle me dit : On repart sur 38 ÷ 5 ? ; la
+            // préparation d'un examen, ce n'est pas un cours normal ». La préparation vit dans la même conversation que
+            // les cours de la matière : moins de 45 minutes après un cours ordinaire, la consigne de relance (« repars
+            // sur ce que vous faisiez ») reprenait l'exercice de ce cours-là. Ici, l'arrivée annonce l'examen blanc.
+            if (typeAccueil is TypeAccueil.Retour or TypeAccueil.NouvelleSeance or TypeAccueil.PremiereSeance
+                && mode == ModesSeance.Controle && controleMode is int controleArrivee && _examensBlancs is not null
+                && await _examensBlancs.GetEtatParControleAsync(controleArrivee, ct) is { } etatArrivee)
+            {
+                declencheur = etatArrivee.ProgrammeValideLe is null
+                    ? "[L'élève vient d'ouvrir la PRÉPARATION DE SON EXAMEN BLANC (bouton de son examen blanc). Ce n'est "
+                      + "PAS un cours ordinaire : ne reprends AUCUN exercice ni sujet d'un cours précédent, même récent. "
+                      + "Salue-le en une phrase, puis présente-lui au tableau le programme tiré de ses documents et "
+                      + "demande-lui s'il est d'accord.]"
+                    : "[L'élève vient d'ouvrir la PRÉPARATION DE SON EXAMEN BLANC (bouton de son examen blanc). Ce n'est "
+                      + "PAS un cours ordinaire : ne reprends aucun exercice d'un cours ordinaire. Repars sur son "
+                      + "programme d'examen blanc : la notion où vous en étiez, ou la suivante qui n'est pas encore "
+                      + "tenue, en le lui disant en une phrase.]";
+            }
+
             // POSÉE ICI, PAS PLUS BAS : elle sert déjà au rappel de contrôle
             // ci-dessous, avant l'endroit où elle servait jusque-là (la
             // gomme du tableau). Pur déplacement, même calcul.
@@ -3598,7 +3659,15 @@ namespace SchoolWebApp.Api.Builders.impl
                 }
             }
 
-            declencheur += "\n\n" + MarqueurModeSeance(mode, controleMode, epreuveMode, nbCours, nbIllisibles, programmeInconnu);
+            // LE CONTRÔLE CACHÉ D'UN EXAMEN BLANC A SON PROPRE RAPPEL (23/11/2026) : celui d'un contrôle ordinaire
+            // demande sur quoi il porte quand son programme est vide, et interdit de parler d'un brevet.
+            var etatExamenBlanc = mode == ModesSeance.Controle && controleMode is int controleDeLExamen && _examensBlancs is not null
+                ? await _examensBlancs.GetEtatParControleAsync(controleDeLExamen, ct)
+                : null;
+
+            declencheur += "\n\n" + (etatExamenBlanc is { } eb && controleMode is int idExamen
+                ? MarqueurExamenBlanc(idExamen, eb.Notions, eb.ProgrammeValideLe is not null)
+                : MarqueurModeSeance(mode, controleMode, epreuveMode, nbCours, nbIllisibles, programmeInconnu));
 
             // UN CONTRÔLE OUVERT SE RAPPELLE À CHAQUE TOUR, ET C'EST LE CODE QUI
             // S'EN CHARGE.
@@ -6238,6 +6307,9 @@ namespace SchoolWebApp.Api.Builders.impl
 
             try
             {
+                // LE PROGRAMME D'UN EXAMEN BLANC (23/11/2026) : son premier bloc le valide. Traité à part, puis on s'arrête.
+                if (await ValiderProgrammeExamenBlancAsync(eleveId, matiereId, niveauScolaireId, declare, ct)) return;
+
                 // UNE DÉCLARATION INCOMPLÈTE SE COMPLÈTE EN PARLANT. « J'ai un
                 // contrôle de maths » devient « les triangles semblables et le
                 // théorème de Thalès » une fois que le professeur a posé la
@@ -6535,6 +6607,68 @@ namespace SchoolWebApp.Api.Builders.impl
                 _logger.LogError(ex,
                     "Echec de la deduction du programme du controle {ControleId}.", controleId);
             }
+        }
+
+        /// <summary>
+        /// LE PROGRAMME D'UN EXAMEN BLANC, VALIDÉ AU TABLEAU — Camara, le 23/11/2026 : « le professeur propose un
+        /// programme de révision au tableau ; si l'enfant est d'accord, on officialise le programme ». Le professeur l'a
+        /// proposé (consigne dans le contexte, AgentPedagogiqueService.ContexteExamenBlanc) ; son PREMIER
+        /// [CONTROLE_NOTIONS] sur le contrôle caché de la matière est l'accord de l'élève.
+        ///
+        /// Les notions recopiées d'un dossier gardent la notion du référentiel de ce dossier (pas de rapprochement à
+        /// refaire) ; celles ajoutées à la demande de l'élève passent par le rapprochement habituel. AUCUNE N'EST
+        /// « TRAVAILLÉE » : on vient de se mettre d'accord sur le programme, pas de le réviser — la barre part de zéro.
+        /// Rend faux si ce contrôle n'est pas celui d'un examen blanc, ou si son programme est déjà validé (le bloc
+        /// suit alors le chemin ordinaire : des notions qu'on vient de travailler).
+        /// </summary>
+        private async Task<bool> ValiderProgrammeExamenBlancAsync(
+            int eleveId, int matiereId, int? niveauScolaireId, ControleNotionsDeclarees declare, CancellationToken ct)
+        {
+            if (_examensBlancs is null || declare.Notions.Count == 0) return false;
+
+            var examen = await _examensBlancs.GetParControleAsync(declare.Controle, ct);
+            if (examen is null || examen.ProgrammeValideLe is not null) return false;
+
+            var dossiers = examen.Notions
+                .GroupBy(n => LibelleNotion.CleSouple(n.Libelle))
+                .ToDictionary(g => g.Key, g => g.First());
+            var reconnues = new List<NotionDeclaree>();
+            var libres = new List<string>();
+
+            foreach (var libelle in declare.Notions)
+            {
+                var cle = LibelleNotion.CleSouple(libelle);
+                var dossier = dossiers.TryGetValue(cle, out var exact)
+                    ? exact
+                    : examen.Notions.Where(n =>
+                        {
+                            var sienne = LibelleNotion.CleSouple(n.Libelle);
+                            return sienne.Length > 0 && cle.Length > 0 && (sienne.Contains(cle) || cle.Contains(sienne));
+                        }).Take(2).ToList() is { Count: 1 } proches ? proches[0] : null;
+
+                if (dossier?.CompetenceId is int competence) reconnues.Add(new NotionDeclaree(competence, dossier.Libelle));
+                else libres.Add(dossier?.Libelle ?? libelle);
+            }
+
+            var posees = reconnues.Count > 0
+                ? await _controles.AjouterNotionsAsync(eleveId, declare.Controle, matiereId, reconnues, travaillee: false, ct)
+                : 0;
+
+            if (libres.Count > 0)
+            {
+                posees += await AjouterNotionsAsync(
+                    eleveId, declare.Controle, matiereId, niveauScolaireId, libres, travaillee: false, ct);
+            }
+
+            if (posees == 0) return false;
+
+            await _examensBlancs.MarquerProgrammeValideAsync(declare.Controle, DateTime.UtcNow, ct);
+
+            _logger.LogInformation(
+                "Examen blanc {ExamenBlancId} : programme valide en {Matiere}, {Nombre} notion(s) (controle {ControleId}).",
+                examen.ExamenBlancId, examen.MatiereLibelle, posees, declare.Controle);
+
+            return true;
         }
 
         /// <summary>

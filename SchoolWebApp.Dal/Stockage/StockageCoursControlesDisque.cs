@@ -12,6 +12,7 @@ namespace SchoolWebApp.Dal.Stockage
     public class StockageCoursControlesDisque : IStockageCoursControles
     {
         private readonly string _racine;
+        private readonly string _racineMarque;
         private readonly ILogger<StockageCoursControlesDisque> _logger;
 
         public StockageCoursControlesDisque(IConfiguration configuration, ILogger<StockageCoursControlesDisque> logger)
@@ -22,9 +23,22 @@ namespace SchoolWebApp.Dal.Stockage
             _racine = Path.GetFullPath(string.IsNullOrWhiteSpace(configure)
                 ? Path.Combine(AppContext.BaseDirectory, "stockage", "cours-controles")
                 : configure);
+            _racineMarque = _racine;
         }
 
-        public bool Pret => File.Exists(Path.Combine(_racine, StockagePlanchesDisque.Marque));
+        /// <summary>
+        /// UN SOUS-DOSSIER DU MÊME DISQUE — les examens blancs (23/11/2026) : leurs fichiers vivent sous
+        /// <c>examens-blancs/</c>, dans le dossier des cours de contrôle. La marque reste celle de la racine : aucun
+        /// montage ni aucune marque de plus à poser sur le VPS. Pas directement à la racine : la purge des
+        /// contrôles efface tout dossier d'élève qui ne répond à aucun contrôle.
+        /// </summary>
+        protected StockageCoursControlesDisque(IConfiguration configuration, ILogger<StockageCoursControlesDisque> logger, string sousDossier)
+            : this(configuration, logger)
+        {
+            _racine = Path.Combine(_racine, sousDossier);
+        }
+
+        public bool Pret => File.Exists(Path.Combine(_racineMarque, StockagePlanchesDisque.Marque));
 
         public async Task<string> EcrireAsync(int eleveId, int controleId, byte[] donnees, string nom, CancellationToken ct = default)
         {

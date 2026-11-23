@@ -2222,6 +2222,202 @@ namespace SchoolWebApp.Dal.Migrations
                     b.ToTable("Examen", (string)null);
                 });
 
+            modelBuilder.Entity("SchoolWebApp.Dal.Entities.ExamenBlanc", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasColumnName("id");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("DateCreation")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("date_creation");
+
+                    b.Property<DateTime>("DateExamen")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("date_examen");
+
+                    b.Property<DateTime?>("DateModification")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("date_modification");
+
+                    b.Property<int>("EleveId")
+                        .HasColumnType("int")
+                        .HasColumnName("eleve_id");
+
+                    b.Property<TimeSpan?>("HeureExamen")
+                        .HasColumnType("time")
+                        .HasColumnName("heure_examen");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)")
+                        .HasColumnName("type");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EleveId", "DateExamen");
+
+                    b.ToTable("ExamenBlanc", (string)null);
+                });
+
+            modelBuilder.Entity("SchoolWebApp.Dal.Entities.ExamenBlancDocument", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasColumnName("id");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Chemin")
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)")
+                        .HasColumnName("chemin");
+
+                    b.Property<DateTime>("DateCreation")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("date_creation");
+
+                    b.Property<int>("ExamenBlancMatiereId")
+                        .HasColumnType("int")
+                        .HasColumnName("examen_blanc_matiere_id");
+
+                    b.Property<DateTime?>("FichierEffaceLe")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("fichier_efface_le");
+
+                    b.Property<string>("NomFichier")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)")
+                        .HasColumnName("nom_fichier");
+
+                    b.Property<int>("NombrePages")
+                        .HasColumnType("int")
+                        .HasColumnName("nombre_pages");
+
+                    b.Property<long>("Taille")
+                        .HasColumnType("bigint")
+                        .HasColumnName("taille");
+
+                    b.Property<int>("Tentatives")
+                        .HasColumnType("int")
+                        .HasColumnName("tentatives");
+
+                    b.Property<string>("Transcription")
+                        .HasColumnType("nvarchar(max)")
+                        .HasColumnName("transcription");
+
+                    b.Property<string>("TypeMime")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("nvarchar(120)")
+                        .HasColumnName("type_mime");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ExamenBlancMatiereId");
+
+                    b.ToTable("ExamenBlancDocument", (string)null);
+                });
+
+            modelBuilder.Entity("SchoolWebApp.Dal.Entities.ExamenBlancMatiere", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasColumnName("id");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int?>("ControleId")
+                        .HasColumnType("int")
+                        .HasColumnName("controle_id");
+
+                    b.Property<DateTime>("DateCreation")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("date_creation");
+
+                    b.Property<DateTime?>("DocumentsModifiesLe")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("documents_modifies_le");
+
+                    b.Property<int>("ExamenBlancId")
+                        .HasColumnType("int")
+                        .HasColumnName("examen_blanc_id");
+
+                    b.Property<int>("MatiereId")
+                        .HasColumnType("int")
+                        .HasColumnName("matiere_id");
+
+                    b.Property<DateTime?>("NotionsLe")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("notions_le");
+
+                    b.Property<DateTime?>("ProgrammeValideLe")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("programme_valide_le");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MatiereId");
+
+                    b.HasIndex("ExamenBlancId", "MatiereId")
+                        .IsUnique();
+
+                    b.ToTable("ExamenBlancMatiere", (string)null);
+                });
+
+            modelBuilder.Entity("SchoolWebApp.Dal.Entities.ExamenBlancNotion", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasColumnName("id");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int?>("CompetenceId")
+                        .HasColumnType("int")
+                        .HasColumnName("competence_id");
+
+                    b.Property<DateTime>("DateCreation")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("date_creation");
+
+                    b.Property<string>("DocumentIds")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)")
+                        .HasColumnName("document_ids");
+
+                    b.Property<int>("ExamenBlancMatiereId")
+                        .HasColumnType("int")
+                        .HasColumnName("examen_blanc_matiere_id");
+
+                    b.Property<string>("Libelle")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)")
+                        .HasColumnName("libelle");
+
+                    b.Property<int>("Ordre")
+                        .HasColumnType("int")
+                        .HasColumnName("ordre");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompetenceId");
+
+                    b.HasIndex("ExamenBlancMatiereId");
+
+                    b.ToTable("ExamenBlancNotion", (string)null);
+                });
+
             modelBuilder.Entity("SchoolWebApp.Dal.Entities.ExpressionEcrite", b =>
                 {
                     b.Property<int>("Id")
@@ -5288,6 +5484,77 @@ namespace SchoolWebApp.Dal.Migrations
                     b.Navigation("Eleve");
 
                     b.Navigation("Matiere");
+                });
+
+            modelBuilder.Entity("SchoolWebApp.Dal.Entities.ExamenBlanc", b =>
+                {
+                    b.HasOne("SchoolWebApp.Dal.Entities.Eleve", "Eleve")
+                        .WithMany()
+                        .HasForeignKey("EleveId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Eleve");
+                });
+
+            modelBuilder.Entity("SchoolWebApp.Dal.Entities.ExamenBlancDocument", b =>
+                {
+                    b.HasOne("SchoolWebApp.Dal.Entities.ExamenBlancMatiere", "ExamenBlancMatiere")
+                        .WithMany("Documents")
+                        .HasForeignKey("ExamenBlancMatiereId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ExamenBlancMatiere");
+                });
+
+            modelBuilder.Entity("SchoolWebApp.Dal.Entities.ExamenBlancMatiere", b =>
+                {
+                    b.HasOne("SchoolWebApp.Dal.Entities.ExamenBlanc", "ExamenBlanc")
+                        .WithMany("Matieres")
+                        .HasForeignKey("ExamenBlancId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("SchoolWebApp.Dal.Entities.Matiere", "Matiere")
+                        .WithMany()
+                        .HasForeignKey("MatiereId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("ExamenBlanc");
+
+                    b.Navigation("Matiere");
+                });
+
+            modelBuilder.Entity("SchoolWebApp.Dal.Entities.ExamenBlancNotion", b =>
+                {
+                    b.HasOne("SchoolWebApp.Dal.Entities.Competence", "Competence")
+                        .WithMany()
+                        .HasForeignKey("CompetenceId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.HasOne("SchoolWebApp.Dal.Entities.ExamenBlancMatiere", "ExamenBlancMatiere")
+                        .WithMany("Notions")
+                        .HasForeignKey("ExamenBlancMatiereId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Competence");
+
+                    b.Navigation("ExamenBlancMatiere");
+                });
+
+            modelBuilder.Entity("SchoolWebApp.Dal.Entities.ExamenBlanc", b =>
+                {
+                    b.Navigation("Matieres");
+                });
+
+            modelBuilder.Entity("SchoolWebApp.Dal.Entities.ExamenBlancMatiere", b =>
+                {
+                    b.Navigation("Documents");
+
+                    b.Navigation("Notions");
                 });
 
             modelBuilder.Entity("SchoolWebApp.Dal.Entities.ExpressionEcrite", b =>
