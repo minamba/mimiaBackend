@@ -32,19 +32,47 @@ namespace SchoolWebApp.Api.Services
         // Le nombre, en chiffres (« 11 », « 12,5 ») ou en lettres (« onze », « dix-sept »), un « et demi » facultatif,
         // un « points » facultatif, puis « sur 20 », « sur vingt » ou « /20 ». Jamais collé à une lettre, un chiffre ou
         // une barre devant (« 3/4 », « x11 ») ; jamais suivi d'un autre chiffre (« /2025 »).
+        // #75 v2 (Omar point B.4) : « N virgule M » dit en toutes lettres (« dix-sept virgule cinq sur vingt » = 17,5,
+        // « 13 virgule 3 sur 20 » = 13,3) — lu 5 et 3 en v1.
         [GeneratedRegex(
-            @"(?<![\p{L}\d/,.])(?<nombre>\d{1,2}(?:[.,]\d{1,2})?|dix[- ]sept|dix[- ]huit|dix[- ]neuf|z[ée]ro|une?|deux|trois|quatre|cinq|six|sept|huit|neuf|dix|onze|douze|treize|quatorze|quinze|seize|vingt)"
+            @"(?<![\p{L}\d/,.])(?<!virgule\s+)(?<nombre>\d{1,2}(?:[.,]\d{1,2})?|dix[- ]sept|dix[- ]huit|dix[- ]neuf|z[ée]ro|une?|deux|trois|quatre|cinq|six|sept|huit|neuf|dix|onze|douze|treize|quatorze|quinze|seize|vingt)"
+            + @"(?:\s+virgule\s+(?<decimale>\d{1,2}|z[ée]ro|une?|deux|trois|quatre|cinq|six|sept|huit|neuf|vingt-cinq|cinquante|soixante-quinze)(?![\p{L}\d]))?"
             + @"(?<demi>\s+et\s+demie?)?\s*(?:points?\s+)?(?<sep>sur\s+|/\s*)(?:20|vingt)(?![\d\p{L}])",
             RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
         private static partial Regex Mention();
 
         // Une fraction de calcul (« 3/20 + 1/20 », « = 7/20 ») n'est pas une note : un opérateur juste avant ou juste
         // après une forme « /20 » l'écarte.
-        [GeneratedRegex(@"[+\-−×*÷=:]\s*$")]
+        // #75 v2 (Omar point B.1) : ni « : » ni « * » — « Note : 7,5/20 » et « Note : **8,3/20** » sont LA forme réelle
+        // du modèle (fEC-2, fEC-3, cBO3-6) et n'étaient jamais lues.
+        [GeneratedRegex(@"[+\-−×÷=]\s*$")]
         private static partial Regex OperateurAvant();
 
-        [GeneratedRegex(@"^\s*[+\-−×*÷=]")]
+        [GeneratedRegex(@"^\s*[+\-−×÷=]")]
         private static partial Regex OperateurApres();
+
+        // #75 v2 (Omar point B.3) : un calcul dit en toutes lettres (« trois sur vingt plus quatre sur vingt ») n'est pas
+        // une note, quel que soit le séparateur.
+        [GeneratedRegex(@"\b(?:plus|moins|fois|divisée?\s+par|multipliée?\s+par|font|égale?n?t?)\s*$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+        private static partial Regex MotOperateurAvant();
+
+        [GeneratedRegex(@"^\s*(?:plus|moins|fois|divisée?|multipliée?|égale?n?t?)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+        private static partial Regex MotOperateurApres();
+
+        // #75 v2 (Omar point B.3) : une mention qui, dans sa proposition (depuis la dernière ponctuation), parle d'autre
+        // chose que la note de cette copie — une note PASSÉE (« La dernière fois tu avais 9 sur 20 », « 17,5/20 au contrôle
+        // d'avant »), une note de CLASSE (« ton contrôle de classe : 8 sur 20 »), une fraction, une probabilité, une
+        // moyenne. Elle n'est ni « la note dite » ni une note à comparer.
+        [GeneratedRegex(@"\b(?:avais|aviez|dernière\s+fois|fois\s+d['’]avant|précédente?|d['’]avant|dernier\s+contrôle|classe|hier"
+            + @"|semaine\s+dernière|fraction|probabilité|chances?|proportion|moyenne|pourcentage)\b",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+        private static partial Regex AutreNote();
+
+        // #75 v2 (Omar point B.3) : la mention qu'on PRÉFÈRE comme note dite — introduite par « tu as (eu) », « ta note
+        // (est de) », « tu obtiens », « note : »… juste avant le nombre.
+        [GeneratedRegex(@"\b(?:tu\s+as(?:\s+eu)?|ta\s+note(?:\s+(?:est|sera|finale))?(?:\s+de)?|tu\s+obtiens|tu\s+décroches|tu\s+fais|note(?:\s+finale)?\s*:|ça\s+fait|ce\s+qui\s+fait|soit)[\s*_«""]*$",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+        private static partial Regex Introduite();
 
         [GeneratedRegex(@"\[ARDOISE\].*?(\[/ARDOISE\]|$)", RegexOptions.Singleline | RegexOptions.IgnoreCase)]
         private static partial Regex Ardoise();
@@ -61,31 +89,91 @@ namespace SchoolWebApp.Api.Services
         };
 
         /// <summary>
-        /// La première note sur 20 que le professeur DIT dans ce message, avant son bloc [EVALUATION] — c'est l'ordre
-        /// de la consigne : la note d'abord, seule. Le tableau ([ARDOISE]) est écarté : c'est là que s'écrivent les
-        /// calculs et les fractions. Null s'il n'en dit aucune.
+        /// La note sur 20 que le professeur DIT dans ce message, avant son bloc [EVALUATION]. Le tableau ([ARDOISE])
+        /// est écarté : c'est là que s'écrivent les calculs et les fractions. Null s'il n'en dit aucune.
+        ///
+        /// #75 v2 (Omar point B.3) : ce n'est plus la PREMIÈRE mention « sur 20 » (« La dernière fois tu avais 9 sur 20.
+        /// Aujourd'hui, tu as 15 sur 20 » donnait « et pas 9 »). Parmi les notes lues (<see cref="Lectures"/> : calculs,
+        /// notes passées, de classe, fractions, probabilités et moyennes écartés), on préfère celle qu'introduit « tu as »,
+        /// « ta note », « tu obtiens », « note : » ; à défaut, la première.
         /// </summary>
         public static double? Lire(string? message)
         {
-            if (string.IsNullOrWhiteSpace(message)) return null;
+            var lues = Lectures(message);
+            if (lues.Count == 0) return null;
+
+            foreach (var (valeur, introduite) in lues)
+                if (introduite) return valeur;
+
+            return lues[0].Valeur;
+        }
+
+        /// <summary>
+        /// Toutes les notes sur 20 lues dans ce que dit le professeur, dans l'ordre, avec « introduite » vrai si la
+        /// mention suit « tu as », « ta note », « tu obtiens », « note : »… Écartées : un calcul (opérateur ou « plus »,
+        /// « moins », « fois » juste avant ou après), et une mention dont la proposition parle d'autre chose que cette
+        /// copie (<see cref="AutreNote"/> : « tu avais », « la dernière fois », « classe », « fraction », « probabilité »,
+        /// « moyenne »…).
+        /// </summary>
+        public static IReadOnlyList<(double Valeur, bool Introduite)> Lectures(string? message)
+        {
+            var lues = new List<(double, bool)>();
+            if (string.IsNullOrWhiteSpace(message)) return lues;
 
             var parle = Parle(message);
+            var finPrecedente = 0;
 
             foreach (Match m in Mention().Matches(parle))
             {
-                if (m.Groups["sep"].Value.StartsWith('/')
-                    && (OperateurAvant().IsMatch(parle[..m.Index])
-                        || OperateurApres().IsMatch(parle[(m.Index + m.Length)..])))
+                var avant = parle[..m.Index];
+                var apres = parle[(m.Index + m.Length)..];
+                var debutProposition = Math.Max(finPrecedente, avant.LastIndexOfAny(['.', '!', '?', ';', ',', ':', '\n']) + 1);
+                var proposition = avant[debutProposition..];
+                var finPrecedenteAvant = finPrecedente;
+                finPrecedente = m.Index + m.Length;
+
+                if (m.Groups["sep"].Value.StartsWith('/') && (OperateurAvant().IsMatch(avant) || OperateurApres().IsMatch(apres)))
                     continue;
+                if (MotOperateurAvant().IsMatch(avant) || MotOperateurApres().IsMatch(apres)) continue;
+                if (AutreNote().IsMatch(proposition)) continue;
+
+                // Toute la phrase compte pour une mention qui n'est pas introduite (« Au contrôle de classe, 8 sur 20. »,
+                // « Avec 12 et 14 sur 20, ta moyenne est de 13 ») ; seule sa proposition pour « … tu avais 9 sur 20,
+                // aujourd'hui tu as 15 sur 20 » ou « tu as 15 sur 20, ta moyenne monte à 14 ».
+                var introduite = Introduite().IsMatch(avant[Math.Max(0, avant.Length - 40)..]);
+                if (!introduite)
+                {
+                    var debutPhrase = Math.Max(finPrecedenteAvant, avant.LastIndexOfAny(['.', '!', '?', ';', '\n']) + 1);
+                    var finDePhrase = apres.IndexOfAny(['.', '!', '?', ';', '\n']);
+                    if (AutreNote().IsMatch(avant[debutPhrase..]) || AutreNote().IsMatch(finDePhrase < 0 ? apres : apres[..finDePhrase]))
+                        continue;
+                }
 
                 if (Valeur(m.Groups["nombre"].Value) is not double valeur) continue;
+                if (m.Groups["decimale"].Success)
+                {
+                    if (m.Groups["nombre"].Value.Contains(',') || m.Groups["nombre"].Value.Contains('.')) continue;
+                    valeur += Decimale(m.Groups["decimale"].Value);
+                }
                 if (m.Groups["demi"].Success) valeur += 0.5;
                 if (valeur is < 0 or > 20) continue;
 
-                return valeur;
+                lues.Add((valeur, introduite));
             }
 
-            return null;
+            return lues;
+        }
+
+        /// <summary>« virgule cinq » = 0,5 ; « virgule 3 » = 0,3 ; « virgule vingt-cinq » = 0,25 ; « virgule 50 » = 0,5.</summary>
+        private static double Decimale(string brut)
+        {
+            var chiffres = brut.Trim().ToLowerInvariant() switch
+            {
+                "zéro" or "zero" => "0", "un" or "une" => "1", "deux" => "2", "trois" => "3", "quatre" => "4",
+                "cinq" or "cinquante" => "5", "six" => "6", "sept" => "7", "huit" => "8", "neuf" => "9",
+                "vingt-cinq" => "25", "soixante-quinze" => "75", var autre => autre,
+            };
+            return double.TryParse("0." + chiffres, NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out var d) ? d : 0;
         }
 
         /// <summary>
@@ -109,7 +197,10 @@ namespace SchoolWebApp.Api.Services
             dite = Lire(message);
             if (dite is null) return null;
 
-            if (Math.Abs(dite.Value - copie.Value) < Ecart - 1e-9) return null;
+            // #75 v2 (Omar point B.3) : aucune rectification si UNE des notes lues vaut celle de la copie (« La dernière
+            // fois 9 sur 20, aujourd'hui 15 sur 20 » pour une copie à 15) — on ne corrige que ce qui est sûrement faux.
+            var noteCopie = copie.Value;
+            if (Lectures(message).Any(l => Math.Abs(l.Valeur - noteCopie) < Ecart - 1e-9)) return null;
 
             // LA QUESTION RESTE LA DERNIÈRE CHOSE DITE. Relevé dans le message réel du #75 : le professeur rend la note,
             // commence la correction et finit sur une question (« … et l'autre, à ton avis, placée où ? »). La phrase
@@ -135,6 +226,10 @@ namespace SchoolWebApp.Api.Services
             var debut = DebutDePhrase(parle, fin - 1);
             var question = parle[debut..fin].Trim();
             if (question.Length == 0) return null;
+
+            // #75 v2 (Omar point B.5) : une question qui contient elle-même une note (« Tu as 11 sur 20, tu veux qu'on
+            // reprenne la question 3 ? ») n'est pas reposée : elle redirait la note fausse juste après la rectification.
+            if (Mention().IsMatch(question)) return null;
 
             if (question.Length < 80 && debut > 0 && parle[debut - 1] != '\n')
             {
@@ -169,7 +264,13 @@ namespace SchoolWebApp.Api.Services
             return Ardoise().Replace(parle, " ");
         }
 
-        [GeneratedRegex(@"\[/?[A-Z_]+(?::[^\]]*)?\]")]
+        /// <summary>
+        /// Les balises CONNUES de l'application, et elles seules (#75 v2, Omar point B.2) : la v1 effaçait tout
+        /// « [MAJUSCULES] », dont la concentration « [A] » de la question reposée (« calcule [A] à t = 20 s ? » devenait
+        /// « calcule à t = 20 s ? », 3 fois sur 10 au corpus). Une balise de l'application a un nom à tiret bas
+        /// (SUPPORT_EVALUATION, TABLEAU_EFFACE, FIN_SEANCE, LECTURE_IMAGE:…) ou est l'une des balises d'un mot ci-dessous.
+        /// </summary>
+        [GeneratedRegex(@"\[/?(?:[A-Z]+(?:_[A-Z]+)+|EVALUATION|RAPPORT|FICHE|ARDOISE|DICTEE|FIGURE|FR|EN)(?::[^\]]*)?\]")]
         private static partial Regex Balise();
 
         /// <summary>
