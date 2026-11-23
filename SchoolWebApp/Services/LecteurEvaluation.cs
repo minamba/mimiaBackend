@@ -369,12 +369,28 @@ namespace SchoolWebApp.Api.Services
         /// <see cref="DebutDePhrase"/> accepte en plus le prénom en apostrophe (« Très bien,
         /// Adam, première question : »), « Et voici la », « Commençons par la » et
         /// « Allez c'est parti, » sans virgule après « Allez ».
+        ///
+        /// #68 v7 (Omar, verdict sur 6ef6e24) :
+        /// - « Question 1 : » et « (la) première question : » suivis de l'énoncé valent
+        ///   partout, AU PRÉSENT seulement : jamais après un futur, un conditionnel ou
+        ///   « vais te + infinitif » (<see cref="PasAuFutur"/> : « Je vais te poser la
+        ///   question 1 : elle portera sur k. », « Ensuite, je te poserai la question 1 : »),
+        ///   ni juste après un mot de discours (<see cref="PasApresMotDeDiscours"/> :
+        ///   « Attention, première question : », « Rappel, … »), ni après « pour / de / sur /
+        ///   dans / en la » (une correction : « Pour la première question : tu avais… »).
+        ///   Rattrape « Je te pose la première question : », « Voici donc la première
+        ///   question : », « Pour commencer, première question : », « On y va. La première
+        ///   question : ».
+        /// - Le prénom en apostrophe de <see cref="DebutDePhrase"/> n'accepte plus les mots
+        ///   de discours (« Attention, », « Consigne, »…) et accepte les prénoms composés
+        ///   (« Jean-Pierre, »).
         /// </summary>
-        [GeneratedRegex(@"\bQuestion\s*(?:n°\s*|numéro\s*)?(?:1|un|une)\b\**[ \t]*:"
-            + @"|" + ApresVerbeDeLancement + @"\bQuestion\s*(?:n°\s*|numéro\s*)?(?:1|un|une)\b\**(?:\s*[.)\-–—]|\s+sur\s+(?:\d+|deux|trois|quatre|cinq)\b)"
+        [GeneratedRegex(PasAuFutur + PasApresMotDeDiscours + PasApresPreposition + @"\bQuestion\s*(?:n°\s*|numéro\s*)?(?:1|un|une)\b\**[ \t]*:"
+            + @"|" + PasAuFutur + PasApresMotDeDiscours + PasApresPreposition + @"\bpremière\s+question\b\**[ \t]*:"
+            + @"|" + ApresVerbeDeLancement + PasAuFutur + @"\bQuestion\s*(?:n°\s*|numéro\s*)?(?:1|un|une)\b\**(?:\s*[.)\-–—]|\s+sur\s+(?:\d+|deux|trois|quatre|cinq)\b)"
             + @"|" + DebutDePhrase + @"\bQuestion\s*(?:n°\s*|numéro\s*)?(?:1|un|une)\b\**[ \t]*\**[ \t]*\r?$"
             + @"|" + DebutDePhrase + @"\bPremière\s+question\b\**(?:\s*[:.,!\-–—]|[ \t]*\r?$)"
-            + @"|\bQ\s?1\s*[:.)\-–—]"
+            + @"|" + PasAuFutur + @"\bQ\s?1\s*[:.)\-–—]"
             + @"|^[ \t]*\**1[.)]\**[ \t]+\S",
             RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Multiline)]
         private static partial Regex PremiereQuestion();
@@ -394,13 +410,59 @@ namespace SchoolWebApp.Api.Services
         /// « Commençons / On commence / On attaque par (avec) la ». Ces mots ne
         /// déclenchent rien seuls : il faut encore « Première question » ou
         /// « Question 1 » suivis d'une ponctuation ou d'une fin de ligne.
+        ///
+        /// #68 v7 (Omar point 2) : le prénom n'est plus « n'importe quel mot à majuscule » —
+        /// les mots de discours (<see cref="MotsDeDiscours"/> : « Attention, », « Rappel, »,
+        /// « Consigne, », « Ensuite, »…) et de correction (« Bravo, », « Merci, », « Oui, »)
+        /// sont exclus ; les prénoms composés passent (« Jean-Pierre, », « Marie-Ève, »).
         /// </summary>
         private const string DebutDePhrase =
             @"(?<=(?:^|[.!?…:;]|[\p{So}\p{Cs}])[ \t]*(?:[*_#>]+[ \t]*){0,3}(?:[\p{So}\p{Cs}]+[ \t]*)?"
             + @"(?:(?:et|allez|alors|bon|bien|donc|ok|okay|parfait|super|très\s+bien|c['’]est\s+parti|go)[ \t]*[,!]*[ \t]*){0,3}"
-            + @"(?:(?-i:\p{Lu}[\p{Ll}'’\-]+)[ \t]*,[ \t]*)?"
+            + @"(?:(?-i:\p{Lu}\p{Ll}*(?:['’\-]\p{Lu}?\p{Ll}+)*)(?<!\b(?:" + MotsDeDiscours + @"|merci|oui|non|désolée?|pardon|raté|correct|incorrect|perdu))[ \t]*,[ \t]*)?"
             + @"(?:(?:voici|voilà)[ \t]+(?:la|ta|ma)[ \t]+|c['’]est[ \t]+parti[ \t]+pour[ \t]+(?:la|ta)[ \t]+"
             + @"|(?:commençons|démarrons|attaquons|on[ \t]+(?:commence|démarre|attaque))[ \t]+(?:par|avec)[ \t]+(?:la|ta)[ \t]+)?)";
+
+        /// <summary>
+        /// Les mots de discours qui ne sont ni un prénom ni un départ (#68 v7, Omar point 2) :
+        /// « Attention, première question : … », « Rappel, … », « Consigne, … » annoncent une
+        /// remarque, pas le top départ ; « Bravo, », « Juste, », « Faux, » corrigent.
+        /// </summary>
+        private const string MotsDeDiscours =
+            @"attention|rappel|consigne|remarque|ensuite|puis|enfin|note|nb|important|astuce|conseil|indice|correction"
+            + @"|rectification|exemple|bravo|exact|juste|faux|presque|dommage|bref|sinon|rappelle-toi|souviens-toi";
+
+        /// <summary>Pas juste après un mot de discours (« Attention, première question : »), article compris.</summary>
+        private const string PasApresMotDeDiscours =
+            @"(?<!\b(?:" + MotsDeDiscours + @")[ \t]*[,:;!]?[ \t]*(?:(?:la|ta|ma|une|cette)[ \t]+)?)";
+
+        /// <summary>
+        /// Pas après « pour / de / sur / dans / en / sauf la » (#68 v7) : « Pour la première
+        /// question : tu avais oublié l'unité » parle d'une question passée. « C'est parti pour
+        /// la question 1 : » reste un départ.
+        /// </summary>
+        private const string PasApresPreposition =
+            @"(?<!(?:\b(?:de|sur|dans|en|sauf)|(?<!\bparti[ \t]+)\bpour)[ \t]+(?:la|ta|ma|cette)[ \t]+)";
+
+        /// <summary>
+        /// Pas après un FUTUR, un CONDITIONNEL ou « aller + infinitif » (#68 v7, Omar point 1) :
+        /// « Je vais te poser la question 1 : elle portera sur k. », « Ensuite, je te poserai la
+        /// question 1 : », « Dans un instant, je te donnerai la question 1 : », « Tout à l'heure,
+        /// je t'enverrai la question 1 : » annoncent la question, ils ne la posent pas — même avec
+        /// les deux-points. Futur et conditionnel reconnus à leur terminaison (-rai, -ras, -ra,
+        /// -erons/-irons, -erez/-irez, -ront, -rais, -rait, -rions, -riez, -raient), suivis ou non
+        /// d'un infinitif (« je voudrais te poser la »), au plus un adverbe (« ensuite »,
+        /// « tout de suite »), puis « (à / par / avec) la (ta, ma, une, cette) ». Le présent
+        /// (« Je te pose la question 1 : calcule k. ») n'est pas touché.
+        /// </summary>
+        private const string PasAuFutur =
+            @"(?<!\b(?:(?:vais|vas|va|allons|allez|vont|" + Futur + @")[ \t]+(?:(?:te|me|lui|vous|nous|leur)[ \t]+|[tm]['’])?\p{L}+(?:er|ir|re|oir)"
+            + @"|" + Futur + @")"
+            + @"(?:[ \t]+(?:ensuite|après|bientôt|alors|donc|maintenant|d['’]abord|tout[ \t]+de[ \t]+suite|tout[ \t]+à[ \t]+l['’]heure|plus[ \t]+tard|juste[ \t]+après))?"
+            + @"[ \t]+(?:(?:à|par|avec)[ \t]+)?(?:la|ta|ma|une|cette)[ \t]+)";
+
+        /// <summary>Un verbe au futur ou au conditionnel, reconnu à sa terminaison.</summary>
+        private const string Futur = @"\p{L}+(?:rai|ras|ra|ront|erons|irons|erez|irez|rais|rait|rions|riez|raient)";
 
         /// <summary>
         /// Pas juste après un verbe qui ANNONCE la question (#68 v5) : « Tu me fais
