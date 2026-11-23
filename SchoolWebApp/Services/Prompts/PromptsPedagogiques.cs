@@ -3415,14 +3415,18 @@ namespace SchoolWebApp.Api.Services.Prompts
         /// </summary>
         /// <summary>
         /// #68 v5 (Omar point 2, gEO3-3) : au top départ, la première question s'appelle
-        /// « Question 1 » — les exercices faits avant dans la séance ne comptent pas.
+        /// « Question 1 » — la numérotation repart à 1. Variante ÉTROITE, mesurée en parallèle
+        /// (EO3 ×12 par bras, même heure, banc v5) contre « … même si vous avez fait d'autres
+        /// exercices juste avant » : celle-ci avait 1 dérive sur 25 après le choix du support
+        /// (le prof reparti sur « Dernière question d'application », v5EO3a-3), l'étroite 0 sur 11,
+        /// le témoin sans phrase (b87b596) 0 sur 24 ; « Question 1 » au top départ : 100 % partout.
+        /// Écart non significatif, mais la phrase longue amorce plausiblement l'« exercice » : on
+        /// garde l'étroite (code = variante mesurée au mot près).
         /// Le code tient la suite : une note qui compte moins de questions que l'annonce
         /// (jamais moins de trois) est refusée (LecteurEvaluation.FiltreNoteEcourtee).
         /// </summary>
         public const string NumerotationDuControle =
-            "Au top départ, la numérotation repart à 1 : ta première question "
-            + "s'appelle « Question 1 », même si vous avez fait d'autres exercices "
-            + "juste avant. ";
+            "Au top départ, ta première question s'appelle « Question 1 ». ";
 
         private static string ConsigneDEvaluation(int secondes, bool evaluationEnCours, bool evaluationEngagee)
         {
