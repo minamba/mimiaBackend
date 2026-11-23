@@ -272,6 +272,48 @@ namespace SchoolWebApp.Api.Services
             return false;
         }
 
+        /// <summary>
+        /// L'évaluation est-elle ENGAGÉE sans être encore ouverte ?
+        ///
+        /// Signalement #68, deuxième temps (Omar, 23/11/2026) : entre le « oui »
+        /// de l'élève et le top départ, il y a deux ou trois tours (choix du
+        /// support, consignes, « je suis prêt »). `EstOuvert` reste faux
+        /// pendant tout ce temps, et le minuteur redisait « PAS de nouvelle
+        /// évaluation » à chacun : le professeur pouvait encore la retirer.
+        ///
+        /// Engagée = depuis la dernière évaluation rendue, abandonnée,
+        /// reportée ou ouverte, le professeur a posé [SUPPORT_EVALUATION], ou
+        /// l'élève a répondu au choix du support (le fait joint par l'écran,
+        /// « [ÉVALUATION AU CAHIER … » / « [ÉVALUATION À L'ORDINATEUR … »).
+        /// On lit TOUT le fil (les deux rôles), du plus récent au plus ancien,
+        /// et on s'arrête au premier marqueur. Une ouverture ([DEBUT_EVALUATION])
+        /// rend faux : c'est alors `EstOuvert` qui prend le relais.
+        /// </summary>
+        public static bool EstEngagee(IEnumerable<string?> messagesDuFil)
+        {
+            foreach (var message in messagesDuFil.Reverse())
+            {
+                if (string.IsNullOrEmpty(message)) continue;
+
+                if (message.Contains(Abandon, StringComparison.Ordinal)) return false;
+                if (message.Contains("[/EVALUATION]", StringComparison.OrdinalIgnoreCase)) return false;
+                if (message.Contains(Debut, StringComparison.Ordinal)) return false;
+                // Reportée au prochain cours : l'engagement est levé.
+                if (message.Contains("[EVALUATION_PREVUE]", StringComparison.OrdinalIgnoreCase)) return false;
+
+                if (message.Contains(BaliseSupport, StringComparison.OrdinalIgnoreCase)) return true;
+                if (message.Contains("[ÉVALUATION AU CAHIER", StringComparison.Ordinal)
+                    || message.Contains("[ÉVALUATION À L’ORDINATEUR", StringComparison.Ordinal)
+                    || message.Contains("[ÉVALUATION À L'ORDINATEUR", StringComparison.Ordinal))
+                    return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>La balise du choix du support (deux boutons à l'écran).</summary>
+        public const string BaliseSupport = "[SUPPORT_EVALUATION]";
+
         /// <summary>Retire le bloc et le marqueur d'ouverture. Sert aux relectures d'historique.</summary>
         public static string Retirer(string? message) =>
             LecteurBloc.Retirer(message, Bloc(), Debut);

@@ -338,11 +338,14 @@ namespace SchoolWebApp.Api.Services.Prompts
             Quatre questions font donc une dizaine de minutes, six en font
             près d'un quart d'heure.
 
-            Il te faut ce temps EN ENTIER devant toi. Une évaluation commencée
-            trop tard est pire que pas d'évaluation du tout : l'élève est
-            interrompu au milieu, la note ne veut plus rien dire, et il garde
-            le souvenir d'un exercice raté alors qu'il a simplement manqué de
-            temps.
+            Il te faut ce temps EN ENTIER devant toi pour la PROPOSER. Une
+            évaluation proposée trop tard est pire que pas d'évaluation du
+            tout : l'élève est interrompu au milieu, la note ne veut plus rien
+            dire, et il garde le souvenir d'un exercice raté alors qu'il a
+            simplement manqué de temps. Une seule exception, qui n'en est pas
+            une : l'évaluation déjà proposée et acceptée (voir plus bas) — elle
+            a été proposée à temps, et c'est le minuteur qui te dit comment la
+            mener.
 
             Le minuteur t'annonce le temps restant à CHAQUE message de l'élève.
             Lis-le avant de proposer quoi que ce soit : sous douze minutes, tu
@@ -352,8 +355,10 @@ namespace SchoolWebApp.Api.Services.Prompts
             te réponde.
 
             Une évaluation que tu as proposée, tu la tiens : s'il te répond
-            oui, tu la lances, sans revenir dessus. Le minuteur te dit, au tour
-            de sa réponse, comment la faire tenir dans le temps qui reste.
+            oui, tu l'engages, avec son déroulé habituel (choix du support,
+            puis le top départ quand il est prêt), sans revenir dessus, et tu
+            la mènes jusqu'à la note. Le minuteur te dit, à chaque tour,
+            combien de questions elle compte.
             Proposer puis se dédire pour une affaire de secondes déroute
             l'élève plus que tout.
 
@@ -3188,8 +3193,13 @@ namespace SchoolWebApp.Api.Services.Prompts
         /// Nom distinct, et non une surcharge de <see cref="MarqueurTemps"/> :
         /// des harnais lisent cette méthode par réflexion (`GetMethod(nom)`),
         /// qu'une seconde signature du même nom rendrait ambiguë.
+        ///
+        /// `evaluationEngagee` (#68 v2) : l'état « évaluation ENGAGÉE » calculé
+        /// par le code (<see cref="LecteurEvaluation.EstEngagee"/>) — support
+        /// demandé ou choisi, pas encore de top départ. Paramètre optionnel, et
+        /// toujours pas de surcharge : une seule méthode de ce nom.
         /// </summary>
-        public static string MarqueurTempsDuTour(int secondes, string? cycle, int age, bool evaluationEnCours)
+        public static string MarqueurTempsDuTour(int secondes, string? cycle, int age, bool evaluationEnCours, bool evaluationEngagee = false)
         {
             var lisible = secondes >= 60
                 ? $"{secondes / 60} min{(secondes % 60 >= 10 ? $" {secondes % 60}" : "")}"
@@ -3210,6 +3220,23 @@ namespace SchoolWebApp.Api.Services.Prompts
                     + "une salutation courte suffit, deux phrases au plus. Tu ne "
                     + "redis pas ce qu'il a retenu, tu ne réannonces pas la "
                     + "prochaine séance — c'est déjà écrit juste au-dessus.",
+
+                // UN CONTRÔLE OUVERT NE SE COUPE PAS AU BILAN (#68 v2, Omar point 5).
+                // Une évaluation tenue jusqu'au bout peut entrer dans les quatre-
+                // vingt-dix dernières secondes avant la note. Le bilan de séance,
+                // ici, la coupait. L'écran, lui, la laisse finir : le dépassement
+                // accordé à un contrôle ouvert (school_ia, Chat.js, `depassement`,
+                // RAB_AVERTISSEMENT 10 min puis RAB_MAXIMUM 12 min, annonces
+                // « cloture-proche » / « cloture-forcee »). Le minuteur dit donc
+                // la même chose que l'écran.
+                <= DerniereLigneDroite when evaluationEnCours =>
+                    "Un contrôle noté est OUVERT : il continue jusqu'à sa note. "
+                    + "Si l'heure passe, l'écran lui laisse le temps de finir "
+                    + "(un dépassement est prévu pour un contrôle en cours). Pas "
+                    + "de bilan de séance, pas d'au revoir, et pas un mot sur le "
+                    + "temps qui manque : tu poses la question suivante, ou, s'il "
+                    + "a répondu à la dernière, tu rends sa note avec le bloc "
+                    + "[EVALUATION].",
 
                 <= DerniereLigneDroite =>
                     "Trop court pour une question de plus : elle resterait sans "
@@ -3282,8 +3309,10 @@ namespace SchoolWebApp.Api.Services.Prompts
                     + "trois à quatre, une question courte une seule. Ne "
                     + "commence rien que le minuteur viendra couper : l'élève "
                     + "garderait le souvenir d'un exercice raté alors qu'il a "
-                    + "simplement manqué de temps.\n"
-                    + ConsigneDEvaluation(secondes, lisible, evaluationEnCours)
+                    + "simplement manqué de temps. Sauf une évaluation déjà "
+                    + "proposée et acceptée : celle-là, tu la mènes à son terme "
+                    + "(voir ci-dessous).\n"
+                    + ConsigneDEvaluation(secondes, evaluationEnCours, evaluationEngagee)
                     + "Si tu as déjà dit au revoir plus tôt dans la séance, "
                     + "c'était une erreur : ne la répète pas.\n"
                     // L'exception, sans laquelle cette consigne se retourne contre
@@ -3351,9 +3380,33 @@ namespace SchoolWebApp.Api.Services.Prompts
         /// son propre message sous les yeux, et c'est lui qui sait s'il vient
         /// de proposer. La consigne lui dit seulement quoi faire dans ce cas.
         /// </summary>
-        private static string ConsigneDEvaluation(int secondes, string lisible, bool evaluationEnCours)
+        private static string ConsigneDEvaluation(int secondes, bool evaluationEnCours, bool evaluationEngagee)
         {
-            if (evaluationEnCours || secondes >= SeuilPropositionEvaluation) return "";
+            if (evaluationEnCours) return "";
+
+            // ENGAGÉE, CE N'EST PLUS UNE PROPOSITION (#68 v2, Omar point 1).
+            // Le « oui » est passé, le choix du support est demandé ou fait, le
+            // top départ n'est pas encore donné. Aux tours suivants (support,
+            // consignes, « je suis prêt »), le professeur lisait encore « PAS
+            // de nouvelle évaluation » et pouvait la retirer. L'état vient du
+            // code (LecteurEvaluation.EstEngagee), pas de sa mémoire, et il n'a
+            // plus de plancher : seul le « oui » en a un (SeuilEvaluationCourte).
+            if (evaluationEngagee)
+            {
+                return "L'ÉVALUATION NOTÉE EST ENGAGÉE : tu l'as proposée, il a "
+                    + "accepté, le choix cahier ou ordinateur est demandé ou fait. "
+                    + "Tu la mènes à son terme, avec son déroulé habituel "
+                    + "(consignes, « tu es prêt ? », top départ avec "
+                    + "[DEBUT_EVALUATION], puis la note). Tu ne la reportes pas, "
+                    + "tu ne la retires pas, et tu ne dis RIEN du temps : ni qu'il "
+                    + "manque, ni qu'elle doit tenir. C'est une évaluation NOTÉE, "
+                    + "pas un entraînement."
+                    + (secondes < DureeEvaluation
+                        ? " Elle compte TROIS questions, pas quatre.\n"
+                        : "\n");
+            }
+
+            if (secondes >= SeuilPropositionEvaluation) return "";
 
             const string tenir =
                 "UNE SEULE EXCEPTION : si TON message précédent lui proposait "
@@ -3362,7 +3415,7 @@ namespace SchoolWebApp.Api.Services.Prompts
                 + "(d'abord le choix cahier ou ordinateur, puis le top départ "
                 + "quand il est prêt). Tu ne reviens pas sur ta proposition et "
                 + "tu ne lui dis pas que le temps manque : proposer puis retirer "
-                + "le déroute.";
+                + "le déroute. C'est une évaluation NOTÉE, pas un entraînement.";
 
             if (secondes >= DureeEvaluation)
             {
@@ -3373,7 +3426,8 @@ namespace SchoolWebApp.Api.Services.Prompts
                     + "passer tranquillement. "
                     + tenir
                     + " Elle tient encore en entier. De même s'il te la demande "
-                    + "lui-même : tu peux la lancer maintenant.\n";
+                    + "lui-même : tu l'engages maintenant, avec son déroulé "
+                    + "habituel.\n";
             }
 
             if (secondes >= SeuilEvaluationCourte)
@@ -3383,8 +3437,8 @@ namespace SchoolWebApp.Api.Services.Prompts
                     + "semble acquise, dis-le et donne-lui rendez-vous au prochain "
                     + "cours pour la passer tranquillement. "
                     + tenir
-                    + $" Pour qu'elle tienne dans les {lisible}, elle compte "
-                    + "TROIS questions au lieu de quatre.\n";
+                    + " Elle compte TROIS questions au lieu de quatre (ne le lui "
+                    + "présente pas comme une affaire de temps).\n";
             }
 
             return "Concrètement, à cet instant : PAS d'évaluation notée, "

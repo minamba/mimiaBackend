@@ -3986,9 +3986,16 @@ namespace SchoolWebApp.Api.Builders.impl
             {
                 // Avec l'état du contrôle : un contrôle déjà ouvert ne doit pas
                 // lire « PAS d'évaluation » dès que le compteur passe sous dix
-                // minutes (#68, voir ConsigneDEvaluation).
+                // minutes (#68, voir ConsigneDEvaluation). Ni une évaluation
+                // ENGAGÉE (support demandé ou choisi, pas encore de top départ) :
+                // c'est le code qui le sait, pas la mémoire du modèle (#68 v2).
+                // Le message de ce tour n'est pas encore dans l'historique : il
+                // compte aussi (le fait du support choisi y voyage).
+                var evaluationEngagee = !controleOuvert && LecteurEvaluation.EstEngagee(
+                    historique.Select(m => (string?)m.Contenu).Append(contenu));
                 declencheur += "\n\n" + PromptsPedagogiques.MarqueurTempsDuTour(
-                    restant, contexte.Eleve.NiveauCycle, contexte.Eleve.Age, controleOuvert);
+                    restant, contexte.Eleve.NiveauCycle, contexte.Eleve.Age, controleOuvert,
+                    evaluationEngagee);
             }
 
             Services.Voix.EtatDuMot? etatDuMot = null;
