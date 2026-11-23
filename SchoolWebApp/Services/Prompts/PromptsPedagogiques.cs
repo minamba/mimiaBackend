@@ -3497,26 +3497,26 @@ namespace SchoolWebApp.Api.Services.Prompts
         ///
         /// LA PHRASE INTERDITE, UN SEUL EXEMPLE, PUIS LE RAPPEL DE LA RÈGLE ABSOLUE (v5, mesurée au bout en bout le
         /// 23/11/2026, base de TEST, Maths, réponse exacte d'Adam « c'est a plus b égale c »). Mesure : « réponse donnée » =
-        /// formule COMPLÈTE (écrite « a² + b² = c² », dite « a au carré plus b au carré égale c au carré », ou « le carré de
-        /// l'hypoténuse est égal à la somme des carrés… ») OU formule À TROUS (« a² + b² = ? », « a au carré plus b au carré
-        /// égale… quoi ? »), comptée une fois par réponse. Deux bancs : série A (élève fictif de CP, question forcée) et
-        /// REJEU de l'historique EXACT de la conversation d'Adam (niveau 3e forcé pour le banc).
-        /// - Sans la règle (master) : série A 5 sur 64 ; rejeu 16 sur 64.
+        /// formule COMPLÈTE (écrite « a² + b² = c² », dite « a au carré, plus b au carré, égale c au carré », virgules ou
+        /// non, ou « le carré de l'hypoténuse est égal à la somme des carrés… ») OU formule À TROUS ou GABARIT (« a² + b² =
+        /// ? », « a ... + b ... = c ... », « ... + ... = ... », « ? + ? = ? »), comptée une fois par réponse. Deux bancs :
+        /// série A (élève fictif de CP, question forcée) et REJEU de l'historique EXACT de la conversation d'Adam (3e forcé).
+        /// - Sans la règle (master) : série A 8 sur 64 ; rejeu 18 sur 64 (12 sur 32 à 7 h 09, 4 sur 29 à 7 h 29).
         /// - v1 (exemple « a + b = c pour Pythagore », « dis seulement que ce n'est pas la bonne relation ») et v2 (« sans
-        ///   lui donner la bonne réponse », « sauf si c'est une règle exacte du cours ») : environ 1 fois sur 4 en série A —
-        ///   citer l'exercice ou une « règle du cours » fait énoncer la formule.
-        /// - v3 (la phrase interdite avec deux exemples, dont « c'est vrai en général, sauf ici ») : série A 13 sur 64
-        ///   (10 complètes + 3 à trous), environ 2,5 fois master ; elle faisait disparaître les « presque », remplacés par
-        ///   la formule au tableau.
-        /// - v4 (v3 + « dis-lui simplement que ce n'est pas ça, puis aide-le comme d'habitude ») : série A 5 sur 32,
+        ///   lui donner la bonne réponse », « sauf si c'est une règle exacte du cours ») : 5 et 6 sur 16 (master 3 sur 32)
+        ///   — citer l'exercice ou une « règle du cours » fait énoncer la formule.
+        /// - v3 (la phrase interdite avec deux exemples, dont « c'est vrai en général, sauf ici ») : série A 6 sur 32
+        ///   (13 sur 64 avec les 32 tirages d'Omar), rejeu 8 sur 32 ; elle faisait disparaître les « presque », remplacés
+        ///   par la formule au tableau.
+        /// - v4 (v3 + « dis-lui simplement que ce n'est pas ça, puis aide-le comme d'habitude ») : série A 6 sur 32,
         ///   rejeu 13 sur 32, et en français plus de réponses données, moins d'exceptions expliquées : rejetée.
-        /// - v5b (v3 sans l'exemple « vrai en général », sans rappel) : série A 7 sur 64, rejeu 23 sur 64 : rejetée.
-        /// - v5, RETENUE (cette constante) : série A 8 sur 64 (7 complètes + 1 à trous, 1,6 fois master), rejeu 2 sur 32
-        ///   (8 fois sur 32 avec la v3). Le rappel nomme « ta règle absolue » et « la réponse », jamais la « bonne
-        ///   réponse » ni une « règle du cours » (ce sont elles qui faisaient énoncer la formule en v2).
+        /// - v5b (v3 sans l'exemple « vrai en général », sans rappel) : série A 9 sur 65, rejeu 24 sur 64 : rejetée.
+        /// - v5, RETENUE (cette constante) : série A 9 sur 64 (7 complètes + 2 à trous ; master 8 sur 64), rejeu 2 sur 32
+        ///   (master à l'heure la plus proche : 4 sur 29). Réduction de risque, pas une preuve : écarts non significatifs.
+        ///   Le rappel nomme « ta règle absolue » et « la réponse », jamais la « bonne réponse » ni une « règle du cours ».
         /// L'exemple « c'est vrai en général, sauf ici » est retiré : il ressemblait à une exception JUSTE (« en général on
         /// ajoute un s, sauf les mots en -al ») qu'un professeur doit pouvoir expliquer. Mesure en français (« des chevals »
-        /// et « vous faisez », 32 tirages par version, lus à la main) : exception juste expliquée 19 fois (master 16),
+        /// et « vous faisez », 32 tirages par version, lus à la main) : exception juste expliquée 17 fois (master 16),
         /// réponse donnée 10 fois (master 12), aucune concession inventée (master 1).
         /// </summary>
         public const string RegleDesReponsesFausses =
