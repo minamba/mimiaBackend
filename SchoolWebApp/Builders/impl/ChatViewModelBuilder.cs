@@ -6604,7 +6604,7 @@ namespace SchoolWebApp.Api.Builders.impl
             return (nombre >= 2 && PlusQue().IsMatch(cle)) || DejaRetireOuVide().IsMatch(cle);
         }
 
-        [GeneratedRegex(@" (plus qu une( seule)? notion|(programme|il|elle) (ne |n )?(contient|porte|comporte|a|garde|compte) plus que|ne porte plus que|seule notion qui (te )?reste|il ne (te )?reste (plus )?que (la|le|les|l) notion) ")]
+        [GeneratedRegex(@" (plus qu une( seule)? notion|(programme|il|elle) (ne |n )?(contient|porte|comporte|a|garde|compte) plus que|ne porte plus que|seule notion qui (te )?reste|il ne (te )?reste (plus )?que (la|le|les|l) notion|(bac blanc|programme|examen|controle|il|elle) (portera|porte|portent|porteront) (donc )?(uniquement|seulement) sur) ")]
         private static partial Regex PlusQue();
 
         [GeneratedRegex(@" (deja (ete )?(retire|retiree|retirees|retires|ecarte|ecartee|ecartees|ecartes|enleve|enlevee|enlevees|enleves|supprime|supprimee|supprimees)|plus rien (a reviser|dans ton programme|au programme|a retirer)|programme (est )?vide) ")]
