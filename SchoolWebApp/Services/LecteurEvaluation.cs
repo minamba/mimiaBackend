@@ -292,7 +292,8 @@ namespace SchoolWebApp.Api.Services
         /// #68 v3 (Omar point 3) — L'ENGAGEMENT SE LÈVE AUSSI :
         /// - si l'élève y renonce lui-même : le professeur la reporte avec le
         ///   bloc [EVALUATION_PREVUE] (la sortie balisée, déjà lue ci-dessous) ;
-        /// - si la séance se termine ([FIN_SEANCE] ou [RAPPORT]) ;
+        /// - si la séance se termine ([FIN_SEANCE] ou [RAPPORT]), ou si une
+        ///   nouvelle séance a commencé ([TABLEAU_EFFACE], #68 v4) ;
         /// - s'il n'y a pas eu de top départ en <see cref="ToursSansTopDepart"/>
         ///   réponses du professeur après le marqueur : le fil a changé de
         ///   sujet, la consigne « tu la mènes à son terme » n'a plus d'objet.
@@ -321,6 +322,13 @@ namespace SchoolWebApp.Api.Services
                     || message.Contains("[ÉVALUATION À L'ORDINATEUR", StringComparison.Ordinal))
                     return distance < 2 * ToursSansTopDepart;
 
+                // Nouvelle séance (#68 v4, Omar point 4) : le premier message
+                // d'une reprise commence par [TABLEAU_EFFACE] (voir le builder,
+                // `TableauEfface`). Ce qui était engagé avant est derrière nous.
+                // Testé APRÈS le support : un choix fait dans ce même message
+                // vient après l'effacement, il compte.
+                if (message.Contains("[TABLEAU_EFFACE]", StringComparison.Ordinal)) return false;
+
                 distance++;
             }
 
@@ -337,12 +345,41 @@ namespace SchoolWebApp.Api.Services
         public const int ToursSansTopDepart = 4;
 
         /// <summary>
-        /// La première question d'un contrôle, écrite comme telle (« Question 1 : »,
-        /// « **Question 1** — », « Première question : », « Q1 : »).
+        /// La première question d'un contrôle, écrite comme telle : « Question 1 : »,
+        /// « **Question 1** — », « Question 1. », « Question un. », « Question 1 sur 3 »,
+        /// « Question 1 » seule sur sa ligne, « Première question. / , / : »,
+        /// « Q1 : », ou une ligne qui commence par « 1. » / « 1) ».
+        /// Pas « Question 12 », ni « la question 1 de tout à l'heure », ni « les
+        /// questions une par une ».
         /// </summary>
-        [GeneratedRegex(@"(?:\bQuestion\s*(?:n°\s*)?(?:1|une)\b\**\s*[:.)\-–—]|\bPremière\s+question\**\s*[:\-–—]|\bQ\s?1\s*[:.)\-–—])",
-            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+        [GeneratedRegex(@"(?:\bQuestion\s*(?:n°\s*|numéro\s*)?(?:1|un|une)\b\**(?:\s*[:.)\-–—]|\s+sur\s+(?:\d+|deux|trois|quatre|cinq)\b|[ \t]*\**[ \t]*\r?$)"
+            + @"|\bPremière\s+question\b\**(?:\s*[:.,!\-–—]|[ \t]*\r?$)"
+            + @"|\bQ\s?1\s*[:.)\-–—]"
+            + @"|^[ \t]*\**1[.)]\**[ \t]+\S)",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Multiline)]
         private static partial Regex PremiereQuestion();
+
+        /// <summary>
+        /// La réponse attend ENCORE le « prêt » de l'élève : c'est un aperçu du
+        /// sujet, pas le top départ (#68 v4, Omar point 1 : « Tu es prêt ? »,
+        /// « Dis-moi quand tu es prêt à démarrer, et je lance le chrono »).
+        /// </summary>
+        [GeneratedRegex(@"\bprête?s?\s*(?:à\s+(?:démarrer|commencer|te\s+lancer|y\s+aller|partir)\s*)?\?"
+            + @"|\b(?:quand|dès\s+que|lorsque|si)\s+tu\s+(?:es|seras|te\s+sens)\s+prête?\b"
+            + @"|\b(?:et|puis)\s+je\s+lance(?:rai)?\s+le\s+chrono",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+        private static partial Regex AttendLePret();
+
+        /// <summary>
+        /// … sauf si elle lui laisse, à la place, répondre tout de suite (« Tu me
+        /// dis quand tu es prêt, OU tu réponds directement », wEO3-1 t2) : la
+        /// question est posée et il peut y répondre, c'est parti. Le « ou » est
+        /// exigé : « tu réponds directement ici » est une consigne (répondre à
+        /// l'écran), pas un départ (bEO-2, bEO-5, bSO-7, bTO-2, bTO2-1 t2).
+        /// </summary>
+        [GeneratedRegex(@"\bou\s+(?:alors\s+)?(?:tu\s+(?:me\s+)?)?réponds(?:-moi)?\s+(?:directement|tout\s+de\s+suite)|\bou\s+(?:alors\s+)?tu\s+peux\s+(?:déjà\s+|directement\s+)?(?:me\s+)?répondre",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+        private static partial Regex InviteARepondre();
 
         /// <summary>
         /// LE FILET DU TOP DÉPART — #68 v3, Omar point 2 : 3 parcours sur 45 à
@@ -352,11 +389,32 @@ namespace SchoolWebApp.Api.Services
         /// contrôle, pas de note). Même patron que le filet de la copie de
         /// contrôle : quand l'évaluation est ENGAGÉE et que la réponse pose la
         /// première question sans la balise, le code l'écrit pour lui.
+        ///
+        /// #68 v4 (Omar, rejeu sur tout le corpus des bancs v2/v3) :
+        /// - pas de filet tant que la réponse attend le « prêt » (aperçu du
+        ///   sujet) : sinon le contrôle s'ouvrait, et « Je suis prêt. » était
+        ///   noté comme la réponse à la question 1 (10 aperçus sur le corpus) ;
+        /// - le texte du bloc [EVALUATION] ne compte pas (« q1: » d'une note,
+        ///   vEC-1 t4), et une réponse qui clôt (note, report, abandon, fin de
+        ///   séance) n'est jamais un top départ ;
+        /// - le motif reconnaît aussi « Question 1 sur 3 », « Première
+        ///   question. », « Question 1 » seule sur sa ligne et « 1. … ».
         /// </summary>
-        public static bool TopDepartSansBalise(string? reponse) =>
-            !string.IsNullOrEmpty(reponse)
-            && !reponse.Contains(Debut, StringComparison.Ordinal)
-            && PremiereQuestion().IsMatch(reponse);
+        public static bool TopDepartSansBalise(string? reponse)
+        {
+            if (string.IsNullOrEmpty(reponse) || reponse.Contains(Debut, StringComparison.Ordinal)) return false;
+
+            if (reponse.Contains(Abandon, StringComparison.Ordinal)
+                || reponse.Contains("[EVALUATION_PREVUE]", StringComparison.OrdinalIgnoreCase)
+                || reponse.Contains("[FIN_SEANCE]", StringComparison.Ordinal)
+                || reponse.Contains("[RAPPORT]", StringComparison.OrdinalIgnoreCase)) return false;
+
+            var texte = Bloc().Replace(reponse, string.Empty);
+
+            if (AttendLePret().IsMatch(texte) && !InviteARepondre().IsMatch(texte)) return false;
+
+            return PremiereQuestion().IsMatch(texte);
+        }
 
         /// <summary>La balise du choix du support (deux boutons à l'écran).</summary>
         public const string BaliseSupport = "[SUPPORT_EVALUATION]";

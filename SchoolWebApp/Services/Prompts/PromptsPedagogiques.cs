@@ -3230,6 +3230,9 @@ namespace SchoolWebApp.Api.Services.Prompts
                 // RAB_AVERTISSEMENT 10 min puis RAB_MAXIMUM 12 min, annonces
                 // « cloture-proche » / « cloture-forcee »). Le minuteur dit donc
                 // la même chose que l'écran.
+                // #68 v4 (Omar point 5, fG80-4 t5 : « On en reste là pour cette
+                // évaluation, le temps est écoulé » dans la note, après 3/3) :
+                // la tournure est nommée et interdite, note comprise.
                 <= DerniereLigneDroite when evaluationEnCours =>
                     "Un contrôle noté est OUVERT : il continue jusqu'à sa note. "
                     + "Si l'heure passe, l'écran lui laisse le temps de finir "
@@ -3242,7 +3245,9 @@ namespace SchoolWebApp.Api.Services.Prompts
                     + "elle arrive, tu rends sa note avec le bloc [EVALUATION]. "
                     + "Toutes les questions annoncées comptent : tu n'en retires "
                     + "aucune pour le temps, et jamais moins de trois questions "
-                    + "avant la note.",
+                    + "avant la note. Même en rendant la note, tu ne dis ni « le "
+                    + "temps est écoulé », ni « on en reste là » : le contrôle "
+                    + "s'est terminé parce qu'il a répondu à tout.",
 
                 // ENGAGÉE DANS LES 90 DERNIÈRES SECONDES (#68 v3, Omar point 4).
                 // Le « oui » a été tenu, le support est demandé ou choisi, et le
@@ -3422,7 +3427,8 @@ namespace SchoolWebApp.Api.Services.Prompts
                     + "n'en retires aucune, tu n'en fusionnes aucune, et tu ne "
                     + "dis RIEN du temps (ni « la dernière qu'on a le temps de "
                     + "faire », ni « il te reste une minute », ni « vu le temps "
-                    + "qui reste »). Si tu n'as pas annoncé leur nombre : jamais "
+                    + "qui reste », ni, en rendant la note, « le temps est écoulé » "
+                    + "ou « on en reste là »). Si tu n'as pas annoncé leur nombre : jamais "
                     + "moins de trois questions avant la note. Si l'heure passe, "
                     + "l'écran lui laisse le temps de finir.\n";
             }
