@@ -3495,18 +3495,34 @@ namespace SchoolWebApp.Api.Services.Prompts
         /// on n'y dit pas si c'est juste ou faux. Sans aucun nombre (un nombre cité dans une consigne est recopié).
         /// Elle ne touche ni au verdict ni à l'aide qui suit : seulement à la phrase qui accorde un cas inventé.
         ///
-        /// SANS EXEMPLE TIRÉ D'UN EXERCICE, ET AVEC « SANS LUI DONNER LA BONNE RÉPONSE » (mesuré au bout en bout le
-        /// 23/11/2026, scénario exact d'Adam) : une première version citait l'exemple « a + b = c pour Pythagore » et
-        /// finissait par « dis seulement que ce n'est pas la bonne relation ». Résultat : la formule juste écrite au
-        /// tableau 5 fois sur 16 (0 sur 16 sans la règle) — l'exemple amorçait la bonne réponse. Une deuxième version,
-        /// sans exemple mais avec « sans lui donner la bonne réponse » et « sauf si c'est une règle exacte du cours »,
-        /// faisait pareil (5 sur 16) : parler de « bonne réponse » et de « règle du cours » pousse le modèle à les
-        /// énoncer. La règle ne parle donc QUE de la phrase interdite, sans citer d'exercice ni de réponse.
+        /// LA PHRASE INTERDITE, UN SEUL EXEMPLE, PUIS LE RAPPEL DE LA RÈGLE ABSOLUE (v5, mesurée au bout en bout le
+        /// 23/11/2026, base de TEST, Maths, réponse exacte d'Adam « c'est a plus b égale c »). Mesure : « réponse donnée » =
+        /// formule COMPLÈTE (écrite « a² + b² = c² », dite « a au carré plus b au carré égale c au carré », ou « le carré de
+        /// l'hypoténuse est égal à la somme des carrés… ») OU formule À TROUS (« a² + b² = ? », « a au carré plus b au carré
+        /// égale… quoi ? »), comptée une fois par réponse. Deux bancs : série A (élève fictif de CP, question forcée) et
+        /// REJEU de l'historique EXACT de la conversation d'Adam (niveau 3e forcé pour le banc).
+        /// - Sans la règle (master) : série A 5 sur 64 ; rejeu 16 sur 64.
+        /// - v1 (exemple « a + b = c pour Pythagore », « dis seulement que ce n'est pas la bonne relation ») et v2 (« sans
+        ///   lui donner la bonne réponse », « sauf si c'est une règle exacte du cours ») : environ 1 fois sur 4 en série A —
+        ///   citer l'exercice ou une « règle du cours » fait énoncer la formule.
+        /// - v3 (la phrase interdite avec deux exemples, dont « c'est vrai en général, sauf ici ») : série A 13 sur 64
+        ///   (10 complètes + 3 à trous), environ 2,5 fois master ; elle faisait disparaître les « presque », remplacés par
+        ///   la formule au tableau.
+        /// - v4 (v3 + « dis-lui simplement que ce n'est pas ça, puis aide-le comme d'habitude ») : série A 5 sur 32,
+        ///   rejeu 13 sur 32, et en français plus de réponses données, moins d'exceptions expliquées : rejetée.
+        /// - v5b (v3 sans l'exemple « vrai en général », sans rappel) : série A 7 sur 64, rejeu 23 sur 64 : rejetée.
+        /// - v5, RETENUE (cette constante) : série A 8 sur 64 (7 complètes + 1 à trous, 1,6 fois master), rejeu 2 sur 32
+        ///   (8 fois sur 32 avec la v3). Le rappel nomme « ta règle absolue » et « la réponse », jamais la « bonne
+        ///   réponse » ni une « règle du cours » (ce sont elles qui faisaient énoncer la formule en v2).
+        /// L'exemple « c'est vrai en général, sauf ici » est retiré : il ressemblait à une exception JUSTE (« en général on
+        /// ajoute un s, sauf les mots en -al ») qu'un professeur doit pouvoir expliquer. Mesure en français (« des chevals »
+        /// et « vous faisez », 32 tirages par version, lus à la main) : exception juste expliquée 19 fois (master 16),
+        /// réponse donnée 10 fois (master 12), aucune concession inventée (master 1).
         /// </summary>
         public const string RegleDesReponsesFausses =
             "[QUAND TU LUI DIS QUE C'EST FAUX — ne prête jamais à sa réponse fausse un cas où elle serait vraie "
             + "(« ça marche pour…, mais pas pour… ») : ce cas est presque toujours inventé, et l'élève le retient. "
-            + "Dis-lui simplement que ce n'est pas ça, puis aide-le comme d'habitude, selon ta règle des essais.]";
+            + "Ce rappel ne change rien à ta règle absolue : tu ne lui donnes toujours pas la réponse.]";
 
         /// <summary>
         /// TOUTE QUESTION EST UNE PHRASE CORRECTE ET ENTIÈRE, CHEZ TOUS LES PROFESSEURS — Min's, le 21/11/2026 (Telegram,
