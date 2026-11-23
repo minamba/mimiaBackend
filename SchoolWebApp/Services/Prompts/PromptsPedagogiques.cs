@@ -3383,6 +3383,24 @@ namespace SchoolWebApp.Api.Services.Prompts
         }
 
         /// <summary>
+        /// #68 v5 (Omar point 2, gEO3-3) : au top départ, la première question s'appelle
+        /// « Question 1 » — la numérotation repart à 1. Variante ÉTROITE, mesurée en parallèle
+        /// (EO3 ×12 par bras, même heure, banc v5) contre « … même si vous avez fait d'autres
+        /// exercices juste avant » : celle-ci avait 1 dérive sur 25 après le choix du support
+        /// (le prof reparti sur « Dernière question d'application », v5EO3a-3), l'étroite 0 sur 11,
+        /// le témoin sans phrase (b87b596) 0 sur 24 ; « Question 1 » au top départ : 100 % partout.
+        /// Écart non significatif, mais la phrase longue amorce plausiblement l'« exercice » : on
+        /// garde l'étroite (code = variante mesurée au mot près).
+        /// #68 v6 (Omar, verdict sur 1d93f4b) : le garde-fou de code qui refusait une note
+        /// écourtée (v5) est RETIRÉ — après un refus, la question annoncée n'était pas posée et
+        /// la copie suivante contenait des questions inventées ou recopiées. Une copie inventée
+        /// est pire qu'une évaluation courte : seule cette numérotation par le prompt reste,
+        /// avec « toutes les questions annoncées, jamais moins de trois » de la consigne.
+        /// </summary>
+        public const string NumerotationDuControle =
+            "Au top départ, ta première question s'appelle « Question 1 ». ";
+
+        /// <summary>
         /// Ce que le minuteur dit de l'évaluation notée, selon le temps restant.
         ///
         /// PROPOSER PUIS RETIRER — signalement #68 (Adam, 23/11/2026, bac blanc
@@ -3413,21 +3431,6 @@ namespace SchoolWebApp.Api.Services.Prompts
         /// son propre message sous les yeux, et c'est lui qui sait s'il vient
         /// de proposer. La consigne lui dit seulement quoi faire dans ce cas.
         /// </summary>
-        /// <summary>
-        /// #68 v5 (Omar point 2, gEO3-3) : au top départ, la première question s'appelle
-        /// « Question 1 » — la numérotation repart à 1. Variante ÉTROITE, mesurée en parallèle
-        /// (EO3 ×12 par bras, même heure, banc v5) contre « … même si vous avez fait d'autres
-        /// exercices juste avant » : celle-ci avait 1 dérive sur 25 après le choix du support
-        /// (le prof reparti sur « Dernière question d'application », v5EO3a-3), l'étroite 0 sur 11,
-        /// le témoin sans phrase (b87b596) 0 sur 24 ; « Question 1 » au top départ : 100 % partout.
-        /// Écart non significatif, mais la phrase longue amorce plausiblement l'« exercice » : on
-        /// garde l'étroite (code = variante mesurée au mot près).
-        /// Le code tient la suite : une note qui compte moins de questions que l'annonce
-        /// (jamais moins de trois) est refusée (LecteurEvaluation.FiltreNoteEcourtee).
-        /// </summary>
-        public const string NumerotationDuControle =
-            "Au top départ, ta première question s'appelle « Question 1 ». ";
-
         private static string ConsigneDEvaluation(int secondes, bool evaluationEnCours, bool evaluationEngagee)
         {
             // UN CONTRÔLE OUVERT NE S'ÉCOURTE PAS (#68 v3, Omar point 1). Au

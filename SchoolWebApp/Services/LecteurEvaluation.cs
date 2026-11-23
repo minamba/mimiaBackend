@@ -360,8 +360,18 @@ namespace SchoolWebApp.Api.Services
         /// lance la première question »). Les formes fortes (« Question 1 : »,
         /// « Question 1 sur 3 ») valent partout, SAUF juste après « je lance /
         /// pose / donne / envoie / affiche / écris la (ta, une, cette) » (<see cref="ApresVerbeDeLancement"/>).
+        ///
+        /// #68 v6 (Omar point 3 : 15 tops départs réels vus par la v4, ratés par la v5) —
+        /// « Question 1 : » (deux-points) vaut PARTOUT, verbe de lancement compris
+        /// (« Je te pose la question 1 : calcule… », « Je t'affiche la question 1 : ») :
+        /// l'énoncé suit, c'est la question posée. Un aperçu qui attend le « prêt »
+        /// (« Je lance la question 1 : tu es prêt ? ») reste écarté par <see cref="AttendLePret"/>.
+        /// <see cref="DebutDePhrase"/> accepte en plus le prénom en apostrophe (« Très bien,
+        /// Adam, première question : »), « Et voici la », « Commençons par la » et
+        /// « Allez c'est parti, » sans virgule après « Allez ».
         /// </summary>
-        [GeneratedRegex(ApresVerbeDeLancement + @"\bQuestion\s*(?:n°\s*|numéro\s*)?(?:1|un|une)\b\**(?:\s*[:.)\-–—]|\s+sur\s+(?:\d+|deux|trois|quatre|cinq)\b)"
+        [GeneratedRegex(@"\bQuestion\s*(?:n°\s*|numéro\s*)?(?:1|un|une)\b\**[ \t]*:"
+            + @"|" + ApresVerbeDeLancement + @"\bQuestion\s*(?:n°\s*|numéro\s*)?(?:1|un|une)\b\**(?:\s*[.)\-–—]|\s+sur\s+(?:\d+|deux|trois|quatre|cinq)\b)"
             + @"|" + DebutDePhrase + @"\bQuestion\s*(?:n°\s*|numéro\s*)?(?:1|un|une)\b\**[ \t]*\**[ \t]*\r?$"
             + @"|" + DebutDePhrase + @"\bPremière\s+question\b\**(?:\s*[:.,!\-–—]|[ \t]*\r?$)"
             + @"|\bQ\s?1\s*[:.)\-–—]"
@@ -376,12 +386,21 @@ namespace SchoolWebApp.Api.Services
         /// parti ! ») et au plus « Voici / Voilà la (ta, ma) » (« Voici ta première
         /// question. », wBO3-5 t3) ou « (Allez) c'est parti pour la » (tEO3-1 t3). Bornes gourmandes, jamais paresseuses : le
         /// générateur .NET ne compile pas une boucle paresseuse dans un lookbehind.
+        ///
+        /// #68 v6 (Omar point 3) : jusqu'à trois interjections, virgule facultative
+        /// (« Allez c'est parti, », « Et voici »), puis au plus UN prénom en
+        /// apostrophe — un seul mot à majuscule suivi d'une virgule (« Très bien,
+        /// Adam, ») —, puis au plus « Voici / Voilà la », « c'est parti pour la » ou
+        /// « Commençons / On commence / On attaque par (avec) la ». Ces mots ne
+        /// déclenchent rien seuls : il faut encore « Première question » ou
+        /// « Question 1 » suivis d'une ponctuation ou d'une fin de ligne.
         /// </summary>
         private const string DebutDePhrase =
             @"(?<=(?:^|[.!?…:;]|[\p{So}\p{Cs}])[ \t]*(?:[*_#>]+[ \t]*){0,3}(?:[\p{So}\p{Cs}]+[ \t]*)?"
-            + @"(?:(?:allez|alors|bon|bien|ok|okay|parfait|super|très\s+bien|c['’]est\s+parti|go)[ \t]*[,!]+[ \t]*)?"
-            + @"(?:(?:allez|alors|bon)[ \t]+)?"
-            + @"(?:(?:voici|voilà)[ \t]+(?:la|ta|ma)[ \t]+|c['’]est[ \t]+parti[ \t]+pour[ \t]+(?:la|ta)[ \t]+)?)";
+            + @"(?:(?:et|allez|alors|bon|bien|donc|ok|okay|parfait|super|très\s+bien|c['’]est\s+parti|go)[ \t]*[,!]*[ \t]*){0,3}"
+            + @"(?:(?-i:\p{Lu}[\p{Ll}'’\-]+)[ \t]*,[ \t]*)?"
+            + @"(?:(?:voici|voilà)[ \t]+(?:la|ta|ma)[ \t]+|c['’]est[ \t]+parti[ \t]+pour[ \t]+(?:la|ta)[ \t]+"
+            + @"|(?:commençons|démarrons|attaquons|on[ \t]+(?:commence|démarre|attaque))[ \t]+(?:par|avec)[ \t]+(?:la|ta)[ \t]+)?)";
 
         /// <summary>
         /// Pas juste après un verbe qui ANNONCE la question (#68 v5) : « Tu me fais
@@ -413,7 +432,7 @@ namespace SchoolWebApp.Api.Services
             + @"|(?<!\b(?:vois|voit|sais|sens|sent|constate|remarque|comprends|maintenant|vu|sûr|sûre|certain|certaine|content|contente|ravi|ravie|heureux|heureuse)\s+)"
             + @"\bque\s+tu\s+(?:es|seras|te\s+sens)\s+prête?s?\b"
             + @"|\b(?:et|puis)\s+je\s+lance(?:rai)?\s+le\s+chrono"
-            + @"|\b(?:on\s+(?:commence|démarre|y\s+va|attaque|lance|peut\s+(?:commencer|démarrer|y\s+aller))|je\s+(?:te\s+)?(?:lance|commence|démarre|pose|donne|envoie)\w*|c['’]est\s+parti)\b"
+            + @"|\b(?:on\s+(?:commence|démarre|y\s+va|attaque|lance|peut\s+(?:commencer|démarrer|y\s+aller))|commençons|démarrons|attaquons|je\s+(?:te\s+)?(?:lance|commence|démarre|pose|donne|envoie)\w*|c['’]est\s+parti)\b"
             + @"[^.!?\n]{0,60}\b(?:quand|dès\s+que|lorsque)\s+tu\s+(?:le\s+)?(?:veux|voudras|souhaites)\b"
             + @"|\b(?:quand|dès\s+que|lorsque)\s+tu\s+(?:le\s+)?(?:veux|voudras|souhaites)\s*[,!.]?\s*(?:(?:et|puis)\s+)?"
             + @"(?:on\s+(?:commence|démarre|y\s+va|attaque|lance)|je\s+(?:te\s+)?(?:lance|commence|démarre|pose|donne|envoie)|c['’]est\s+parti)"
@@ -472,246 +491,6 @@ namespace SchoolWebApp.Api.Services
 
         /// <summary>La balise du choix du support (deux boutons à l'écran).</summary>
         public const string BaliseSupport = "[SUPPORT_EVALUATION]";
-
-        // ===================== #68 v5 : la note écourtée =====================
-        //
-        // gEO3-3 (banc v4, conversation 4225) : trois questions annoncées, la
-        // première intitulée « Troisième et dernière question » (le modèle a
-        // compté les exercices faits juste avant), et la note tombe après cette
-        // seule question : 0/20. La consigne dit déjà « toutes les questions
-        // annoncées, jamais moins de trois » ; le code la tient maintenant.
-
-        /// <summary>Le plancher d'un contrôle noté (consigne du contrôle ouvert).</summary>
-        public const int QuestionsMinimum = 3;
-
-        /// <summary>
-        /// « Trois questions », « 3 questions », « Question 1 sur 3 », « Troisième et
-        /// dernière question » : le nombre que le professeur a annoncé à l'élève.
-        /// </summary>
-        [GeneratedRegex(@"\b(?<n>\d{1,2}|deux|trois|quatre|cinq|six)\s+(?:petites\s+|courtes\s+|dernières\s+)?questions\b"
-            + @"|\bquestion\s*(?:n°\s*)?(?:\d{1,2}|un|une|deux|trois|quatre|cinq)\s+sur\s+(?<n>\d{1,2}|deux|trois|quatre|cinq|six)\b"
-            + @"|\b(?<o>deuxième|troisième|quatrième|cinquième|sixième)\s+et\s+dernière\s+question\b",
-            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
-        private static partial Regex NombreDeQuestions();
-
-        private static int Valeur(string mot) => mot.ToLowerInvariant() switch
-        {
-            "deux" or "deuxième" => 2,
-            "trois" or "troisième" => 3,
-            "quatre" or "quatrième" => 4,
-            "cinq" or "cinquième" => 5,
-            "six" or "sixième" => 6,
-            var chiffres when int.TryParse(chiffres, out var n) => n,
-            _ => 0,
-        };
-
-        /// <summary>
-        /// Le nombre de questions ANNONCÉ pour le contrôle en cours (0 si aucun). On
-        /// lit les messages du professeur du plus récent au plus ancien, jusqu'au
-        /// choix du support ([SUPPORT_EVALUATION]) inclus ; on s'arrête avant une
-        /// évaluation rendue, abandonnée ou reportée, ou une nouvelle séance. Le
-        /// plus grand nombre lu l'emporte (borné à 6 : au-delà, c'est un autre sujet).
-        /// </summary>
-        public static int QuestionsAnnoncees(IEnumerable<string?> messagesProfesseur)
-        {
-            var annonce = 0;
-            var apresDebut = 0;
-            foreach (var message in messagesProfesseur.Reverse())
-            {
-                if (string.IsNullOrEmpty(message)) continue;
-                if (message.Contains(Abandon, StringComparison.Ordinal)
-                    || message.Contains("[/EVALUATION]", StringComparison.OrdinalIgnoreCase)
-                    || message.Contains("[EVALUATION_PREVUE]", StringComparison.OrdinalIgnoreCase)) break;
-
-                foreach (Match m in NombreDeQuestions().Matches(Bloc().Replace(message, string.Empty)))
-                {
-                    var n = Valeur(m.Groups["n"].Success ? m.Groups["n"].Value : m.Groups["o"].Value);
-                    if (n is >= 1 and <= 6 && n > annonce) annonce = n;
-                }
-
-                if (message.Contains(BaliseSupport, StringComparison.OrdinalIgnoreCase)
-                    || message.Contains("[TABLEAU_EFFACE]", StringComparison.Ordinal)) break;
-
-                // Sans choix du support balisé : les messages qui précèdent le top
-                // départ (consignes, « prêt ? ») comptent encore, pas au-delà.
-                if (apresDebut > 0 && ++apresDebut > ToursSansTopDepart + 1) break;
-                if (apresDebut == 0 && message.Contains(Debut, StringComparison.Ordinal)) apresDebut = 1;
-            }
-
-            return annonce;
-        }
-
-        /// <summary>Le nombre de questions qu'une note doit compter : l'annonce, jamais moins de trois.</summary>
-        public static int QuestionsRequises(IEnumerable<string?> messagesProfesseur) =>
-            Math.Max(QuestionsMinimum, QuestionsAnnoncees(messagesProfesseur));
-
-        /// <summary>
-        /// Le début de la phrase que le code ajoute quand il refuse une note écourtée.
-        /// Sert aussi à ne refuser qu'UNE fois par contrôle (<see cref="DejaRefusee"/>) :
-        /// si le modèle rend encore une note courte après, elle est gardée plutôt que
-        /// de tourner en rond.
-        /// </summary>
-        public const string DebutPhraseNoteRefusee = "Attends, je reprends le compte :";
-
-        /// <summary>Une note écourtée a-t-elle déjà été refusée dans ce contrôle ?</summary>
-        public static bool DejaRefusee(IEnumerable<string?> messagesProfesseur)
-        {
-            foreach (var message in messagesProfesseur.Reverse())
-            {
-                if (string.IsNullOrEmpty(message)) continue;
-                if (message.Contains(DebutPhraseNoteRefusee, StringComparison.Ordinal)) return true;
-                if (message.Contains(Debut, StringComparison.Ordinal)
-                    || message.Contains("[/EVALUATION]", StringComparison.OrdinalIgnoreCase)
-                    || message.Contains(Abandon, StringComparison.Ordinal)) return false;
-            }
-            return false;
-        }
-
-        private static string EnLettres(int n) => n switch
-        {
-            1 => "une", 2 => "deux", 3 => "trois", 4 => "quatre", 5 => "cinq", 6 => "six",
-            _ => n.ToString(System.Globalization.CultureInfo.InvariantCulture),
-        };
-
-        /// <summary>
-        /// La phrase vraie, ajoutée à la fin de la réponse (écran ET message gardé) quand
-        /// la note est refusée. Sans accord de genre (le professeur peut être une
-        /// professeure). Au cahier, la copie est déjà là : il la corrige en entier.
-        /// </summary>
-        public static string PhraseNoteRefusee(int requises, int notees, bool auCahier)
-        {
-            var compte = notees switch
-            {
-                0 => "ma note n'en comptait aucune",
-                1 => "ma note n'en comptait qu'une",
-                _ => $"ma note n'en comptait que {EnLettres(notees)}",
-            };
-            var suite = auCahier
-                ? "je corrige ta copie en entier, question par question, dans mon prochain message."
-                : notees == 0 ? "on continue." : $"on continue avec la question {notees + 1}.";
-            return $"\n\n{DebutPhraseNoteRefusee} cette évaluation compte {EnLettres(requises)} questions, et {compte}. "
-                + $"Cette note ne compte pas : {suite}";
-        }
-
-        /// <summary>Le dernier support choisi dans le fil est-il le cahier ?</summary>
-        public static bool AuCahier(IEnumerable<string?> messagesDuFil)
-        {
-            foreach (var message in messagesDuFil.Reverse())
-            {
-                if (string.IsNullOrEmpty(message)) continue;
-                if (message.Contains("[ÉVALUATION AU CAHIER", StringComparison.Ordinal)) return true;
-                if (message.Contains("[ÉVALUATION À L’ORDINATEUR", StringComparison.Ordinal)
-                    || message.Contains("[ÉVALUATION À L'ORDINATEUR", StringComparison.Ordinal)) return false;
-            }
-            return false;
-        }
-
-        /// <summary>Retire le bloc [EVALUATION] d'un texte (note refusée : elle ne doit pas être gardée).</summary>
-        public static string SansBloc(string texte) => Bloc().Replace(texte, string.Empty);
-
-        /// <summary>
-        /// LE GARDE-FOU DE LA NOTE ÉCOURTÉE, DANS LE FLUX (#68 v5, Omar point 2).
-        ///
-        /// Pendant un contrôle OUVERT, le bloc [EVALUATION] est retenu dès son
-        /// ouverture jusqu'à sa fermeture — l'écran ne l'affiche ni ne le lit de
-        /// toute façon (school_ia, ardoise.js : retiré dès l'ouverture), donc rien ne
-        /// se voit du retard. Fermé, il est lu : s'il compte moins de questions que
-        /// <c>requises</c>, il ne part pas (l'écran garde le contrôle ouvert, chrono
-        /// compris) et <see cref="Notees"/> dit combien il en comptait ; sinon il part
-        /// tel quel. Un bloc jamais fermé part tel quel à la fin.
-        /// </summary>
-        public sealed class FiltreNoteEcourtee
-        {
-            private const string Ouverture = "[EVALUATION]";
-            private const string Fermeture = "[/EVALUATION]";
-
-            private readonly int _requises;
-            private readonly System.Text.StringBuilder _retenu = new();
-            private string _attente = string.Empty;
-            private bool _dansLeBloc;
-
-            public FiltreNoteEcourtee(int requises) => _requises = requises;
-
-            /// <summary>Le nombre de questions du bloc refusé, ou null si aucun bloc n'a été refusé.</summary>
-            public int? Notees { get; private set; }
-
-            /// <summary>Le bloc refusé, tel qu'il a été écrit (pour le rendre si la réponse clôt la séance).</summary>
-            public string? BlocRefuse { get; private set; }
-
-            public bool Refusee => Notees is not null;
-
-            public string Passer(string fragment)
-            {
-                if (string.IsNullOrEmpty(fragment)) return string.Empty;
-                var sortie = new System.Text.StringBuilder();
-                var texte = _attente + fragment;
-                _attente = string.Empty;
-
-                while (texte.Length > 0)
-                {
-                    if (!_dansLeBloc)
-                    {
-                        var i = texte.IndexOf(Ouverture, StringComparison.OrdinalIgnoreCase);
-                        if (i < 0)
-                        {
-                            // Garder la fin qui pourrait être le début de la balise.
-                            var garde = PrefixeEnFin(texte, Ouverture);
-                            sortie.Append(texte, 0, texte.Length - garde);
-                            _attente = texte[(texte.Length - garde)..];
-                            break;
-                        }
-
-                        sortie.Append(texte, 0, i);
-                        _dansLeBloc = true;
-                        _retenu.Clear();
-                        texte = texte[i..];
-                    }
-
-                    _retenu.Append(texte);
-                    texte = string.Empty;
-                    var retenu = _retenu.ToString();
-                    var f = retenu.IndexOf(Fermeture, StringComparison.OrdinalIgnoreCase);
-                    if (f < 0) break;
-
-                    var bloc = retenu[..(f + Fermeture.Length)];
-                    texte = retenu[(f + Fermeture.Length)..];
-                    _dansLeBloc = false;
-                    _retenu.Clear();
-
-                    var lu = Lire(bloc);
-                    if (Notees is null && lu is not null && lu.Questions.Count < _requises)
-                    {
-                        Notees = lu.Questions.Count;
-                        BlocRefuse = bloc;
-                    }
-                    else
-                    {
-                        sortie.Append(bloc);
-                    }
-                }
-
-                return sortie.ToString();
-            }
-
-            /// <summary>La fin du flux : ce qui attendait encore (un bloc jamais fermé part tel quel).</summary>
-            public string Terminer()
-            {
-                var reste = _attente + (_dansLeBloc ? _retenu.ToString() : string.Empty);
-                _attente = string.Empty;
-                _retenu.Clear();
-                _dansLeBloc = false;
-                return reste;
-            }
-
-            private static int PrefixeEnFin(string texte, string balise)
-            {
-                for (var n = Math.Min(balise.Length - 1, texte.Length); n > 0; n--)
-                {
-                    if (string.Compare(texte, texte.Length - n, balise, 0, n, StringComparison.OrdinalIgnoreCase) == 0) return n;
-                }
-                return 0;
-            }
-        }
 
         /// <summary>Retire le bloc et le marqueur d'ouverture. Sert aux relectures d'historique.</summary>
         public static string Retirer(string? message) =>
