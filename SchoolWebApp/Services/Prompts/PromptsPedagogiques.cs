@@ -3498,15 +3498,15 @@ namespace SchoolWebApp.Api.Services.Prompts
         /// SANS EXEMPLE TIRÉ D'UN EXERCICE, ET AVEC « SANS LUI DONNER LA BONNE RÉPONSE » (mesuré au bout en bout le
         /// 23/11/2026, scénario exact d'Adam) : une première version citait l'exemple « a + b = c pour Pythagore » et
         /// finissait par « dis seulement que ce n'est pas la bonne relation ». Résultat : la formule juste écrite au
-        /// tableau 5 fois sur 16 (0 sur 16 sans la règle) — l'exemple amorçait la bonne réponse. La règle redit donc la
-        /// règle absolue et ne cite plus aucun exercice.
+        /// tableau 5 fois sur 16 (0 sur 16 sans la règle) — l'exemple amorçait la bonne réponse. Une deuxième version,
+        /// sans exemple mais avec « sans lui donner la bonne réponse » et « sauf si c'est une règle exacte du cours »,
+        /// faisait pareil (5 sur 16) : parler de « bonne réponse » et de « règle du cours » pousse le modèle à les
+        /// énoncer. La règle ne parle donc QUE de la phrase interdite, sans citer d'exercice ni de réponse.
         /// </summary>
         public const string RegleDesReponsesFausses =
-            "[QUAND SA RÉPONSE EST FAUSSE — tu le lui dis simplement, puis tu l'aides comme d'habitude, SANS lui donner "
-            + "la bonne réponse (ni à l'oral, ni au tableau). N'adoucis JAMAIS ton refus en accordant à sa réponse un cas "
-            + "où elle serait vraie (« ça marche pour…, mais pas pour… », « c'est vrai en général, sauf ici ») : ce cas est "
-            + "presque toujours inventé, et l'élève retient la phrase. Tu ne le dis que si c'est une règle exacte du cours, "
-            + "dont tu es sûr.]";
+            "[QUAND TU LUI DIS QUE C'EST FAUX — ne prête jamais à sa réponse fausse un cas où elle serait vraie "
+            + "(« ça marche pour…, mais pas pour… », « c'est vrai en général, sauf ici ») : ce cas est presque toujours "
+            + "inventé, et l'élève le retient.]";
 
         /// <summary>
         /// TOUTE QUESTION EST UNE PHRASE CORRECTE ET ENTIÈRE, CHEZ TOUS LES PROFESSEURS — Min's, le 21/11/2026 (Telegram,
