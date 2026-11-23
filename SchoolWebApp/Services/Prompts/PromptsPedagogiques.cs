@@ -345,10 +345,17 @@ namespace SchoolWebApp.Api.Services.Prompts
             temps.
 
             Le minuteur t'annonce le temps restant à CHAQUE message de l'élève.
-            Lis-le avant de proposer quoi que ce soit : sous dix minutes, tu ne
-            proposes plus AUCUNE évaluation. Pas « on peut essayer », pas « on
-            verra si on a le temps » — dix minutes, c'est ce qu'elle prend, et
-            tu ne les as pas.
+            Lis-le avant de proposer quoi que ce soit : sous douze minutes, tu
+            ne proposes plus AUCUNE évaluation. Pas « on peut essayer », pas
+            « on verra si on a le temps » — dix minutes, c'est ce qu'elle
+            prend, et il faut y ajouter le temps qu'il lise ta proposition et
+            te réponde.
+
+            Une évaluation que tu as proposée, tu la tiens : s'il te répond
+            oui, tu la lances, sans revenir dessus. Le minuteur te dit, au tour
+            de sa réponse, comment la faire tenir dans le temps qui reste.
+            Proposer puis se dédire pour une affaire de secondes déroute
+            l'élève plus que tout.
 
             Cette règle disait autrefois « dès qu'on te signale qu'il reste cinq
             minutes ». Deux erreurs : le signal en question n'existe plus — le
@@ -2872,6 +2879,19 @@ namespace SchoolWebApp.Api.Services.Prompts
         private const int DureeEvaluation = 600;
 
         /// <summary>
+        /// En dessous, le professeur ne PROPOSE plus d'évaluation : les dix
+        /// minutes qu'elle prend, plus deux pour que l'élève lise la
+        /// proposition et y réponde. Voir <c>ConsigneDEvaluation</c> (#68).
+        /// </summary>
+        private const int SeuilPropositionEvaluation = DureeEvaluation + 120;
+
+        /// <summary>
+        /// Jusqu'ici, une évaluation DÉJÀ proposée et acceptée se tient
+        /// encore, en trois questions : trois fois deux minutes, plus la note.
+        /// </summary>
+        private const int SeuilEvaluationCourte = 480;
+
+        /// <summary>
         /// Combien de lignes doit faire une dictée demandée MAINTENANT.
         ///
         /// POURQUOI CE CALCUL EST FAIT ICI ET PLUS DEMANDÉ AU PROFESSEUR
@@ -3159,6 +3179,17 @@ namespace SchoolWebApp.Api.Services.Prompts
         }
 
         public static string MarqueurTemps(int secondes, string? cycle = null, int age = 0)
+            => MarqueurTempsDuTour(secondes, cycle, age, evaluationEnCours: false);
+
+        /// <summary>
+        /// Le marqueur de temps, quand le code sait aussi si une évaluation
+        /// notée est déjà ouverte (<see cref="LecteurEvaluation.EstOuvert"/>).
+        ///
+        /// Nom distinct, et non une surcharge de <see cref="MarqueurTemps"/> :
+        /// des harnais lisent cette méthode par réflexion (`GetMethod(nom)`),
+        /// qu'une seconde signature du même nom rendrait ambiguë.
+        /// </summary>
+        public static string MarqueurTempsDuTour(int secondes, string? cycle, int age, bool evaluationEnCours)
         {
             var lisible = secondes >= 60
                 ? $"{secondes / 60} min{(secondes % 60 >= 10 ? $" {secondes % 60}" : "")}"
@@ -3252,12 +3283,7 @@ namespace SchoolWebApp.Api.Services.Prompts
                     + "commence rien que le minuteur viendra couper : l'élève "
                     + "garderait le souvenir d'un exercice raté alors qu'il a "
                     + "simplement manqué de temps.\n"
-                    + (secondes < DureeEvaluation
-                        ? "Concrètement, à cet instant : PAS d'évaluation notée, "
-                          + "il n'en reste pas de quoi la mener. Si la notion "
-                          + "semble acquise, dis-le et donne-lui rendez-vous au "
-                          + "prochain cours pour la passer tranquillement.\n"
-                        : "")
+                    + ConsigneDEvaluation(secondes, lisible, evaluationEnCours)
                     + "Si tu as déjà dit au revoir plus tôt dans la séance, "
                     + "c'était une erreur : ne la répète pas.\n"
                     // L'exception, sans laquelle cette consigne se retourne contre
@@ -3292,6 +3318,77 @@ namespace SchoolWebApp.Api.Services.Prompts
                 : "";
 
             return $"[Minuteur : il reste {lisible} de séance. {consigne}{dictee}]";
+        }
+
+        /// <summary>
+        /// Ce que le minuteur dit de l'évaluation notée, selon le temps restant.
+        ///
+        /// PROPOSER PUIS RETIRER — signalement #68 (Adam, 23/11/2026, bac blanc
+        /// de Terminale, séance de quinze minutes). Il restait environ 10 min 30 quand
+        /// le professeur a lu la réponse de l'élève : au-dessus du seuil, il a
+        /// proposé « une petite évaluation notée, ça prend une dizaine de
+        /// minutes ». L'élève a mis 37 secondes à répondre « oui, on la fait
+        /// maintenant » : environ 9 min 55, sous le seuil, et le minuteur lui a dit
+        /// « PAS d'évaluation notée ». Il s'est donc dédit.
+        ///
+        /// Un seul seuil pour deux décisions qui ne tombent pas au même tour.
+        /// On en fait deux :
+        /// - PROPOSER demande dix minutes PLUS le temps de la réponse
+        ///   (<see cref="SeuilPropositionEvaluation"/>) : une proposition
+        ///   faite à temps l'est encore quand le « oui » arrive ;
+        /// - TENIR une proposition déjà faite reste possible jusqu'à huit
+        ///   minutes (<see cref="SeuilEvaluationCourte"/>), en trois
+        ///   questions au lieu de quatre. Une parole donnée à l'élève compte
+        ///   plus qu'une question de plus sur la copie.
+        ///
+        /// Et rien pendant une évaluation déjà ouverte : « PAS d'évaluation,
+        /// il n'en reste pas de quoi la mener » arrivait aussi au milieu d'un
+        /// contrôle lancé à dix minutes et demie, dès que le compteur passait
+        /// sous dix. Le temps d'un contrôle ouvert a ses propres règles
+        /// (rallonge, clôture forcée), le minuteur n'a pas à les contredire.
+        ///
+        /// Pas de lecture du message précédent par le code : le professeur a
+        /// son propre message sous les yeux, et c'est lui qui sait s'il vient
+        /// de proposer. La consigne lui dit seulement quoi faire dans ce cas.
+        /// </summary>
+        private static string ConsigneDEvaluation(int secondes, string lisible, bool evaluationEnCours)
+        {
+            if (evaluationEnCours || secondes >= SeuilPropositionEvaluation) return "";
+
+            const string tenir =
+                "UNE SEULE EXCEPTION : si TON message précédent lui proposait "
+                + "déjà une évaluation notée et qu'il vient d'accepter, tu tiens "
+                + "parole et tu la LANCES dans ce message. Tu ne reviens pas sur "
+                + "ta proposition et tu ne lui dis pas que le temps manque : "
+                + "proposer puis retirer le déroute.";
+
+            if (secondes >= DureeEvaluation)
+            {
+                return "Concrètement, à cet instant : ne PROPOSE PLUS d'évaluation "
+                    + "notée — le temps qu'il te réponde, il ne resterait plus les "
+                    + "dix minutes qu'elle demande. Si la notion semble acquise, "
+                    + "dis-le et donne-lui rendez-vous au prochain cours pour la "
+                    + "passer tranquillement. "
+                    + tenir
+                    + " Elle tient encore en entier. De même s'il te la demande "
+                    + "lui-même : tu peux la lancer maintenant.\n";
+            }
+
+            if (secondes >= SeuilEvaluationCourte)
+            {
+                return "Concrètement, à cet instant : PAS de nouvelle évaluation "
+                    + "notée, il n'en reste pas de quoi la mener. Si la notion "
+                    + "semble acquise, dis-le et donne-lui rendez-vous au prochain "
+                    + "cours pour la passer tranquillement. "
+                    + tenir
+                    + $" Pour qu'elle tienne dans les {lisible}, tu la fais en "
+                    + "TROIS questions au lieu de quatre.\n";
+            }
+
+            return "Concrètement, à cet instant : PAS d'évaluation notée, "
+                + "il n'en reste pas de quoi la mener. Si la notion "
+                + "semble acquise, dis-le et donne-lui rendez-vous au "
+                + "prochain cours pour la passer tranquillement.\n";
         }
 
         private static readonly CultureInfo Fr = new("fr-FR");

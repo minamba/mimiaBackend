@@ -3984,8 +3984,11 @@ namespace SchoolWebApp.Api.Builders.impl
             // et à l'affichage.
             if (secondesRestantes is int restant && restant > 0)
             {
-                declencheur += "\n\n" + PromptsPedagogiques.MarqueurTemps(
-                    restant, contexte.Eleve.NiveauCycle, contexte.Eleve.Age);
+                // Avec l'état du contrôle : un contrôle déjà ouvert ne doit pas
+                // lire « PAS d'évaluation » dès que le compteur passe sous dix
+                // minutes (#68, voir ConsigneDEvaluation).
+                declencheur += "\n\n" + PromptsPedagogiques.MarqueurTempsDuTour(
+                    restant, contexte.Eleve.NiveauCycle, contexte.Eleve.Age, controleOuvert);
             }
 
             Services.Voix.EtatDuMot? etatDuMot = null;
