@@ -6491,7 +6491,10 @@ namespace SchoolWebApp.Api.Builders.impl
                     + "programme",
                 MotifRefusRetrait.Plancher =>
                     $"retirer « {r.Demande} » aurait laissé son programme VIDE : rien n'a été retiré",
-                _ => $"« {r.Demande} » ne correspond à aucune notion de son programme : rien n'a été retiré",
+                // « Rien n'a été retiré » laissait croire au professeur qu'elle était encore au programme : il ne la
+                // reposait pas quand l'élève disait « garde-la » (bout en bout, validation d'un bac blanc).
+                _ => $"« {r.Demande} » n'est PAS dans son programme (il n'y avait rien à retirer) : si l'élève veut la "
+                    + "garder, ajoute-la entière avec `notions:`",
             }).Distinct();
 
             return "\n\n[TON DERNIER RETRAIT N'A PAS ÉTÉ FAIT : " + string.Join(" ; ", lignes) + ". Dis-le à l'élève "
