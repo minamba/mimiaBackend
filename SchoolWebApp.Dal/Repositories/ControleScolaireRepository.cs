@@ -591,80 +591,156 @@ namespace SchoolWebApp.Dal.Repositories
             return touchees;
         }
 
-        public async Task<IReadOnlyList<string>> RetirerNotionsAsync(
+        public async Task<BilanRetrait> RetirerNotionsAsync(
             int eleveId, int controleId, int matiereId,
             IReadOnlyList<string> libelles, IReadOnlyList<string>? garder = null,
             CancellationToken ct = default)
         {
-            if (libelles.Count == 0) return [];
+            if (libelles.Count == 0) return BilanRetrait.Vide;
 
             // Même cloisonnement que l'ajout : le programme d'un contrôle ne se touche que chez lui.
             var sien = await _context.ControlesScolaires
                 .AnyAsync(c => c.Id == controleId && c.EleveId == eleveId && c.MatiereId == matiereId, ct);
 
-            if (!sien) return [];
+            if (!sien) return BilanRetrait.Vide;
 
-            // Une notion jugée sur la copie corrigée est une MESURE : elle reste.
-            var lignes = await _context.ControlesNotions
+            var programme = await _context.ControlesNotions
                 .Include(n => n.Competence)
-                .Where(n => n.ControleId == controleId && n.Resultat == null)
+                .Where(n => n.ControleId == controleId)
                 .ToListAsync(ct);
 
-            // Ce que le MÊME bloc vient de poser au mot près (`garder`) ne part jamais par un rapprochement souple.
+            // Une notion jugée sur la copie corrigée est une MESURE : elle reste (et elle compte pour le plancher).
+            var lignes = programme.Where(n => n.Resultat == null).ToList();
+
+            // Ce que le MÊME bloc pose (`garder`) ne part jamais : poser et retirer la même notion, c'est un CONFLIT.
             var gardees = (garder ?? []).Select(LibelleNotion.CleSouple).Where(c => c.Length > 0).ToHashSet();
 
+            var refus = new List<RetraitRefuse>();
+            var parDemande = new List<(string Demande, List<ControleNotion> Lignes)>();
             var aRetirer = new List<ControleNotion>();
+
             foreach (var libelle in libelles)
             {
-                foreach (var ligne in LignesARetirer(lignes, libelle))
-                {
-                    var protegee = gardees.Contains(LibelleNotion.CleSouple(ligne.Libelle))
-                        || gardees.Contains(LibelleNotion.CleSouple(ligne.Competence?.Libelle));
+                var (trouvees, seuleCandidate) = LignesARetirer(lignes, libelle);
 
-                    if (!protegee && !aRetirer.Contains(ligne)) aRetirer.Add(ligne);
+                if (trouvees.Count == 0)
+                {
+                    refus.Add(seuleCandidate is null
+                        ? new RetraitRefuse(libelle, MotifRefusRetrait.Introuvable)
+                        : new RetraitRefuse(libelle, MotifRefusRetrait.Partiel, LibelleAffiche(seuleCandidate)));
+                    continue;
+                }
+
+                // CONFLIT (verdict d'Omar, #67 v2) : si le bloc pose une des lignes visées, la demande entière tombe —
+                // on ne sait pas ce que l'élève veut, rien ne part (brancheV-7 : la 864 supprimée alors que l'élève ne
+                // retirait que les amphotères, le prof l'ayant recopiée dans `notions:` ET dans `retirer:`).
+                var posee = trouvees.FirstOrDefault(l =>
+                    gardees.Contains(LibelleNotion.CleSouple(l.Libelle))
+                    || gardees.Contains(LibelleNotion.CleSouple(l.Competence?.Libelle)));
+
+                if (posee is not null)
+                {
+                    refus.Add(new RetraitRefuse(libelle, MotifRefusRetrait.Conflit, LibelleAffiche(posee)));
+                    continue;
+                }
+
+                parDemande.Add((libelle, trouvees));
+                foreach (var ligne in trouvees)
+                {
+                    if (!aRetirer.Contains(ligne)) aRetirer.Add(ligne);
                 }
             }
 
-            if (aRetirer.Count == 0) return [];
+            if (aRetirer.Count == 0) return new BilanRetrait([], refus);
+
+            // PLANCHER (#67 v2) : un retrait qui laisserait le programme VIDE n'est pas appliqué, du tout. Un contrôle
+            // sans notion ne se prépare plus (pourcentage indéfini) ; l'élève qui veut tout changer le dit, et le
+            // professeur pose les nouvelles notions avant de retirer les anciennes.
+            if (aRetirer.Count >= programme.Count)
+            {
+                refus.AddRange(parDemande.Select(d =>
+                    new RetraitRefuse(d.Demande, MotifRefusRetrait.Plancher, LibelleAffiche(d.Lignes[0]))));
+                return new BilanRetrait([], refus);
+            }
+
+            var retirees = aRetirer
+                .Select(n => new NotionRetiree(
+                    n.Id, n.ControleId, n.CompetenceId, n.Libelle, n.Source,
+                    n.TravailleeLe, n.EtatProfesseur, n.EtatProfesseurLe, n.DateCreation))
+                .ToList();
 
             _context.ControlesNotions.RemoveRange(aRetirer);
             await _context.SaveChangesAsync(ct);
 
-            return aRetirer.Select(n => n.Libelle).ToList();
+            return new BilanRetrait(retirees, refus);
         }
 
+        /// <summary>Ce que l'élève voit d'une ligne : le libellé de sa compétence quand elle est rattachée.</summary>
+        private static string LibelleAffiche(ControleNotion n) => n.Competence?.Libelle ?? n.Libelle;
+
         /// <summary>
-        /// Les lignes du programme que nomme un libellé à retirer (signalement #67).
+        /// Les lignes du programme que nomme un libellé à retirer (signalement #67, resserré par le verdict d'Omar v2).
+        /// UNE NOTION SE GARDE OU SE RETIRE ENTIÈRE : on ne supprime une ligne que si la demande la nomme vraiment.
         ///
-        /// 1. À LA PLUME PRÈS (<see cref="LibelleNotion.CleSouple"/>), sur le libellé de la ligne ou celui de sa
+        /// 1. AU MOT PRÈS (<see cref="LibelleNotion.CleSouple"/>), sur le libellé de la ligne ou celui de sa
         ///    compétence : le cas normal, le professeur recopie la notion du programme qu'il a sous les yeux.
-        /// 2. Sinon, la ligne CONTENUE dans le libellé écrit (il a ajouté des mots autour) : seulement si UNE seule
-        ///    ligne répond, comme partout ailleurs (<c>TrouverParLibelle</c>).
-        /// 3. Sinon, le libellé écrit CONTENU dans des lignes, MOT POUR MOT et avec deux mots de 4 lettres au moins (« dosage par
-        ///    titrage » dans « Réaliser un dosage par titrage colorimétrique » ET « … pH-métrique ») : l'élève a retiré
-        ///    tout un thème (« retire complètement les titrages »), toutes ses notions sortent. Un seul mot ne suffit
-        ///    jamais (« fraction » ne vide pas un contrôle sur les fractions).
+        /// 2. Sinon, la ligne CONTENUE dans le libellé écrit (il a ajouté des mots autour) : si UNE seule ligne répond
+        ///    ET qu'elle a au moins deux mots de 4 lettres ou plus (« Les fractions » n'est pas retirée par « comparer
+        ///    les fractions décimales »).
+        /// 3. Sinon, un THÈME : le libellé écrit, d'au moins deux mots de 4 lettres ou plus, contenu MOT POUR MOT dans AU
+        ///    MOINS DEUX lignes (« dosage par titrage » dans « … titrage colorimétrique » ET « … titrage pH-métrique ») :
+        ///    l'élève a retiré tout un thème. Contenu dans UNE seule ligne, c'est un MORCEAU de notion (« espèce
+        ///    amphotère » dans « Identifier un couple acide-base de Brønsted, une espèce amphotère… ») : rien ne part.
+        ///
+        /// Rend aussi la seule ligne candidate quand rien ne part (une demande partielle), pour que le professeur
+        /// puisse dire à l'élève de quelle notion elle fait partie.
         /// </summary>
-        private static List<ControleNotion> LignesARetirer(List<ControleNotion> lignes, string libelle)
+        private static (List<ControleNotion> Lignes, ControleNotion? SeuleCandidate) LignesARetirer(
+            List<ControleNotion> lignes, string libelle)
         {
             var cle = LibelleNotion.CleSouple(libelle);
-            if (cle.Length == 0) return [];
+            if (cle.Length == 0) return ([], null);
 
             string[] Cles(ControleNotion n) =>
                 new[] { LibelleNotion.CleSouple(n.Libelle), LibelleNotion.CleSouple(n.Competence?.Libelle) }
                     .Where(c => c.Length > 0).Distinct().ToArray();
 
             var exactes = lignes.Where(n => Cles(n).Contains(cle)).ToList();
-            if (exactes.Count > 0) return exactes;
+            if (exactes.Count > 0) return (exactes, null);
 
             var contenues = lignes.Where(n => Cles(n).Any(c => ContientMots(cle, c))).ToList();
-            if (contenues.Count == 1) return contenues;
+            var contenuesSures = lignes
+                .Where(n => Cles(n).Any(c => ContientMots(cle, c) && MotsPleins(c) >= 2))
+                .ToList();
+            if (contenuesSures.Count == 1) return (contenuesSures, null);
 
-            // Deux VRAIS mots au moins (4 lettres et plus) : « une fraction », « de la » ne vident jamais un programme.
-            if (cle.Split(' ').Count(m => m.Length >= 4) < 2) return [];
+            var incluantes = lignes.Where(n => Cles(n).Any(c => ContientMots(c, cle))).ToList();
+            if (MotsPleins(cle) >= 2 && incluantes.Count >= 2) return (incluantes, null);
 
-            return lignes.Where(n => Cles(n).Any(c => ContientMots(c, cle))).ToList();
+            var seule = incluantes.Count == 1 ? incluantes[0]
+                : incluantes.Count == 0 && contenues.Count == 1 ? contenues[0]
+                : null;
+
+            // POUR LE DIRE SEULEMENT, jamais pour supprimer : la seule ligne qui a TOUS les vrais mots de la demande,
+            // au singulier (« les espèces amphotères » → la notion « … une espèce amphotère … »).
+            if (seule is null && MotsSinguliers(cle) is { Count: > 0 } mots)
+            {
+                var proches = lignes.Where(n => Cles(n).Any(c => mots.IsSubsetOf(MotsSinguliers(c)))).ToList();
+                if (proches.Count == 1) seule = proches[0];
+            }
+
+            return ([], seule);
         }
+
+        /// <summary>Les vrais mots d'une clé (4 lettres et plus), sans leur « s » ou « x » final.</summary>
+        private static HashSet<string> MotsSinguliers(string cle) =>
+            cle.Split(' ')
+                .Where(m => m.Length >= 4)
+                .Select(m => m.Length > 4 && (m.EndsWith('s') || m.EndsWith('x')) ? m[..^1] : m)
+                .ToHashSet();
+
+        /// <summary>Les VRAIS mots d'une clé (4 lettres et plus) : « une fraction », « de la » n'en ont qu'un ou aucun.</summary>
+        private static int MotsPleins(string cle) => cle.Split(' ').Count(m => m.Length >= 4);
 
         /// <summary>« a b c » contient « b c » mot pour mot (pas « titrages » pour « titrage », pas un bout de mot).</summary>
         private static bool ContientMots(string texte, string morceau) =>

@@ -1,6 +1,7 @@
 ﻿using System.Text.RegularExpressions;
 using System.Runtime.CompilerServices;
 using AutoMapper;
+using Microsoft.Extensions.Caching.Memory;
 using SchoolWebApp.Api.Request;
 using SchoolWebApp.Api.Services;
 using SchoolWebApp.Api.Services.Prompts;
@@ -106,6 +107,9 @@ namespace SchoolWebApp.Api.Builders.impl
         private readonly IMaitriseRepository _maitrises;
         private readonly IPlanificateurControleService _planificateur;
         private readonly IExamenBlancRepository? _examensBlancs;
+
+        /// <summary>Les retraits refusés d'un tour, à dire au professeur au tour suivant (#67 v2) : voir RetraitsNonFaits.</summary>
+        private readonly IMemoryCache? _retraitsRefuses;
         private readonly IAbonnementRepository _abonnements;
         private readonly Services.Paiement.AccesForfaitService _acces;
         private readonly IFileAlertesQuota _fileAlertes;
@@ -167,9 +171,11 @@ namespace SchoolWebApp.Api.Builders.impl
             Services.Paiement.AccesForfaitService acces,
             IConfiguration configuration,
             IHostEnvironment environnement,
-            IExamenBlancRepository? examensBlancs = null)
+            IExamenBlancRepository? examensBlancs = null,
+            IMemoryCache? retraitsRefuses = null)
         {
             _examensBlancs = examensBlancs;
+            _retraitsRefuses = retraitsRefuses;
             _texteBrutAuJournal = TexteBrutAuJournalPermis(configuration, environnement);
             _acces = acces ?? throw new ArgumentNullException(nameof(acces));
             _verificationSon = verificationSon ?? throw new ArgumentNullException(nameof(verificationSon));
@@ -1559,8 +1565,8 @@ namespace SchoolWebApp.Api.Builders.impl
                   + "COMMENCE AUCUNE RÉVISION avant son accord. Dès qu'il est d'accord, écris dans ce message "
                   + $"[CONTROLE_NOTIONS] controle: {controleId} avec les notions retenues recopiées au mot près — c'est ce "
                   + "qui valide son programme —, dis-lui que son programme est prêt, puis commence. S'IL A DEMANDÉ D'EN "
-                  + "RETIRER UNE (« enlève les espèces amphotères ») : elle n'est PAS dans `notions:`, elle va dans "
-                  + "`retirer:` (au mot près du dossier), et tu réécris le tableau sans elle.")
+                  + "RETIRER UNE ENTIÈRE : elle n'est PAS dans `notions:`, elle va dans `retirer:` (au mot près du "
+                  + "dossier), et tu réécris le tableau sans elle. " + NotionEntiere)
             + "]";
 
         /// <summary>
@@ -1573,7 +1579,21 @@ namespace SchoolWebApp.Api.Builders.impl
             "S'IL TE DIT QU'UNE NOTION NE SERA PAS (OU PLUS) À SON CONTRÔLE, retire-la : écris dans ce message "
             + $"[CONTROLE_NOTIONS] controle: {controleId} avec `retirer:` et chaque notion concernée recopiée au mot près "
             + "de son programme (toutes celles du thème s'il retire un thème entier), et réécris le tableau sans elles. "
-            + "Dire « je la retire » sans ce bloc ne la retire pas.";
+            + "Dire « je la retire » sans ce bloc ne la retire pas. " + NotionEntiere;
+
+        /// <summary>
+        /// UNE NOTION SE GARDE OU SE RETIRE ENTIÈRE — verdict d'Omar sur le #67 (v2). « Enlève les espèces
+        /// amphotères » ne visait qu'un morceau de « Identifier un couple acide-base de Brønsted, une espèce amphotère, et
+        /// écrire la réaction associée » : le serveur ne coupe pas une notion en deux (un morceau dans `retirer:` ne
+        /// supprime rien), c'est au professeur de le dire à l'élève. Et poser et retirer la même notion dans le même bloc
+        /// ne la retire pas (conflit : elle reste).
+        /// </summary>
+        private const string NotionEntiere =
+            "UNE NOTION SE GARDE OU SE RETIRE ENTIÈRE : s'il ne veut retirer qu'un MORCEAU d'une notion de son programme "
+            + "(« les amphotères » dans « Identifier un couple acide-base de Brønsted, une espèce amphotère… »), garde-la "
+            + "entière, dis-lui de quelle notion ce morceau fait partie et qu'elle se garde ou se retire en entier, et "
+            + "demande-lui s'il veut la retirer en entier. Ne mets JAMAIS une même notion à la fois dans `notions:` et dans "
+            + "`retirer:`.";
 
         private static string MarqueurModeSeance(string mode, int? controleId, string? epreuveCode, int? nbCours = null, int nbIllisibles = 0, bool programmeInconnu = false) => mode switch
         {
@@ -3685,6 +3705,13 @@ namespace SchoolWebApp.Api.Builders.impl
             declencheur += "\n\n" + (etatExamenBlanc is { } eb && controleMode is int idExamen
                 ? MarqueurExamenBlanc(idExamen, eb.Notions, eb.ProgrammeValideLe is not null)
                 : MarqueurModeSeance(mode, controleMode, epreuveMode, nbCours, nbIllisibles, programmeInconnu));
+
+            // UN RETRAIT REFUSÉ AU TOUR D'AVANT SE DIT À L'ÉLÈVE (#67 v2) : morceau de notion, conflit, programme qui
+            // se viderait, notion introuvable. Voir `RetraitsNonFaits`.
+            if (mode == ModesSeance.Controle && controleMode is int controleDuRetrait)
+            {
+                declencheur += RetraitsNonFaits(conversationId, controleDuRetrait);
+            }
 
             // UN CONTRÔLE OUVERT SE RAPPELLE À CHAQUE TOUR, ET C'EST LE CODE QUI
             // S'EN CHARGE.
@@ -6337,48 +6364,123 @@ namespace SchoolWebApp.Api.Builders.impl
                 await CompleterProgrammeAsync(conversationId, eleveId, matiereId, niveauScolaireId, declare, travaillee, ct);
             }
 
+            // UNE NOTION POSÉE ET RETIRÉE PAR LE MÊME BLOC (#67 v2) : elle reste (le lecteur l'a gardée dans
+            // `notions:`), le conflit va au journal, et le professeur le dira au tour suivant.
+            var refus = declare.NotionsEnConflit
+                .Select(n => new RetraitRefuse(n, MotifRefusRetrait.Conflit, n))
+                .ToList();
+
             // CE QUE L'ÉLÈVE A FAIT RETIRER SORT DU PROGRAMME — signalement #67 : « enlève les espèces amphotères »,
             // « retire complètement les titrages ». APRÈS l'ajout, et c'est voulu : le premier bloc d'un examen blanc
-            // valide le programme en y recopiant les dossiers, et le professeur y laisse parfois le dossier que l'élève
-            // vient de refuser (« Dosage par titrage d'une espèce amphotère » recopié, « les espèces amphotères » à
-            // retirer) — le retrait passe derrière et l'enlève. Une notion écrite telle quelle dans `notions:` est
-            // protégée : un rapprochement souple ne retire jamais ce que le même bloc vient de poser.
+            // valide le programme, le retrait passe derrière. Ce que le même bloc pose ne part JAMAIS (conflit : rien
+            // n'est supprimé, verdict d'Omar v2), une notion ne part qu'ENTIÈRE, et le programme ne se vide pas.
             if (declare.NotionsRetirees.Count > 0)
             {
-                await RetirerDuProgrammeAsync(conversationId, eleveId, matiereId, declare, ct);
+                refus.AddRange(await RetirerDuProgrammeAsync(conversationId, eleveId, matiereId, declare, ct));
+            }
+
+            foreach (var r in refus)
+            {
+                _logger.LogWarning(
+                    "Retrait NON applique sur le controle {ControleId} (eleve {EleveId}, conversation {ConversationId}) : "
+                    + "«{Demande}» — motif {Motif}{Notion}.",
+                    declare.Controle, eleveId, conversationId, r.Demande, r.Motif,
+                    r.Notion is null ? "" : $" (notion du programme : «{r.Notion}»)");
+            }
+
+            // Le bloc de CE tour remplace ce qui restait à dire du tour d'avant.
+            var cle = CleRetraitsRefuses(conversationId);
+            if (refus.Count > 0)
+            {
+                _retraitsRefuses?.Set(cle, (declare.Controle, (IReadOnlyCollection<RetraitRefuse>)refus), TimeSpan.FromHours(6));
+            }
+            else
+            {
+                _retraitsRefuses?.Remove(cle);
             }
         }
 
+        private static string CleRetraitsRefuses(int conversationId) => $"retraits-refuses:{conversationId}";
+
         /// <summary>
-        /// Retire du programme du contrôle les notions du champ `retirer:` (signalement #67). Silencieux : un retrait
-        /// raté ne doit pas faire perdre la séance ; il se voit dans le journal.
+        /// Retire du programme du contrôle les notions du champ `retirer:` (signalement #67) et rend les refus.
+        /// Silencieux : un retrait raté ne doit pas faire perdre la séance ; il se voit dans le journal. CHAQUE LIGNE
+        /// SUPPRIMÉE Y EST ÉCRITE EN ENTIER (journal restaurable, #67 v2) : de quoi la réinsérer à l'identique.
         /// </summary>
-        private async Task RetirerDuProgrammeAsync(
+        private async Task<IReadOnlyList<RetraitRefuse>> RetirerDuProgrammeAsync(
             int conversationId, int eleveId, int matiereId, ControleNotionsDeclarees declare, CancellationToken ct)
         {
             try
             {
-                var retirees = await _controles.RetirerNotionsAsync(
+                var bilan = await _controles.RetirerNotionsAsync(
                     eleveId, declare.Controle, matiereId, declare.NotionsRetirees, garder: declare.Notions, ct: ct);
 
-                if (retirees.Count == 0)
+                foreach (var ligne in bilan.Retirees)
                 {
-                    _logger.LogWarning(
-                        "Retrait demande mais AUCUNE notion retiree du controle {ControleId} (eleve {EleveId}) : «{Demandees}» "
-                        + "ne correspond a aucune ligne du programme.",
-                        declare.Controle, eleveId, string.Join(" ; ", declare.NotionsRetirees));
-                    return;
+                    _logger.LogInformation(
+                        "Notion retiree du programme (restaurable) : {NotionRetiree}",
+                        System.Text.Json.JsonSerializer.Serialize(ligne));
                 }
 
-                _logger.LogInformation(
-                    "Controle {ControleId} (eleve {EleveId}) : {Nombre} notion(s) retiree(s) du programme ({Libelles}).",
-                    declare.Controle, eleveId, retirees.Count, string.Join(" ; ", retirees));
+                if (bilan.Retirees.Count > 0)
+                {
+                    _logger.LogInformation(
+                        "Controle {ControleId} (eleve {EleveId}) : {Nombre} notion(s) retiree(s) du programme ({Libelles}).",
+                        declare.Controle, eleveId, bilan.Retirees.Count, string.Join(" ; ", bilan.Retirees.Select(r => r.Libelle)));
+                }
+
+                return bilan.Refus;
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex,
                     "Echec du retrait de notions du programme (conversation {ConversationId}).", conversationId);
+                return [];
             }
+        }
+
+        /// <summary>
+        /// LE RETRAIT QUI N'A PAS ÉTÉ FAIT, DIT AU PROFESSEUR AU TOUR SUIVANT (#67 v2). Le bloc se lit APRÈS sa
+        /// réponse : quand le serveur refuse un retrait (morceau de notion, conflit, programme qui se viderait, notion
+        /// introuvable), le professeur a peut-être déjà écrit « je la retire ». Le bilan EXACT de son dernier bloc est
+        /// gardé en mémoire (6 h, aucune base, aucune migration) et lu UNE fois, au tour suivant de la même conversation.
+        /// Perdu si l'API redémarre entre les deux tours : le retrait reste refusé, seul le message manque.
+        /// </summary>
+        private string RetraitsNonFaits(int conversationId, int controleId)
+        {
+            if (_retraitsRefuses is null) return "";
+
+            var cle = CleRetraitsRefuses(conversationId);
+            if (!_retraitsRefuses.TryGetValue(cle, out (int Controle, IReadOnlyCollection<RetraitRefuse> Refus) dit)) return "";
+
+            _retraitsRefuses.Remove(cle);
+            return dit.Controle == controleId ? RetraitNonFait(controleId, dit.Refus) : "";
+        }
+
+        /// <summary>Le rappel du retrait refusé (voir <see cref="RetraitsNonFaits"/>). Vide sans refus.</summary>
+        internal static string RetraitNonFait(int controleId, IReadOnlyCollection<RetraitRefuse> refus)
+        {
+            if (refus.Count == 0) return "";
+
+            var lignes = refus.Select(r => r.Motif switch
+            {
+                MotifRefusRetrait.Partiel =>
+                    $"« {r.Demande} » ne nomme pas une notion entière de son programme, la plus proche est « {r.Notion} » "
+                    + "(une notion se garde ou se retire ENTIÈRE) : rien n'a été retiré",
+                MotifRefusRetrait.Conflit =>
+                    $"« {r.Notion ?? r.Demande} » était à la fois dans `notions:` et dans `retirer:` : elle est RESTÉE au "
+                    + "programme",
+                MotifRefusRetrait.Plancher =>
+                    $"retirer « {r.Demande} » aurait laissé son programme VIDE : rien n'a été retiré",
+                _ => $"« {r.Demande} » ne correspond à aucune notion de son programme : rien n'a été retiré",
+            }).Distinct();
+
+            return "\n\n[TON DERNIER RETRAIT N'A PAS ÉTÉ FAIT : " + string.Join(" ; ", lignes) + ". Dis-le à l'élève "
+                + "simplement, sans jargon (ne parle ni de bloc ni de champ). Pour un morceau de notion, dis-lui de quelle "
+                + "notion il fait partie et demande-lui s'il préfère la GARDER ENTIÈRE ou la RETIRER ENTIÈRE. Pour un "
+                + "programme qui se viderait, demande-lui ce qu'il y aura à la place. S'il choisit de retirer, écris "
+                + $"[CONTROLE_NOTIONS] controle: {controleId} avec `retirer:` et la notion recopiée au mot près de son "
+                + "programme, SANS la remettre dans `notions:`.]";
         }
 
         /// <summary>Le sujet et les notions d'un bloc [CONTROLE_NOTIONS] : validation d'un examen blanc, ou ajout.</summary>

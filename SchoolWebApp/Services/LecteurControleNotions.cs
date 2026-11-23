@@ -7,13 +7,21 @@ namespace SchoolWebApp.Api.Services
     /// <param name="Retirees">
     /// Les notions que l'élève a fait RETIRER du programme (champ `retirer:`, signalement #67) : « on ne les a pas
     /// vues », « mon prof a dit que ce ne serait pas au bac blanc ». Jamais dans <paramref name="Notions"/> : une notion
-    /// écrite dans les deux champs est retirée.
+    /// écrite dans les deux champs n'est PAS retirée (conflit, voir <paramref name="Conflits"/>).
+    /// </param>
+    /// <param name="Conflits">
+    /// Les notions écrites À LA FOIS dans `notions:` et dans `retirer:` (verdict d'Omar, #67 v2) : on ne sait pas ce
+    /// que l'élève veut, la notion RESTE dans <paramref name="Notions"/> et le conflit part au journal.
     /// </param>
     public record ControleNotionsDeclarees(
-        int Controle, string? Sujet, IReadOnlyList<string> Notions, IReadOnlyList<string>? Retirees = null)
+        int Controle, string? Sujet, IReadOnlyList<string> Notions, IReadOnlyList<string>? Retirees = null,
+        IReadOnlyList<string>? Conflits = null)
     {
         /// <summary>Jamais null.</summary>
         public IReadOnlyList<string> NotionsRetirees => Retirees ?? [];
+
+        /// <summary>Jamais null.</summary>
+        public IReadOnlyList<string> NotionsEnConflit => Conflits ?? [];
     }
 
     /// <summary>
@@ -69,19 +77,23 @@ namespace SchoolWebApp.Api.Services
             var retirees = LecteurControleProgramme.DecouperNotions(
                 LecteurBloc.Valeur(champs, "retirer", "retirees", "retire", "a_retirer", "notions_retirees", "hors_programme"));
 
-            // Une notion écrite à la fois dans `notions:` et dans `retirer:` (il a recopié le tableau entier) : c'est
-            // le retrait qui compte — l'élève l'a demandé.
-            var cles = retirees.Select(LibelleNotion.CleSouple).Where(c => c.Length > 0).ToHashSet();
             var notions = LecteurControleProgramme.DecouperNotions(
-                    LecteurBloc.Valeur(champs, "notions", "notion"))
-                .Where(n => !cles.Contains(LibelleNotion.CleSouple(n)))
-                .ToList();
+                LecteurBloc.Valeur(champs, "notions", "notion"));
+
+            // UNE NOTION ÉCRITE À LA FOIS DANS `notions:` ET DANS `retirer:` (il a recopié le tableau entier, et la
+            // notion refusée avec) : CONFLIT, on ne supprime RIEN — verdict d'Omar, #67 v2. Sur un bac blanc de test,
+            // le prof a recopié « Identifier un couple acide-base… une espèce amphotère… » dans les deux champs alors
+            // que l'élève ne retirait que les amphotères : la notion entière serait partie. Elle reste, le conflit va au
+            // journal, et le professeur le dit à l'élève au tour suivant.
+            var posees = notions.Select(LibelleNotion.CleSouple).Where(c => c.Length > 0).ToHashSet();
+            var conflits = retirees.Where(r => posees.Contains(LibelleNotion.CleSouple(r))).ToList();
+            retirees = retirees.Where(r => !posees.Contains(LibelleNotion.CleSouple(r))).ToList();
 
             // Un bloc qui n'apporte NI sujet NI notion NI retrait ne dit rien :
             // mieux vaut l'ignorer que d'écrire une ligne vide.
             return sujet is null && notions.Count == 0 && retirees.Count == 0
                 ? null
-                : new ControleNotionsDeclarees(controle, sujet, notions, retirees);
+                : new ControleNotionsDeclarees(controle, sujet, notions, retirees, conflits);
         }
 
         /// <summary>Retire le bloc. Sert aux relectures d'historique.</summary>
