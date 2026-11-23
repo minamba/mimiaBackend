@@ -239,6 +239,99 @@ namespace SchoolWebApp.Domain.Models
             Enumerable.Range(0, Math.Max(0, mots.Count - 1)).Select(i => (mots[i], mots[i + 1])).ToHashSet();
     }
 
+    /// <summary>
+    /// LE RETRAIT D'UNE NOTION SE FAIT SUR UN OUI, JAMAIS SUR UNE INTERPRÉTATION — signalement #67 v5 (verdict d'Omar sur
+    /// f33d9e2, avis du coordinateur). Après quatre versions, chaque assouplissement de l'analyse du texte libre de
+    /// l'élève (négations, verbes, morceaux) rouvrait un trou : « retire le temps de demi-réaction mais garde la vitesse
+    /// volumique » emportait la notion entière. Désormais le serveur ne retire une notion QUE si :
+    /// 1. le DERNIER message du professeur pose la question fermée, avec le libellé EXACT de la notion
+    ///    (<see cref="QuestionFermee"/> : « Je retire toute la notion « X » de ton programme ? ») ;
+    /// 2. le message de l'élève qui suit est un OUI CLAIR (<see cref="OuiClair"/>).
+    /// Tout le reste : rien n'est retiré, et le professeur le dit (le serveur pose lui-même la question fermée quand le
+    /// professeur a voulu retirer sans elle). Les règles de refus de <see cref="OuiClair"/> ne peuvent qu'EMPÊCHER un
+    /// retrait : aucune phrase de l'élève, à elle seule, ne supprime rien.
+    /// </summary>
+    public static partial class ConfirmationDeRetrait
+    {
+        /// <summary>La question fermée, au mot près : c'est elle, et elle seule, qu'un oui confirme.</summary>
+        public static string QuestionFermee(string libelle) => $"Je retire toute la notion « {libelle.Trim()} » de ton programme ?";
+
+        /// <summary>
+        /// Les libellés dont <paramref name="messageDuProfesseur"/> demande le retrait par la question fermée (dans
+        /// l'ordre, sans doublon). Espaces fines ou insécables autour des guillemets acceptées ; rien d'autre ne compte
+        /// (« tu veux que je la retire ? » n'est pas la question fermée).
+        /// </summary>
+        public static IReadOnlyList<string> NotionsDemandees(string? messageDuProfesseur)
+        {
+            if (string.IsNullOrWhiteSpace(messageDuProfesseur)) return [];
+
+            return Question().Matches(messageDuProfesseur)
+                .Select(m => m.Groups["x"].Value.Trim())
+                .Where(x => x.Length > 0)
+                .Distinct()
+                .ToList();
+        }
+
+        /// <summary>
+        /// Un OUI CLAIR : le message COMMENCE par un acquiescement (« oui », « ouais », « ok », « d'accord », « vas-y »,
+        /// « exactement », « bien sûr », « tout à fait », « je confirme ») et ne contient AUCUNE réserve : « non »,
+        /// « mais », « sauf », « seulement », « juste », « uniquement », « garde / conserve / laisse », « plutôt »,
+        /// « attends », « finalement », « enfin », « peut-être », « je crois / je pense », « pas » devant un article ou
+        /// « toute / en entier / besoin / la peine / encore », « ne … que », « pour la / celle… », « la première… », un
+        /// verbe de retrait nié (« ne la retire pas »), « évite », « inutile », « autre », ou un point d'interrogation
+        /// (il pose une question). S'il reprend des mots d'une notion demandée (<paramref name="notionsDemandees"/>), il
+        /// doit dire « toute la notion » ou « en entier » (« oui, la vitesse volumique » peut vouloir dire « seulement
+        /// elle »). Une justification reste permise (« oui, on ne l'a pas vue »). Plus de 25 mots : pas clair.
+        /// </summary>
+        /// <param name="autresNotions">Le reste du programme : un oui qui nomme une AUTRE notion (« oui, la vitesse
+        /// volumique » à la question sur la 864) n'est pas clair.</param>
+        public static bool OuiClair(
+            string? message, IReadOnlyList<string>? notionsDemandees = null, IReadOnlyList<string>? autresNotions = null)
+        {
+            if (string.IsNullOrWhiteSpace(message) || message.Contains('?')) return false;
+
+            var cle = LibelleNotion.CleSouple(message);
+            var mots = cle.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (mots.Length == 0 || mots.Length > 25) return false;
+            if (!Acquiescement().IsMatch($" {cle} ") || Reserve().IsMatch($" {cle} ")) return false;
+
+            var demandes = Vocabulaire(notionsDemandees);
+            var autres = Vocabulaire(autresNotions);
+            autres.ExceptWith(demandes);
+
+            var dits = mots.Where(m => m.Length >= 4).Select(Singulier).ToList();
+            if (dits.Any(autres.Contains)) return false;
+
+            return !dits.Any(demandes.Contains) || Entiere().IsMatch($" {cle} ");
+        }
+
+        private static HashSet<string> Vocabulaire(IReadOnlyList<string>? notions) =>
+            (notions ?? [])
+                .SelectMany(n => LibelleNotion.CleSouple(n).Split(' ', StringSplitOptions.RemoveEmptyEntries))
+                .Where(m => m.Length >= 4)
+                .Select(Singulier)
+                .ToHashSet();
+
+        private static string Singulier(string m) => m.Length > 4 && (m.EndsWith('s') || m.EndsWith('x')) ? m[..^1] : m;
+
+        // « d'accord » devient « accord » dans la clé (l'amorce « d » est ôtée par CleSouple).
+        [GeneratedRegex(@"^ (oui|ouai|ouais|ouaip|ok|okay|oki|yes|yep|accord|d accord|exactement|exact|absolument|parfait|carrement|vas y|vasy|go|bien sur|tout a fait|je confirme|confirme|c est ca|c est bon) ")]
+        private static partial Regex Acquiescement();
+
+        [GeneratedRegex(@" (non|nan|mais|sauf|seulement|juste|uniquement|garde\w*|conserve\w*|laisse\w*|plutot|attend\w*|finalement|enfin|peut etre|je crois|je pense|hesite\w*|evite\w*|inutile|autre|autres"
+            + @"|premier\w*|deuxieme|second\w*|troisieme|dernier\w*|pour (la|le|l|les|celle|celui|cette|ce|cet|ces)"
+            + @"|pas (la|le|les|l|un|une|toute?|tous|toutes|en|entier\w*|completement|totalement|cette|ce|ces|cet|celle|celui|du|des|de|d|besoin|la peine|encore|maintenant|tout de suite|ca|cela)"
+            + @"|ne pas|que (la|le|les|l|cette|ce|ces|cet|celle|celui|du|des|un|une)"
+            + @"|(ne|n) ((la|le|les|l|lui|en|me|te) ){0,2}(retir|enlev|supprim|ot|vir)\w* (pas|jamais|rien|plus)) ")]
+        private static partial Regex Reserve();
+
+        [GeneratedRegex(@" (toute? (la|cette) notion|(la|cette) notion (entiere|en entier|entierement|completement)|en entier|entiere\w*|tout entiere|completement|totalement) ")]
+        private static partial Regex Entiere();
+
+        [GeneratedRegex(@"Je retire toute la notion[\s  ]*«[\s  ]*(?<x>[^«»\r\n]+?)[\s  ]*»[\s  ]*de ton programme[\s  ]*\?", RegexOptions.IgnoreCase)]
+        private static partial Regex Question();
+    }
+
     /// <summary>Ce qu'un retrait a fait (ou ferait, en simulation) au programme d'un contrôle.</summary>
     public sealed record BilanRetrait(IReadOnlyList<NotionRetiree> Retirees, IReadOnlyList<RetraitRefuse> Refus)
     {

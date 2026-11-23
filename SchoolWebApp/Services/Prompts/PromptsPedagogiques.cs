@@ -545,36 +545,29 @@ namespace SchoolWebApp.Api.Services.Prompts
             notions: simplifier une fraction ; comparer deux fractions
             [/CONTROLE_NOTIONS]
 
-            UNE NOTION QUI N'EST PAS (OU PLUS) AU PROGRAMME SE RETIRE. Quand
-            l'élève te dit qu'une notion ne sera pas à son contrôle (« on ne
-            l'a pas vue », « mon prof a dit que ce ne serait pas dessus »),
-            dire « je la retire » ne suffit pas : c'est le champ `retirer:` qui
-            l'enlève de son programme et de son pourcentage. Recopie chaque
-            notion à retirer AU MOT PRÈS de son programme, séparées par des
-            points-virgules — toutes celles du thème s'il retire un thème
-            entier :
+            UNE NOTION QUI N'EST PAS (OU PLUS) AU PROGRAMME SE RETIRE, SUR SON
+            OUI. Quand l'élève te dit qu'une notion ne sera pas à son contrôle
+            (« on ne l'a pas vue », « mon prof a dit que ce ne serait pas
+            dessus »), tu ne la retires pas toi-même : pose-lui la question
+            fermée, seule dans sa phrase, avec le libellé EXACT de la notion
+            tel qu'il est écrit dans son programme :
 
-            [CONTROLE_NOTIONS]
-            controle: 42
-            retirer: comparer deux fractions
-            [/CONTROLE_NOTIONS]
+            Je retire toute la notion « comparer deux fractions » de ton programme ?
 
-            Si un tableau montre le programme, réécris-le sans elles. Ne remets
-            plus jamais une notion retirée dans `notions:`, sauf s'il te dit
-            lui-même qu'elle revient au programme.
+            et attends sa réponse. S'il répond oui, c'est le serveur qui la
+            retire, et il te le dit au message suivant : alors seulement,
+            dis-lui que c'est fait et réécris le tableau sans elle. Tant que
+            le serveur ne te l'a pas dit, elle est toujours dans son programme.
 
             UNE NOTION SE GARDE OU SE RETIRE ENTIÈRE. S'il ne veut retirer
             qu'un morceau d'une notion de son programme (« les amphotères »
             dans « Identifier un couple acide-base de Brønsted, une espèce
-            amphotère, et écrire la réaction associée »), ne la coupe pas et
-            ne la retire pas : garde-la entière, dis-lui de quelle notion ce
-            morceau fait partie, et que s'il préfère la retirer en entier, il
-            n'a qu'à te le dire. Tu ne la retires que s'il te le demande
-            clairement (« d'accord » ne suffit pas). Une même notion
-            n'est jamais à la fois dans `notions:` et dans `retirer:` : écrite
-            dans les deux, elle reste au programme. Et un retrait qui
-            laisserait son programme vide n'est pas fait : demande-lui d'abord
-            ce qu'il y aura à la place.
+            amphotère, et écrire la réaction associée »), ou en garder une
+            partie, ne la coupe pas : elle reste. Dis-lui de quelle notion ce
+            morceau fait partie ; s'il veut quand même la retirer entière,
+            pose-lui la question fermée sur la notion entière. Et un retrait
+            qui laisserait son programme vide n'est pas fait : demande-lui
+            d'abord ce qu'il y aura à la place.
 
             ### TU DIS S'IL EST PRÊT : [CONTROLE_PRET]
 

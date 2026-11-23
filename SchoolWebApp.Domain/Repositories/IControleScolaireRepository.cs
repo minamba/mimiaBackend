@@ -84,19 +84,19 @@ namespace SchoolWebApp.Domain.Repositories
             CancellationToken ct = default);
 
         /// <summary>
-        /// RETIRE DES NOTIONS DU PROGRAMME d'un contrôle, à la demande de l'élève (signalement #67) : « on ne les a pas
-        /// vues », « ce ne sera pas au bac blanc ». Cloisonné comme l'ajout (élève ET matière). Une notion déjà jugée
-        /// sur une copie corrigée (résultat posé) n'est jamais retirée, ni une notion que vise <paramref name="garder"/>
-        /// (posée par le même bloc, au mot près, contenue ou tronquée : conflit, elle RESTE). Une notion se garde ou se
-        /// retire ENTIÈRE : une demande qui n'en nomme qu'une partie ne supprime rien, ni le libellé complet quand
-        /// <paramref name="messageEleve"/> (le dernier message de l'élève) n'en nommait qu'un morceau (#67 v3). Un
-        /// retrait qui viderait le programme n'est pas appliqué (#67 v2). Rend les lignes supprimées (restaurables) et
-        /// les refus (dits au professeur au tour suivant).
+        /// RETIRE DES NOTIONS DU PROGRAMME d'un contrôle, CONFIRMÉES par l'élève (signalement #67 v5). Le serveur ne
+        /// retire JAMAIS sur une interprétation de la phrase de l'élève : seulement les notions dont le professeur a
+        /// demandé le retrait par la question fermée, au libellé EXACT (« Je retire toute la notion « X » de ton
+        /// programme ? »), et auxquelles l'élève a répondu par un oui clair au tour suivant (voir
+        /// <see cref="Models.ConfirmationDeRetrait"/>). Chaque libellé doit nommer une ligne AU MOT PRÈS
+        /// (<see cref="Models.LibelleNotion.CleSouple"/>, sur son libellé ou celui de sa compétence) : aucun
+        /// rapprochement souple. Cloisonné comme l'ajout (élève ET matière). Une notion déjà jugée sur une copie corrigée
+        /// (résultat posé) n'est jamais retirée. Un retrait qui viderait le programme n'est pas appliqué (#67 v2). Rend
+        /// les lignes supprimées (restaurables) et les refus.
         /// </summary>
-        Task<BilanRetrait> RetirerNotionsAsync(
+        Task<BilanRetrait> RetirerNotionsConfirmeesAsync(
             int eleveId, int controleId, int matiereId,
-            IReadOnlyList<string> libelles, IReadOnlyList<string>? garder = null,
-            CancellationToken ct = default, string? messageEleve = null);
+            IReadOnlyList<string> libellesExacts, CancellationToken ct = default);
 
         /// <summary>
         /// Remplace le sujet d'un contrôle par ce que le professeur en a
