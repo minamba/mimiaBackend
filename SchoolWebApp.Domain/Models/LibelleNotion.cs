@@ -29,6 +29,11 @@ namespace SchoolWebApp.Domain.Models
         {
             if (string.IsNullOrWhiteSpace(libelle)) return string.Empty;
 
+            // « ø », « œ », « æ » ne se décomposent pas (#67 v4, verdict d'Omar) : « Brønsted » devenait « br nsted » et ne
+            // répondait pas à « Bronsted » tapé sans ø ; « nœud » ne répondait pas à « noeud ».
+            libelle = libelle.Replace('ø', 'o').Replace('Ø', 'O')
+                .Replace("œ", "oe").Replace("Œ", "OE").Replace("æ", "ae").Replace("Æ", "AE");
+
             var sansAccent = string.Concat(libelle.Normalize(NormalizationForm.FormD)
                 .Where(c => CharUnicodeInfo.GetUnicodeCategory(c) != UnicodeCategory.NonSpacingMark));
 

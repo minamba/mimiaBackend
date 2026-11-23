@@ -768,11 +768,15 @@ namespace SchoolWebApp.Dal.Repositories
         /// tronqué, « Identifier un couple acide-base de Brønsted » pour la 864 complète). Contenu à la lettre près, comme
         /// la validation d'un examen blanc : un libellé coupé au milieu d'un mot vise encore sa ligne.
         /// </summary>
+        /// #67 v4 (verdict d'Omar, cas 11) : ou ce qui est posé est un libellé RÉÉCRIT dont au moins trois vrais mots, TOUS,
+        /// se retrouvent dans la ligne (« Identifier un couple acide-base de Brønsted et écrire la réaction associée » pour
+        /// la 864 complète, l'espèce amphotère en moins).
         private static bool Vise(string posee, string ligne) =>
             posee.Length > 0 && ligne.Length > 0
             && (posee == ligne
                 || (MotsPleins(ligne) >= 1 && ContientMots(posee, ligne))
-                || (MotsPleins(posee) >= 2 && ligne.Contains(posee, StringComparison.Ordinal)));
+                || (MotsPleins(posee) >= 2 && ligne.Contains(posee, StringComparison.Ordinal))
+                || (MotsSinguliers(posee) is { Count: >= 3 } mots && mots.IsSubsetOf(MotsSinguliers(ligne))));
 
         /// <summary>
         /// Le morceau de cette ligne que le dernier message de l'élève nomme SEUL (voir <see cref="MorceauDeNotion"/>),
@@ -785,12 +789,8 @@ namespace SchoolWebApp.Dal.Repositories
             var autres = lignes.Where(l => l != ligne).SelectMany(l => new[] { l.Libelle, l.Competence?.Libelle }).ToList();
             var sienne = new[] { ligne.Competence?.Libelle, ligne.Libelle };
 
-            // Nommée entière sous l'un de ses deux libellés : ce n'est pas un morceau.
-            var dit = MotsSinguliers(LibelleNotion.CleSouple(messageEleve));
-            if (sienne.Any(s => MotsSinguliers(LibelleNotion.CleSouple(s)) is { Count: > 0 } mots && mots.IsSubsetOf(dit)))
-            {
-                return null;
-            }
+            // Nommée entière sous l'un de ses deux libellés (le verbe d'amorce en moins, #67 v4) : ce n'est pas un morceau.
+            if (sienne.Any(s => MorceauDeNotion.NommeeEntiere(messageEleve, s))) return null;
 
             return sienne.Select(s => MorceauDeNotion.Nomme(messageEleve, s, autres)).FirstOrDefault(m => m is not null);
         }
