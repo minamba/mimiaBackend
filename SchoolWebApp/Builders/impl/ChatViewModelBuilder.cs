@@ -1565,8 +1565,10 @@ namespace SchoolWebApp.Api.Builders.impl
                   + "COMMENCE AUCUNE RÉVISION avant son accord. Dès qu'il est d'accord, écris dans ce message "
                   + $"[CONTROLE_NOTIONS] controle: {controleId} avec les notions retenues recopiées au mot près — c'est ce "
                   + "qui valide son programme —, dis-lui que son programme est prêt, puis commence. S'IL A DEMANDÉ D'EN "
-                  + "RETIRER UNE ENTIÈRE : elle n'est PAS dans `notions:`, elle va dans `retirer:` (au mot près du "
-                  + "dossier), et tu réécris le tableau sans elle. " + NotionEntiere)
+                  + "RETIRER UNE ENTIÈRE (il l'a nommée en entier, ou tout son thème) : elle n'est PAS dans `notions:`, elle "
+                  + "va dans `retirer:` (au mot près du dossier), et tu réécris le tableau sans elle. S'IL N'EN REFUSE QU'UN "
+                  + "MORCEAU, tu valides AVEC cette notion entière dans `notions:` : ni oubliée, ni dans `retirer:`. "
+                  + NotionEntiere)
             + "]";
 
         /// <summary>
@@ -1595,7 +1597,9 @@ namespace SchoolWebApp.Api.Builders.impl
             + "elle reste dans son programme (et dans `notions:` si tu valides son programme maintenant), sans aucun "
             + "`retirer:`. Dis-lui de quelle notion ce morceau fait partie, qu'une notion se garde ou se retire en entier, "
             + "et demande-lui s'il veut la retirer en entier. Tu ne la retires QUE s'il te répond oui. Ne mets JAMAIS une "
-            + "même notion à la fois dans `notions:` et dans `retirer:`.";
+            + "même notion à la fois dans `notions:` et dans `retirer:`. Avant de lui dire qu'une notion (ou un morceau) "
+            + "n'est plus dans son programme, relis la liste de son programme : si elle y est encore, dis-le-lui "
+            + "franchement, sans prétendre que c'est déjà fait.";
 
         private static string MarqueurModeSeance(string mode, int? controleId, string? epreuveCode, int? nbCours = null, int nbIllisibles = 0, bool programmeInconnu = false) => mode switch
         {
