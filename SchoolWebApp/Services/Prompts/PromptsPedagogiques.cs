@@ -3358,9 +3358,11 @@ namespace SchoolWebApp.Api.Services.Prompts
             const string tenir =
                 "UNE SEULE EXCEPTION : si TON message précédent lui proposait "
                 + "déjà une évaluation notée et qu'il vient d'accepter, tu tiens "
-                + "parole et tu la LANCES dans ce message. Tu ne reviens pas sur "
-                + "ta proposition et tu ne lui dis pas que le temps manque : "
-                + "proposer puis retirer le déroute.";
+                + "parole : tu l'ENGAGES maintenant, avec son déroulé habituel "
+                + "(d'abord le choix cahier ou ordinateur, puis le top départ "
+                + "quand il est prêt). Tu ne reviens pas sur ta proposition et "
+                + "tu ne lui dis pas que le temps manque : proposer puis retirer "
+                + "le déroute.";
 
             if (secondes >= DureeEvaluation)
             {
@@ -3381,7 +3383,7 @@ namespace SchoolWebApp.Api.Services.Prompts
                     + "semble acquise, dis-le et donne-lui rendez-vous au prochain "
                     + "cours pour la passer tranquillement. "
                     + tenir
-                    + $" Pour qu'elle tienne dans les {lisible}, tu la fais en "
+                    + $" Pour qu'elle tienne dans les {lisible}, elle compte "
                     + "TROIS questions au lieu de quatre.\n";
             }
 
