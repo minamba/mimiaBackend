@@ -6578,8 +6578,37 @@ namespace SchoolWebApp.Api.Builders.impl
                 phrases.Add(phrase);
             }
 
+            // UNE AFFIRMATION FAUSSE SUR CE QUI RESTE (#67 v5, verdict d'Omar point 4 : « ton programme n'a plus qu'une
+            // seule notion » alors que la fiche en gardait deux, jusqu'à la fin) : la liste relue en base est ajoutée,
+            // dans le même tour. Le serveur n'ajoute qu'une phrase vraie ; il ne retire rien.
+            if (phrases.Count == 0 && AffirmeUnProgrammeReduit(texte, programme.Count))
+            {
+                phrases.Add($"Pour être exact, ton programme contient toujours {(programme.Count == 1 ? "cette notion" : $"ces {programme.Count} notions")} : "
+                    + string.Join(" ; ", programme.Select(n => $"« {n} »")) + ".");
+            }
+
             return phrases.Count == 0 ? null : "\n\n" + string.Join("\n\n", phrases);
         }
+
+        /// <summary>
+        /// La réponse dit-elle que le programme a rétréci (« n'a plus qu'une seule notion », « ne porte plus que sur la
+        /// cinétique », « il ne reste que… », « déjà retirée », « plus rien à réviser ») alors que la base en garde
+        /// <paramref name="nombre"/> ? Deux notions ou plus pour « plus que / il ne reste que » ; une ou plus pour « déjà
+        /// retirée / écartée » et « plus rien ».
+        /// </summary>
+        internal static bool AffirmeUnProgrammeReduit(string? texte, int nombre)
+        {
+            if (string.IsNullOrWhiteSpace(texte) || nombre == 0) return false;
+
+            var cle = $" {LibelleNotion.CleSouple(texte)} ";
+            return (nombre >= 2 && PlusQue().IsMatch(cle)) || DejaRetireOuVide().IsMatch(cle);
+        }
+
+        [GeneratedRegex(@" (plus qu une( seule)? notion|(programme|il|elle) (ne |n )?(contient|porte|comporte|a|garde|compte) plus que|ne porte plus que|seule notion qui (te )?reste|il ne (te )?reste (plus )?que (la|le|les|l) notion) ")]
+        private static partial Regex PlusQue();
+
+        [GeneratedRegex(@" (deja (ete )?(retire|retiree|retirees|retires|ecarte|ecartee|ecartees|ecartes|enleve|enlevee|enlevees|enleves|supprime|supprimee|supprimees)|plus rien (a reviser|dans ton programme|au programme|a retirer)|programme (est )?vide) ")]
+        private static partial Regex DejaRetireOuVide();
 
         /// <summary>
         /// Les lignes du programme que vise ce que le professeur a écrit dans `retirer:` — POUR LA QUESTION SEULEMENT :
