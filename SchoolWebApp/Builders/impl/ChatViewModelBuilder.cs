@@ -6702,10 +6702,10 @@ namespace SchoolWebApp.Api.Builders.impl
             }
 
             // Les questions fermées EN DERNIER (#67 v6, point 4) : c'est la dernière question du message que le oui
-            // confirmera. Une notion que la réponse pose déjà valablement n'est reposée que si la réponse annonce aussi
-            // un retrait ou un programme réduit ; sinon les phrases ajoutées (sans « ? ») la laissent dernière question.
+            // confirmera. Une notion que la réponse pose déjà valablement n'est JAMAIS reposée (bout en bout v6 : doublons) :
+            // les phrases ajoutées après elle n'ont pas de « ? », elle reste la dernière question du message.
             var questions = aQuestionner
-                .Where(n => annonce || reduit || !dejaPosees.Contains(LibelleNotion.CleSouple(n)))
+                .Where(n => !dejaPosees.Contains(LibelleNotion.CleSouple(n)))
                 .Select(ConfirmationDeRetrait.QuestionFermee)
                 .ToList();
 
