@@ -6521,7 +6521,10 @@ namespace SchoolWebApp.Api.Builders.impl
             var pourquoi = decision.NonValables.Count > 0
                 ? "ta question fermée n'était pas la DERNIÈRE question de ton message (ou elle était citée, ou plus ancienne)"
                 : "ton dernier message ne lui posait PAS la question fermée";
-            var question = decision.Evoquees.Count == 1
+            var question = programme.Count < 2
+                ? "Son programme n'a plus qu'une notion : elle ne peut pas être retirée (un programme ne reste jamais vide). "
+                  + "Demande-lui ce qu'il y aura à la place"
+                : decision.Evoquees.Count == 1
                 ? $"Pose-lui, en DERNIÈRE question de ton message, exactement : « {ConfirmationDeRetrait.QuestionFermee(decision.Evoquees[0])} »"
                 : "Demande-lui quelle notion il veut retirer, puis pose la question fermée au libellé EXACT de son programme, "
                   + "en DERNIÈRE question de ton message : « Je retire toute la notion « … » de ton programme ? »";
@@ -6641,19 +6644,33 @@ namespace SchoolWebApp.Api.Builders.impl
             // IL A DIT OUI (OU « RETIRE ») SANS QUESTION FERMÉE VALABLE — #67 v6 (point 2, v5cR-3 et v5cR-5) : rien n'est
             // parti. La notion visée (son message, les messages du professeur ; à défaut, la question que pose cette
             // réponse quand il a lui-même écrit « retire ») reçoit la question exacte, si elle est unique.
+            // Une notion seule au programme ne se retire pas (plancher) : rien à proposer.
             var annonce = AnnonceUnRetrait(texte);
-            if (decision.DemandeSansQuestion)
+            var listeDite = false;
+            if (decision.DemandeSansQuestion && programme.Count >= 2)
             {
                 var visees = decision.Evoquees.Count > 0 ? decision.Evoquees
                     : decision.DemandeExplicite ? NotionsDesQuestions(texte, programme) : [];
                 if (visees.Count == 1)
                 {
-                    if (vues.Add(LibelleNotion.CleSouple(visees[0])))
+                    // Déjà posée valablement par la réponse, sans annonce contraire : rien à ajouter (bout en bout v6 :
+                    // la question revenait deux fois).
+                    var cle = LibelleNotion.CleSouple(visees[0]);
+                    if ((annonce || !dejaPosees.Contains(cle)) && vues.Add(cle))
                     {
                         phrases.Add($"Je n'ai rien retiré pour l'instant : « {visees[0]} » est toujours dans ton programme.");
                     }
 
                     Questionner(visees[0]);
+                }
+                else if (decision.DemandeExplicite && dejaPosees.Count == 0)
+                {
+                    // « Retire-la » sans notion qu'on puisse nommer seule (bout en bout v6R-6) : la réponse ne doit pas
+                    // laisser croire qu'un retrait a eu lieu. Phrase vraie et question ouverte : un « oui » n'y retire rien.
+                    phrases.Add("Pour être exact, je n'ai rien retiré : ton programme contient toujours "
+                        + $"{(programme.Count == 1 ? "cette notion" : $"ces {programme.Count} notions")} : "
+                        + string.Join(" ; ", programme.Select(n => $"« {n} »")) + ". Dis-moi laquelle tu veux retirer.");
+                    listeDite = true;
                 }
             }
 
@@ -6677,7 +6694,7 @@ namespace SchoolWebApp.Api.Builders.impl
 
             // UNE AFFIRMATION FAUSSE SUR CE QUI RESTE (#67 v5, verdict d'Omar point 4) : la liste relue en base est
             // ajoutée, dans le même tour, le tableau compris (v6, point 3).
-            if (reduit)
+            if (reduit && !listeDite)
             {
                 phrases.Add((absentes.Count > 0 ? "Le tableau n'est pas à jour. " : "")
                     + $"Pour être exact, ton programme contient toujours {(programme.Count == 1 ? "cette notion" : $"ces {programme.Count} notions")} : "
@@ -6686,9 +6703,9 @@ namespace SchoolWebApp.Api.Builders.impl
 
             // Les questions fermées EN DERNIER (#67 v6, point 4) : c'est la dernière question du message que le oui
             // confirmera. Une notion que la réponse pose déjà valablement n'est reposée que si la réponse annonce aussi
-            // un retrait ou un programme réduit (sa question ne serait plus la dernière chose dite).
+            // un retrait ou un programme réduit ; sinon les phrases ajoutées (sans « ? ») la laissent dernière question.
             var questions = aQuestionner
-                .Where(n => annonce || reduit || phrases.Count > 0 || !dejaPosees.Contains(LibelleNotion.CleSouple(n)))
+                .Where(n => annonce || reduit || !dejaPosees.Contains(LibelleNotion.CleSouple(n)))
                 .Select(ConfirmationDeRetrait.QuestionFermee)
                 .ToList();
 
@@ -6711,7 +6728,7 @@ namespace SchoolWebApp.Api.Builders.impl
         [GeneratedRegex(@"Je retire toute la notion[\s  ]*«[^«»\r\n]+»[\s  ]*de ton programme[\s  ]*\?", RegexOptions.IgnoreCase)]
         private static partial Regex QuestionFermeeTexte();
 
-        [GeneratedRegex(@" (c est fait|c est note|je (la |le |les |l |te la |te le |te les )?(retire|enleve|supprime)|j ai (bien )?(retire|enleve|supprime)|on (a )?(bien )?(retire|enleve)|(est|sont|a ete|ont ete|bien) (bien )?(retire|retiree|retires|retirees|enleve|enlevee|enleves|enlevees|supprime|supprimee|supprimes|supprimees)) ")]
+        [GeneratedRegex(@" (c est fait|c est note|je (la |le |les |l |te la |te le |te les )?(retire|enleve|supprime)|j ai (bien )?(retire|enleve|supprime)|on (a )?(bien )?(retire|enleve)|(est|sont|a ete|ont ete|bien) (bien )?(retire|retiree|retires|retirees|enleve|enlevee|enleves|enlevees|supprime|supprimee|supprimes|supprimees)|sort\w* (bien )?(de|du) (ton )?programme|(n est|ne sont|ne fait|ne font) plus (dans|partie)) ")]
         private static partial Regex AnnonceRetrait();
 
         /// <summary>
