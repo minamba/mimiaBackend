@@ -38,7 +38,9 @@ namespace SchoolWebApp.Domain.Repositories
 
         Task<JeuDeTest?> AjouterLigneAsync(int jeuId, int testId, string competence, CancellationToken ct = default);
 
-        /// <summary>`maintenant` (heure de France) devient « Effectué le » dès qu'un élément de la ligne change.</summary>
+        /// <summary>
+        /// `maintenant` (heure de France) devient « Effectué le » seulement si le statut change ; le texte seul ne date pas.
+        /// </summary>
         Task<JeuDeTest?> ModifierLigneAsync(
             int jeuId, int ligneId, string competence, string statut, string? commentaire,
             DateTime maintenant, CancellationToken ct = default);

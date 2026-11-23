@@ -247,12 +247,10 @@ namespace SchoolWebApp.Dal.Repositories
             var ligne = await LigneDuJeuAsync(jeuId, ligneId, ct);
             if (ligne is null) return null;
 
-            // TOUTE MODIFICATION DATE LA LIGNE — Camara, le 08/11/2026 : plus de date au calendrier, le jour et l'heure se
-            // posent seuls dès qu'un élément change. Réenregistrer sans rien changer ne touche pas à la date.
-            if (ligne.Competence != competence || ligne.Statut != statut || ligne.Commentaire != commentaire)
-            {
-                ligne.DateEffectuee = maintenant;
-            }
+            // SEUL UN CHANGEMENT DE STATUT DATE LA LIGNE — Min's, le 23/11/2026 (remplace la règle du 08/11/2026, où toute
+            // modification la datait) : « Effectué le » dit quand le test a été passé. Réécrire la compétence ou le
+            // commentaire (émoticônes, texte aéré) avec le même statut laisse la date telle quelle.
+            if (ligne.Statut != statut) ligne.DateEffectuee = maintenant;
 
             ligne.Competence = competence;
             ligne.Statut = statut;
