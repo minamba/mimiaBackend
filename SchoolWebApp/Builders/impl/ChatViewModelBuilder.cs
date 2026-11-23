@@ -4859,6 +4859,26 @@ namespace SchoolWebApp.Api.Builders.impl
 
             if (filtreEcoute?.Terminer() is { Length: > 0 } finDeFlux) yield return finDeFlux;
 
+            // LA NOTE DITE EST CELLE DE LA COPIE — signalement #75 (23/11/2026) : « 11 sur 20 » à l'oral, 15 sur 20 sur la
+            // copie. La copie porte la note recalculée à partir des verdicts ; l'oral, le chiffre que le modèle a choisi
+            // avant de les écrire. La note orale est déjà partie : une phrase vraie, ajoutée à la fin (écran, voix et
+            // historique), donne celle de la copie. Repère au journal : grep « Note dite contredite ».
+            string? noteRectifiee = null;
+            if (bilan.Task.IsCompletedSuccessfully)
+            {
+                noteRectifiee = NoteAnnoncee.Rectification(
+                    (await bilan.Task).TexteComplet, out var noteDite, out var noteCopie);
+
+                if (noteRectifiee is not null)
+                {
+                    _logger.LogWarning(
+                        "Note dite contredite par la copie : {Dite}/20 dit, {Copie}/20 sur la copie, phrase de rectification ajoutee (conversation {ConversationId}).",
+                        noteDite, noteCopie, conversationId);
+
+                    yield return noteRectifiee;
+                }
+            }
+
             // LE FILET DE LA COPIE DE CONTRÔLE — et c'est le code qui le tend.
             //
             // Voulu par Camara le 13/09/2026 : « dès qu'on parle d'un contrôle,
@@ -4989,6 +5009,10 @@ namespace SchoolWebApp.Api.Builders.impl
                 // qu'une page rechargée retrouve la carte. Le signal générique
                 // part avec : la carte a ses propres boutons, et laisser le
                 // trombone s'allumer inviterait à contourner la question.
+                // La rectification de la note (#75) aussi, à la même place que dans le flux : la séance suivante relit
+                // la note de la copie, pas seulement celle qui a été dite.
+                if (noteRectifiee is not null) contenuPersiste += noteRectifiee;
+
                 if (blocCopieAjoute is not null)
                 {
                     contenuPersiste = contenuPersiste.Replace("[DEMANDE_DOCUMENT]", string.Empty) + blocCopieAjoute;
