@@ -3505,8 +3505,8 @@ namespace SchoolWebApp.Api.Services.Prompts
         /// </summary>
         public const string RegleDesReponsesFausses =
             "[QUAND TU LUI DIS QUE C'EST FAUX — ne prête jamais à sa réponse fausse un cas où elle serait vraie "
-            + "(« ça marche pour…, mais pas pour… », « c'est vrai en général, sauf ici ») : ce cas est presque toujours "
-            + "inventé, et l'élève le retient.]";
+            + "(« ça marche pour…, mais pas pour… ») : ce cas est presque toujours inventé, et l'élève le retient. "
+            + "Dis-lui simplement que ce n'est pas ça, puis aide-le comme d'habitude, selon ta règle des essais.]";
 
         /// <summary>
         /// TOUTE QUESTION EST UNE PHRASE CORRECTE ET ENTIÈRE, CHEZ TOUS LES PROFESSEURS — Min's, le 21/11/2026 (Telegram,
