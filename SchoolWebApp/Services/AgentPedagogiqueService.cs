@@ -1153,7 +1153,8 @@ namespace SchoolWebApp.Api.Services
                     + "retenues recopiées AU MOT PRÈS de la liste (une notion ajoutée à sa demande : avec ses mots). S'IL "
                     + "VEUT EN RETIRER UNE, tu ne la retires pas toi-même : pose-lui la question fermée, seule dans sa "
                     + "phrase, avec le libellé exact de la liste : « Je retire toute la notion « <libellé exact> » de ton "
-                    + "programme ? », et attends son oui ; c'est le serveur qui la retire, et il te le dit. Une notion se "
+                    + "programme ? », en DERNIÈRE question de ton message, et attends son oui ; c'est le serveur qui la "
+                    + "retire, et il te le dit : jamais « je retire », « c'est noté » ni « c'est fait » avant. Une notion se "
                     + "garde ou se retire ENTIÈRE : s'il n'en refuse qu'un morceau, elle reste (dis-lui de quelle notion ce "
                     + "morceau fait partie) :\n"
                     + "[CONTROLE_NOTIONS]\n"
@@ -1172,7 +1173,9 @@ namespace SchoolWebApp.Api.Services
                     + "contrôle (pas forcément tous les dossiers ci-dessus : ceux qu'il a fait retirer n'y sont plus, et "
                     + "n'y reviennent pas). Ne le lui reproposes pas ; révise-le en t'appuyant sur ses documents. "
                     + "S'il te dit qu'une notion ne sera finalement pas à son examen blanc, pose-lui la question fermée "
-                    + "« Je retire toute la notion « <libellé exact> » de ton programme ? » et attends son oui.");
+                    + "« Je retire toute la notion « <libellé exact> » de ton programme ? » en DERNIÈRE question de ton "
+                    + "message, et attends son oui ; jamais « je retire », « c'est noté » ni « c'est fait » avant le fait "
+                    + "[RETRAIT] du serveur.");
             }
 
             // LE TEXTE DES DOCUMENTS, par dossier, dans la limite du contexte : le professeur prépare avec SES cours.

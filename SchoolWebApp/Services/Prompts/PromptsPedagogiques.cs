@@ -554,10 +554,16 @@ namespace SchoolWebApp.Api.Services.Prompts
 
             Je retire toute la notion « comparer deux fractions » de ton programme ?
 
-            et attends sa réponse. S'il répond oui, c'est le serveur qui la
-            retire, et il te le dit au message suivant : alors seulement,
-            dis-lui que c'est fait et réécris le tableau sans elle. Tant que
-            le serveur ne te l'a pas dit, elle est toujours dans son programme.
+            et attends sa réponse. Cette question est la DERNIÈRE de ton
+            message : aucune autre question après elle (« ou tu préfères
+            qu'on la révise ? »), sinon son oui ne retire rien. S'il répond
+            oui, c'est le serveur qui la retire, et il te le dit au message
+            suivant : alors seulement, dis-lui que c'est fait et réécris le
+            tableau sans elle. Tant que le serveur ne te l'a pas dit, elle est
+            toujours dans son programme : jamais « je retire », « je la
+            retire », « c'est noté » ni « c'est fait » avant ce fait, même
+            s'il vient de dire oui. Appuie-toi sur le fait [RETRAIT] du
+            serveur, jamais sur ce que tu crois avoir fait.
 
             UNE NOTION SE GARDE OU SE RETIRE ENTIÈRE. S'il ne veut retirer
             qu'un morceau d'une notion de son programme (« les amphotères »

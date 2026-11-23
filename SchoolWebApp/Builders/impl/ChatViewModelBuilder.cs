@@ -3680,11 +3680,11 @@ namespace SchoolWebApp.Api.Builders.impl
 
             // LE RETRAIT D'UNE NOTION, SUR UN OUI ET RIEN D'AUTRE — #67 v5. Fait AVANT de relire le programme du tour :
             // le professeur répond avec le programme tel qu'il est après le retrait, et le sait.
-            var faitDuRetrait = mode == ModesSeance.Controle && controleMode is int controleConfirme && !accueil
+            var (faitDuRetrait, decisionDuRetrait) = mode == ModesSeance.Controle && controleMode is int controleConfirme && !accueil
                 ? await RetraitConfirmeAsync(
                     conversationId, contexte.Eleve.Id, contexte.Conversation.MatiereId, controleConfirme,
-                    historique.LastOrDefault(), contenu, ct)
-                : "";
+                    historique, contenu, ct)
+                : ("", DecisionDeRetrait.Rien);
 
             if (mode == ModesSeance.Controle && controleMode is int controlePrepare)
             {
@@ -4890,7 +4890,7 @@ namespace SchoolWebApp.Api.Builders.impl
             if (mode == ModesSeance.Controle && controleMode is int controleDuRetrait && !accueil
                 && bilan.Task.IsCompletedSuccessfully)
             {
-                retraitAjoute = RetraitNonFaitDuTour((await bilan.Task).TexteComplet, notionsDuTour);
+                retraitAjoute = RetraitNonFaitDuTour((await bilan.Task).TexteComplet, notionsDuTour, decisionDuRetrait);
 
                 if (retraitAjoute is not null)
                 {
@@ -6418,16 +6418,11 @@ namespace SchoolWebApp.Api.Builders.impl
         /// Chaque ligne supprimée est écrite EN ENTIER au journal (restaurable, #67 v2). Silencieux en cas d'échec : un
         /// retrait raté ne doit pas faire perdre la séance.
         /// </summary>
-        private async Task<string> RetraitConfirmeAsync(
+        private async Task<(string Fait, DecisionDeRetrait Decision)> RetraitConfirmeAsync(
             int conversationId, int eleveId, int matiereId, int controleId,
-            DomainMessage? dernier, string? messageEleve, CancellationToken ct)
+            IReadOnlyList<DomainMessage> historique, string? messageEleve, CancellationToken ct)
         {
-            if (dernier is null || !string.Equals(dernier.Role, "assistant", StringComparison.Ordinal)) return "";
-
-            var demandees = ConfirmationDeRetrait.NotionsDemandees(dernier.Contenu);
-            if (demandees.Count == 0) return "";
-
-            // Le reste du programme : un oui qui nomme une AUTRE notion n'est pas clair.
+            // Le programme relu en base : la décision en a besoin (oui qui nomme une AUTRE notion, notion à nommer).
             IReadOnlyList<string> programme = [];
             try
             {
@@ -6439,19 +6434,33 @@ namespace SchoolWebApp.Api.Builders.impl
                 _logger.LogWarning(ex, "Programme du controle {ControleId} illisible pour la confirmation.", controleId);
             }
 
-            if (!ConfirmationDeRetrait.OuiClair(messageEleve, demandees, programme))
+            var decision = DecisionDuTour(historique, messageEleve, programme);
+
+            if (decision.DemandeSansQuestion)
+            {
+                _logger.LogWarning(
+                    "Retrait NON applique sur le controle {ControleId} (eleve {EleveId}, conversation {ConversationId}) : "
+                    + "pas de question fermee valable au dernier message ({Nombre} notion(s) visee(s)).",
+                    controleId, eleveId, conversationId, decision.Evoquees.Count);
+
+                return (FaitSansQuestion(decision, programme), decision);
+            }
+
+            if (decision.Posees.Count == 0) return ("", decision);
+
+            if (!decision.OuiClair)
             {
                 _logger.LogWarning(
                     "Retrait NON applique sur le controle {ControleId} (eleve {EleveId}, conversation {ConversationId}) : "
                     + "pas de oui clair a la question fermee ({Nombre} notion(s)).",
-                    controleId, eleveId, conversationId, demandees.Count);
+                    controleId, eleveId, conversationId, decision.Posees.Count);
 
-                return FaitDuRetrait(controleId, BilanRetrait.Vide, demandees, ouiClair: false, programme);
+                return (FaitDuRetrait(controleId, BilanRetrait.Vide, decision.Posees, ouiClair: false, programme), decision);
             }
 
             try
             {
-                var bilan = await _controles.RetirerNotionsConfirmeesAsync(eleveId, controleId, matiereId, demandees, ct);
+                var bilan = await _controles.RetirerNotionsConfirmeesAsync(eleveId, controleId, matiereId, decision.AConfirmer, ct);
 
                 foreach (var ligne in bilan.Retirees)
                 {
@@ -6475,14 +6484,56 @@ namespace SchoolWebApp.Api.Builders.impl
                     : (await _controles.GetPreparationAsync(eleveId, controleId, ct))?.Notions.Select(n => n.Libelle).ToList()
                       ?? programme;
 
-                return FaitDuRetrait(controleId, bilan, demandees, ouiClair: true, apres);
+                return (FaitDuRetrait(controleId, bilan, decision.AConfirmer, ouiClair: true, apres), decision);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 _logger.LogError(ex,
                     "Echec du retrait de notions du programme (conversation {ConversationId}).", conversationId);
-                return FaitDuRetrait(controleId, BilanRetrait.Vide, demandees, ouiClair: true, programme);
+                return (FaitDuRetrait(controleId, BilanRetrait.Vide, decision.AConfirmer, ouiClair: true, programme), decision);
             }
+        }
+
+        /// <summary>
+        /// LA DÉCISION DU TOUR, À PARTIR DE L'HISTORIQUE — #67 v6 (verdict d'Omar, point 5). Le DERNIER message de
+        /// l'historique doit être celui du professeur (sinon : aucune question fermée, rien ne part) ; le message du
+        /// professeur d'avant ne sert qu'à nommer la notion. Le reste est <see cref="ConfirmationDeRetrait.Decider"/>.
+        /// </summary>
+        internal static DecisionDeRetrait DecisionDuTour(
+            IReadOnlyList<DomainMessage> historique, string? messageEleve, IReadOnlyList<string> programme)
+        {
+            var dernier = historique.Count > 0 && string.Equals(historique[^1].Role, "assistant", StringComparison.Ordinal)
+                ? historique[^1].Contenu
+                : null;
+            var avantDernier = historique.Take(Math.Max(0, historique.Count - 1))
+                .LastOrDefault(m => string.Equals(m.Role, "assistant", StringComparison.Ordinal))?.Contenu;
+
+            return ConfirmationDeRetrait.Decider(dernier, avantDernier, messageEleve, programme);
+        }
+
+        /// <summary>
+        /// LE FAIT QUAND IL N'Y AVAIT PAS DE QUESTION FERMÉE VALABLE — #67 v6 (verdict d'Omar, point 2 : « Oui, retire-la
+        /// entière » après une question libre, puis « C'est fait »). Rien n'est retiré : le professeur le sait avant de
+        /// répondre, avec la question exacte à poser (s'il n'y a qu'une notion visée) et le programme relu.
+        /// </summary>
+        internal static string FaitSansQuestion(DecisionDeRetrait decision, IReadOnlyList<string> programme)
+        {
+            var pourquoi = decision.NonValables.Count > 0
+                ? "ta question fermée n'était pas la DERNIÈRE question de ton message (ou elle était citée, ou plus ancienne)"
+                : "ton dernier message ne lui posait PAS la question fermée";
+            var question = decision.Evoquees.Count == 1
+                ? $"Pose-lui, en DERNIÈRE question de ton message, exactement : « {ConfirmationDeRetrait.QuestionFermee(decision.Evoquees[0])} »"
+                : "Demande-lui quelle notion il veut retirer, puis pose la question fermée au libellé EXACT de son programme, "
+                  + "en DERNIÈRE question de ton message : « Je retire toute la notion « … » de ton programme ? »";
+            var liste = programme.Count > 0
+                ? " SON PROGRAMME, RELU EN BASE : " + string.Join(" ; ", programme.Select(n => $"« {n} »"))
+                  + ". Tout tableau de son programme reprend EXACTEMENT ces notions."
+                : "";
+
+            return "\n\n[RETRAIT : il te demande un retrait (ou te dit oui), mais " + pourquoi + ". RIEN N'A ÉTÉ RETIRÉ : "
+                + "toutes ses notions sont TOUJOURS DANS SON PROGRAMME. N'écris ni « c'est fait », ni « c'est noté », ni « je "
+                + "retire », ni « je la retire », et ne réécris pas le tableau sans elle : appuie-toi sur ce fait. " + question
+                + ", et attends son oui." + liste + "]";
         }
 
         /// <summary>
@@ -6508,8 +6559,9 @@ namespace SchoolWebApp.Api.Builders.impl
                 return "\n\n[RETRAIT : tu lui as demandé « " + string.Join(" » et « ", demandees) + " » à retirer, et il n'a "
                     + "PAS répondu par un oui clair. RIEN N'A ÉTÉ RETIRÉ : ces notions sont TOUJOURS DANS SON PROGRAMME, "
                     + "entières. Ne dis pas qu'elles sont retirées. Réponds à ce qu'il te dit ; s'il veut toujours en "
-                    + "retirer une, repose la question fermée, seule dans sa phrase : « Je retire toute la notion « … » de "
-                    + "ton programme ? » (libellé exact de son programme), et attends son oui." + liste + "]";
+                    + "retirer une, repose la question fermée, seule dans sa phrase et en DERNIÈRE question de ton message : "
+                    + "« Je retire toute la notion « … » de ton programme ? » (libellé exact de son programme), et attends son "
+                    + "oui. Jamais « je retire », « c'est noté » ni « c'est fait » avant." + liste + "]";
             }
 
             var refusees = bilan.Refus.Select(r => r.Demande).ToHashSet();
@@ -6542,53 +6594,190 @@ namespace SchoolWebApp.Api.Builders.impl
         /// professeur a écrit et la ligne du programme ne sert qu'à CHOISIR la question : il ne retire jamais rien. Null
         /// s'il n'y a rien à dire (pas de `retirer:`, ou plus aucune ligne visée).
         /// </summary>
-        internal static string? RetraitNonFaitDuTour(string? texte, IReadOnlyList<string> programme)
+        internal static string? RetraitNonFaitDuTour(
+            string? texte, IReadOnlyList<string> programme, DecisionDeRetrait? decision)
         {
             if (string.IsNullOrWhiteSpace(texte) || programme.Count == 0) return null;
+            decision ??= DecisionDeRetrait.Rien;
 
             var declare = LecteurControleNotions.Lire(texte);
             var demandes = declare is null ? [] : declare.NotionsRetirees.Concat(declare.NotionsEnConflit).ToList();
 
+            // Les questions fermées que la réponse pose VALABLEMENT (dernière question, en tête de phrase) : un oui au
+            // tour suivant les confirmera. Une notion déjà posée ainsi n'est pas reposée.
             var posees = ConfirmationDeRetrait.NotionsDemandees(texte);
-            var dejaPosees = posees.Select(LibelleNotion.CleSouple).ToHashSet();
+            var dejaPosees = ConfirmationDeRetrait.NotionsConfirmables(texte).Select(LibelleNotion.CleSouple).ToHashSet();
             var cles = programme.Select(LibelleNotion.CleSouple).ToHashSet();
             var phrases = new List<string>();
+            var aQuestionner = new List<string>();
             var vues = new HashSet<string>();
+
+            void Questionner(string notion)
+            {
+                // Plancher : une notion seule au programme n'est jamais proposée au retrait.
+                if (programme.Count >= 2 && !aQuestionner.Contains(notion)) aQuestionner.Add(notion);
+            }
 
             // UNE QUESTION FERMÉE AU LIBELLÉ INEXACT (#67 v5, bout en bout v5R-1 : « Identifier un couple acide-base de
             // Brønsted », tronqué) : un oui n'y retirerait rien. Si UNE seule notion du programme répond, la question au
             // libellé exact est ajoutée : c'est elle que le oui confirmera.
             foreach (var inexacte in posees.Where(p => !cles.Contains(LibelleNotion.CleSouple(p))))
             {
-                var visees = NotionsVisees(inexacte, programme).ToList();
-                if (visees.Count != 1 || dejaPosees.Contains(LibelleNotion.CleSouple(visees[0]))) continue;
-                if (!vues.Add(LibelleNotion.CleSouple(visees[0]))) continue;
+                var visees = ConfirmationDeRetrait.Viser(inexacte, programme);
+                if (visees.Count != 1 || !vues.Add(LibelleNotion.CleSouple(visees[0]))) continue;
 
-                phrases.Add($"Le nom exact de cette notion dans ton programme est « {visees[0]} ». "
-                    + ConfirmationDeRetrait.QuestionFermee(visees[0]));
+                phrases.Add($"Le nom exact de cette notion dans ton programme est « {visees[0]} ».");
+                Questionner(visees[0]);
             }
 
-            foreach (var notion in demandes.SelectMany(d => NotionsVisees(d, programme)))
+            foreach (var notion in demandes.SelectMany(d => ConfirmationDeRetrait.Viser(d, programme)))
             {
-                var cle = LibelleNotion.CleSouple(notion);
-                if (!vues.Add(cle)) continue;
+                if (!vues.Add(LibelleNotion.CleSouple(notion))) continue;
 
-                var phrase = $"Je n'ai pas encore retiré « {notion} » : elle est toujours dans ton programme.";
-                if (!dejaPosees.Contains(cle)) phrase += " " + ConfirmationDeRetrait.QuestionFermee(notion);
-                phrases.Add(phrase);
+                phrases.Add($"Je n'ai pas encore retiré « {notion} » : elle est toujours dans ton programme.");
+                Questionner(notion);
             }
 
-            // UNE AFFIRMATION FAUSSE SUR CE QUI RESTE (#67 v5, verdict d'Omar point 4 : « ton programme n'a plus qu'une
-            // seule notion » alors que la fiche en gardait deux, jusqu'à la fin) : la liste relue en base est ajoutée,
-            // dans le même tour. Le serveur n'ajoute qu'une phrase vraie ; il ne retire rien.
-            if (phrases.Count == 0 && AffirmeUnProgrammeReduit(texte, programme.Count))
+            // IL A DIT OUI (OU « RETIRE ») SANS QUESTION FERMÉE VALABLE — #67 v6 (point 2, v5cR-3 et v5cR-5) : rien n'est
+            // parti. La notion visée (son message, les messages du professeur ; à défaut, la question que pose cette
+            // réponse quand il a lui-même écrit « retire ») reçoit la question exacte, si elle est unique.
+            var annonce = AnnonceUnRetrait(texte);
+            if (decision.DemandeSansQuestion)
             {
-                phrases.Add($"Pour être exact, ton programme contient toujours {(programme.Count == 1 ? "cette notion" : $"ces {programme.Count} notions")} : "
+                var visees = decision.Evoquees.Count > 0 ? decision.Evoquees
+                    : decision.DemandeExplicite ? NotionsDesQuestions(texte, programme) : [];
+                if (visees.Count == 1)
+                {
+                    if (vues.Add(LibelleNotion.CleSouple(visees[0])))
+                    {
+                        phrases.Add($"Je n'ai rien retiré pour l'instant : « {visees[0]} » est toujours dans ton programme.");
+                    }
+
+                    Questionner(visees[0]);
+                }
+            }
+
+            // LE TABLEAU QUI ANNONCE UN PROGRAMME RÉDUIT — #67 v6 (point 3, v5cR-5 T3 : une notion à l'ardoise, deux en
+            // base). Chaque notion de la base absente du tableau du programme, ou annoncée retirée dans une phrase,
+            // reçoit la phrase vraie et la question fermée ; le tableau est dit pas à jour.
+            var absentes = AbsentesDuTableau(texte, programme);
+            var reduit = absentes.Count > 0 || AffirmeUnProgrammeReduit(texte, programme.Count);
+            if (reduit || annonce)
+            {
+                foreach (var notion in absentes.Concat(AnnonceesRetirees(texte, programme)).Distinct())
+                {
+                    if (vues.Add(LibelleNotion.CleSouple(notion)))
+                    {
+                        phrases.Add($"Je n'ai rien retiré pour l'instant : « {notion} » est toujours dans ton programme.");
+                    }
+
+                    Questionner(notion);
+                }
+            }
+
+            // UNE AFFIRMATION FAUSSE SUR CE QUI RESTE (#67 v5, verdict d'Omar point 4) : la liste relue en base est
+            // ajoutée, dans le même tour, le tableau compris (v6, point 3).
+            if (reduit)
+            {
+                phrases.Add((absentes.Count > 0 ? "Le tableau n'est pas à jour. " : "")
+                    + $"Pour être exact, ton programme contient toujours {(programme.Count == 1 ? "cette notion" : $"ces {programme.Count} notions")} : "
                     + string.Join(" ; ", programme.Select(n => $"« {n} »")) + ".");
             }
 
-            return phrases.Count == 0 ? null : "\n\n" + string.Join("\n\n", phrases);
+            // Les questions fermées EN DERNIER (#67 v6, point 4) : c'est la dernière question du message que le oui
+            // confirmera. Une notion que la réponse pose déjà valablement n'est reposée que si la réponse annonce aussi
+            // un retrait ou un programme réduit (sa question ne serait plus la dernière chose dite).
+            var questions = aQuestionner
+                .Where(n => annonce || reduit || phrases.Count > 0 || !dejaPosees.Contains(LibelleNotion.CleSouple(n)))
+                .Select(ConfirmationDeRetrait.QuestionFermee)
+                .ToList();
+
+            if (phrases.Count == 0 && questions.Count == 0) return null;
+            return "\n\n" + string.Join("\n\n", phrases.Concat(questions));
         }
+
+        /// <summary>
+        /// La réponse annonce-t-elle un retrait comme fait (« c'est fait », « c'est noté », « je retire », « je la
+        /// retire », « j'ai retiré », « est retirée », « sont retirés », « on enlève ») ? La question fermée elle-même
+        /// (« Je retire toute la notion « X » de ton programme ? ») n'en est pas une.
+        /// </summary>
+        internal static bool AnnonceUnRetrait(string? texte)
+        {
+            if (string.IsNullOrWhiteSpace(texte)) return false;
+            var sansQuestion = ConfirmationDeRetrait.SansArdoise(QuestionFermeeTexte().Replace(texte, " "));
+            return AnnonceRetrait().IsMatch($" {LibelleNotion.CleSouple(sansQuestion)} ");
+        }
+
+        [GeneratedRegex(@"Je retire toute la notion[\s  ]*«[^«»\r\n]+»[\s  ]*de ton programme[\s  ]*\?", RegexOptions.IgnoreCase)]
+        private static partial Regex QuestionFermeeTexte();
+
+        [GeneratedRegex(@" (c est fait|c est note|je (la |le |les |l |te la |te le |te les )?(retire|enleve|supprime)|j ai (bien )?(retire|enleve|supprime)|on (a )?(bien )?(retire|enleve)|(est|sont|a ete|ont ete|bien) (bien )?(retire|retiree|retires|retirees|enleve|enlevee|enleves|enlevees|supprime|supprimee|supprimes|supprimees)) ")]
+        private static partial Regex AnnonceRetrait();
+
+        /// <summary>
+        /// Les notions de la base ABSENTES d'un tableau qui donne le programme (un [ARDOISE] qui parle de « programme » et
+        /// cite au moins une notion de la base) : une notion y est présente si les deux tiers de ses vrais mots y figurent.
+        /// </summary>
+        internal static IReadOnlyList<string> AbsentesDuTableau(string? texte, IReadOnlyList<string> programme)
+        {
+            if (string.IsNullOrWhiteSpace(texte) || programme.Count == 0) return [];
+
+            var absentes = new List<string>();
+            foreach (Match m in ArdoiseDuProgramme().Matches(texte))
+            {
+                var cle = LibelleNotion.CleSouple(m.Groups["b"].Value);
+                // « Programme de la séance / du jour / de révision » : le plan d'une séance, pas le programme du contrôle.
+                if (!$" {cle} ".Contains(" programme ", StringComparison.Ordinal) || PlanDeSeance().IsMatch($" {cle} ")) continue;
+                var mots = VraisMots(cle);
+
+                var presentes = programme.Where(n => Presente(n, mots)).ToList();
+                if (presentes.Count == 0) continue;
+                absentes.AddRange(programme.Except(presentes));
+            }
+
+            return absentes.Distinct().ToList();
+
+            static bool Presente(string notion, HashSet<string> mots)
+            {
+                var siens = VraisMots(LibelleNotion.CleSouple(notion));
+                return siens.Count > 0 && siens.Count(mots.Contains) * 3 >= siens.Count * 2;
+            }
+        }
+
+        [GeneratedRegex(@" programme (de (la |cette )?(seance|revision\w*|travail)|du jour|d aujourd hui|de ce soir|de demain) ")]
+        private static partial Regex PlanDeSeance();
+
+        [GeneratedRegex(@"\[ARDOISE\](?<b>[\s\S]*?)(\[/ARDOISE\]|$)", RegexOptions.IgnoreCase)]
+        private static partial Regex ArdoiseDuProgramme();
+
+        /// <summary>
+        /// Les notions de la base que la réponse annonce retirées : nommées par un mot qui n'appartient qu'à elles dans
+        /// une phrase qui annonce un retrait (« c'est fait, le couple acide-base est retiré aussi »).
+        /// </summary>
+        internal static IReadOnlyList<string> AnnonceesRetirees(string? texte, IReadOnlyList<string> programme)
+        {
+            var sans = ConfirmationDeRetrait.SansArdoise(texte);
+            if (sans.Length == 0) return [];
+            return FinDePhrase().Split(sans)
+                .Where(AnnonceUnRetrait)
+                .SelectMany(p => ConfirmationDeRetrait.NotionsNommees(p, programme))
+                .Distinct()
+                .ToList();
+        }
+
+        /// <summary>
+        /// Les notions de la base nommées dans les QUESTIONS de la réponse (hors tableau) : « Tu parles de quelle notion ?
+        /// Celle sur le couple acide-base de Brønsted ? » (v5cR-3).
+        /// </summary>
+        internal static IReadOnlyList<string> NotionsDesQuestions(string? texte, IReadOnlyList<string> programme) =>
+            FinDePhrase().Split(ConfirmationDeRetrait.SansArdoise(texte))
+                .Where(p => p.TrimEnd().EndsWith('?'))
+                .SelectMany(p => ConfirmationDeRetrait.NotionsNommees(p, programme))
+                .Distinct()
+                .ToList();
+
+        [GeneratedRegex(@"(?<=[.!?…\n])")]
+        private static partial Regex FinDePhrase();
 
         /// <summary>
         /// La réponse dit-elle que le programme a rétréci (« n'a plus qu'une seule notion », « ne porte plus que sur la
@@ -6615,22 +6804,8 @@ namespace SchoolWebApp.Api.Builders.impl
         /// au mot près ; sinon les lignes qui ont tous ses vrais mots (un morceau, « les espèces amphotères ») ; sinon
         /// celles contenues dans ce qu'il a écrit (un libellé allongé). Trois au plus.
         /// </summary>
-        private static IEnumerable<string> NotionsVisees(string demande, IReadOnlyList<string> programme)
-        {
-            var cle = LibelleNotion.CleSouple(demande);
-            if (cle.Length == 0) return [];
-
-            var exactes = programme.Where(p => LibelleNotion.CleSouple(p) == cle).ToList();
-            if (exactes.Count > 0) return exactes;
-
-            var mots = VraisMots(cle);
-            var avecTousSesMots = mots.Count == 0 ? [] : programme.Where(p => mots.IsSubsetOf(VraisMots(LibelleNotion.CleSouple(p)))).ToList();
-            if (avecTousSesMots.Count > 0) return avecTousSesMots.Take(3);
-
-            return programme
-                .Where(p => LibelleNotion.CleSouple(p) is { Length: > 0 } c && $" {cle} ".Contains($" {c} ", StringComparison.Ordinal))
-                .Take(3);
-        }
+        private static IEnumerable<string> NotionsVisees(string demande, IReadOnlyList<string> programme) =>
+            ConfirmationDeRetrait.Viser(demande, programme);
 
         /// <summary>Les vrais mots d'une clé (4 lettres et plus), sans leur « s » ou « x » final.</summary>
         private static HashSet<string> VraisMots(string cle) =>

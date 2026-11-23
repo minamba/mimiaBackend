@@ -273,6 +273,216 @@ namespace SchoolWebApp.Domain.Models
         }
 
         /// <summary>
+        /// Les libellés qu'un oui CONFIRME dans <paramref name="messageDuProfesseur"/> — #67 v6 (verdict d'Omar, point 4).
+        /// Une question fermée ne compte que si :
+        /// - elle COMMENCE une phrase (début du message, ou après « . », « ! », « ? », « … » ou un saut de ligne ; gras
+        ///   et espaces ignorés) : citée dans une phrase (« je te demanderais : Je retire… ? », « « Je retire… ? » ») ou
+        ///   entre guillemets, ce n'est pas une question posée ;
+        /// - elle est la DERNIÈRE question du message : aucun « ? » après elle. Plusieurs questions fermées qui se suivent
+        ///   à la fin comptent toutes ; une autre question après (« Ou tu préfères qu'on la révise ? ») : rien.
+        /// </summary>
+        public static IReadOnlyList<string> NotionsConfirmables(string? messageDuProfesseur)
+        {
+            if (string.IsNullOrWhiteSpace(messageDuProfesseur)) return [];
+
+            var texte = messageDuProfesseur;
+            var posees = Question().Matches(texte).Where(m => EnTeteDePhrase(texte, m.Index) && !Citee(texte, m.Index + m.Length))
+                .ToList();
+            if (posees.Count == 0) return [];
+
+            // La suite de questions fermées qui FINIT le message : chacune se termine au « ? » qui précède la suivante.
+            var retenues = new List<string>();
+            var attendu = texte.LastIndexOf('?');
+            for (var i = posees.Count - 1; i >= 0 && attendu >= 0; i--)
+            {
+                var m = posees[i];
+                if (m.Index + m.Length - 1 != attendu) break;
+                retenues.Insert(0, m.Groups["x"].Value.Trim());
+                attendu = m.Index == 0 ? -1 : texte.LastIndexOf('?', m.Index - 1);
+            }
+
+            return retenues.Where(x => x.Length > 0).Distinct().ToList();
+        }
+
+        private static bool EnTeteDePhrase(string texte, int debut)
+        {
+            var i = debut - 1;
+            while (i >= 0 && (char.IsWhiteSpace(texte[i]) && texte[i] != '\n' || texte[i] is '*' or '_' or ' ' or ' '))
+            {
+                i--;
+            }
+
+            return i < 0 || texte[i] is '\n' or '.' or '!' or '?' or '…';
+        }
+
+        private static bool Citee(string texte, int fin)
+        {
+            var i = fin;
+            while (i < texte.Length && (texte[i] is ' ' or ' ' or ' ' or '*' or '_')) i++;
+            return i < texte.Length && texte[i] is '»' or '"' or '”' or '\'' or '’';
+        }
+
+        /// <summary>
+        /// LA DÉCISION DU TOUR — #67 v6 (verdict d'Omar, point 5 : le harnais teste la vraie décision). Ce que le serveur
+        /// fait du message de l'élève, à partir du DERNIER message du professeur (<paramref name="dernierProfesseur"/>,
+        /// null si le dernier message de l'historique n'est pas le sien), du message d'avant
+        /// (<paramref name="avantDernierProfesseur"/>, pour nommer la notion seulement) et du programme relu en base.
+        /// Seules les notions de <see cref="DecisionDeRetrait.AConfirmer"/> sont passées au dépôt (au mot près).
+        /// </summary>
+        public static DecisionDeRetrait Decider(
+            string? dernierProfesseur, string? avantDernierProfesseur, string? messageEleve, IReadOnlyList<string> programme)
+        {
+            var confirmables = NotionsConfirmables(dernierProfesseur);
+            var cles = programme.Select(LibelleNotion.CleSouple).ToHashSet();
+
+            // UN LIBELLÉ TRONQUÉ COUVERT PAR LA QUESTION EXACTE (#67 v6, point 9 : « Identifier un couple acide-base de
+            // Brønsted » suivi de la question au libellé exact ajoutée par le serveur) : seul le libellé exact part au
+            // dépôt, le tronqué ne laisse pas de « Introuvable » au journal.
+            var exactes = confirmables.Where(c => cles.Contains(LibelleNotion.CleSouple(c))).ToList();
+            var aPasser = confirmables
+                .Where(c => cles.Contains(LibelleNotion.CleSouple(c)) || !Viser(c, programme).Any(v => exactes.Contains(v)))
+                .ToList();
+
+            var nonValables = NotionsDemandees(dernierProfesseur).Concat(NotionsDemandees(avantDernierProfesseur))
+                .Where(n => !confirmables.Contains(n)).Distinct().ToList();
+
+            if (confirmables.Count > 0)
+            {
+                var oui = OuiClair(messageEleve, confirmables, programme);
+                return new DecisionDeRetrait(oui ? aPasser : [], confirmables, nonValables, oui, false, []);
+            }
+
+            // PAS DE QUESTION FERMÉE VALABLE : rien ne part. S'il demande pourtant un retrait (verbe de retrait non nié,
+            // ou un oui à un message qui parlait de retrait), le serveur le dit et nomme la notion s'il n'y en a qu'une.
+            var veut = DemandeUnRetrait(messageEleve)
+                || (Acquiescement().IsMatch($" {LibelleNotion.CleSouple(messageEleve)} ")
+                    && (nonValables.Count > 0 || QuestionDeRetrait(dernierProfesseur)));
+            if (!veut) return new DecisionDeRetrait([], [], nonValables, false, false, []);
+
+            var evoquees = NotionsNommees(messageEleve, programme);
+            if (evoquees.Count == 0) evoquees = NotionsVisees(dernierProfesseur, programme);
+            if (evoquees.Count == 0) evoquees = NotionsVisees(avantDernierProfesseur, programme);
+
+            return new DecisionDeRetrait([], [], nonValables, false, true, evoquees, DemandeUnRetrait(messageEleve));
+        }
+
+        /// <summary>
+        /// L'élève demande-t-il lui-même un retrait : un verbe de retrait (« retire », « enlève », « supprime », « vire »)
+        /// qui n'est pas nié (« ne la retire pas »).
+        /// </summary>
+        public static bool DemandeUnRetrait(string? message)
+        {
+            var cle = $" {LibelleNotion.CleSouple(message)} ";
+            return VerbeDeRetrait().IsMatch(cle) && !RetraitNie().IsMatch(cle);
+        }
+
+        /// <summary>
+        /// Les notions du programme que <paramref name="texte"/> NOMME par un mot qui n'appartient qu'à elle (« les
+        /// titrages », « les espèces amphotères ») ; vide si aucune, ou si le texte n'en nomme aucune seule.
+        /// </summary>
+        public static IReadOnlyList<string> NotionsNommees(string? texte, IReadOnlyList<string> programme)
+        {
+            if (string.IsNullOrWhiteSpace(texte) || programme.Count == 0) return [];
+
+            var parNotion = programme.Select(n => (Notion: n, Mots: Vocabulaire([n]))).ToList();
+            var dits = LibelleNotion.CleSouple(texte).Split(' ', StringSplitOptions.RemoveEmptyEntries)
+                .Where(m => m.Length >= 4).Select(Singulier).ToHashSet();
+
+            return parNotion
+                .Where(p => p.Mots.Any(m => dits.Contains(m) && parNotion.Count(q => q.Mots.Contains(m)) == 1))
+                .Select(p => p.Notion)
+                .ToList();
+        }
+
+        /// <summary>
+        /// Les notions du programme qu'un message du professeur vise pour un RETRAIT (pour la question exacte
+        /// seulement) : libellés entre guillemets après « retire / retirer / enlève » (question fermée tronquée ou
+        /// reformulée : « je retire toute la notion « Identifier un couple acide-base de Brønsted » aussi ? »), puis les
+        /// notions nommées dans une phrase qui parle de retrait. Le tableau ([ARDOISE]) et la liste ajoutée par le serveur
+        /// (« Pour être exact… ») ne comptent pas.
+        /// </summary>
+        public static IReadOnlyList<string> NotionsVisees(string? messageDuProfesseur, IReadOnlyList<string> programme)
+        {
+            var texte = SansArdoise(messageDuProfesseur);
+            if (texte.Length == 0 || programme.Count == 0) return [];
+
+            var visees = new List<string>();
+            foreach (Match m in CitationApresRetrait().Matches(texte))
+            {
+                visees.AddRange(Viser(m.Groups["x"].Value, programme));
+            }
+
+            if (visees.Count == 0)
+            {
+                foreach (var phrase in Phrases().Split(texte).Where(p => ParleDeRetrait(p)))
+                {
+                    visees.AddRange(NotionsNommees(phrase, programme));
+                }
+            }
+
+            return visees.Distinct().ToList();
+        }
+
+        /// <summary>
+        /// Les lignes du programme que vise un libellé : au mot près ; sinon celles qui ont tous ses vrais mots (un
+        /// morceau, un libellé tronqué) ; sinon celles contenues dans ce qu'il a écrit (un libellé allongé). Trois au plus.
+        /// </summary>
+        public static IReadOnlyList<string> Viser(string? demande, IReadOnlyList<string> programme)
+        {
+            var cle = LibelleNotion.CleSouple(demande);
+            if (cle.Length == 0) return [];
+
+            var exactes = programme.Where(p => LibelleNotion.CleSouple(p) == cle).ToList();
+            if (exactes.Count > 0) return exactes;
+
+            var mots = cle.Split(' ', StringSplitOptions.RemoveEmptyEntries).Where(m => m.Length >= 4).Select(Singulier).ToHashSet();
+            var avecTousSesMots = mots.Count == 0 ? [] : programme.Where(p => mots.IsSubsetOf(Vocabulaire([p]))).ToList();
+            if (avecTousSesMots.Count > 0) return avecTousSesMots.Take(3).ToList();
+
+            return programme
+                .Where(p => LibelleNotion.CleSouple(p) is { Length: > 0 } c && $" {cle} ".Contains($" {c} ", StringComparison.Ordinal))
+                .Take(3)
+                .ToList();
+        }
+
+        /// <summary>
+        /// Le texte d'un message sans ses tableaux ([ARDOISE]…[/ARDOISE]) ni les paragraphes de liste ajoutés par le
+        /// serveur (« Pour être exact… », « Le tableau n'est pas à jour… ») : ils énumèrent le programme, ils ne visent
+        /// aucune notion.
+        /// </summary>
+        public static string SansArdoise(string? texte)
+        {
+            if (string.IsNullOrWhiteSpace(texte)) return "";
+            var sans = Ardoise().Replace(texte, "\n");
+            return string.Join("\n", sans.Split('\n').Where(l => !ListeDuServeur().IsMatch(l))).Trim();
+        }
+
+        /// <summary>Une phrase du message (hors tableau) qui finit par « ? » et parle de retrait (« Tu veux que je la retire ? »).</summary>
+        private static bool QuestionDeRetrait(string? texte) =>
+            Phrases().Split(SansArdoise(texte)).Any(p => p.TrimEnd().EndsWith('?') && ParleDeRetrait(p));
+
+        private static bool ParleDeRetrait(string? texte) =>
+            !string.IsNullOrWhiteSpace(texte) && VerbeDeRetrait().IsMatch($" {LibelleNotion.CleSouple(texte)} ");
+
+        [GeneratedRegex(@" (retir\w*|enlev\w*|supprim\w*|vire|virer|vires|virez) ")]
+        private static partial Regex VerbeDeRetrait();
+
+        [GeneratedRegex(@" ((ne|n) ((la|le|les|l|lui|en|me|te) ){0,2}(retir|enlev|supprim|vir)\w* (pas|jamais|rien|plus)|ne pas ((la|le|les|l) )?(retir|enlev|supprim|vir)\w*|pas (la|le|les|l) (retir|enlev|supprim|vir)\w*) ")]
+        private static partial Regex RetraitNie();
+
+        [GeneratedRegex(@"(retir|enlev|supprim)\w*[^«»\r\n?]{0,60}«[\s  ]*(?<x>[^«»\r\n]+?)[\s  ]*»", RegexOptions.IgnoreCase)]
+        private static partial Regex CitationApresRetrait();
+
+        [GeneratedRegex(@"(?<=[.!?…\n])")]
+        private static partial Regex Phrases();
+
+        [GeneratedRegex(@"\[ARDOISE\][\s\S]*?(\[/ARDOISE\]|$)", RegexOptions.IgnoreCase)]
+        private static partial Regex Ardoise();
+
+        [GeneratedRegex(@"^\s*(Pour être exact|Le tableau n'est pas à jour)", RegexOptions.IgnoreCase)]
+        private static partial Regex ListeDuServeur();
+
+        /// <summary>
         /// Un OUI CLAIR : le message COMMENCE par un acquiescement (« oui », « ouais », « ok », « d'accord », « vas-y »,
         /// « exactement », « bien sûr », « tout à fait », « je confirme ») et ne contient AUCUNE réserve : « non »,
         /// « mais », « sauf », « seulement », « juste », « uniquement », « garde / conserve / laisse », « plutôt »,
@@ -322,6 +532,10 @@ namespace SchoolWebApp.Domain.Models
             + @"|premier\w*|deuxieme|second\w*|troisieme|dernier\w*|pour (la|le|l|les|celle|celui|cette|ce|cet|ces)"
             + @"|pas (la|le|les|l|un|une|toute?|tous|toutes|en|entier\w*|completement|totalement|cette|ce|ces|cet|celle|celui|du|des|de|d|besoin|la peine|encore|maintenant|tout de suite|ca|cela)"
             + @"|ne pas|que (la|le|les|l|cette|ce|ces|cet|celle|celui|du|des|un|une)"
+            // #67 v6 (point 4) : « oui jsp », « oui je sais pas », « d'accord, on la révise alors », « oui, on l'a vue en
+            // classe » (il l'a VUE : elle reste), « je la connais ».
+            + @"|jsp|jsais|chais|sais pas|sait pas|sais plus|sais rien|ne sais|revis\w*|alors"
+            + @"|on l a (vu|vue|vus|vues|fait|faite|faites|etudie\w*|deja)|(je|on) (la|le|l) (connai\w*|maitris\w*|sai\w*)"
             + @"|(ne|n) ((la|le|les|l|lui|en|me|te) ){0,2}(retir|enlev|supprim|ot|vir)\w* (pas|jamais|rien|plus)) ")]
         private static partial Regex Reserve();
 
@@ -330,6 +544,26 @@ namespace SchoolWebApp.Domain.Models
 
         [GeneratedRegex(@"Je retire toute la notion[\s  ]*«[\s  ]*(?<x>[^«»\r\n]+?)[\s  ]*»[\s  ]*de ton programme[\s  ]*\?", RegexOptions.IgnoreCase)]
         private static partial Regex Question();
+    }
+
+    /// <summary>
+    /// La décision du tour sur un retrait (#67 v6) : voir <see cref="ConfirmationDeRetrait.Decider"/>.
+    /// </summary>
+    /// <param name="AConfirmer">Les libellés passés au dépôt (oui clair à une question fermée valable) ; vide sinon.</param>
+    /// <param name="Posees">Les questions fermées VALABLES du dernier message du professeur (dernière question, en tête de
+    /// phrase, non citées).</param>
+    /// <param name="NonValables">Les questions fermées présentes mais qui ne comptent pas (pas la dernière question,
+    /// citées, ou dans l'avant-dernier message).</param>
+    /// <param name="OuiClair">L'élève a répondu par un oui clair aux questions valables.</param>
+    /// <param name="DemandeSansQuestion">Il demande un retrait (ou dit oui à un message qui en parlait) sans question
+    /// fermée valable : RIEN n'est retiré, le serveur le dit et pose la question exacte si la notion est unique.</param>
+    /// <param name="Evoquees">Les notions du programme qu'il semble viser (pour la question exacte seulement).</param>
+    /// <param name="DemandeExplicite">Son message contient lui-même un verbe de retrait non nié (« retire-la »).</param>
+    public sealed record DecisionDeRetrait(
+        IReadOnlyList<string> AConfirmer, IReadOnlyList<string> Posees, IReadOnlyList<string> NonValables,
+        bool OuiClair, bool DemandeSansQuestion, IReadOnlyList<string> Evoquees, bool DemandeExplicite = false)
+    {
+        public static readonly DecisionDeRetrait Rien = new([], [], [], false, false, []);
     }
 
     /// <summary>Ce qu'un retrait a fait (ou ferait, en simulation) au programme d'un contrôle.</summary>
