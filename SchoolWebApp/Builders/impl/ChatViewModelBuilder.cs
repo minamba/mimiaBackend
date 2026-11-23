@@ -1577,9 +1577,10 @@ namespace SchoolWebApp.Api.Builders.impl
         /// </summary>
         private static string RetraitDeNotion(int? controleId) =>
             "S'IL TE DIT QU'UNE NOTION NE SERA PAS (OU PLUS) À SON CONTRÔLE, retire-la : écris dans ce message "
-            + $"[CONTROLE_NOTIONS] controle: {controleId} avec `retirer:` et chaque notion concernée recopiée au mot près "
-            + "de son programme (toutes celles du thème s'il retire un thème entier), et réécris le tableau sans elles. "
-            + "Dire « je la retire » sans ce bloc ne la retire pas. " + NotionEntiere;
+            + $"[CONTROLE_NOTIONS] controle: {controleId} avec `retirer:` et chaque notion concernée recopiée AU MOT PRÈS "
+            + "de la liste de son programme (le libellé COMPLET tel qu'il y est écrit, pas une version courte que tu "
+            + "aurais écrite plus tôt ; toutes celles du thème s'il retire un thème entier), et réécris le tableau sans "
+            + "elles. Dire « je la retire » sans ce bloc ne la retire pas. " + NotionEntiere;
 
         /// <summary>
         /// UNE NOTION SE GARDE OU SE RETIRE ENTIÈRE — verdict d'Omar sur le #67 (v2). « Enlève les espèces
@@ -1589,11 +1590,12 @@ namespace SchoolWebApp.Api.Builders.impl
         /// ne la retire pas (conflit : elle reste).
         /// </summary>
         private const string NotionEntiere =
-            "UNE NOTION SE GARDE OU SE RETIRE ENTIÈRE : s'il ne veut retirer qu'un MORCEAU d'une notion de son programme "
-            + "(« les amphotères » dans « Identifier un couple acide-base de Brønsted, une espèce amphotère… »), garde-la "
-            + "entière, dis-lui de quelle notion ce morceau fait partie et qu'elle se garde ou se retire en entier, et "
-            + "demande-lui s'il veut la retirer en entier. Ne mets JAMAIS une même notion à la fois dans `notions:` et dans "
-            + "`retirer:`.";
+            "UNE NOTION SE GARDE OU SE RETIRE ENTIÈRE : s'il ne refuse qu'un MORCEAU d'une notion de son programme (« les "
+            + "amphotères » dans « Identifier un couple acide-base de Brønsted, une espèce amphotère… »), NE LA RETIRE PAS : "
+            + "elle reste dans son programme (et dans `notions:` si tu valides son programme maintenant), sans aucun "
+            + "`retirer:`. Dis-lui de quelle notion ce morceau fait partie, qu'une notion se garde ou se retire en entier, "
+            + "et demande-lui s'il veut la retirer en entier. Tu ne la retires QUE s'il te répond oui. Ne mets JAMAIS une "
+            + "même notion à la fois dans `notions:` et dans `retirer:`.";
 
         private static string MarqueurModeSeance(string mode, int? controleId, string? epreuveCode, int? nbCours = null, int nbIllisibles = 0, bool programmeInconnu = false) => mode switch
         {
@@ -6417,7 +6419,9 @@ namespace SchoolWebApp.Api.Builders.impl
 
                 foreach (var ligne in bilan.Retirees)
                 {
-                    _logger.LogInformation(
+                    // Avertissement, pas information : une donnée d'élève supprimée doit rester au journal même quand
+                    // l'environnement ne garde que les avertissements (c'est le réglage de la copie de test).
+                    _logger.LogWarning(
                         "Notion retiree du programme (restaurable) : {NotionRetiree}",
                         System.Text.Json.JsonSerializer.Serialize(ligne));
                 }

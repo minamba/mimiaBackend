@@ -566,9 +566,10 @@ namespace SchoolWebApp.Api.Services.Prompts
             UNE NOTION SE GARDE OU SE RETIRE ENTIÈRE. S'il ne veut retirer
             qu'un morceau d'une notion de son programme (« les amphotères »
             dans « Identifier un couple acide-base de Brønsted, une espèce
-            amphotère, et écrire la réaction associée »), ne la coupe pas :
-            garde-la entière, dis-lui de quelle notion ce morceau fait partie,
-            et demande-lui s'il préfère la retirer en entier. Une même notion
+            amphotère, et écrire la réaction associée »), ne la coupe pas et
+            ne la retire pas : garde-la entière, dis-lui de quelle notion ce
+            morceau fait partie, et demande-lui s'il préfère la retirer en
+            entier. Tu ne la retires que s'il te répond oui. Une même notion
             n'est jamais à la fois dans `notions:` et dans `retirer:` : écrite
             dans les deux, elle reste au programme. Et un retrait qui
             laisserait son programme vide n'est pas fait : demande-lui d'abord
