@@ -3478,6 +3478,32 @@ namespace SchoolWebApp.Api.Services.Prompts
             + "règle ou la définition du cours, juste et en entier ; faire observer ne remplace jamais une leçon demandée.]";
 
         /// <summary>
+        /// UNE RÉPONSE FAUSSE NE S'ADOUCIT PAS PAR UNE FAUSSE CONCESSION, CHEZ TOUS LES PROFESSEURS — signalement #66
+        /// (Adam, 23/11/2026, 3e, préparation du brevet blanc de maths). À « c'est quoi la formule du théorème de
+        /// Pythagore ? », l'élève répond « c'est a plus b égale c », et Nora corrige : « Pas tout à fait. a + b = c, ça
+        /// marche pour des longueurs quelconques mais pas pour un triangle rectangle ». C'est faux (aucun triangle ne
+        /// vérifie a + b = c : inégalité triangulaire), et l'enfant retient la phrase.
+        ///
+        /// CE N'EST PAS UN INDICE : <see cref="RegleDesIndices"/> interdit déjà d'énoncer une règle dont on n'est pas sûr,
+        /// mais le professeur ne croyait pas donner un indice ; il ADOUCISSAIT son refus en accordant à la réponse fausse
+        /// un domaine où elle serait vraie (« ça marche pour…, mais pas pour… »). Ce tic de politesse n'est pas propre à
+        /// Pythagore ni aux maths (« c'est vrai pour le présent, mais pas ici », « ça marche pour les noms, pas pour les
+        /// verbes ») : la règle est donc COMMUNE, ici, et pas dans la spécialité de Nora (règle de Min's du 21/11/2026).
+        ///
+        /// REDITE À CHAQUE TOUR, PAS ÉCRITE DANS LE NOYAU, pour la même raison que <see cref="RegleDesTroisEssais"/> : le
+        /// Noyau ne se touche pas (Camara, 19/09/2026) et le préfixe en cache ne bouge pas. Pas pendant un contrôle noté :
+        /// on n'y dit pas si c'est juste ou faux. Sans aucun nombre (un nombre cité dans une consigne est recopié).
+        /// Elle ne touche ni au verdict ni à l'aide qui suit : seulement à la phrase qui accorde un cas inventé.
+        /// </summary>
+        public const string RegleDesReponsesFausses =
+            "[QUAND SA RÉPONSE EST FAUSSE — tu le lui dis simplement, puis tu l'aides comme d'habitude. N'adoucis JAMAIS "
+            + "ton refus en lui accordant un cas où sa réponse serait vraie (« ça marche pour…, mais pas pour… », « c'est vrai "
+            + "en général, sauf ici ») : c'est presque toujours faux, et l'élève retient la phrase. Tu ne le dis que si c'est "
+            + "une règle exacte du cours, dont tu es sûr. Exemple : à « a + b = c » pour le théorème de Pythagore, ne dis "
+            + "pas que c'est vrai pour d'autres longueurs ou d'autres triangles (ce n'est vrai pour aucun triangle) ; dis "
+            + "seulement que ce n'est pas la bonne relation.]";
+
+        /// <summary>
         /// TOUTE QUESTION EST UNE PHRASE CORRECTE ET ENTIÈRE, CHEZ TOUS LES PROFESSEURS — Min's, le 21/11/2026 (Telegram,
         /// 13 h 02) : « une question doit toujours être une phrase correcte et entière pour tous les profs ». Constat d'Adam
         /// (#30) : Nora écrit « Et après 74, ça vient ? » au lieu de « Et après 74, qu'est-ce qui vient ? ». Ce n'est pas

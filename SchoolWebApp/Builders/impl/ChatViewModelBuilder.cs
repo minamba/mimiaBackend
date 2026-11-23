@@ -4019,6 +4019,15 @@ namespace SchoolWebApp.Api.Builders.impl
                 declencheur += "\n\n" + PromptsPedagogiques.RegleDesIndices;
             }
 
+            // UNE RÉPONSE FAUSSE NE S'ADOUCIT PAS PAR UNE FAUSSE CONCESSION — signalement #66 (23/11/2026 : « a + b = c, ça
+            // marche pour des longueurs quelconques mais pas pour un triangle rectangle »), voir
+            // `PromptsPedagogiques.RegleDesReponsesFausses`. Commune à TOUS les professeurs, à chaque tour, juste après la
+            // règle des indices ; pas pendant un contrôle noté (on n'y dit pas si c'est juste ou faux).
+            if (!controleOuvert)
+            {
+                declencheur += "\n\n" + PromptsPedagogiques.RegleDesReponsesFausses;
+            }
+
             // TOUTE QUESTION EST UNE PHRASE CORRECTE ET ENTIÈRE — Min's, le 21/11/2026, voir
             // `PromptsPedagogiques.RegleDesQuestionsCompletes`. Commune à TOUS les professeurs, à chaque tour (arrivée,
             // sons et lecture compris), dans le tour et pas dans le Noyau : le préfixe en cache ne change pas. Pas pendant
