@@ -69,9 +69,7 @@ namespace SchoolWebApp.Api.Services
         {
             if (string.IsNullOrWhiteSpace(message)) return null;
 
-            var ouverture = OuvertureDuBloc().Match(message);
-            var parle = ouverture.Success ? message[..ouverture.Index] : message;
-            parle = Ardoise().Replace(parle, " ");
+            var parle = Parle(message);
 
             foreach (Match m in Mention().Matches(parle))
             {
@@ -113,8 +111,66 @@ namespace SchoolWebApp.Api.Services
 
             if (Math.Abs(dite.Value - copie.Value) < Ecart - 1e-9) return null;
 
-            return Phrase(copie.Value, dite.Value);
+            // LA QUESTION RESTE LA DERNIÈRE CHOSE DITE. Relevé dans le message réel du #75 : le professeur rend la note,
+            // commence la correction et finit sur une question (« … et l'autre, à ton avis, placée où ? »). La phrase
+            // ajoutée APRÈS l'enterrerait : l'élève entendrait une rectification et ne saurait plus qu'on attend sa
+            // réponse. On la lui repose donc, telle quelle.
+            var question = QuestionEnSuspens(message);
+
+            return Phrase(copie.Value, dite.Value)
+                + (question is null ? string.Empty : " Je te repose ma question. " + question);
         }
+
+        /// <summary>
+        /// La question sur laquelle finit ce que le professeur DIT (avant le bloc, tableau et balises écartés) ; null si
+        /// son texte ne finit pas sur une question. Une question courte (« Et l'autre, placée où ? ») reprend la phrase
+        /// d'avant, dans le même paragraphe, pour être comprise seule — jamais si cette phrase contient une note.
+        /// </summary>
+        public static string? QuestionEnSuspens(string? message)
+        {
+            var parle = Balise().Replace(Parle(message), " ").TrimEnd();
+            if (!parle.EndsWith('?')) return null;
+
+            var fin = parle.Length;
+            var debut = DebutDePhrase(parle, fin - 1);
+            var question = parle[debut..fin].Trim();
+            if (question.Length == 0) return null;
+
+            if (question.Length < 80 && debut > 0 && parle[debut - 1] != '\n')
+            {
+                var avant = DebutDePhrase(parle, debut - 1);
+                var phrase = parle[avant..debut].Trim();
+                if (phrase.Length > 0 && !Mention().IsMatch(phrase)) question = phrase + " " + question;
+            }
+
+            return question;
+        }
+
+        /// <summary>Juste après la fin de la phrase précédente (. ! ? … ou saut de ligne), en remontant depuis <paramref name="avant"/> exclu.</summary>
+        private static int DebutDePhrase(string texte, int avant)
+        {
+            for (var i = avant - 1; i >= 0; i--)
+            {
+                if (texte[i] is '\n') return i + 1;
+                if (texte[i] is '.' or '!' or '?' or '…' && (i + 1 >= texte.Length || char.IsWhiteSpace(texte[i + 1])))
+                    return i + 1;
+            }
+
+            return 0;
+        }
+
+        /// <summary>Ce que le professeur dit avant son bloc [EVALUATION], sans le tableau.</summary>
+        private static string Parle(string? message)
+        {
+            if (string.IsNullOrEmpty(message)) return string.Empty;
+
+            var ouverture = OuvertureDuBloc().Match(message);
+            var parle = ouverture.Success ? message[..ouverture.Index] : message;
+            return Ardoise().Replace(parle, " ");
+        }
+
+        [GeneratedRegex(@"\[/?[A-Z_]+(?::[^\]]*)?\]")]
+        private static partial Regex Balise();
 
         /// <summary>
         /// Dite par le professeur, à la deuxième personne, sans rien reprocher à personne : il a recompté. Elle donne
