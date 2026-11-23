@@ -3241,7 +3241,8 @@ namespace SchoolWebApp.Api.Services.Prompts
                     + "rien de plus : tu attends la photo de sa copie, et quand "
                     + "elle arrive, tu rends sa note avec le bloc [EVALUATION]. "
                     + "Toutes les questions annoncées comptent : tu n'en retires "
-                    + "aucune pour le temps.",
+                    + "aucune pour le temps, et jamais moins de trois questions "
+                    + "avant la note.",
 
                 // ENGAGÉE DANS LES 90 DERNIÈRES SECONDES (#68 v3, Omar point 4).
                 // Le « oui » a été tenu, le support est demandé ou choisi, et le
@@ -3257,8 +3258,9 @@ namespace SchoolWebApp.Api.Services.Prompts
                     + "qu'il est prêt, c'est le top départ, avec la balise "
                     + "[DEBUT_EVALUATION] dans ton message : l'écran lui laisse "
                     + "alors le temps de finir (un dépassement est prévu pour un "
-                    + "contrôle en cours). Elle compte TROIS questions, toutes "
-                    + "posées, jusqu'à la note. Seule exception : s'il y renonce "
+                    + "contrôle en cours). Elle compte TROIS questions : tu "
+                    + "l'annonces au top départ (« trois questions »), et tu les "
+                    + "poses toutes, jusqu'à la note. Seule exception : s'il y renonce "
                     + "lui-même, tu la reportes au prochain cours avec le bloc "
                     + "[EVALUATION_PREVUE], puis tu fais le bilan.",
 
@@ -3420,8 +3422,9 @@ namespace SchoolWebApp.Api.Services.Prompts
                     + "n'en retires aucune, tu n'en fusionnes aucune, et tu ne "
                     + "dis RIEN du temps (ni « la dernière qu'on a le temps de "
                     + "faire », ni « il te reste une minute », ni « vu le temps "
-                    + "qui reste »). Si l'heure passe, l'écran lui laisse le "
-                    + "temps de finir.\n";
+                    + "qui reste »). Si tu n'as pas annoncé leur nombre : jamais "
+                    + "moins de trois questions avant la note. Si l'heure passe, "
+                    + "l'écran lui laisse le temps de finir.\n";
             }
 
             // ENGAGÉE, CE N'EST PLUS UNE PROPOSITION (#68 v2, Omar point 1).
@@ -3443,8 +3446,8 @@ namespace SchoolWebApp.Api.Services.Prompts
                     + "l'écran (ni chrono, ni temps de dépassement si l'heure "
                     + "passe). Tu ne la reportes pas, tu ne la retires pas, et tu "
                     + "ne dis RIEN du temps : ni qu'il manque, ni qu'elle doit "
-                    + "tenir. Toutes les questions que tu annonces seront posées "
-                    + "et notées. C'est une évaluation NOTÉE, pas un entraînement. "
+                    + "tenir. Au top départ, tu annonces combien de questions "
+                    + "elle compte, et toutes seront posées et notées. C'est une évaluation NOTÉE, pas un entraînement. "
                     // L'ÉLÈVE PEUT SE RAVISER (#68 v3, Omar point 3) : sans cette
                     // sortie, « tu ne la reportes pas » le retenait, et rien ne
                     // levait l'état engagé. [EVALUATION_PREVUE] le lève
