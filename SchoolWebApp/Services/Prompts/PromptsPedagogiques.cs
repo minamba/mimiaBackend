@@ -357,8 +357,9 @@ namespace SchoolWebApp.Api.Services.Prompts
             Une évaluation que tu as proposée, tu la tiens : s'il te répond
             oui, tu l'engages, avec son déroulé habituel (choix du support,
             puis le top départ quand il est prêt), sans revenir dessus, et tu
-            la mènes jusqu'à la note. Le minuteur te dit, à chaque tour,
-            combien de questions elle compte.
+            la mènes jusqu'à la note. De même s'il te la DEMANDE lui-même
+            alors qu'il reste plus de dix minutes : tu l'engages. Le minuteur
+            te dit, à chaque tour, combien de questions elle compte.
             Proposer puis se dédire pour une affaire de secondes déroute
             l'élève plus que tout.
 
@@ -3393,14 +3394,17 @@ namespace SchoolWebApp.Api.Services.Prompts
             // plus de plancher : seul le « oui » en a un (SeuilEvaluationCourte).
             if (evaluationEngagee)
             {
-                return "L'ÉVALUATION NOTÉE EST ENGAGÉE : tu l'as proposée, il a "
-                    + "accepté, le choix cahier ou ordinateur est demandé ou fait. "
-                    + "Tu la mènes à son terme, avec son déroulé habituel "
-                    + "(consignes, « tu es prêt ? », top départ avec "
-                    + "[DEBUT_EVALUATION], puis la note). Tu ne la reportes pas, "
-                    + "tu ne la retires pas, et tu ne dis RIEN du temps : ni qu'il "
-                    + "manque, ni qu'elle doit tenir. C'est une évaluation NOTÉE, "
-                    + "pas un entraînement."
+                return "L'ÉVALUATION NOTÉE EST ENGAGÉE : elle a été proposée et "
+                    + "acceptée (ou demandée par lui), le choix cahier ou ordinateur "
+                    + "est demandé ou fait. Tu la mènes à son terme, avec son "
+                    + "déroulé habituel : consignes, « tu es prêt ? », top départ, "
+                    + "puis la note. AU TOP DÉPART — dès qu'il te dit qu'il est "
+                    + "prêt —, la balise [DEBUT_EVALUATION] va OBLIGATOIREMENT dans "
+                    + "ton message : sans elle, le contrôle n'existe pas pour "
+                    + "l'écran (ni chrono, ni temps de dépassement si l'heure "
+                    + "passe). Tu ne la reportes pas, tu ne la retires pas, et tu "
+                    + "ne dis RIEN du temps : ni qu'il manque, ni qu'elle doit "
+                    + "tenir. C'est une évaluation NOTÉE, pas un entraînement."
                     + (secondes < DureeEvaluation
                         ? " Elle compte TROIS questions, pas quatre.\n"
                         : "\n");
@@ -3419,15 +3423,25 @@ namespace SchoolWebApp.Api.Services.Prompts
 
             if (secondes >= DureeEvaluation)
             {
+                // DEUX CAS, PAS « UNE SEULE EXCEPTION » (#68 v2, Omar point 3) :
+                // « UNE SEULE EXCEPTION … De même s'il te la demande » se
+                // contredisait, et l'élève qui la demandait lui-même à 10 min 50
+                // se la voyait refuser au banc (4 fois sur 5, « au prochain
+                // cours »). Il reste les dix minutes : on les lui donne.
                 return "Concrètement, à cet instant : ne PROPOSE PLUS d'évaluation "
-                    + "notée — le temps qu'il te réponde, il ne resterait plus les "
-                    + "dix minutes qu'elle demande. Si la notion semble acquise, "
-                    + "dis-le et donne-lui rendez-vous au prochain cours pour la "
-                    + "passer tranquillement. "
-                    + tenir
-                    + " Elle tient encore en entier. De même s'il te la demande "
-                    + "lui-même : tu l'engages maintenant, avec son déroulé "
-                    + "habituel.\n";
+                    + "notée de ta propre initiative — le temps qu'il te réponde, "
+                    + "il ne resterait plus les dix minutes qu'elle demande. Si la "
+                    + "notion semble acquise, dis-le et donne-lui rendez-vous au "
+                    + "prochain cours pour la passer tranquillement. DEUX CAS où tu "
+                    + "l'ENGAGES quand même, maintenant, avec son déroulé habituel "
+                    + "(d'abord le choix cahier ou ordinateur, puis le top départ "
+                    + "quand il est prêt) : (1) TON message précédent lui proposait "
+                    + "une évaluation notée et il vient d'accepter — tu tiens "
+                    + "parole ; (2) il te DEMANDE lui-même de la passer — il reste "
+                    + "les dix minutes, tu ne la renvoies pas au prochain cours. "
+                    + "Dans les deux cas, pas un mot sur le temps qui manque. Elle "
+                    + "tient encore en entier. C'est une évaluation NOTÉE, pas un "
+                    + "entraînement.\n";
             }
 
             if (secondes >= SeuilEvaluationCourte)
