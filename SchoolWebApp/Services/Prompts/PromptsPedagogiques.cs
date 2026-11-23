@@ -3494,14 +3494,19 @@ namespace SchoolWebApp.Api.Services.Prompts
         /// Noyau ne se touche pas (Camara, 19/09/2026) et le préfixe en cache ne bouge pas. Pas pendant un contrôle noté :
         /// on n'y dit pas si c'est juste ou faux. Sans aucun nombre (un nombre cité dans une consigne est recopié).
         /// Elle ne touche ni au verdict ni à l'aide qui suit : seulement à la phrase qui accorde un cas inventé.
+        ///
+        /// SANS EXEMPLE TIRÉ D'UN EXERCICE, ET AVEC « SANS LUI DONNER LA BONNE RÉPONSE » (mesuré au bout en bout le
+        /// 23/11/2026, scénario exact d'Adam) : une première version citait l'exemple « a + b = c pour Pythagore » et
+        /// finissait par « dis seulement que ce n'est pas la bonne relation ». Résultat : la formule juste écrite au
+        /// tableau 5 fois sur 16 (0 sur 16 sans la règle) — l'exemple amorçait la bonne réponse. La règle redit donc la
+        /// règle absolue et ne cite plus aucun exercice.
         /// </summary>
         public const string RegleDesReponsesFausses =
-            "[QUAND SA RÉPONSE EST FAUSSE — tu le lui dis simplement, puis tu l'aides comme d'habitude. N'adoucis JAMAIS "
-            + "ton refus en lui accordant un cas où sa réponse serait vraie (« ça marche pour…, mais pas pour… », « c'est vrai "
-            + "en général, sauf ici ») : c'est presque toujours faux, et l'élève retient la phrase. Tu ne le dis que si c'est "
-            + "une règle exacte du cours, dont tu es sûr. Exemple : à « a + b = c » pour le théorème de Pythagore, ne dis "
-            + "pas que c'est vrai pour d'autres longueurs ou d'autres triangles (ce n'est vrai pour aucun triangle) ; dis "
-            + "seulement que ce n'est pas la bonne relation.]";
+            "[QUAND SA RÉPONSE EST FAUSSE — tu le lui dis simplement, puis tu l'aides comme d'habitude, SANS lui donner "
+            + "la bonne réponse (ni à l'oral, ni au tableau). N'adoucis JAMAIS ton refus en accordant à sa réponse un cas "
+            + "où elle serait vraie (« ça marche pour…, mais pas pour… », « c'est vrai en général, sauf ici ») : ce cas est "
+            + "presque toujours inventé, et l'élève retient la phrase. Tu ne le dis que si c'est une règle exacte du cours, "
+            + "dont tu es sûr.]";
 
         /// <summary>
         /// TOUTE QUESTION EST UNE PHRASE CORRECTE ET ENTIÈRE, CHEZ TOUS LES PROFESSEURS — Min's, le 21/11/2026 (Telegram,
