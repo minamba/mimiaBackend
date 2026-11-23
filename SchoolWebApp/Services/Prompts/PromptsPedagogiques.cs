@@ -3265,7 +3265,9 @@ namespace SchoolWebApp.Api.Services.Prompts
                     + "alors le temps de finir (un dépassement est prévu pour un "
                     + "contrôle en cours). Elle compte TROIS questions : tu "
                     + "l'annonces au top départ (« trois questions »), et tu les "
-                    + "poses toutes, jusqu'à la note. Seule exception : s'il y renonce "
+                    + "poses toutes, jusqu'à la note. "
+                    + NumerotationDuControle
+                    + "Seule exception : s'il y renonce "
                     + "lui-même, tu la reportes au prochain cours avec le bloc "
                     + "[EVALUATION_PREVUE], puis tu fais le bilan.",
 
@@ -3411,6 +3413,17 @@ namespace SchoolWebApp.Api.Services.Prompts
         /// son propre message sous les yeux, et c'est lui qui sait s'il vient
         /// de proposer. La consigne lui dit seulement quoi faire dans ce cas.
         /// </summary>
+        /// <summary>
+        /// #68 v5 (Omar point 2, gEO3-3) : au top départ, la première question s'appelle
+        /// « Question 1 » — les exercices faits avant dans la séance ne comptent pas.
+        /// Le code tient la suite : une note qui compte moins de questions que l'annonce
+        /// (jamais moins de trois) est refusée (LecteurEvaluation.FiltreNoteEcourtee).
+        /// </summary>
+        public const string NumerotationDuControle =
+            "Au top départ, la numérotation repart à 1 : ta première question "
+            + "s'appelle « Question 1 », même si vous avez fait d'autres exercices "
+            + "juste avant. ";
+
         private static string ConsigneDEvaluation(int secondes, bool evaluationEnCours, bool evaluationEngagee)
         {
             // UN CONTRÔLE OUVERT NE S'ÉCOURTE PAS (#68 v3, Omar point 1). Au
@@ -3453,7 +3466,13 @@ namespace SchoolWebApp.Api.Services.Prompts
                     + "passe). Tu ne la reportes pas, tu ne la retires pas, et tu "
                     + "ne dis RIEN du temps : ni qu'il manque, ni qu'elle doit "
                     + "tenir. Au top départ, tu annonces combien de questions "
-                    + "elle compte, et toutes seront posées et notées. C'est une évaluation NOTÉE, pas un entraînement. "
+                    + "elle compte, et toutes seront posées et notées. "
+                    // LA NUMÉROTATION REPART À 1 (#68 v5, Omar point 2, gEO3-3) : la
+                    // première question du top départ s'appelait « Troisième et
+                    // dernière question » (les exercices d'avant comptés), et la
+                    // note tombait après elle seule.
+                    + NumerotationDuControle
+                    + "C'est une évaluation NOTÉE, pas un entraînement. "
                     // L'ÉLÈVE PEUT SE RAVISER (#68 v3, Omar point 3) : sans cette
                     // sortie, « tu ne la reportes pas » le retenait, et rien ne
                     // levait l'état engagé. [EVALUATION_PREVUE] le lève

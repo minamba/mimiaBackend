@@ -4685,6 +4685,16 @@ namespace SchoolWebApp.Api.Builders.impl
             // ouverte et que l'élève n'a pas trouvé : ailleurs, pas le moindre retard sur la voix. Dernier filtre du texte.
             var filtreReponse = reponseCherchee is { } cherchee ? new ReponseNonDonnee(cherchee.Valeur) : null;
 
+            // LA NOTE ÉCOURTÉE NE PART PAS — #68 v5, Omar point 2 (gEO3-3 : trois questions annoncées, note après une
+            // seule). Pendant un contrôle ouvert, à un tour ordinaire de l'élève (pas la clôture forcée, qui note
+            // justement ce qui a été fait), un bloc [EVALUATION] qui compte moins de questions que l'annonce (jamais
+            // moins de trois) est retenu : voir LecteurEvaluation.FiltreNoteEcourtee. Une seule fois par contrôle.
+            var messagesDuProfesseur = historique.Where(m => m.Role == "assistant").Select(m => (string?)m.Contenu).ToList();
+            var filtreNote = controleOuvert && typeAccueil == TypeAccueil.Aucun
+                && !LecteurEvaluation.DejaRefusee(messagesDuProfesseur)
+                ? new LecteurEvaluation.FiltreNoteEcourtee(LecteurEvaluation.QuestionsRequises(messagesDuProfesseur))
+                : null;
+
             // DES CONSIGNES PLUTÔT QUE DES FILTRES — tâche 0000o (22/11/2026), décision du coordinateur selon la règle de Min's :
             // 4e tour de contrôle d'Omar où les filtres de PHRASES cassaient des phrases (« Ce que tu as dit, mais c'est le mot
             // français. », « Ce n'est pas encore, prends ton temps. », « Tu te souviens ? Et après 80 ? », « Tu répètes ? »
@@ -4766,6 +4776,7 @@ namespace SchoolWebApp.Api.Builders.impl
                 if (filtreNombres is not null) accorde = filtreNombres.Passer(accorde);
                 if (filtreBaliseNombre is not null) accorde = filtreBaliseNombre.Passer(accorde);
                 if (filtreReponse is not null) accorde = filtreReponse.Passer(accorde);
+                if (filtreNote is not null) accorde = filtreNote.Passer(accorde);
                 if (accorde.Length == 0) continue;
 
                 if (filtreEcoute is null)
@@ -4849,6 +4860,11 @@ namespace SchoolWebApp.Api.Builders.impl
             if (filtreReponse is not null)
             {
                 finAccordee = filtreReponse.Passer(finAccordee) + filtreReponse.Terminer();
+            }
+
+            if (filtreNote is not null)
+            {
+                finAccordee = filtreNote.Passer(finAccordee) + filtreNote.Terminer();
             }
 
             if (finAccordee.Length > 0)
@@ -4937,6 +4953,34 @@ namespace SchoolWebApp.Api.Builders.impl
                 yield return debutAjoute;
             }
 
+            // LA NOTE ÉCOURTÉE REFUSÉE (#68 v5) : le bloc retenu ne part pas, la phrase vraie part à la place, à
+            // l'écran ET dans le message gardé (même patron que les filets ci-dessus). Le contrôle reste ouvert pour
+            // l'écran (pas de [/EVALUATION]) comme pour le serveur (`EstOuvert`). Exception : si la réponse clôt la
+            // séance ([FIN_SEANCE], [RAPPORT]), il n'y aura pas de tour suivant pour finir — la note part telle quelle.
+            string? phraseNoteRefusee = null;
+            if (filtreNote is { Refusee: true, BlocRefuse: { } blocRefuse } && bilan.Task.IsCompletedSuccessfully)
+            {
+                var texteModele = (await bilan.Task).TexteComplet;
+                if (texteModele.Contains("[FIN_SEANCE]", StringComparison.Ordinal)
+                    || texteModele.Contains("[RAPPORT]", StringComparison.OrdinalIgnoreCase))
+                {
+                    yield return "\n" + blocRefuse;
+                }
+                else
+                {
+                    var requises = LecteurEvaluation.QuestionsRequises(messagesDuProfesseur);
+                    phraseNoteRefusee = LecteurEvaluation.PhraseNoteRefusee(
+                        requises, filtreNote.Notees!.Value,
+                        LecteurEvaluation.AuCahier(historique.Select(m => (string?)m.Contenu).Append(contenu)));
+
+                    _logger.LogWarning(
+                        "Note ecourtee refusee : {Notees} question(s) notee(s) sur {Requises} requises (conversation {ConversationId}).",
+                        filtreNote.Notees, requises, conversationId);
+
+                    yield return phraseNoteRefusee;
+                }
+            }
+
             // Le flux est terminé : on persiste la réponse et la consommation.
             // Si le client s'est déconnecté en cours de route, on enregistre quand
             // même ce qui a été produit — les tokens sont facturés dans tous les cas.
@@ -4997,6 +5041,13 @@ namespace SchoolWebApp.Api.Builders.impl
                 // La balise du top départ ajoutée par le filet rejoint aussi le
                 // texte persisté : c'est là que `EstOuvert` la relira.
                 if (debutAjoute is not null) contenuPersiste += debutAjoute;
+
+                // La note écourtée refusée (#68 v5) : ni son bloc dans le message gardé (le contrôle reste ouvert
+                // pour `EstOuvert`), ni sa trace en base (voir plus bas) ; la phrase vraie, oui.
+                if (phraseNoteRefusee is not null)
+                {
+                    contenuPersiste = LecteurEvaluation.SansBloc(contenuPersiste) + phraseNoteRefusee;
+                }
 
                 if (copieOuverte is not null
                     && LecteurCopieControle.LireDemande(contenuPersiste) == copieOuverte.Id)
@@ -5200,9 +5251,12 @@ namespace SchoolWebApp.Api.Builders.impl
                         conversationId, contexte.Eleve.Id);
                 }
 
-                await EnregistrerEvaluationAsync(
-                    conversationId, contexte.Eleve.Id, contexte.Eleve.NiveauScolaireId,
-                    resultat.TexteComplet, ct);
+                if (phraseNoteRefusee is null)
+                {
+                    await EnregistrerEvaluationAsync(
+                        conversationId, contexte.Eleve.Id, contexte.Eleve.NiveauScolaireId,
+                        resultat.TexteComplet, ct);
+                }
 
                 await EnregistrerRapportAsync(
                     conversationId, contexte.Eleve.Id, resultat.TexteComplet,
