@@ -1596,10 +1596,11 @@ namespace SchoolWebApp.Api.Builders.impl
             + "amphotères » dans « Identifier un couple acide-base de Brønsted, une espèce amphotère… »), NE LA RETIRE PAS : "
             + "elle reste dans son programme (et dans `notions:` si tu valides son programme maintenant), sans aucun "
             + "`retirer:`. Dis-lui de quelle notion ce morceau fait partie, qu'une notion se garde ou se retire en entier, "
-            + "et demande-lui s'il veut la retirer en entier. Tu ne la retires QUE s'il te répond oui. Ne mets JAMAIS une "
-            + "même notion à la fois dans `notions:` et dans `retirer:`. Avant de lui dire qu'une notion (ou un morceau) "
-            + "n'est plus dans son programme, relis la liste de son programme : si elle y est encore, dis-le-lui "
-            + "franchement, sans prétendre que c'est déjà fait.";
+            + "que tu la GARDES ENTIÈRE, et que s'il préfère la retirer en entier il n'a qu'à te le dire. Tu ne la "
+            + "retires QUE s'il te dit clairement de la retirer EN ENTIER (« d'accord », « on continue » : elle reste). "
+            + "Ne mets JAMAIS une même notion à la fois dans `notions:` et dans `retirer:`. Avant de lui dire qu'une "
+            + "notion (ou un morceau) n'est plus dans son programme, relis la liste de son programme : si elle y est "
+            + "encore, dis-le-lui franchement, sans prétendre que c'est déjà fait.";
 
         private static string MarqueurModeSeance(string mode, int? controleId, string? epreuveCode, int? nbCours = null, int nbIllisibles = 0, bool programmeInconnu = false) => mode switch
         {
@@ -3684,6 +3685,7 @@ namespace SchoolWebApp.Api.Builders.impl
             int? nbCours = null;
             var nbIllisibles = 0;
             var programmeInconnu = false;
+            IReadOnlyList<string> notionsDuTour = [];
             if (mode == ModesSeance.Controle && controleMode is int controlePrepare)
             {
                 try
@@ -3695,6 +3697,7 @@ namespace SchoolWebApp.Api.Builders.impl
                     // Le programme manque-t-il encore ? Voir `MarqueurModeSeance`.
                     var preparationDuTour = await _controles.GetPreparationAsync(contexte.Eleve.Id, controlePrepare, ct);
                     programmeInconnu = preparationDuTour is { PerimetreConnu: false };
+                    notionsDuTour = preparationDuTour?.Notions.Select(n => n.Libelle).ToList() ?? [];
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
@@ -3717,6 +3720,10 @@ namespace SchoolWebApp.Api.Builders.impl
             if (mode == ModesSeance.Controle && controleMode is int controleDuRetrait)
             {
                 declencheur += RetraitsNonFaits(conversationId, controleDuRetrait);
+
+                // S'IL NE NOMME QU'UN MORCEAU D'UNE NOTION, LE PROFESSEUR LE SAIT AVANT DE RÉPONDRE (#67 v3) : sinon il
+                // recopie le libellé complet dans `retirer:` (A-1), ou répond « c'est déjà fait » (A-3, A-7).
+                if (!accueil) declencheur += MorceauNommeDuTour(contenu, notionsDuTour);
             }
 
             // UN CONTRÔLE OUVERT SE RAPPELLE À CHAQUE TOUR, ET C'EST LE CODE QUI
@@ -5236,7 +5243,7 @@ namespace SchoolWebApp.Api.Builders.impl
                     await EnregistrerControleNotionsAsync(
                         conversationId, contexte.Eleve.Id, contexte.Conversation.MatiereId,
                         contexte.Eleve.NiveauScolaireId, controleMode.Value, resultat.TexteComplet, ct,
-                        travaillee: aRepondu);
+                        travaillee: aRepondu, messageEleve: accueil ? null : contenu);
 
                     if (aRepondu)
                     {
@@ -6350,7 +6357,7 @@ namespace SchoolWebApp.Api.Builders.impl
         private async Task EnregistrerControleNotionsAsync(
             int conversationId, int eleveId, int matiereId,
             int? niveauScolaireId, int controleCible, string texte, CancellationToken ct,
-            bool travaillee = true)
+            bool travaillee = true, string? messageEleve = null)
         {
             var declare = LecteurControleNotions.Lire(texte);
             if (declare is null) return;
@@ -6382,7 +6389,7 @@ namespace SchoolWebApp.Api.Builders.impl
             // n'est supprimé, verdict d'Omar v2), une notion ne part qu'ENTIÈRE, et le programme ne se vide pas.
             if (declare.NotionsRetirees.Count > 0)
             {
-                var bilan = await RetirerDuProgrammeAsync(conversationId, eleveId, matiereId, declare, ct);
+                var bilan = await RetirerDuProgrammeAsync(conversationId, eleveId, matiereId, declare, messageEleve, ct);
 
                 // DÉJÀ RETIRÉE DANS CETTE SÉANCE : le professeur recopie parfois, dans le bloc suivant, une notion qu'il a
                 // retirée au tour d'avant. « Introuvable » serait vrai mais trompeur au tour suivant (« rien n'a été
@@ -6425,12 +6432,16 @@ namespace SchoolWebApp.Api.Builders.impl
         /// SUPPRIMÉE Y EST ÉCRITE EN ENTIER (journal restaurable, #67 v2) : de quoi la réinsérer à l'identique.
         /// </summary>
         private async Task<BilanRetrait> RetirerDuProgrammeAsync(
-            int conversationId, int eleveId, int matiereId, ControleNotionsDeclarees declare, CancellationToken ct)
+            int conversationId, int eleveId, int matiereId, ControleNotionsDeclarees declare, string? messageEleve,
+            CancellationToken ct)
         {
             try
             {
+                // Le dernier message de l'élève accompagne la demande (#67 v3) : s'il ne nommait qu'un MORCEAU de la
+                // notion, son libellé complet recopié par le professeur ne la supprime pas.
                 var bilan = await _controles.RetirerNotionsAsync(
-                    eleveId, declare.Controle, matiereId, declare.NotionsRetirees, garder: declare.Notions, ct: ct);
+                    eleveId, declare.Controle, matiereId, declare.NotionsRetirees, garder: declare.Notions, ct: ct,
+                    messageEleve: messageEleve);
 
                 foreach (var ligne in bilan.Retirees)
                 {
@@ -6476,6 +6487,33 @@ namespace SchoolWebApp.Api.Builders.impl
             return dit.Controle == controleId ? RetraitNonFait(controleId, dit.Refus) : "";
         }
 
+        /// <summary>
+        /// LE MORCEAU DE NOTION, DIT AVANT LA RÉPONSE — #67 v3 (verdict d'Omar sur 2d1b535). « Retire les espèces
+        /// amphotères » ne nomme qu'un morceau de « Identifier un couple acide-base de Brønsted, une espèce amphotère… » :
+        /// le serveur refuse après coup le retrait de la notion entière (<see cref="MorceauDeNotion"/>), mais le professeur
+        /// a déjà répondu. Le FAIT lui est donné avec le message : ce morceau, cette notion, toujours au programme.
+        /// Conditionnel (« s'il demande de retirer… ») : nommer un morceau pour une question de cours ne change rien.
+        /// Vide si son message ne nomme aucun morceau seul, ou s'il demande expressément la notion entière.
+        /// </summary>
+        internal static string MorceauNommeDuTour(string? message, IReadOnlyList<string> notions)
+        {
+            if (string.IsNullOrWhiteSpace(message) || notions.Count == 0 || !MorceauDeNotion.ParleDeRetrait(message)) return "";
+
+            var morceaux = notions
+                .Select((n, i) => (Notion: n, Morceau: MorceauDeNotion.Nomme(message, n, notions.Where((_, j) => j != i))))
+                .Where(x => x.Morceau is not null)
+                .Select(x => $"« {x.Morceau} » n'est qu'un morceau de la notion « {x.Notion} »")
+                .ToList();
+
+            if (morceaux.Count == 0) return "";
+
+            return "\n\n[S'IL TE DEMANDE DE RETIRER CE QU'IL VIENT DE NOMMER : " + string.Join(" ; ", morceaux) + ". Cette "
+                + "notion est TOUJOURS DANS SON PROGRAMME, entière : rien n'a été retiré, ne dis pas que c'est déjà fait. "
+                + "Ne la retire pas dans ce message (pas de `retirer:`) : dis-lui de quelle notion ce morceau fait partie, "
+                + "qu'une notion se garde ou se retire en entier, que tu la GARDES ENTIÈRE, et que s'il préfère la retirer "
+                + "en entier, il n'a qu'à te le dire.]";
+        }
+
         /// <summary>Le rappel du retrait refusé (voir <see cref="RetraitsNonFaits"/>). Vide sans refus.</summary>
         internal static string RetraitNonFait(int controleId, IReadOnlyCollection<RetraitRefuse> refus)
         {
@@ -6483,24 +6521,29 @@ namespace SchoolWebApp.Api.Builders.impl
 
             var lignes = refus.Select(r => r.Motif switch
             {
+                // « Rien n'a été retiré » était faux quand le même bloc retirait une autre ligne (#67 v3, ligne courte).
                 MotifRefusRetrait.Partiel =>
-                    $"« {r.Demande} » ne nomme pas une notion entière de son programme, la plus proche est « {r.Notion} » "
-                    + "(une notion se garde ou se retire ENTIÈRE) : rien n'a été retiré",
+                    $"« {r.Demande} » ne nomme qu'un morceau de la notion « {r.Notion} » de son programme (une notion se "
+                    + "garde ou se retire ENTIÈRE) : cette notion n'a PAS été retirée, elle est toujours dans son programme",
                 MotifRefusRetrait.Conflit =>
                     $"« {r.Notion ?? r.Demande} » était à la fois dans `notions:` et dans `retirer:` : elle est RESTÉE au "
                     + "programme",
                 MotifRefusRetrait.Plancher =>
                     $"retirer « {r.Demande} » aurait laissé son programme VIDE : rien n'a été retiré",
-                // « Rien n'a été retiré » laissait croire au professeur qu'elle était encore au programme : il ne la
-                // reposait pas quand l'élève disait « garde-la » (bout en bout, validation d'un bac blanc).
-                _ => $"« {r.Demande} » n'est PAS dans son programme (il n'y avait rien à retirer) : si l'élève veut la "
-                    + "garder, ajoute-la entière avec `notions:`",
+                // INTROUVABLE (#67 v3, verdict d'Omar) : le plus souvent un libellé mal recopié, ou deux notions
+                // collées sans point-virgule. Le dire tel quel, pour qu'il recopie la liste.
+                _ => $"« {r.Demande} » ne correspond mot pour mot à aucune notion de son programme : relis la liste et "
+                    + "recopie le libellé exact, une notion par point-virgule",
             }).Distinct();
 
-            return "\n\n[TON DERNIER RETRAIT N'A PAS ÉTÉ FAIT : " + string.Join(" ; ", lignes) + ". Dis-le à l'élève "
-                + "simplement, sans jargon (ne parle ni de bloc ni de champ). Pour un morceau de notion, dis-lui de quelle "
-                + "notion il fait partie et demande-lui s'il préfère la GARDER ENTIÈRE ou la RETIRER ENTIÈRE. Pour un "
-                + "programme qui se viderait, demande-lui ce qu'il y aura à la place. S'il choisit de retirer, écris "
+            // S'IL VIENT DE RÉPONDRE, ON APPLIQUE SA RÉPONSE (#67 v3, verdict d'Omar) : le rappel arrive au tour où
+            // l'élève a souvent déjà tranché (« garde-la en entier ») ; V-1 à V-6 lui reposaient la question.
+            return "\n\n[TON DERNIER RETRAIT N'A PAS ÉTÉ FAIT EN ENTIER : " + string.Join(" ; ", lignes) + ". S'IL VIENT "
+                + "DE TE RÉPONDRE (garder la notion entière, ou la retirer entière), applique sa réponse dans ce message "
+                + "SANS LUI REDEMANDER. Sinon, dis-le-lui simplement, sans jargon (ne parle ni de bloc ni de champ) : pour "
+                + "un morceau de notion, dis-lui de quelle notion il fait partie, que tu la GARDES ENTIÈRE et que s'il "
+                + "préfère la RETIRER ENTIÈRE il n'a qu'à te le dire ; pour un programme qui se viderait, demande-lui ce "
+                + "qu'il y aura à la place. S'il choisit de retirer, écris "
                 + $"[CONTROLE_NOTIONS] controle: {controleId} avec `retirer:` et la notion recopiée au mot près de son "
                 + "programme, SANS la remettre dans `notions:`.]";
         }
