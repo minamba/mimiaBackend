@@ -374,6 +374,8 @@ namespace SchoolWebApp.Api.Services.Notifications
         public string ComposerHtmlComplet(string texte, IReadOnlyDictionary<string, ValeurVariable>? variables)
         {
             // NETTOYÉ À CHAQUE COMPOSITION, pas seulement à l'enregistrement : ce qui part est toujours passé par ici.
+            // Une 1re fois AVANT les variables : le texte nettoyé n'a plus de chevron dans une valeur d'attribut ni de
+            // note en commentaire, donc `DansUneBalise` et la recherche de la balise y sont fiables.
             var html = HtmlComplet.Nettoyer(HtmlComplet.Contenu(texte));
 
             // LE LIEN SIGNÉ DU PARENT : présent seulement pour une promotion (case cochée), `#` dans l'aperçu.
@@ -409,19 +411,72 @@ namespace SchoolWebApp.Api.Services.Notifications
                 return string.IsNullOrEmpty(valeur.Texte) ? string.Empty : espace + EnHtml(valeur);
             });
 
-            // LE GARDE-FOU DE LA PROMOTION (tâche du 24/11/2026) : sans la balise, le pied commercial complet
-            // (consentement, identité, lien signé) est ajouté ; avec la balise mais sans le SIRET, l'identité seule.
-            // Le HTML de Slimane porte les deux : rien n'est ajouté, son pied n'apparaît qu'une fois.
+            // Une 2e fois APRÈS les variables (contrôle d'Omar, v2) : ce qui part est jugé tel quel, valeurs comprises.
+            html = HtmlComplet.Nettoyer(html);
+
             if (lien is not null)
             {
+                // LE GARDE-FOU DE LA PROMOTION (tâche du 24/11/2026) : sans la balise, le pied commercial complet
+                // (consentement, identité, lien signé) est ajouté ; avec la balise mais sans le SIRET, l'identité seule.
+                // Le HTML de Slimane porte les deux : rien n'est ajouté, son pied n'apparaît qu'une fois.
                 string? ajout = null;
                 if (!balisePresente) ajout = ComposerMentionPied(lien, CategorieDesabonnement.Diffusion);
                 else if (!SiretPresent.IsMatch(html)) ajout = WebUtility.HtmlEncode(MentionIdentite);
 
                 if (ajout is not null) html = AjouterPied(html, ajout);
             }
+            else if (!CompteMimia.IsMatch(html))
+            {
+                // L'INFORMATION GARDE SON PIED (décision du 24/11/2026, v2) : comme en mode texte, « Vous recevez ce
+                // message parce que vous avez un compte Mimia… » est ajouté si le HTML ne le dit pas déjà.
+                html = AjouterPied(html, ComposerMentionPied());
+            }
 
-            return HtmlComplet.LierImagesDuSite(html);
+            return HtmlComplet.LierImagesDuSite(AdressesEnTexte(html));
+        }
+
+        /// <summary>La mention du pied d'information, quelle que soit l'espace entre les mots.</summary>
+        private static readonly Regex CompteMimia = new(
+            @"compte(?:\s|&nbsp;|&#160;|&#xa0;|\xa0)+Mimia", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+        /// <summary>Un commentaire (laissé tel quel), ou un lien `&lt;a …&gt;…&lt;/a&gt;`.</summary>
+        private static readonly Regex LienOuCommentaire = new(
+            @"<!--.*?-->|<a\b(?<attributs>[^>]*)>(?<texte>.*?)</a\s*>",
+            RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.Singleline);
+
+        private static readonly Regex AdresseHttp = new(
+            @"\bhref=""(?<adresse>https?://[^""]+)""", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+        /// <summary>
+        /// LA VERSION TEXTE GARDE LES ADRESSES (contrôle d'Omar, v2 ; règle du 22/11 pour le bouton du mode texte) :
+        /// sans cela, « Voir les formules » et « Se désinscrire en un clic » arrivaient SANS adresse dans la partie
+        /// texte du courriel. Chaque lien http(s) qui a un texte visible reçoit `data-adresse-en-texte`, et
+        /// `TexteBrut.Depuis` l'écrit « texte : adresse ». Une même adresse n'est écrite qu'une fois (les quatre
+        /// formules du tableau mènent à la même page) ; un lien sans texte (une image) n'en reçoit pas.
+        /// </summary>
+        private static string AdressesEnTexte(string html)
+        {
+            var dejaEcrites = new HashSet<string>(StringComparer.Ordinal);
+            return LienOuCommentaire.Replace(html, m =>
+            {
+                if (!m.Groups["attributs"].Success) return m.Value;  // un commentaire
+
+                var attributs = m.Groups["attributs"].Value;
+                var adresse = AdresseHttp.Match(attributs);
+                if (!adresse.Success) return m.Value;
+
+                var visible = WebUtility.HtmlDecode(Regex.Replace(m.Groups["texte"].Value, "<[^>]*>", string.Empty)).Trim();
+                if (visible.Length == 0) return m.Value;
+
+                if (attributs.Contains("data-adresse-en-texte", StringComparison.OrdinalIgnoreCase))
+                {
+                    dejaEcrites.Add(adresse.Groups["adresse"].Value);
+                    return m.Value;
+                }
+
+                if (!dejaEcrites.Add(adresse.Groups["adresse"].Value)) return m.Value;
+                return "<a " + TexteBrut.AttributAdresseEnTexte + m.Value[2..];
+            });
         }
 
         /// <summary>Le pied ajouté, juste avant `&lt;/body&gt;` (ou à la fin s'il n'y en a pas).</summary>

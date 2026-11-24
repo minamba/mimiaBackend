@@ -153,7 +153,7 @@ namespace SchoolWebApp.Tests
         [InlineData("<p>a</p><script>alert(1)</script><p>b</p>", "<p>a</p><p>b</p>")]
         [InlineData("<p>a</p><SCRIPT type=\"text/javascript\">x</SCRIPT >", "<p>a</p>")]
         [InlineData("<p>a<script src=\"//x\"></p>", "<p>a</p>")]
-        [InlineData("<scr<script>x</script>ipt>alert(1)</script>", "alert(1)")]
+        [InlineData("<scr<script>x</script>ipt>alert(1)</script>", "xipt>alert(1)")]
         [InlineData("<iframe src=\"https://x\"></iframe><p>a</p>", "<p>a</p>")]
         [InlineData("<img src=\"x.png\" onerror=\"alert(1)\" alt=\"\">", "<img src=\"x.png\" alt=\"\">")]
         [InlineData("<a href=\"#\" OnClick='x()' onmouseover=y>a</a>", "<a href=\"#\">a</a>")]
@@ -168,6 +168,77 @@ namespace SchoolWebApp.Tests
         [InlineData("<p>a</p><!-- note interne --><p>b</p>", "<p>a</p><p>b</p>")]
         public void Le_html_colle_est_nettoye(string colle, string attendu) =>
             Assert.Equal(attendu, HtmlComplet.Nettoyer(colle));
+
+        /// <summary>
+        /// LES 6 CAS DU CONTRÔLE D'OMAR (v1 refusée le 24/11/2026), passés tels quels par le nettoyeur à regex, et leurs
+        /// variantes. Le nettoyeur v2 découpe le HTML comme un navigateur : ce qu'il juge est ce que le navigateur lira.
+        /// </summary>
+        [Theory]
+        // 1. un attribut commence aussi après un `/`
+        [InlineData("<svg/onload=alert(1)>", "")]
+        [InlineData("<p>a</p><svg/onload=alert(1)><circle r=\"1\"/></svg><p>b</p>", "<p>a</p><circle r=\"1\"/><p>b</p>")]
+        // 2. idem sur une balise gardée
+        [InlineData("<body/onload=alert(1)><p>a</p></body>", "<body><p>a</p></body>")]
+        [InlineData("<img/src=\"x.png\"/onerror=alert(1)>", "<img src=\"x.png\">")]
+        // 3. un attribut commence juste après une valeur entre guillemets, sans espace
+        [InlineData("<img src=\"x\"onerror=\"alert(1)\">", "<img src=\"x\">")]
+        [InlineData("<img src='x'onerror='alert(1)'>", "<img src=\"x\">")]
+        // 4. un `>` entre guillemets ne ferme pas la balise
+        [InlineData("<img alt=\">\" src=x onerror=alert(1)>", "<img alt=\"&gt;\" src=\"x\">")]
+        [InlineData("<a title='a>b' href=\"javascript:alert(1)\">a</a>", "<a title=\"a&gt;b\" href=\"#\">a</a>")]
+        // 5. et 6. les entités du HTML5 qui cachent le protocole
+        [InlineData("<a href=\"jav&Tab;ascript:alert(1)\">a</a>", "<a href=\"#\">a</a>")]
+        [InlineData("<a href=\"javascript&colon;alert(1)\">a</a>", "<a href=\"#\">a</a>")]
+        [InlineData("<a href=\"java&NewLine;script&colon;alert(1)\">a</a>", "<a href=\"#\">a</a>")]
+        [InlineData("<a href=\"&#x6A&#X61vascript&#58alert(1)\">a</a>", "<a href=\"#\">a</a>")]
+        [InlineData("<a href=\"&#0000106avascript:alert(1)\">a</a>", "<a href=\"#\">a</a>")]
+        [InlineData("<a href=\"javascript&unknown;:alert(1)\">a</a>", "<a href=\"#\">a</a>")]
+        [InlineData("<a href=\"&amp;#106;avascript:alert(1)\">a</a>", "<a href=\"#\">a</a>")]
+        // autres façons d'écrire un événement ou une adresse
+        [InlineData("<IMG SRC=x ONERROR=alert(1)>", "<img src=\"x\">")]
+        [InlineData("<a href=\"#\" onclick>a</a>", "<a href=\"#\">a</a>")]
+        [InlineData("<div style=\"width:expression(alert(1))\">a</div>", "<div>a</div>")]
+        [InlineData("<div style=\"background:url(&#106;avascript:alert(1))\">a</div>", "<div>a</div>")]
+        [InlineData("<form action=\"javascript:alert(1)\"><button formaction=\"javascript:x\">b</button></form>", "<form action=\"#\"><button>b</button></form>")]
+        [InlineData("<img src=\"data:image/png;base64,AAAA\"><a href=\"data:image/png;base64,AAAA\">a</a>", "<img src=\"data:image/png;base64,AAAA\"><a href=\"#\">a</a>")]
+        [InlineData("<img src=\"data:image/svg+xml;base64,AAAA\">", "<img src=\"#\">")]
+        [InlineData("<iframe srcdoc=\"&lt;script&gt;alert(1)&lt;/script&gt;\"></iframe>", "")]
+        [InlineData("<object data=\"x.swf\"><embed src=\"x.swf\"></object><p>a</p>", "<p>a</p>")]
+        [InlineData("<noscript><p title=\"</noscript><img src=x onerror=alert(1)>\"></noscript>", "<img src=\"x\">\">")]
+        [InlineData("<math><mtext><table><mglyph><style><img src=x onerror=alert(1)>", "<mtext><table><mglyph><style><img src=\"x\">")]
+        [InlineData("<style>p{color:red}</style><style>a{width:expression(alert(1))}</style>", "<style>p{color:red}</style><style>a{width:x-expression-alert(1))}</style>")]
+        [InlineData("<title><img src=x onerror=alert(1)></title>", "<title>&lt;img src=x onerror=alert(1)></title>")]
+        [InlineData("<!--[if mso]><img src=x onerror=alert(1)><![endif]-->", "<!--[if mso]><img src=\"x\"><![endif]-->")]
+        [InlineData("<!--[if mso]>--<script></script>><![endif]--><p>a</p>", "<p>a</p>")]
+        [InlineData("<!--> <img src=x onerror=alert(1)> -->", "<!--> <img src=\"x\"> -->")]
+        [InlineData("<!-- a --!><img src=x onerror=alert(1)>", "<img src=\"x\">")]
+        [InlineData("<?xml version=\"1.0\"?><p>a</p>", "<p>a</p>")]
+        [InlineData("<a href=\"https://mimia.fr/?a=1&amp;b=2\" target=\"_blank\">a</a> 3 < 4", "<a href=\"https://mimia.fr/?a=1&amp;b=2\" target=\"_blank\">a</a> 3 &lt; 4")]
+        public void Les_contournements_du_controle_d_Omar_sont_nettoyes(string colle, string attendu)
+        {
+            var propre = HtmlComplet.Nettoyer(colle);
+            Assert.Equal(attendu, propre);
+
+            // Stable : le repasser ne change plus rien (le HTML part après DEUX passages, avant et après les variables).
+            Assert.Equal(propre, HtmlComplet.Nettoyer(propre));
+
+            // Rien d'exécutable ne reste, quelle que soit la casse.
+            Assert.DoesNotMatch(@"(?i)<[^>]*\son\w+\s*=|<script|javascript:|<svg|<iframe", propre);
+        }
+
+        [Fact]
+        public void Le_nettoyage_de_la_maquette_reelle_ne_retire_que_ses_notes()
+        {
+            // La maquette d'essai (ou le vrai mail de Slimane avec MIMIA_TEST_HTML) : le nettoyage ne retire QUE les
+            // commentaires ordinaires. Le reste est recopié à l'octet près.
+            var maquette = MaquetteOuFichier();
+            var sansNotes = System.Text.RegularExpressions.Regex.Replace(
+                maquette, @"<!--(?!\[if|<!\[endif|>).*?-->", string.Empty, System.Text.RegularExpressions.RegexOptions.Singleline);
+
+            var propre = HtmlComplet.Nettoyer(maquette);
+            Assert.Equal(sansNotes, propre);
+            Assert.Equal(propre, HtmlComplet.Nettoyer(propre));
+        }
 
         [Fact]
         public void Le_nettoyage_garde_la_maquette_intacte()
@@ -194,7 +265,7 @@ namespace SchoolWebApp.Tests
             var html = Service().ComposerHtmlComplet(EnHtmlComplet(Maquette), variables);
 
             // La balise en href devient l'ADRESSE signée (échappée), jamais un lien imbriqué dans un lien.
-            Assert.Contains("<a href=\"https://mimia.fr/desabonnement?jeton=abc.def&amp;x=1\" style=\"color:#ffe199\">", html);
+            Assert.Contains("<a data-adresse-en-texte=\"1\" href=\"https://mimia.fr/desabonnement?jeton=abc.def&amp;x=1\" style=\"color:#ffe199\">", html);
             Assert.DoesNotContain("{{", html);
 
             // Le pied de la maquette porte balise et SIRET : rien n'est ajouté, la mention n'apparaît qu'une fois.
@@ -244,20 +315,86 @@ namespace SchoolWebApp.Tests
                 EnHtmlComplet("<p>Offre</p><p>{{lien_desinscription}}</p>"), variables);
 
             // Dans le texte (hors balise), la variable devient un lien « Se désinscrire ».
-            Assert.Contains("<p><a href=\"https://mimia.fr/d?j=1\" style=\"color:inherit; text-decoration:underline;\">Se désinscrire</a></p>", html);
+            Assert.Contains("<p><a data-adresse-en-texte=\"1\" href=\"https://mimia.fr/d?j=1\" style=\"color:inherit; text-decoration:underline;\">Se désinscrire</a></p>", html);
             Assert.Contains(WebUtility.HtmlEncode(DiffusionService.MentionIdentite), html);
             Assert.DoesNotContain("accepté de recevoir", html);
         }
 
         [Fact]
-        public void Information_le_html_part_tel_quel_sans_pied_ajoute()
+        public void Information_le_pied_compte_Mimia_est_ajoute_s_il_manque()
         {
+            // Décision du 24/11/2026 (v2) : comme en mode texte, une information porte le pied « compte Mimia ».
             var variables = new Dictionary<string, ValeurVariable> { ["prenom"] = new(string.Empty) };
             DiffusionService.RetirerLienDesinscription(variables);
+            var service = Service();
 
-            var html = Service().ComposerHtmlComplet(EnHtmlComplet("<html><body><p>Bonjour {{prenom}}, nouveauté.</p></body></html>"), variables);
+            var html = service.ComposerHtmlComplet(EnHtmlComplet("<html><body><p>Bonjour {{prenom}}, nouveauté.</p></body></html>"), variables);
 
-            Assert.Equal("<html><body><p>Bonjour, nouveauté.</p></body></html>", html);
+            Assert.StartsWith("<html><body><p>Bonjour, nouveauté.</p><table role=\"presentation\"", html);
+            Assert.Contains(service.ComposerMentionPied(), html);
+            Assert.EndsWith("</td></tr></table></body></html>", html);
+            Assert.DoesNotContain("désinscri", html, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("SIRET", html);
+
+            // Sans variables du tout (aucun lien) : le même pied.
+            Assert.Contains(service.ComposerMentionPied(), service.ComposerHtmlComplet(EnHtmlComplet("<p>Info</p>"), null));
+        }
+
+        [Fact]
+        public void Information_dont_le_html_porte_deja_le_pied_n_est_pas_doublee()
+        {
+            var variables = new Dictionary<string, ValeurVariable>();
+            DiffusionService.RetirerLienDesinscription(variables);
+
+            const string avecPied = "<html><body><p>Info</p><p>Vous recevez ce message parce que vous avez un compte&nbsp;Mimia.</p></body></html>";
+            Assert.Equal(avecPied, Service().ComposerHtmlComplet(EnHtmlComplet(avecPied), variables));
+        }
+
+        [Fact]
+        public void Le_html_est_nettoye_apres_le_remplacement_des_variables()
+        {
+            // Une valeur de variable ne peut pas réintroduire ce que le nettoyage a retiré (contrôle d'Omar, point c).
+            var variables = new Dictionary<string, ValeurVariable>
+            {
+                ["lienTarifs"] = new("Tarifs", "javascript:alert(1)"),
+                ["prenom"] = new("<img src=x onerror=alert(1)>"),
+            };
+            DiffusionService.AjouterLienDesinscription(variables, "https://mimia.fr/d?j=1");
+
+            var html = Service().ComposerHtmlComplet(
+                EnHtmlComplet("<p>Bonjour {{prenom}}</p><a href=\"{{lienTarifs}}\">Tarifs</a><p>{{lien_desinscription}}</p>"), variables);
+
+            Assert.Contains("<a href=\"#\">Tarifs</a>", html);
+            Assert.Contains("Bonjour &lt;img src=x onerror=alert(1)&gt;", html);
+            Assert.DoesNotMatch(@"(?i)<[^>]*\son\w+\s*=|javascript:", html);
+            Assert.Contains("href=\"https://mimia.fr/d?j=1\"", html);
+        }
+
+        [Fact]
+        public void La_version_texte_garde_les_adresses_du_bouton_et_de_la_desinscription()
+        {
+            // Contrôle d'Omar (v2) : « Voir les formules » et « Se désinscrire en un clic » arrivaient SANS adresse dans la
+            // partie texte. Comme le bouton du mode texte (règle du 22/11) : « texte : adresse ».
+            const string lien = "https://mimia.fr/desabonnement?jeton=abc.def";
+            var variables = new Dictionary<string, ValeurVariable> { ["prenom"] = new("Léa") };
+            DiffusionService.AjouterLienDesinscription(variables, lien);
+
+            var html = Service().ComposerHtmlComplet(EnHtmlComplet(Maquette), variables);
+            var texte = TexteBrut.Depuis(html);
+
+            Assert.Contains("Voir les formules : https://mimia.fr/tarifs?utm_source=email&utm_content=bouton", texte);
+            Assert.Contains($"Se désinscrire en un clic : {lien}", texte);
+            Assert.DoesNotContain("<", texte);
+
+            // Une image liée (aucun texte visible) n'écrit pas d'adresse ; une même adresse n'est écrite qu'une fois.
+            var deux = Service().ComposerHtmlComplet(EnHtmlComplet(
+                "<a href=\"https://mimia.fr/\"><img src=\"https://mimia.fr/email/logo-sombre.png\" alt=\"\"></a>"
+                + "<p><a href=\"https://mimia.fr/tarifs\">Starter</a></p><p><a href=\"https://mimia.fr/tarifs\">Solo</a></p>"
+                + "<!--[if mso]><a href=\"https://mimia.fr/tarifs\">Outlook</a><![endif]-->"), variables);
+            var texteDeux = TexteBrut.Depuis(deux);
+            Assert.Contains("Starter : https://mimia.fr/tarifs", texteDeux);
+            Assert.DoesNotContain("Solo : ", texteDeux);
+            Assert.DoesNotContain(" : https://mimia.fr/\n", texteDeux + "\n");
         }
 
         // ------------------------------------------------------------------ bout en bout sans envoi
@@ -297,6 +434,10 @@ namespace SchoolWebApp.Tests
             var texte = TexteBrut.Depuis(compose);
             Assert.DoesNotContain("<", texte);
             Assert.DoesNotContain("{", texte);
+            // … mais garde les adresses du bouton et de la désinscription (contrôle d'Omar, v2).
+            Assert.Matches(@"Voir les formules : https://mimia\.fr/tarifs\?", texte);
+            Assert.Contains($"Se désinscrire en un clic : {lienSigne}", texte);
+            Ecrire("html-complet-version-texte.txt", texte);
 
             // Les pièces liées : le logo du site est joint, la bannière blanche ne l'est pas.
             var constructeur = new BodyBuilder { HtmlBody = compose };
