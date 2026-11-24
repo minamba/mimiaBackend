@@ -4883,10 +4883,9 @@ namespace SchoolWebApp.Api.Builders.impl
                 }
             }
 
-            // UN RETRAIT VOULU SANS LE OUI DE L'ÉLÈVE NE SE FAIT PAS, ET ÇA SE DIT DANS LE MÊME TOUR — #67 v5 (verdict
-            // d'Omar, v4R-3 : « 1. Cinétique chimique » à l'ardoise alors que la fiche en gardait deux, jusqu'à la fin). Le
-            // professeur a écrit `retirer:` (ou a dit « je la retire ») : rien n'est parti, le serveur ajoute à la réponse
-            // affichée la phrase vraie et la question fermée, à laquelle un oui au tour suivant retire la notion.
+            // CE QUE LE SERVEUR AJOUTE À LA RÉPONSE SUR LE RETRAIT — #67 v7 : la balise du bouton (si la réponse propose une
+            // notion retirable du programme relu) et, sur une annonce de retrait qui n'a pas eu lieu, la phrase vraie et le
+            // programme relu. Jamais de question : le serveur ne propose pas de retrait de lui-même.
             string? retraitAjoute = null;
             if (mode == ModesSeance.Controle && controleMode is int controleDuRetrait && !accueil
                 && bilan.Task.IsCompletedSuccessfully)
