@@ -6685,7 +6685,16 @@ namespace SchoolWebApp.Api.Builders.impl
             static bool Presente(string notion, HashSet<string> mots)
             {
                 var siens = VraisMots(LibelleNotion.CleSouple(notion));
-                return siens.Count > 0 && siens.Count(mots.Contains) * 3 >= siens.Count * 2;
+                if (siens.Count > 0 && siens.Count(mots.Contains) * 3 >= siens.Count * 2) return true;
+
+                // #67 v7 (banc bouton B-1/B-3) : le professeur ABRÈGE un long libellé à sa première virgule (« Identifier un
+                // couple acide-base de Brønsted » pour « …de Brønsted, une espèce amphotère, et écrire la réaction
+                // associée ») ; le tableau était dit « pas à jour » juste après un vrai retrait. La tête entière (au moins
+                // trois vrais mots, tous présents) suffit ; une tête incomplète reste absente.
+                var virgule = notion.IndexOf(',');
+                if (virgule <= 0) return false;
+                var tete = VraisMots(LibelleNotion.CleSouple(notion[..virgule]));
+                return tete.Count >= 3 && tete.All(mots.Contains);
             }
         }
 

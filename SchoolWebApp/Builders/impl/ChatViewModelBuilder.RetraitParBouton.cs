@@ -197,7 +197,7 @@ namespace SchoolWebApp.Api.Builders.impl
             {
                 var debut = annonceFausse && !clicRetire ? "Pour être exact, je n'ai rien retiré : " : "Pour être exact, ";
                 ajouts.Add((absentes.Count > 0 ? "Le tableau n'est pas à jour. " : "") + debut
-                    + $"ton programme contient toujours {(programme.Count == 1 ? "cette notion" : $"ces {programme.Count} notions")} : "
+                    + $"ton programme contient {(clicRetire ? "maintenant" : "toujours")} {(programme.Count == 1 ? "cette notion" : $"ces {programme.Count} notions")} : "
                     + string.Join(" ; ", programme.Select(n => $"« {n.Libelle} »")) + ".");
             }
 
