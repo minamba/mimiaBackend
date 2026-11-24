@@ -554,7 +554,7 @@ namespace SchoolWebApp.Api.Services.Notifications
             sb.AppendLine($"💶 *Tarif {Echapper(fournisseur)} mis à jour*");
             sb.AppendLine($"— Modèle : {Echapper(modele)}");
             foreach (var ligne in lignes) sb.AppendLine($"— {Echapper(ligne)}");
-            sb.AppendLine("— Nos coûts utilisent ce prix dès maintenant, sur tout l'historique.");
+            sb.AppendLine("— Nos coûts utilisent ce prix dès maintenant, sur tout l'historique\\.");
             sb.AppendLine($"— Le : {Horodatage()}");
 
             return EnvoyerAsync(_contactToken, _contactChatId, sb.ToString());
@@ -565,7 +565,7 @@ namespace SchoolWebApp.Api.Services.Notifications
             var sb = new StringBuilder();
             sb.AppendLine($"🟠 *Veille des tarifs {Echapper(fournisseur)}*");
             sb.AppendLine($"— {Echapper(probleme)}");
-            sb.AppendLine("— Le dernier prix connu reste appliqué. À vérifier dans Administration › Anthropic / OpenAI / Gemini › Tarifs.");
+            sb.AppendLine("— Le dernier prix connu reste appliqué\\. À vérifier dans Administration › Anthropic / OpenAI / Gemini › Tarifs\\.");
             sb.AppendLine($"— Le : {Horodatage()}");
 
             return EnvoyerAsync(_contactToken, _contactChatId, sb.ToString());
@@ -649,35 +649,88 @@ namespace SchoolWebApp.Api.Services.Notifications
                 // qui traîne retiendrait le fil d'exécution qui l'a déclenchée.
                 client.Timeout = TimeSpan.FromSeconds(10);
 
-                var reponse = await client.PostAsync(
-                    $"https://api.telegram.org/bot{jeton}/sendMessage",
-                    new FormUrlEncodedContent(new Dictionary<string, string>
-                    {
-                        ["chat_id"] = salon,
-                        ["text"] = texte,
-                        ["parse_mode"] = "MarkdownV2",
-                    }));
+                var reponse = await PosterAsync(client, jeton, salon, texte, "MarkdownV2");
+                if (reponse.IsSuccessStatusCode) return true;
 
-                if (!reponse.IsSuccessStatusCode)
+                // Le corps de la réponse EST le diagnostic : Telegram y dit
+                // « chat not found », « bot was blocked », ou quel caractère
+                // a fait échouer le Markdown. Sans lui on ne saurait que
+                // « ça n'a pas marché ».
+                var corps = await reponse.Content.ReadAsStringAsync();
+
+                // FILET DE SÉCURITÉ (23/11/2026) : UN CARACTÈRE OUBLIÉ NE DOIT
+                // PLUS COÛTER L'ALERTE. Un point littéral non échappé dans la
+                // veille des tarifs a fait rejeter 21 alertes en deux jours
+                // (« Character '.' is reserved »), une à chaque démarrage. Quand
+                // Telegram refuse la MISE EN FORME (« can't parse entities »),
+                // le même message repart en texte brut : il arrive sans gras,
+                // mais il arrive. Le refus reste journalisé en avertissement,
+                // pour qu'on corrige la ligne fautive.
+                if ((int)reponse.StatusCode == 400
+                    && corps.Contains("can't parse entities", StringComparison.OrdinalIgnoreCase))
                 {
-                    // Le corps de la réponse EST le diagnostic : Telegram y dit
-                    // « chat not found », « bot was blocked », ou quel caractère
-                    // a fait échouer le Markdown. Sans lui on ne saurait que
-                    // « ça n'a pas marché ».
-                    var corps = await reponse.Content.ReadAsStringAsync();
-                    _logger.LogError(
-                        "Telegram : envoi refuse ({Statut}) — {Corps}",
-                        (int)reponse.StatusCode, corps);
-                    return false;
+                    _logger.LogWarning(
+                        "Telegram : mise en forme refusee, renvoi en texte brut — {Corps}", corps);
+
+                    var brut = await PosterAsync(client, jeton, salon, EnTexteBrut(texte), null);
+                    if (brut.IsSuccessStatusCode) return true;
+
+                    corps = await brut.Content.ReadAsStringAsync();
+                    reponse = brut;
                 }
 
-                return true;
+                _logger.LogError(
+                    "Telegram : envoi refuse ({Statut}) — {Corps}",
+                    (int)reponse.StatusCode, corps);
+                return false;
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Telegram : envoi impossible vers le salon {Salon}.", salon);
                 return false;
             }
+        }
+
+        private static Task<HttpResponseMessage> PosterAsync(
+            HttpClient client, string jeton, string salon, string texte, string? modeDeRendu)
+        {
+            var champs = new Dictionary<string, string>
+            {
+                ["chat_id"] = salon,
+                ["text"] = texte,
+            };
+            if (modeDeRendu is not null) champs["parse_mode"] = modeDeRendu;
+
+            return client.PostAsync(
+                $"https://api.telegram.org/bot{jeton}/sendMessage",
+                new FormUrlEncodedContent(champs));
+        }
+
+        /// <summary>
+        /// Le message MarkdownV2 rendu lisible sans mise en forme.
+        ///
+        /// Un caractère précédé d'une barre oblique est gardé tel quel (c'est
+        /// du texte) ; les marques de mise en forme NON échappées (* _ ~ ` |)
+        /// sont retirées. Sans ça, le texte brut afficherait « \. » et
+        /// « *Nouvel avis* » au lieu de « . » et « Nouvel avis ».
+        /// </summary>
+        private static string EnTexteBrut(string texte)
+        {
+            var sb = new StringBuilder(texte.Length);
+            for (var i = 0; i < texte.Length; i++)
+            {
+                var c = texte[i];
+                if (c == '\\' && i + 1 < texte.Length)
+                {
+                    sb.Append(texte[++i]);
+                }
+                else if (c is not ('*' or '_' or '~' or '`' or '|'))
+                {
+                    sb.Append(c);
+                }
+            }
+
+            return sb.ToString();
         }
     }
 }
