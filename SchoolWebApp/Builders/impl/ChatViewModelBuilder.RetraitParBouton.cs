@@ -107,9 +107,8 @@ namespace SchoolWebApp.Api.Builders.impl
             string? messageEleve, IReadOnlyList<NotionDuProgramme> programme, IEnumerable<string?> messagesProfesseur)
         {
             var clics = ClicsDeRetrait(messageEleve);
-            if (clics.Count == 0) return "";
-
             var profs = messagesProfesseur.ToList();
+            if (clics.Count == 0) return FaitSansClic(messageEleve, programme, profs);
             var phrases = new List<string>();
             foreach (var (retiree, id) in clics.Distinct())
             {
@@ -140,6 +139,35 @@ namespace SchoolWebApp.Api.Builders.impl
 
             return "\n\n[RETRAIT PAR LE BOUTON : " + string.Join(" ; ", phrases) + "." + liste + "]";
         }
+
+        /// <summary>
+        /// IL A ÉCRIT AU LIEU DE CLIQUER (#67 v7, banc T-1 sur a596a65 : « Oui, retire-la. » tapé sous les boutons → « Merci,
+        /// c'est noté pour ton clic. »). Le dernier message du professeur portait un bouton dont la notion est toujours en
+        /// base, et l'élève répond « oui / ok / d'accord… » ou parle de retrait, SANS clic : le professeur l'apprend AVANT
+        /// de répondre (rien n'est retiré, seul le bouton retire). Aucun retrait, aucun bouton ajouté par le serveur.
+        /// </summary>
+        private static string FaitSansClic(
+            string? messageEleve, IReadOnlyList<NotionDuProgramme> programme, IReadOnlyList<string?> profs)
+        {
+            if (string.IsNullOrWhiteSpace(messageEleve)) return "";
+            var dernier = profs.LastOrDefault(p => !string.IsNullOrWhiteSpace(p));
+            if (dernier is null) return "";
+
+            var bouton = BaliseBoutonRetrait().Matches(dernier).LastOrDefault();
+            if (bouton is null || !int.TryParse(bouton.Groups["id"].Value, out var id)) return "";
+            var notion = programme.FirstOrDefault(n => n.Id == id);
+            if (notion is null) return "";
+
+            if (!OuiTape().IsMatch(messageEleve) && !MorceauDeNotion.ParleDeRetrait(messageEleve)) return "";
+
+            return "\n\n[RETRAIT PAR LE BOUTON : il a ÉCRIT sa réponse, il n'a PAS cliqué : RIEN n'a été retiré, « "
+                + notion.Libelle + " » est TOUJOURS dans son programme. Ne dis ni « c'est noté », ni « c'est fait », ni « ton "
+                + "clic » : dis-lui en une phrase que seul le bouton « Oui, retirer » retire une notion et, s'il veut toujours la "
+                + "retirer, termine ton message par [RETRAIT_PROPOSE] id=" + notion.Id + ".]";
+        }
+
+        [GeneratedRegex(@"^\s*(oui|ouais|ouai|ok|okay|d['’ ]?accord|vas[- ]y|yes|carr[ée]ment|bien s[ûu]r|exactement|voil[àa])\b", RegexOptions.IgnoreCase)]
+        private static partial Regex OuiTape();
 
         /// <summary>
         /// CE QUE LE SERVEUR AJOUTE À LA RÉPONSE DU PROFESSEUR (#67 v7) — dans le même tour, affiché et gardé :
