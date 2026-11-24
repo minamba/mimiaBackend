@@ -301,8 +301,11 @@ namespace SchoolWebApp.Tests
             // Les pièces liées : le logo du site est joint, la bannière blanche ne l'est pas.
             var constructeur = new BodyBuilder { HtmlBody = compose };
             HtmlComplet.AttacherImagesDuSite(constructeur);
-            var logo = Assert.Single(constructeur.LinkedResources);
-            Assert.Equal("mimia-email-logo-sombre", logo.ContentId);
+            var liees = constructeur.LinkedResources.Select(r => r.ContentId).ToList();
+            Assert.Contains("mimia-email-logo-sombre", liees);
+            Assert.DoesNotContain("logoMimia", liees);
+            Assert.All(liees, cid => Assert.StartsWith(HtmlComplet.PrefixeCid, cid));
+            Assert.Equal(liees.Count, liees.Distinct().Count());
 
             Ecrire("html-complet-genere-destinataire.html", compose);
             Ecrire("html-complet-lien-signe.txt", $"Destinataire fictif : parent 901\nLien signé : {lienSigne}\nList-Unsubscribe : {envoi.EnTetes["List-Unsubscribe"]}\n");
