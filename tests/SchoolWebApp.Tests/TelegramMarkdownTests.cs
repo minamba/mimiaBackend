@@ -6,6 +6,7 @@ using Moq;
 using SchoolWebApp.Api.Services.Fournisseurs;
 using SchoolWebApp.Api.Services.Notifications;
 using SchoolWebApp.Domain.Models;
+using Xunit.Abstractions;
 
 namespace SchoolWebApp.Tests
 {
@@ -19,6 +20,10 @@ namespace SchoolWebApp.Tests
     public class TelegramMarkdownTests
     {
         private const string Piege = "a.b-c_d*e[f]g(h)i~j`k>l#m+n=o|p{q}r!s\\t";
+
+        private readonly ITestOutputHelper _sortie;
+
+        public TelegramMarkdownTests(ITestOutputHelper sortie) => _sortie = sortie;
 
         private sealed class FauxTelegram : HttpMessageHandler
         {
@@ -186,28 +191,49 @@ namespace SchoolWebApp.Tests
             if (Environment.GetEnvironmentVariable("MIMIA_TELEGRAM_ESSAI") != "1" || string.IsNullOrWhiteSpace(jeton)) return;
 
             using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
-            var refus = new List<string>();
 
+            async Task<string> Analyser(string texte)
+            {
+                var reponse = await client.PostAsync(
+                    $"https://api.telegram.org/bot{jeton}/sendMessage",
+                    new FormUrlEncodedContent(new Dictionary<string, string>
+                    {
+                        ["chat_id"] = "0",
+                        ["text"] = texte,
+                        ["parse_mode"] = "MarkdownV2",
+                    }));
+                return await reponse.Content.ReadAsStringAsync();
+            }
+
+            // TÉMOINS : l'essai ne prouve quelque chose que si Telegram distingue bien les deux cas. La ligne de la
+            // veille des tarifs telle qu'en production avant le correctif (points nus) doit être refusée à l'analyse ;
+            // la même ligne échappée doit passer (« chat not found »). Envoyés par .NET : texte en UTF-8 quelle que
+            // soit la console (la v1 les passait par la ligne de commande Windows : « text must be encoded in UTF-8 »).
+            var temoinFautif = await Analyser(
+                "— Le dernier prix connu reste appliqué. À vérifier dans Administration › Anthropic / OpenAI / Gemini › Tarifs.");
+            var temoinEchappe = await Analyser(
+                "— Le dernier prix connu reste appliqué\\. À vérifier dans Administration › Anthropic / OpenAI / Gemini › Tarifs\\.");
+            _sortie.WriteLine($"TÉMOIN 1 (points nus) : {temoinFautif}");
+            _sortie.WriteLine($"TÉMOIN 2 (échappés)   : {temoinEchappe}");
+            Assert.Contains("can't parse entities", temoinFautif);
+            Assert.Contains("chat not found", temoinEchappe);
+
+            var refus = new List<string>();
+            var n = 0;
             foreach (var cas in ToutesLesAlertes())
             {
                 var (nom, envoyer) = ((string)cas[0], (Func<TelegramService, Task>)cas[1]);
                 var (service, faux) = Creer();
                 await envoyer(service);
 
-                var reponse = await client.PostAsync(
-                    $"https://api.telegram.org/bot{jeton}/sendMessage",
-                    new FormUrlEncodedContent(new Dictionary<string, string>
-                    {
-                        ["chat_id"] = "0",
-                        ["text"] = faux.Envois[0]["text"],
-                        ["parse_mode"] = "MarkdownV2",
-                    }));
-                var corps = await reponse.Content.ReadAsStringAsync();
+                var corps = await Analyser(faux.Envois[0]["text"]);
+                _sortie.WriteLine($"ALERTE {++n,2}/16 {nom} : {corps}");
 
                 // Seul « chat not found » prouve que le texte a passé l'analyse ; tout le reste est un échec.
                 if (!corps.Contains("chat not found", StringComparison.OrdinalIgnoreCase)) refus.Add($"{nom} : {corps}");
             }
 
+            Assert.Equal(16, n);
             Assert.True(refus.Count == 0, string.Join("\n", refus));
         }
 
