@@ -3996,8 +3996,13 @@ namespace SchoolWebApp.Api.Builders.impl
             // #68 v9 (décision du coordinateur) : le filet du top départ ne joue qu'une fois le SUPPORT CHOISI
             // (clic sur un des deux boutons, ou support nommé par l'élève après [SUPPORT_EVALUATION]). Avant,
             // jamais : une correction au présent (« Je corrige la première question : … ») n'ouvre plus le contrôle.
-            var supportChoisi = evaluationEngagee && LecteurEvaluation.SupportChoisi(
-                historique.Select(m => ((string?)m.Role, (string?)m.Contenu)).Append(((string?)"user", (string?)contenu)));
+            var filDuTour = historique.Select(m => ((string?)m.Role, (string?)m.Contenu))
+                .Append(((string?)"user", (string?)contenu)).ToList();
+            var supportChoisi = evaluationEngagee && LecteurEvaluation.SupportChoisi(filDuTour);
+
+            // #68 v11 (Omar, verdict sur 6e01fcf) : le support NOMMÉ PAR LE PROFESSEUR ne compte que juste après une
+            // réponse de l'élève à [SUPPORT_EVALUATION] (« comme tu veux » → « Très bien, au cahier ! Question 1 : »).
+            var reponseAuSupport = evaluationEngagee && LecteurEvaluation.ReponseALaQuestionDuSupport(filDuTour);
 
             if (secondesRestantes is int restant && restant > 0)
             {
@@ -4952,9 +4957,10 @@ namespace SchoolWebApp.Api.Builders.impl
             // professeur la consigne du contrôle jusqu'à la note.
             string? debutAjoute = null;
             // #68 v10 : le support compte aussi pour choisi quand le professeur le nomme lui-même avant la première
-            // question (« Très bien, au cahier ! Question 1 : … » après « comme tu veux »).
+            // question (« Très bien, au cahier ! Question 1 : … » après « comme tu veux »). #68 v11 : seulement JUSTE
+            // APRÈS la réponse de l'élève à [SUPPORT_EVALUATION], et dans une phrase de confirmation étroite.
             if (evaluationEngagee && bilan.Task.IsCompletedSuccessfully
-                && LecteurEvaluation.TopDepartApresSupport(supportChoisi, (await bilan.Task).TexteComplet))
+                && LecteurEvaluation.TopDepartAuTour(supportChoisi, reponseAuSupport, (await bilan.Task).TexteComplet))
             {
                 debutAjoute = "\n" + LecteurEvaluation.Debut;
 

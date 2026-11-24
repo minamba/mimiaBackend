@@ -419,6 +419,14 @@ namespace SchoolWebApp.Api.Services
         ///   « ici », ordis.
         /// Les réponses qui ne nomment rien (« comme tu veux », « peu importe ») sont couvertes par le
         /// professeur qui nomme le support avant le départ (<see cref="SupportNommeAvantDepart"/>).
+        ///
+        /// #68 v11 (Omar, verdict sur 6e01fcf : 12 faux choix sur 12, « J'écris encore. » lu 18 fois comme un choix
+        /// dans le corpus) — un mot du lexique dans une phrase quelconque ne suffit plus : le message doit être une
+        /// CONSTRUCTION DE CHOIX (<see cref="ConstructionDeChoix"/>), c'est-à-dire réduit au(x) support(s), précédé au
+        /// plus d'un verbe de choix (préfère, veux, choisis, prends, plutôt, je reste, je fais / compose, je vais…) et
+        /// accompagné au plus d'UNE formule de politesse (stp, merci, oui, ok…). « je l'ai écrit, c'est douze »,
+        /// « c'est écrit dans le livre », « ici c'est Paris », « mon micro grésille », « J'écris encore. » ne
+        /// choisissent rien.
         /// </summary>
         public static bool SupportDit(string? message)
         {
@@ -426,9 +434,50 @@ namespace SchoolWebApp.Api.Services
             if (dit.Length == 0 || dit.Length > 120) return false;
             if (dit.Contains('?') || MotInterrogatif().IsMatch(dit)) return false;
             if (NegationOuAbsence().IsMatch(dit) || dit.Any(char.IsDigit)) return false;
+            if (!MotDeSupport().IsMatch(dit) || SupportsOpposes().IsMatch(dit)) return false;
 
-            return MotDeSupport().IsMatch(dit) && !SupportsOpposes().IsMatch(dit);
+            // #68 v11 : une construction de choix, pas une phrase qui contient un mot de support.
+            return ConstructionDeChoix().IsMatch(dit);
         }
+
+        /// <summary>Ce qui sépare les mots d'une construction de choix : espaces, ponctuation (sauf « ? » et
+        /// l'apostrophe), guillemets, émojis.</summary>
+        private const string Bruit = @"[\s,.!…;:\-–—""«»()\p{So}\p{Cs}\p{Sk}\p{M}]";
+
+        /// <summary>Une formule de politesse ou d'acquiescement (#68 v11) — une seule par message.</summary>
+        private const string Politesse =
+            @"(?:stp|svp|s['’]il\s+te\s+pla[iî]t|s['’]il\s+vous\s+pla[iî]t|merci|oui|ouais|ok|okay|d['’]accord|euh|bah|ben|bon|alors|allez)";
+
+        /// <summary>Un verbe de choix devant le support (#68 v11) : « je préfère », « je veux », « je choisis »,
+        /// « je prends », « je reste », « je fais / compose », « je vais », « on fait », « plutôt », « va pour »,
+        /// suivis au besoin d'un infinitif de travail (« je préfère le faire sur le cahier »).</summary>
+        private const string VerbeDeChoix =
+            @"(?:(?:moi\s*,?\s*)?(?:je\s+|j['’]\s*)(?:préfère|préfèrerais|préférerais|prefere|preferes?|veux|voudrais|choisis|prends|reste|fais|compose|vais)"
+            + @"(?:\s+(?:le\s+faire|faire|composer|répondre|repondre|rester))?"
+            + @"|on\s+(?:fait|reste|prend)|plutôt|plutot|moi|va\s+pour)";
+
+        /// <summary>Un support dit par l'élève dans une construction de choix (#68 v11) : un nom de support avec
+        /// au plus une préposition et un article (« cahier », « l'ordi », « à l'oral », « sur le cahier »,
+        /// « par écrit »), ou un adverbe / infinitif / gérondif (oralement, ici, en tapant, écrire, taper, parler),
+        /// ou « j'écris / je tape / je parle » SEULS. Pas « j'ai écrit », ni « c'est écrit ».</summary>
+        private const string SupportEleve =
+            @"(?:(?:(?:au|aux|le|la|les|l['’]|mon|ma|mes|sur|à|a|en|par|avec)\s*(?:(?:le|la|les|l['’]|mon|ma|mes|une|un|ton|ta)\s*)?)?"
+            + @"(?:cahiers?|cachier|papier|feuilles?|ordinateurs?|ordis?|claviers?|écran|ecran|oral|orale|écrit|ecrit|écrite|ecrite|micro|voix\s+haute|la\s+main)"
+            + @"|oralement|ici|en\s+tapant|en\s+écrivant|en\s+ecrivant|écrire|ecrire|taper|parler|j['’]\s*écris|j['’]\s*ecris|je\s+tape|je\s+parle)";
+
+        /// <summary>Le cœur d'une construction de choix : [verbe de choix] support [support] [plutôt / c'est mieux].</summary>
+        private const string CoeurDuChoix =
+            @"(?:" + VerbeDeChoix + Bruit + @"+)?" + SupportEleve + @"(?:" + Bruit + @"+" + SupportEleve + @")?"
+            + @"(?:" + Bruit + @"+(?:plutôt|plutot|c['’]est\s+mieux))?";
+
+        /// <summary>
+        /// LA CONSTRUCTION DE CHOIX (#68 v11) : le message entier est le cœur du choix, avec au plus une formule de
+        /// politesse avant OU après (« à l'oral stp », « oui l'ordi », « moi je veux à l'écrit », « je reste ici »).
+        /// </summary>
+        [GeneratedRegex(@"^" + Bruit + @"*(?:" + Politesse + Bruit + @"+" + CoeurDuChoix + @"|" + CoeurDuChoix
+            + @"(?:" + Bruit + @"+" + Politesse + @")?)" + Bruit + @"*$",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 200)]
+        private static partial Regex ConstructionDeChoix();
 
         /// <summary>Les mots d'un support : ceux de l'écran (cahier, papier, feuille, à la main / ordinateur, ordi,
         /// clavier, écran, taper) et ceux d'une question « écrit ou oral ? » du professeur. #68 v10 : écrire,
@@ -457,6 +506,16 @@ namespace SchoolWebApp.Api.Services
         /// choisissent sans nommer (« comme tu veux », « peu importe ») ou avec des mots hors lexique. Le support doit
         /// être nommé AVANT la première question, dans une phrase qui n'est pas une question et qui n'en oppose
         /// pas deux (« Tu préfères le cahier ou l'ordi ? Bon, question 1 : » ne choisit rien).
+        ///
+        /// #68 v11 (Omar, verdict sur 6e01fcf : 14 faux positifs sur 14) — une phrase qui CITE un support ne suffit
+        /// plus (« Je regarde ce que tu as écrit sur ton cahier. », « Relis ta feuille d'exercices. », « Tu feras
+        /// l'évaluation au cahier plus tard. ») : il faut une PHRASE DE CONFIRMATION ÉTROITE
+        /// (<see cref="ConfirmationDuSupport"/>) — accord (« Très bien », « D'accord », « Parfait », « Va pour »…),
+        /// au plus un sujet + verbe au PRÉSENT de composition (« tu composes », « on reste », « on fait ça »), puis
+        /// le support, et rien d'autre : pas de passé, pas de futur ni de « plus tard », pas d'impératif (relis /
+        /// note / prends), pas de « feuille » / « papier » nus, pas de « l'écrit » suivi d'un complément.
+        /// Et le builder ne l'écoute que JUSTE APRÈS une réponse de l'élève à [SUPPORT_EVALUATION]
+        /// (<see cref="ReponseALaQuestionDuSupport"/>, <see cref="TopDepartAuTour"/>).
         /// </summary>
         public static bool SupportNommeAvantDepart(string? reponse)
         {
@@ -467,34 +526,98 @@ namespace SchoolWebApp.Api.Services
 
             foreach (Match phrase in PhraseAvecFin().Matches(texte[..depart.Index]))
             {
-                var p = phrase.Value;
-                if (p.TrimEnd().EndsWith('?')) continue;
-                if (SupportNommeParLeProf().IsMatch(p) && !SupportsOpposes().IsMatch(p)) return true;
+                var p = phrase.Value.Trim();
+                if (p.EndsWith('?')) continue;
+                if (ConfirmationDuSupport().IsMatch(p) && !SupportsOpposes().IsMatch(p)) return true;
             }
             return false;
         }
+
+        /// <summary>Un accord du professeur devant le support confirmé (#68 v11).</summary>
+        private const string AccordDuProf =
+            @"(?:très\s+bien|bien|parfait|super|génial|d['’]accord|ok|okay|entendu|c['’]est\s+noté|noté|top|excellent"
+            + @"|(?:très\s+)?bon\s+choix|ça\s+marche|allez|alors|bon|oui|c['’]est\s+parti|pas\s+de\s+souci|aucun\s+souci"
+            + @"|bien\s+reçu|va\s+pour|ok\s+pour)";
+
+        /// <summary>Sujet + verbe de composition au PRÉSENT (#68 v11) : « tu composes », « on reste », « on fait
+        /// ça », « tu réponds ». Ni « tu as … », ni « tu feras », ni « tu peux », ni « tu travailles ».</summary>
+        private const string VerbeDuProf =
+            @"(?:tu|on|nous)\s+(?:composes|compose|composons|réponds|répond|répondons|fais|fait|faisons|restes|reste|restons"
+            + @"|passes|passe|passons|choisis|choisit|prends|prend|écris|écrit|écrivons|y\s+vas|y\s+va)(?:\s+(?:ça|donc|alors|tout))?";
+
+        /// <summary>Le support confirmé par le professeur (#68 v11) : « au cahier », « le cahier », « sur ta
+        /// feuille », « à la main », « à l'écran », « sur l'ordinateur », « à l'oral », « à l'écrit », « l'oral »,
+        /// « au clavier », « oralement », « à voix haute », « au micro », « par écrit », éventuellement après
+        /// « pour » (« Va pour le cahier », « C'est parti pour l'oral »). Pas « feuille » ni « papier » nus.</summary>
+        private const string SupportDuProf =
+            @"(?:pour\s+)?(?:au\s+cahier|(?:sur\s+)?(?:ton|le)\s+cahier|sur\s+(?:une|ta)\s+feuille|à\s+la\s+main"
+            + @"|(?:à|sur)\s+l['’](?:écran|ordinateur|ordi)|à\s+l['’](?:oral|écrit)|l['’](?:ordinateur|ordi|oral|écrit|écran)"
+            + @"|(?:au|le)\s+clavier|oralement|à\s+voix\s+haute|au\s+micro|par\s+écrit)";
+
+        /// <summary>
+        /// LA PHRASE DE CONFIRMATION DU SUPPORT (#68 v11) — la phrase entière : [accord(s)] [sujet + verbe au présent]
+        /// [ici] support [ici / alors / donc / c'est parti / c'est noté / bon choix / très bien / parfait].
+        /// « Très bien, au cahier ! », « D'accord, tu composes ici à l'écran. », « Parfait, à l'oral. »,
+        /// « Super, on reste ici à l'écran. », « Alors on fait ça à l'oral. », « Va pour le cahier ! ».
+        /// </summary>
+        [GeneratedRegex(@"^" + Bruit + @"*(?:" + AccordDuProf + Bruit + @"+)*(?:" + VerbeDuProf + Bruit + @"+)?(?:ici" + Bruit + @"+)?"
+            + SupportDuProf + @"(?:" + Bruit + @"+(?:ici|alors|donc|c['’]est\s+parti|c['’]est\s+noté|bon\s+choix|très\s+bien|parfait))?"
+            + Bruit + @"*$",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 200)]
+        private static partial Regex ConfirmationDuSupport();
 
         /// <summary>Une phrase et sa ponctuation finale (le reste sans ponctuation compte aussi).</summary>
         [GeneratedRegex(@"[^.!?…\n]+[.!?…]*", RegexOptions.CultureInvariant)]
         private static partial Regex PhraseAvecFin();
 
-        /// <summary>Le support dit par le PROFESSEUR (#68 v10) : formes avec article ou préposition seulement
-        /// (« au cahier », « à l'écran », « l'oral », « à l'écrit ») — pas « oral » ou « écrit » nus (« l'épreuve
-        /// écrite du brevet »).</summary>
-        [GeneratedRegex(@"(?<!\p{L})(?:(?:au|ton|le|sur\s+(?:ton|le))\s+cahier|(?:sur\s+)?(?:papier|feuille)|à\s+la\s+main"
-            + @"|(?:à|sur|de)\s+l['’](?:ordinateur|ordi|écran)|(?:l['’]|à\s+l['’]|sur\s+l['’])(?:ordinateur|ordi)|(?:au|le)\s+clavier|à\s+l['’]écran"
-            + @"|l['’]oral|à\s+l['’]oral|oralement|à\s+voix\s+haute|au\s+micro|l['’]écrit|à\s+l['’]écrit|par\s+écrit)(?!\p{L})",
-            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
-        private static partial Regex SupportNommeParLeProf();
-
         /// <summary>
-        /// LE FILET COMPLET DU TOP DÉPART (#68 v10), tel que le builder l'appelle quand l'évaluation est engagée :
-        /// le support est choisi (<see cref="SupportChoisi"/> : clic, ou support dit par l'élève) OU le professeur le
-        /// nomme avant la première question (<see cref="SupportNommeAvantDepart"/>), ET la réponse pose la première
-        /// question sans balise (<see cref="TopDepartSansBalise"/>).
+        /// LE FILET DU TOP DÉPART SANS LE FIL (#68 v10, restreint en v11) : le support est choisi
+        /// (<see cref="SupportChoisi"/>) ET la réponse pose la première question sans balise
+        /// (<see cref="TopDepartSansBalise"/>). #68 v11 : le support nommé par le professeur n'y compte plus — il ne
+        /// compte que juste après une réponse de l'élève à [SUPPORT_EVALUATION], ce que seul le fil dit : voir
+        /// <see cref="TopDepartAuTour"/>, que le builder appelle.
         /// </summary>
         public static bool TopDepartApresSupport(bool supportChoisi, string? reponse) =>
-            (supportChoisi || SupportNommeAvantDepart(reponse)) && TopDepartSansBalise(reponse);
+            TopDepartAuTour(supportChoisi, false, reponse);
+
+        /// <summary>
+        /// LE FILET COMPLET DU TOP DÉPART (#68 v11), tel que le builder l'appelle quand l'évaluation est engagée :
+        /// le support est choisi (<see cref="SupportChoisi"/> : clic, ou support dit par l'élève) OU — seulement
+        /// quand la réponse suit JUSTE une réponse de l'élève à [SUPPORT_EVALUATION]
+        /// (<paramref name="reponseALaQuestionDuSupport"/>, <see cref="ReponseALaQuestionDuSupport"/>) — le
+        /// professeur confirme le support avant la première question (<see cref="SupportNommeAvantDepart"/>) ; ET
+        /// la réponse pose la première question sans balise (<see cref="TopDepartSansBalise"/>).
+        /// </summary>
+        public static bool TopDepartAuTour(bool supportChoisi, bool reponseALaQuestionDuSupport, string? reponse) =>
+            (supportChoisi || (reponseALaQuestionDuSupport && SupportNommeAvantDepart(reponse)))
+            && TopDepartSansBalise(reponse);
+
+        /// <summary>
+        /// LA RÉPONSE DU PROFESSEUR SUIT-ELLE JUSTE UNE RÉPONSE DE L'ÉLÈVE À [SUPPORT_EVALUATION] ? (#68 v11, même
+        /// logique que <see cref="SupportChoisi"/>) — le dernier message du fil est celui de l'élève (le message du
+        /// tour) et le message qui le précède est un message du professeur qui porte [SUPPORT_EVALUATION]. C'est le
+        /// seul moment où « Très bien, au cahier ! Question 1 : … » confirme un choix (« comme tu veux », « peu
+        /// importe ») ; à tout autre moment, un support cité par le professeur est une correction, un rappel, un
+        /// projet.
+        /// </summary>
+        /// <param name="fil">Tout le fil, du plus ancien au plus récent, le message de l'élève du tour compris ;
+        /// le rôle vaut « user » pour l'élève, autre chose pour le professeur.</param>
+        public static bool ReponseALaQuestionDuSupport(IEnumerable<(string? Role, string? Contenu)> fil)
+        {
+            var eleveVu = false;
+            foreach (var (role, message) in fil.Reverse())
+            {
+                if (string.IsNullOrWhiteSpace(message)) continue;
+                if (!eleveVu)
+                {
+                    if (role != "user") return false;
+                    eleveVu = true;
+                    continue;
+                }
+                return role != "user" && message.Contains(BaliseSupport, StringComparison.OrdinalIgnoreCase);
+            }
+            return false;
+        }
 
         [GeneratedRegex(@"(?<!\p{L})(?:" + MotsDeSupport + @")(?!\p{L})", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
         private static partial Regex MotDeSupport();
