@@ -6733,10 +6733,12 @@ namespace SchoolWebApp.Api.Builders.impl
         [GeneratedRegex(@"Je retire toute la notion[\s  ]*«[^«»\r\n]+»[\s  ]*de ton programme[\s  ]*\?", RegexOptions.IgnoreCase)]
         private static partial Regex QuestionFermeeTexte();
 
+        // #67 v7 (banc) : l'alternative « est / sont / a été retirée » exigeait DEUX espaces (celle du motif et la sienne) et ne
+        // jouait jamais (« Elle est retirée. » non repérée) : la négation se lit maintenant juste avant le verbe.
         // #67 v7 (verdict d'Omar v6, point 6) : « Je l'ai retirée », « Je te l'enlève », « Je vais la retirer », « Elle
         // n'est plus au programme » ajoutés ; « c'est fait / c'est noté » seuls sortis d'ici (« C'est noté pour vendredi »,
         // « C'est fait, bravo ») : voir `AnnonceUnRetraitFait`, qui ne les compte qu'après une demande de retrait.
-        [GeneratedRegex(@" ((je|on) (la|le|les|l|te la|te le|te les|te l) (retire|enleve|supprime)|(je|on) (vais|va) (la|le|les|l|te la|te le|te les|te l) (retirer|enlever|supprimer)|je (retire|enleve|supprime) (les|la|le|l|du|des)|(j|je l|je les|je te l|je te les|on l|on les) (ai|a) ((bien|aussi|deja|egalement) )?(retire|enleve|supprime)\w*|on a ((bien|aussi|deja|egalement) )?(retire|enleve)\w*|c est ((bien|deja) )?(retire|enleve|supprime)\w*|(?<! (n|ne|rien n|pas)) (est|sont|a ete|ont ete) (bien )?(retire|retiree|retires|retirees|enleve|enlevee|enleves|enlevees|supprime|supprimee|supprimes|supprimees)|bien (retire|retiree|retires|retirees|enleve|enlevee|enleves|enlevees)|sort\w* (bien )?(de|du) (ton )?programme|(n est|ne sont|ne fait|ne font) plus (dans|partie|au)) ")]
+        [GeneratedRegex(@" ((je|on) (la|le|les|l|te la|te le|te les|te l) (retire|enleve|supprime)|(je|on) (vais|va) (la|le|les|l|te la|te le|te les|te l) (retirer|enlever|supprimer)|je (retire|enleve|supprime) (les|la|le|l|du|des)|(j|je l|je les|je te l|je te les|on l|on les) (ai|a) ((bien|aussi|deja|egalement) )?(retire|enleve|supprime)\w*|on a ((bien|aussi|deja|egalement) )?(retire|enleve)\w*|c est ((bien|deja) )?(retire|enleve|supprime)\w*|(?<!( n| ne| rien n| pas) )(est|sont|a ete|ont ete) (bien )?(retire|retiree|retires|retirees|enleve|enlevee|enleves|enlevees|supprime|supprimee|supprimes|supprimees)|bien (retire|retiree|retires|retirees|enleve|enlevee|enleves|enlevees)|sort\w* (bien )?(de|du) (ton )?programme|(n est|ne sont|ne fait|ne font) plus (dans|partie|au)) ")]
         private static partial Regex AnnonceRetrait();
 
         /// <summary>

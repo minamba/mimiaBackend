@@ -231,6 +231,12 @@ namespace SchoolWebApp.Api.Builders.impl
             if (string.IsNullOrWhiteSpace(texte)) return false;
 
             var sans = ConfirmationDeRetrait.SansArdoise(BaliseRetraitPropose().Replace(texte, " "));
+
+            // #67 v7 (banc, tirage B-1) : une QUESTION qui propose (« Tu veux que je les retire toutes les deux ? ») n'annonce
+            // rien — la phrase vraie « je n'ai rien retiré » y était ajoutée à tort. Une question ne compte que si elle
+            // dit un retrait PASSÉ (« Je l'ai retirée, on continue ? », « C'est retiré, ça te va ? »).
+            sans = string.Concat(FinDePhrase().Split(sans)
+                .Where(p => !p.TrimEnd().EndsWith('?') || RetraitPasse().IsMatch($" {LibelleNotion.CleSouple(p)} ")));
             if (AnnonceUnRetrait(sans)) return true;
 
             var phrases = FinDePhrase().Split(sans).Select(p => $" {LibelleNotion.CleSouple(p)} ").ToList();
@@ -239,6 +245,9 @@ namespace SchoolWebApp.Api.Builders.impl
             return MorceauDeNotion.ParleDeRetrait(MarqueurClicRetrait().Replace(messageEleve ?? "", " "))
                 && phrases.Any(p => CestFaitSeul().IsMatch(p));
         }
+
+        [GeneratedRegex(@" ((ai|a|as|avons|ont|est|sont|a ete|ont ete) ((bien|aussi|deja|egalement) )?(retire|enleve|supprime)\w*|c est ((bien|deja) )?(retire|enleve|supprime|fait|note)\w*) ")]
+        private static partial Regex RetraitPasse();
 
         [GeneratedRegex(@"^ (retiree?s?|enlevee?s?|supprimee?s?) ")]
         private static partial Regex ParticipeEnTete();
