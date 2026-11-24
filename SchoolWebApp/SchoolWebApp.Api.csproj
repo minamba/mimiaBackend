@@ -35,6 +35,12 @@
     <PackageReference Include="Swashbuckle.AspNetCore.Annotations" Version="6.6.2" />
   </ItemGroup>
 
+  <!-- s13 (#68) : les tests forcent le dépassement du délai des regex de LecteurEvaluation
+       (LecteurEvaluation.DelaiDepasseForcePourTest, interne). -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="SchoolWebApp.Tests" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\SchoolWebApp.Domain\SchoolWebApp.Domain.csproj" />
     <ProjectReference Include="..\SchoolWebApp.Dal\SchoolWebApp.Dal.csproj" />

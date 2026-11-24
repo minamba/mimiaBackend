@@ -437,7 +437,26 @@ namespace SchoolWebApp.Api.Services
             if (!MotDeSupport().IsMatch(dit) || SupportsOpposes().IsMatch(dit)) return false;
 
             // #68 v11 : une construction de choix, pas une phrase qui contient un mot de support.
-            return ConstructionDeChoix().IsMatch(dit);
+            // s13 : délai dépassé (200 ms, serveur chargé, 1er appel après un redémarrage) = pas un choix, jamais
+            // une exception qui ferait tomber le tour de l'élève (comme ImageEmbarqueeSvg).
+            try { return Correspond(ConstructionDeChoix(), dit); }
+            catch (RegexMatchTimeoutException) { return false; }
+        }
+
+        /// <summary>
+        /// Tests seulement (s13) : force le dépassement du délai des deux lectures à délai
+        /// (<see cref="ConstructionDeChoix"/>, <see cref="ConfirmationDuSupport"/>) dans le flot d'exécution courant.
+        /// <see cref="AsyncLocal{T}"/> : sans effet sur les autres tests ni sur les autres requêtes. Toujours faux en
+        /// production.
+        /// </summary>
+        internal static readonly AsyncLocal<bool> DelaiDepasseForcePourTest = new();
+
+        /// <summary>Une lecture à délai (s13) : le motif, ou le dépassement forcé par un test.</summary>
+        private static bool Correspond(Regex motif, string texte)
+        {
+            if (DelaiDepasseForcePourTest.Value)
+                throw new RegexMatchTimeoutException(texte, motif.ToString(), motif.MatchTimeout);
+            return motif.IsMatch(texte);
         }
 
         /// <summary>Ce qui sépare les mots d'une construction de choix : espaces, ponctuation (sauf « ? » et
@@ -532,12 +551,17 @@ namespace SchoolWebApp.Api.Services
             var depart = PremiereQuestion().Match(texte);
             if (!depart.Success || depart.Index == 0) return false;
 
-            foreach (Match phrase in PhraseAvecFin().Matches(texte[..depart.Index]))
+            try
             {
-                var p = phrase.Value.Trim();
-                if (p.EndsWith('?')) continue;
-                if (ConfirmationDuSupport().IsMatch(p) && !SupportsOpposes().IsMatch(p)) return true;
+                foreach (Match phrase in PhraseAvecFin().Matches(texte[..depart.Index]))
+                {
+                    var p = phrase.Value.Trim();
+                    if (p.EndsWith('?')) continue;
+                    if (Correspond(ConfirmationDuSupport(), p) && !SupportsOpposes().IsMatch(p)) return true;
+                }
             }
+            // s13 : délai dépassé (200 ms) = support non confirmé ; le filet attend alors le clic ou le choix tapé.
+            catch (RegexMatchTimeoutException) { return false; }
             return false;
         }
 
