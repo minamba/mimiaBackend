@@ -90,7 +90,13 @@ namespace SchoolWebApp.Api.Services.Voix
             _photoAttendue = photoAttendue;
             _langue = langue;
             _fiables = fiables;
-            _recents = messagesRecents;
+            // AU TOUR D'ARRIVÉE, LE FIL SANS LES NOTES DE SÉANCE — signalement #64 (Adam, 23/11/2026). L'appelant a déjà jugé
+            // que l'écoute attend sa réponse (au rechargement, la note du départ ne la ferme pas : voir motAReprendre dans
+            // ChatViewModelBuilder). Lue ici, la note du départ disait le contraire quand sa fiche portait une balise de voix
+            // (« tout comme [EN]orange[/EN] ») : le mot attendu n'était plus remis s'il manquait. Vidées, pas retirées : les rangs restent.
+            _recents = arrivee
+                ? messagesRecents.Select(m => RegleVerificationSon.EstUneNoteDeSeance(m) ? string.Empty : m).ToList()
+                : messagesRecents;
             _graine = graine;
         }
 

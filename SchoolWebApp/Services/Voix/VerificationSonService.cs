@@ -1498,12 +1498,17 @@ namespace SchoolWebApp.Api.Services.Voix
             Toujours,
         }
 
-        /// <summary>Le dernier mot dicté dans une balise de voix, du plus récent au plus ancien ; null s'il n'y en a pas.</summary>
+        /// <summary>
+        /// Le dernier mot dicté dans une balise de voix, du plus récent au plus ancien ; null s'il n'y en a pas.
+        /// JAMAIS DANS UNE NOTE DE SÉANCE — signalement #64 (Adam, 23/11/2026) : la fiche écrite au départ (« tout comme
+        /// [EN]orange[/EN] ») passait pour le dernier mot dit, et au retour « Two », le mot qui attendait sa réponse, était
+        /// remplacé par « orange ». Une note est écrite pour les parents (voir EstUneNoteDeSeance), elle ne dicte rien.
+        /// </summary>
         public static string? DernierMotDicte(IReadOnlyList<string> recents)
         {
             for (var i = recents.Count - 1; i >= 0; i--)
             {
-                if (recents[i] is not { } r || !PassageDeVoix().IsMatch(r)) continue;
+                if (recents[i] is not { } r || !PassageDeVoix().IsMatch(r) || EstUneNoteDeSeance(r)) continue;
                 if (DicteeDeMots.MotDit(r) is { } mot) return mot;
             }
 
