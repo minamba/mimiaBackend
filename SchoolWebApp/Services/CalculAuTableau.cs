@@ -122,10 +122,24 @@ namespace SchoolWebApp.Api.Services
 
             if (question.Value.Suite is { } suite) return JugerSuite(suite, reponse);
 
-            return question.Value.Decomposition is { } decomposition
-                ? JugerDecomposition(decomposition, reponse)
-                : JugerCalcul(question.Value.Expression!, question.Value.Resultat, reponse);
+            if (question.Value.Decomposition is { } decomposition) return JugerDecomposition(decomposition, reponse);
+
+            var verdict = JugerCalcul(question.Value.Expression!, question.Value.Resultat, reponse);
+
+            // Signalement #70 : « 3 » pour « 2 + 1 + la retenue de 1 », c'est la retenue oubliée — l'erreur type du CE1.
+            return verdict is { Jugement: Jugement.Faux } && question.Value.Retenue is { } retenue && RetenueOubliee(verdict, retenue)
+                ? verdict with { Indice = IndiceRetenueOubliee }
+                : verdict;
         }
+
+        private const string IndiceRetenueOubliee =
+            "Son erreur : il a oublié d'ajouter la retenue ; fais-lui regarder la retenue.";
+
+        private static bool RetenueOubliee(Verdict verdict, decimal retenue) =>
+            decimal.TryParse(verdict.Attendu.Replace(',', '.'), NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out var attendu)
+            && decimal.TryParse(verdict.Donne.Replace(',', '.'), NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out var donne)
+            && retenue != 0
+            && donne == attendu - retenue;
 
         /// <summary>Le fait à glisser à côté de la réponse de l'élève ; null sans verdict.</summary>
         public static string? Fait(IEnumerable<string?> messagesDuProfesseur, string? messageDeLEleve) =>
@@ -256,7 +270,8 @@ namespace SchoolWebApp.Api.Services
 
         // ───────────── La question ─────────────
 
-        private readonly record struct Question(string? Expression, string Resultat, DecompositionPosee? Decomposition, SuitePosee? Suite = null);
+        /// <param name="Retenue">La retenue nommée dans le calcul (« 2 + 1 + la retenue de 1 », signalement #70), sinon null.</param>
+        private readonly record struct Question(string? Expression, string Resultat, DecompositionPosee? Decomposition, SuitePosee? Suite = null, decimal? Retenue = null);
 
         /// <summary>
         /// Une décomposition à donner : le nombre, la valeur attendue de chaque rang (c, d, u), les rangs qu'on demande
@@ -317,7 +332,7 @@ namespace SchoolWebApp.Api.Services
                 var message = recents[j];
                 if (string.IsNullOrWhiteSpace(message)) continue;
 
-                var calculs = Calculs(message, out var illisible);
+                var calculs = CalculsLus(message, out var illisible, out var retenues);
                 if (illisible) return null;
 
                 // LA MÊME QUESTION, DÉCOMPOSÉE — tâche 1941 (vu par Omar sur master, conversation de test 457) : « [ARDOISE]
@@ -392,7 +407,7 @@ namespace SchoolWebApp.Api.Services
                     var (expression, resultat) = calculs[0];
                     var operandes = NombresDUneRelance(expression, resultat, operandesEnPlus);
                     return nombresDesRelances.All(operandes.Contains)
-                        ? new Question(expression, Ecrire(resultat), null)
+                        ? new Question(expression, Ecrire(resultat), null, Retenue: retenues.TryGetValue(expression, out var retenue) ? retenue : null)
                         : null;
                 }
 
@@ -624,16 +639,144 @@ namespace SchoolWebApp.Api.Services
                 .Select(m => decimal.Parse(m.Value.Replace(',', '.'), CultureInfo.InvariantCulture))
                 .ToHashSet();
 
-        private static List<(string Expression, decimal Resultat)> Calculs(string message, out bool illisible)
+        private static List<(string Expression, decimal Resultat)> Calculs(string message, out bool illisible) =>
+            CalculsLus(message, out illisible, out _);
+
+        /// <summary>
+        /// LA RETENUE NOMMÉE DANS LE CALCUL — Mins, le 24/11/2026, signalement #70 (Adam, CE1, addition posée 27 + 15) :
+        /// « Maintenant les dizaines : combien ça fait, 2 + 1 + la retenue de 1 ? ». Le juge lisait « 2 + 1 » (les mots
+        /// « la retenue de » coupaient le calcul), comptait 3, et disait au professeur « L'élève a répondu 3 : c'est JUSTE,
+        /// ta réponse COMMENCE par Oui ». Nora a validé l'oubli de la retenue — l'erreur type du CE1 —, puis écrit 42.
+        /// La retenue nommée est un terme du calcul : « + la retenue de 1 » se lit « + 1 », « + 1 (la retenue) » aussi.
+        /// Sans valeur (« 2 + 1 + la retenue ? »), elle vaut 1 quand la colonne additionne deux chiffres (une addition
+        /// de deux chiffres retient au plus 1) ; sinon on ne la devine pas, et le calcul coupé ne se juge pas (plus bas).
+        /// Les retenues lues sont rendues par calcul (expression réécrite → valeur), pour l'indice « retenue oubliée ».
+        /// </summary>
+        [GeneratedRegex(@"(?<op>\+|(?<!\p{L})plus)\s*(?:la|ta)\s+retenue(?!\p{L})(?:\s*(?:de|qui\s+vaut|:)\s*(?<n>\d)(?!\d|,\d))?", RegexOptions.IgnoreCase)]
+        private static partial Regex RetenueNommee();
+
+        [GeneratedRegex(@"(?<!\d|\d,)(?<n>\d)\s*\(\s*(?:c['’]est\s+)?(?:la|ta)\s+retenue\s*\)", RegexOptions.IgnoreCase)]
+        private static partial Regex RetenueEntreParentheses();
+
+        // « 2 + 1 » juste avant « + la retenue » : deux chiffres seuls (pas « 20 + 10 », pas « 3 × 4 »). Le calcul ENTIER est
+        // « chiffre + chiffre » (contrôle d'Omar, paquet 1) : rien devant (« 1 + 1 + 2 + la retenue », « 7 × 2 + 3 + la
+        // retenue » se lisaient « 2 + la retenue de 1 » et le juge rendait JUSTE une réponse fausse).
+        // Devant le premier chiffre : ni chiffre collé (« 12 », « 2,5 »), ni opérateur (« 1 + 1 + 2 », « 7 × 2 + 3 », « 8 : 2 + 1 »),
+        // ni mot d'opération ; « Les dizaines : 2 + 1 », « ça fait, 2 + 1 » restent permis.
+        [GeneratedRegex(@"(?<![\d,.])(?<![+\-−–×*÷/=^][ \t]*)(?<!\d[ \t]*[:,.][ \t]*)(?<!(?<!\p{L})(?:x|plus|moins|fois|par)[ \t]*)\d[ \t]*(?:\+|plus)[ \t]*\d[ \t]*$", RegexOptions.IgnoreCase)]
+        private static partial Regex DeuxChiffresAvant();
+
+        // Après « + la retenue », le calcul continue (« 2 + 1 + la retenue + 3 ») : la retenue de « 2 + 1 » ne se devine plus.
+        [GeneratedRegex(@"\G[ \t]*(?:[+\-−–×*:÷/]|(?:plus|moins|fois)(?!\p{L}))", RegexOptions.IgnoreCase)]
+        private static partial Regex SuiteApresLaRetenue();
+
+        // « + la retenue de 10 », « + la retenue (1) » : une valeur qu'on n'a pas lue ; on ne remplace pas par 1.
+        [GeneratedRegex(@"\G\s*(?:(?:de|qui\s+vaut|:)\s*)?\(?\s*\d", RegexOptions.IgnoreCase)]
+        private static partial Regex ValeurNonLue();
+
+        // Les retenues qui font partie du calcul sans être réécrites : « la retenue de 1 + 2 + 1 » (le 1 est lu dans le
+        // calcul), « 2 + 1 + 1 de retenue ».
+        [GeneratedRegex(@"(?<!\p{L})(?:la|ta)\s+retenue\s+(?:de|qui\s+vaut)\s+\d(?=[ \t]*(?:\+|plus(?!\p{L})))|\d[ \t]+de\s+retenue(?!\p{L})", RegexOptions.IgnoreCase)]
+        private static partial Regex RetenueDansLeCalcul();
+
+        [GeneratedRegex(@"(?<!\p{L})retenue?s?(?!\p{L})", RegexOptions.IgnoreCase)]
+        private static partial Regex MotRetenue();
+
+        /// <summary>
+        /// UN CALCUL COUPÉ NE SE JUGE PAS — signalement #70 : après ce qu'on a lu vient encore un opérateur (« 4 + 3 + les 2
+        /// de tout à l'heure », « 2 plus 1 plus ce que tu as retenu ») : on n'a lu que le début du calcul, son résultat
+        /// n'est pas celui de la question. Avant, le juge rendait le verdict du début, et validait la réponse fausse.
+        /// Contrôle d'Omar (paquet 1) : aussi après « - », « − », « : », « / » (« 7 - 4 - la retenue de 1 ? » rendait JUSTE
+        /// « 3 », « 9 - 3 - les 2 de tout à l'heure » rendait JUSTE « 6 »).
+        /// </summary>
+        [GeneratedRegex(@"\G[ \t]*(?:[+\-−–×*÷:/]|x(?!\p{L})|(?:plus|moins|fois)(?!\p{L}))", RegexOptions.IgnoreCase)]
+        private static partial Regex CalculQuiContinue();
+
+        private static string AvecLesRetenues(string message, List<(int Debut, decimal Valeur)> retenues)
+        {
+            var lues = RetenueNommee().Matches(message).Select(m => (m, Nommee: true))
+                .Concat(RetenueEntreParentheses().Matches(message).Select(m => (m, Nommee: false)))
+                .OrderBy(x => x.m.Index)
+                .ToList();
+            if (lues.Count == 0) return message;
+
+            var sortie = new System.Text.StringBuilder();
+            var fin = 0;
+            foreach (var (m, nommee) in lues)
+            {
+                if (m.Index < fin) continue;
+
+                // « 2 + 1, plus la retenue de 1 » : la retenue vient APRÈS le calcul, séparée par une virgule ; ce n'est pas
+                // un terme de « 2 + 1 » (contrôle d'Omar, paquet 1). On ne la réécrit pas, et la phrase ne se juge pas (plus bas).
+                if (nommee && !Regex.IsMatch(message[..m.Index], @"\d[ \t]*$")) continue;
+
+                int? valeur = m.Groups["n"].Success ? m.Groups["n"].Value[0] - '0' : null;
+                if (valeur is null && nommee
+                    && DeuxChiffresAvant().IsMatch(message[..m.Index])
+                    && !SuiteApresLaRetenue().IsMatch(message, m.Index + m.Length)
+                    && !ValeurNonLue().IsMatch(message, m.Index + m.Length)) valeur = 1;
+                if (valeur is null) continue;
+
+                sortie.Append(message, fin, m.Index - fin);
+                if (nommee) sortie.Append(m.Groups["op"].Value).Append(' ');
+                retenues.Add((sortie.Length, valeur.Value));
+                sortie.Append(valeur.Value.ToString(CultureInfo.InvariantCulture));
+                fin = m.Index + m.Length;
+            }
+            sortie.Append(message, fin, message.Length - fin);
+            return sortie.ToString();
+        }
+
+        /// <summary>
+        /// La phrase du calcul (entre deux « . », « ! », « ? » ou sauts de ligne) nomme encore une retenue qui n'est pas un
+        /// terme du calcul lu (message déjà réécrit par <see cref="AvecLesRetenues"/>).
+        /// </summary>
+        private static bool RetenueHorsDuCalcul(string message, int debut, int finExpr)
+        {
+            var avant = message.LastIndexOfAny(['.', '!', '?', '\n'], Math.Max(debut - 1, 0));
+            var apres = message.IndexOfAny(['.', '!', '?', '\n'], finExpr);
+            var (de, a) = (avant < 0 ? 0 : avant + 1, apres < 0 ? message.Length : apres);
+            if (debut == 0) de = 0;
+            var phrase = message[de..a];
+
+            var dansLeCalcul = RetenueDansLeCalcul().Matches(phrase);
+            return MotRetenue().Matches(phrase).Any(r => !dansLeCalcul.Any(c => r.Index >= c.Index && r.Index < c.Index + c.Length));
+        }
+
+        private static List<(string Expression, decimal Resultat)> CalculsLus(string message, out bool illisible, out Dictionary<string, decimal> retenuesDesCalculs)
         {
             var trouves = new List<(string, decimal)>();
             illisible = false;
+            retenuesDesCalculs = new Dictionary<string, decimal>();
+
+            var retenues = new List<(int Debut, decimal Valeur)>();
+            message = AvecLesRetenues(message, retenues);
 
             foreach (var motif in new[] { EgalQuestion(), CombienFont(), ExpressionInterrogee() })
             {
                 foreach (Match m in motif.Matches(message))
                 {
                     var expression = m.Groups["expr"].Value;
+                    var (debut, finExpr) = (m.Groups["expr"].Index, m.Groups["expr"].Index + m.Groups["expr"].Length);
+
+                    if (CalculQuiContinue().IsMatch(message, finExpr))
+                    {
+                        illisible = true;
+                        continue;
+                    }
+
+                    // UNE RETENUE DANS LA PHRASE, HORS DU CALCUL — contrôle d'Omar (paquet 1) : « 2 + 1, plus la retenue de 1 »,
+                    // « 2 + 1, sans oublier la retenue », « 2 + 1 et la retenue » rendaient JUSTE « 3 ». La retenue lue dans le
+                    // calcul est déjà réécrite en nombre ; s'il en reste une dans la même phrase, on ne sait pas ce qui est demandé.
+                    // Sauf si le calcul contient déjà un terme de retenue lu (contrôle d'Omar, paquet 1 v3, V22) : « Maintenant
+                    // les dizaines, sans oublier la retenue : combien ça fait, 2 + 1 + la retenue de 1 ? » annonce la retenue
+                    // que le calcul additionne ; le juge ne rendait aucun verdict et laissait passer « 3 ».
+                    var retenueLueDansLeCalcul = retenues.Any(r => r.Debut >= debut && r.Debut < finExpr);
+                    if (!retenueLueDansLeCalcul && RetenueHorsDuCalcul(message, debut, finExpr))
+                    {
+                        illisible = true;
+                        continue;
+                    }
 
                     // « Question 2 : 6 : 3 = ? » — le « : » d'un intitulé se lirait comme une division.
                     if (expression.Contains(':') && Regex.IsMatch(message[..m.Groups["expr"].Index], @"[\p{L}°]\s*$"))
@@ -652,6 +795,9 @@ namespace SchoolWebApp.Api.Services
                     }
 
                     if (!trouves.Any(t => t.Item1 == lu.Value.Ecrite)) trouves.Add((lu.Value.Ecrite, lu.Value.Valeur));
+
+                    var dedans = retenues.Where(r => r.Debut >= debut && r.Debut < finExpr).ToList();
+                    if (dedans.Count == 1) retenuesDesCalculs[lu.Value.Ecrite] = dedans[0].Valeur;
                 }
             }
 
