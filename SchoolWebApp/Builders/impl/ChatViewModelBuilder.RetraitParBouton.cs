@@ -291,7 +291,8 @@ namespace SchoolWebApp.Api.Builders.impl
         /// F2/F3/F5 d'Omar) — hors tableau, les trois conditions ensemble :
         ///   1. « il ne (te / nous) reste (donc / alors / plus / maintenant…) que » au PRÉSENT : « il ne restera / resterait
         ///      que » décrit ce que le clic ferait, c'est vrai ;
-        ///   2. pas dans une proposition en « si » (« Si tu la retires, il ne reste que… ») ;
+        ///   2. pas dans une proposition en « si » ou un équivalent (« Si tu la retires, il ne reste que… », « Dès que tu
+        ///      cliques, il ne reste que… », « Si tu veux, on retire… : il ne reste alors que… ») ;
         ///   3. ce qui suit « que » est le programme MOINS la notion proposée : soit « deux notions » (le nombre = programme
         ///      moins une), soit une énumération d'autant d'éléments (coupée aux virgules et aux « et »), dont au moins un
         ///      nomme une notion du programme, jamais deux la même, et aucun la notion proposée (balise de la réponse).
@@ -306,20 +307,31 @@ namespace SchoolWebApp.Api.Builders.impl
             return FinDePhrase().Split(sans).Any(p =>
             {
                 var m = ResteQue().Match(p);
-                return m.Success && !DansUnSi(p, m.Index)
+                return m.Success && !DansUneCondition(p, m.Index)
                     && ProgrammeMoinsUne(p[(m.Index + m.Length)..], libelles, libellePropose);
             });
         }
 
-        /// <summary>Ce qui suit « il ne reste que » : le programme moins une notion (condition 3 ci-dessus) ?</summary>
+        /// <summary>
+        /// Ce qui suit « il ne reste que » : le programme moins une notion (condition 3 ci-dessus) ?
+        /// #67 v9 (Omar sur 316db6f) : l'énumération s'arrête à la fin du GROUPE NOMINAL — ponctuation forte, ou virgule
+        /// suivie d'une nouvelle proposition (« …, c'est plus léger ! », « …, on enlève les titrages ») : sans cela, la
+        /// suite comptait comme un élément de plus (G9, G11). Un programme « à revoir / à réviser » parle de révision, pas
+        /// d'un programme réduit (G1) : rien.
+        /// </summary>
         private static bool ProgrammeMoinsUne(string suite, IReadOnlyList<string> libelles, string? libellePropose)
         {
             var attendu = libelles.Count - 1;
-            var nombre = NombreDeNotions().Match(suite);
+            var fin = suite.IndexOfAny(['.', '!', '?', ';', ':', '\n', '—', '–', '(']);
+            var groupe = fin >= 0 ? suite[..fin] : suite;
+            var proposition = NouvelleProposition().Match(groupe);
+            if (proposition.Success) groupe = groupe[..proposition.Index];
+            if (ARevoir().IsMatch(groupe)) return false;
+
+            var nombre = NombreDeNotions().Match(groupe);
             if (nombre.Success) return NombreEcrit(nombre.Groups["n"].Value) == attendu;
 
-            var fin = suite.IndexOfAny(['.', '!', '?', ';', ':', '\n', '—', '–', '(']);
-            var elements = Enumeration().Split(fin >= 0 ? suite[..fin] : suite)
+            var elements = Enumeration().Split(groupe)
                 .Where(e => !string.IsNullOrWhiteSpace(e)).ToList();
             if (elements.Count != attendu) return false;
 
@@ -336,23 +348,32 @@ namespace SchoolWebApp.Api.Builders.impl
         };
 
         /// <summary>
-        /// « il ne reste que » est-il la principale d'une proposition en « si » ? Ce qui précède, dans la même proposition
-        /// (coupée aux « : ; — » et aux virgules, guillemets mis à part), commence par « si / s'il » — directement avant
-        /// (« Et si tu la retires il ne reste que ») ou dans le morceau juste avant la virgule (« Si tu cliques sur « Oui,
-        /// retirer », il ne te reste que »). « Oui, si je comprends bien, on retire les titrages : il ne reste que » et
-        /// « Même si c'est dommage, on retire…, il ne reste que » restent des affirmations.
+        /// « il ne reste que » dépend-il d'une condition ou d'un moment à venir ? Deux cas :
+        ///   1. ce qui précède, dans la même proposition (coupée aux « : ; — » et aux virgules, guillemets mis à part),
+        ///      commence par une condition — directement avant (« Et si tu la retires il ne reste que ») ou dans le morceau
+        ///      juste avant la virgule (« Si tu cliques sur « Oui, retirer », il ne te reste que ») ;
+        ///   2. #67 v9 : la PHRASE commence par une condition (« Si tu veux, on retire les titrages : il ne reste alors que »).
+        /// Condition = « si / s'il » et ses équivalents qui placent le reste après le clic (#67 v9, G2-G6 d'Omar) :
+        /// « quand, lorsque, une fois que, dès que, aussitôt que, après que, après ton clic, après avoir…, en cliquant… ».
+        /// « Oui, si je comprends bien, on retire les titrages : il ne reste que », « Si je comprends bien, … » (« si » de
+        /// discours) et « Même si c'est dommage, on retire…, il ne reste que » restent des affirmations.
         /// </summary>
-        private static bool DansUnSi(string phrase, int position)
+        private static bool DansUneCondition(string phrase, int position)
         {
             var avant = Guillemets().Replace(phrase[..position], "«»");
+            if (Condition($" {LibelleNotion.CleSouple(avant.Split([',', ':', ';', '—', '–'])[0])} ")) return true;
+
             var coupe = avant.LastIndexOfAny([':', ';', '—', '–']);
             if (coupe >= 0) avant = avant[(coupe + 1)..];
             var morceaux = avant.Split(',');
             var dernier = $" {LibelleNotion.CleSouple(morceaux[^1])} ";
-            if (SiEnTete().IsMatch(dernier)) return true;
+            if (Condition(dernier)) return true;
             return morceaux.Length > 1 && LiaisonSeule().IsMatch(dernier)
-                && SiEnTete().IsMatch($" {LibelleNotion.CleSouple(morceaux[^2])} ");
+                && Condition($" {LibelleNotion.CleSouple(morceaux[^2])} ");
         }
+
+        private static bool Condition(string morceauSouple) =>
+            SiEnTete().IsMatch(morceauSouple) && !SiDeDiscours().IsMatch(morceauSouple);
 
         [GeneratedRegex(@"\bil\s+ne\s+(?:te\s+|nous\s+)?reste\s+(?:(?:donc|alors|plus|maintenant|ensuite|d[ée]sormais)\s+)*qu(?:e\s+|['’]\s*)", RegexOptions.IgnoreCase)]
         private static partial Regex ResteQue();
@@ -366,8 +387,20 @@ namespace SchoolWebApp.Api.Builders.impl
         [GeneratedRegex(@"«[^»]*»")]
         private static partial Regex Guillemets();
 
-        [GeneratedRegex(@"^ ((et|mais|alors|donc|ok|oui|bon|d accord|accord) )*(si|s il|s ils) ")]
+        [GeneratedRegex(@"^ ((et|mais|alors|donc|ok|oui|bon|d accord|accord) )*(si|s il|s ils|quand|lorsque|lorsqu|une fois que|une fois qu|une fois (ton|le) clic|une fois clique|des que|des qu|aussitot que|aussitot qu|sitot que|apres que|apres qu|apres (ton|ta|le|un|ce|votre|son) clic|apres avoir|apres l avoir|apres les avoir|en (cliquant|appuyant|validant|confirmant)|au moment ou|des (ton|le|que) clic) ")]
         private static partial Regex SiEnTete();
+
+        /// <summary>« si » de discours, pas une condition : « si je comprends bien », « si j'ai bien compris »…</summary>
+        [GeneratedRegex(@"^ ((et|mais|alors|donc|ok|oui|bon|d accord|accord) )*si (je |j )?(comprends|ai bien compris|ai compris|resume|ne me trompe|me souviens|tu veux mon avis|on resume)")]
+        private static partial Regex SiDeDiscours();
+
+        /// <summary>Virgule suivie d'une nouvelle proposition : l'énumération des notions est finie (#67 v9, G9 / G11).</summary>
+        [GeneratedRegex(@",\s*(?:c['’]|j['’]|t['’]|s['’]il|(?:ce|ça|ca|cela|on|tu|je|il|elle|nous|vous|ils|elles|comme|car|mais|donc|alors|parce|puisque|qui|quand|si|voil[aà])\b)", RegexOptions.IgnoreCase)]
+        private static partial Regex NouvelleProposition();
+
+        /// <summary>Sens « révision » : « … à revoir / à réviser / à travailler » (#67 v9, G1).</summary>
+        [GeneratedRegex(@"\b[àa]\s+(?:revoir|voir|r[ée]viser|retravailler|travailler|approfondir|consolider|reprendre|apprendre|ma[iî]triser|bosser)\b", RegexOptions.IgnoreCase)]
+        private static partial Regex ARevoir();
 
         [GeneratedRegex(@"^ *((et|alors|donc|eh bien|bien) +)*$")]
         private static partial Regex LiaisonSeule();
