@@ -36,4 +36,10 @@ namespace SchoolWebApp.Api.Request
 
         public TimeSpan? HeureControle { get; set; }
     }
+    /// <summary>Le clic sur « Oui, retirer « X » » (#67 v7) : le libellé que le bouton a montré.</summary>
+    public class RetirerNotionRequest
+    {
+        [StringLength(500)]
+        public string? Libelle { get; set; }
+    }
 }

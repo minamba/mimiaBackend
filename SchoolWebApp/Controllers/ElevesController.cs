@@ -453,6 +453,71 @@ namespace SchoolWebApp.Api.Controllers
         }
 
         /// <summary>
+        /// LE RETRAIT D'UNE NOTION DU PROGRAMME, PAR LE BOUTON — signalement #67 v7 (23/11/2026). C'est le SEUL chemin
+        /// par lequel une notion sort d'un programme : le professeur la propose (balise), l'écran montre « Oui, retirer
+        /// « X » » / « Non, la garder », et seul le clic sur « Oui » appelle cette route. Aucun texte tapé ne retire rien.
+        /// Retire CETTE ligne et rien d'autre ; jamais le programme vidé (409) ; la ligne retirée est écrite en entier
+        /// au journal (restaurable).
+        /// </summary>
+        [HttpPost("{id:int}/controles/{controleId:int}/notions/{notionId:int}/retrait")]
+        [SchoolWebApp.Api.Auth.AutoriseEleve]
+        [SwaggerResponse(200, "La notion est retirée ; le programme relu est rendu.")]
+        [SwaggerResponse(404, "Contrôle ou notion inexistants, n'appartenant pas à cet élève, ou libellé différent.")]
+        [SwaggerResponse(409, "Retrait refusé : le programme serait vide.")]
+        public async Task<IActionResult> RetirerNotion(
+            int id,
+            int controleId,
+            int notionId,
+            [FromBody] SchoolWebApp.Api.Request.RetirerNotionRequest? request,
+            [FromServices] IChatContexteResolver resolveur,
+            [FromServices] IControleScolaireRepository controles,
+            CancellationToken ct)
+        {
+            try
+            {
+                var eleve = await resolveur.ResoudreEleveAsync(id);
+                if (eleve is null) return NotFound();
+
+                var bilan = await controles.RetirerNotionParIdAsync(id, controleId, notionId, request?.Libelle, ct);
+
+                foreach (var ligne in bilan.Retirees)
+                {
+                    // Avertissement : une donnée d'élève supprimée reste au journal, restaurable (#67 v2).
+                    _logger.LogWarning(
+                        "Notion retiree du programme par le bouton (restaurable) : {NotionRetiree}",
+                        System.Text.Json.JsonSerializer.Serialize(ligne));
+                }
+
+                if (bilan.Retirees.Count == 0)
+                {
+                    var refus = bilan.Refus.FirstOrDefault();
+                    _logger.LogWarning(
+                        "Retrait par le bouton refuse : controle {ControleId}, notion {NotionId}, motif {Motif}.",
+                        controleId, notionId, refus?.Motif);
+
+                    return refus?.Motif == SchoolWebApp.Domain.Models.MotifRefusRetrait.Plancher
+                        ? Conflict(new { motif = "plancher", notion = refus.Notion })
+                        : NotFound();
+                }
+
+                var preparation = await controles.GetPreparationAsync(id, controleId, ct);
+
+                return Ok(new
+                {
+                    retiree = request?.Libelle ?? bilan.Retirees[0].Libelle,
+                    notionId,
+                    programme = preparation?.Notions.Select(n => n.Libelle).ToList() ?? [],
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Erreur lors du retrait de la notion {NotionId} du controle {ControleId}.",
+                    notionId, controleId);
+                return StatusCode(500, new { message = "Une erreur est survenue, veuillez réessayer." });
+            }
+        }
+
+        /// <summary>
         /// LA PRÉPARATION À L'EXAMEN DE L'ÉLÈVE — la section sous « Mes
         /// contrôles ». `examen` vaut null quand sa classe n'a pas d'examen
         /// cette année : un objet enveloppe plutôt qu'un 204, pour que le

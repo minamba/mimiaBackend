@@ -99,6 +99,17 @@ namespace SchoolWebApp.Domain.Repositories
             IReadOnlyList<string> libellesExacts, CancellationToken ct = default);
 
         /// <summary>
+        /// LE RETRAIT PAR LE BOUTON — #67 v7 (seul chemin de retrait). L'élève a cliqué « Oui, retirer « X » » sous un
+        /// message du professeur : la ligne <paramref name="notionId"/> du programme du contrôle
+        /// <paramref name="controleId"/> sort, et RIEN d'autre. Cloisonné (le contrôle est à cet élève, la ligne à ce
+        /// contrôle) ; jamais une ligne jugée sur copie ; jamais le programme vidé (plancher). Si
+        /// <paramref name="libelleAttendu"/> est donné, il doit être le libellé affiché de la ligne, au mot près (le
+        /// bouton a montré ce libellé-là). La ligne retirée est rendue en entier (journal restaurable).
+        /// </summary>
+        Task<BilanRetrait> RetirerNotionParIdAsync(
+            int eleveId, int controleId, int notionId, string? libelleAttendu, CancellationToken ct = default);
+
+        /// <summary>
         /// Remplace le sujet d'un contrôle par ce que le professeur en a
         /// appris en séance.
         ///

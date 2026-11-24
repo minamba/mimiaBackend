@@ -658,6 +658,48 @@ namespace SchoolWebApp.Dal.Repositories
             return new BilanRetrait(retirees, refus);
         }
 
+        public async Task<BilanRetrait> RetirerNotionParIdAsync(
+            int eleveId, int controleId, int notionId, string? libelleAttendu, CancellationToken ct = default)
+        {
+            var demande = $"id={notionId}";
+
+            // Cloisonnement : le contrôle est à CET élève.
+            var sien = await _context.ControlesScolaires
+                .AnyAsync(c => c.Id == controleId && c.EleveId == eleveId, ct);
+            if (!sien) return new BilanRetrait([], [new RetraitRefuse(demande, MotifRefusRetrait.Introuvable)]);
+
+            var programme = await _context.ControlesNotions
+                .Include(n => n.Competence)
+                .Where(n => n.ControleId == controleId)
+                .ToListAsync(ct);
+
+            // La ligne est à CE contrôle, et ce n'est pas une mesure (jugée sur la copie corrigée).
+            var ligne = programme.FirstOrDefault(n => n.Id == notionId && n.Resultat == null);
+            if (ligne is null) return new BilanRetrait([], [new RetraitRefuse(demande, MotifRefusRetrait.Introuvable)]);
+
+            // Le bouton a montré un libellé : c'est celui-là qui part, au mot près, ou rien.
+            if (!string.IsNullOrWhiteSpace(libelleAttendu)
+                && !Cles(ligne).Contains(LibelleNotion.CleSouple(libelleAttendu)))
+            {
+                return new BilanRetrait([], [new RetraitRefuse(demande, MotifRefusRetrait.Introuvable, LibelleAffiche(ligne))]);
+            }
+
+            // PLANCHER (#67 v2) : jamais un programme vide.
+            if (programme.Count < 2)
+            {
+                return new BilanRetrait([], [new RetraitRefuse(demande, MotifRefusRetrait.Plancher, LibelleAffiche(ligne))]);
+            }
+
+            var retiree = new NotionRetiree(
+                ligne.Id, ligne.ControleId, ligne.CompetenceId, ligne.Libelle, ligne.Source,
+                ligne.TravailleeLe, ligne.EtatProfesseur, ligne.EtatProfesseurLe, ligne.DateCreation);
+
+            _context.ControlesNotions.Remove(ligne);
+            await _context.SaveChangesAsync(ct);
+
+            return new BilanRetrait([retiree], []);
+        }
+
         /// <summary>Ce que l'élève voit d'une ligne : le libellé de sa compétence quand elle est rattachée.</summary>
         private static string LibelleAffiche(ControleNotion n) => n.Competence?.Libelle ?? n.Libelle;
 

@@ -1559,9 +1559,9 @@ namespace SchoolWebApp.Api.Builders.impl
                   + "COMMENCE AUCUNE RÉVISION avant son accord. Dès qu'il est d'accord, écris dans ce message "
                   + $"[CONTROLE_NOTIONS] controle: {controleId} avec les notions retenues recopiées au mot près — c'est ce "
                   + "qui valide son programme —, dis-lui que son programme est prêt, puis commence. S'IL VEUT EN RETIRER "
-                  + "UNE : ne la retire pas toi-même et ne l'enlève pas de `notions:` ; pose-lui la question fermée, seule "
-                  + "dans sa phrase, avec le libellé exact du dossier : « Je retire toute la notion « <libellé exact> » de "
-                  + "ton programme ? », et attends son oui (c'est le serveur qui la retire, et il te le dit). "
+                  + "UNE : ne la retire pas toi-même et ne l'enlève pas de `notions:` ; écris à la fin de ton message "
+                  + "[RETRAIT_PROPOSE] id=<identifiant de la notion> : l'écran lui montre « Oui, retirer » / « Non, la "
+                  + "garder », et seul son clic la retire (le serveur te le dit au message suivant). "
                   + NotionEntiere)
             + "]";
 
@@ -1572,12 +1572,12 @@ namespace SchoolWebApp.Api.Builders.impl
         /// la demande arrive au milieu d'une séance, à quinze cents lignes de là : elle voyage avec chaque tour.
         /// </summary>
         private static string RetraitDeNotion(int? controleId) =>
-            "S'IL TE DIT QU'UNE NOTION NE SERA PAS (OU PLUS) À SON CONTRÔLE, tu ne la retires pas toi-même : pose-lui la "
-            + "question fermée, avec le libellé EXACT de la notion tel qu'il est écrit dans son programme, seule dans sa "
-            + "phrase : « Je retire toute la notion « <libellé exact> » de ton programme ? » (une question par notion, "
-            + "toutes celles du thème s'il retire un thème entier), et attends sa réponse. S'il répond oui au message "
-            + "suivant, c'est le serveur qui la retire, et il te le dit. N'écris JAMAIS `retirer:` : il ne retire rien. "
-            + "Ne dis jamais qu'une notion est retirée tant que le serveur ne te l'a pas dit. " + NotionEntiere;
+            "S'IL TE DIT QU'UNE NOTION NE SERA PAS (OU PLUS) À SON CONTRÔLE, tu ne la retires pas toi-même : écris à la "
+            + "fin de ton message la balise [RETRAIT_PROPOSE] id=<identifiant de la notion> (identifiants dans le fait "
+            + "« RETRAIT D'UNE NOTION » ; une notion par message) : l'écran lui montre « Oui, retirer » / « Non, la "
+            + "garder », et SEUL SON CLIC retire (#67 v7). Rien de ce qu'il écrit ne retire. N'écris JAMAIS `retirer:` : "
+            + "il ne retire rien. Ne dis jamais qu'une notion est retirée tant que le serveur ne te l'a pas dit. "
+            + NotionEntiere;
 
         /// <summary>
         /// UNE NOTION SE GARDE OU SE RETIRE ENTIÈRE — verdict d'Omar sur le #67 (v2), sur la question fermée en v5.
@@ -1590,7 +1590,7 @@ namespace SchoolWebApp.Api.Builders.impl
             + "amphotères » dans « Identifier un couple acide-base de Brønsted, une espèce amphotère… »), ou s'il en garde "
             + "une partie (« retire ceci mais garde cela »), la notion RESTE. Dis-lui de quelle notion ce morceau fait "
             + "partie, qu'une notion se garde ou se retire en entier, et que tu la gardes ; s'il veut quand même la retirer "
-            + "entière, pose-lui la question fermée sur la notion entière. Avant de lui dire ce qu'il reste dans son "
+            + "entière, propose-lui le bouton de retrait de la notion entière ([RETRAIT_PROPOSE] id=…). Avant de lui dire ce qu'il reste dans son "
             + "programme, relis la liste de son programme : c'est elle qui fait foi.";
 
         private static string MarqueurModeSeance(string mode, int? controleId, string? epreuveCode, int? nbCours = null, int nbIllisibles = 0, bool programmeInconnu = false) => mode switch
@@ -3677,14 +3677,11 @@ namespace SchoolWebApp.Api.Builders.impl
             var nbIllisibles = 0;
             var programmeInconnu = false;
             IReadOnlyList<string> notionsDuTour = [];
+            IReadOnlyList<NotionDuProgramme> programmeDuTour = [];
 
-            // LE RETRAIT D'UNE NOTION, SUR UN OUI ET RIEN D'AUTRE — #67 v5. Fait AVANT de relire le programme du tour :
-            // le professeur répond avec le programme tel qu'il est après le retrait, et le sait.
-            var (faitDuRetrait, decisionDuRetrait) = mode == ModesSeance.Controle && controleMode is int controleConfirme && !accueil
-                ? await RetraitConfirmeAsync(
-                    conversationId, contexte.Eleve.Id, contexte.Conversation.MatiereId, controleConfirme,
-                    historique, contenu, ct)
-                : ("", DecisionDeRetrait.Rien);
+            // LE RETRAIT D'UNE NOTION SE FAIT PAR LE BOUTON, ET PAR LUI SEUL — #67 v7. Plus aucun retrait sur le texte
+            // de l'élève (`RetraitConfirmeAsync` n'est plus appelé) : la route du clic a déjà retiré la ligne quand ce
+            // message arrive, et le programme relu ci-dessous le montre.
 
             if (mode == ModesSeance.Controle && controleMode is int controlePrepare)
             {
@@ -3698,6 +3695,7 @@ namespace SchoolWebApp.Api.Builders.impl
                     var preparationDuTour = await _controles.GetPreparationAsync(contexte.Eleve.Id, controlePrepare, ct);
                     programmeInconnu = preparationDuTour is { PerimetreConnu: false };
                     notionsDuTour = preparationDuTour?.Notions.Select(n => n.Libelle).ToList() ?? [];
+                    programmeDuTour = preparationDuTour?.Notions.Select(n => new NotionDuProgramme(n.Id, n.Libelle)).ToList() ?? [];
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
@@ -3719,7 +3717,10 @@ namespace SchoolWebApp.Api.Builders.impl
             // le professeur le sait aussi (#67 v3) : sinon il répond « c'est déjà fait ».
             if (mode == ModesSeance.Controle && controleMode is int && !accueil)
             {
-                declencheur += faitDuRetrait;
+                declencheur += FaitDuClicDeRetrait(
+                    contenu, programmeDuTour,
+                    historique.Where(m => m.Role == "assistant").Select(m => m.Contenu));
+                declencheur += ProgrammeEtBoutonDeRetrait(programmeDuTour);
                 declencheur += MorceauNommeDuTour(contenu, notionsDuTour);
             }
 
@@ -4890,13 +4891,16 @@ namespace SchoolWebApp.Api.Builders.impl
             if (mode == ModesSeance.Controle && controleMode is int controleDuRetrait && !accueil
                 && bilan.Task.IsCompletedSuccessfully)
             {
-                retraitAjoute = RetraitNonFaitDuTour((await bilan.Task).TexteComplet, notionsDuTour, decisionDuRetrait);
+                // #67 v7 : bouton (si la réponse propose une notion retirable) et phrase vraie (si elle annonce un retrait
+                // qui n'a pas eu lieu) — jamais de question ajoutée par le serveur.
+                retraitAjoute = AjoutDuRetraitParBouton(
+                    (await bilan.Task).TexteComplet, programmeDuTour, controleDuRetrait, contenu);
 
                 if (retraitAjoute is not null)
                 {
                     _logger.LogWarning(
-                        "Retrait sans confirmation sur le controle {ControleId} (conversation {ConversationId}) : rien retire, "
-                        + "question fermee ajoutee a la reponse.", controleDuRetrait, conversationId);
+                        "Retrait (bouton ou phrase vraie) ajoute a la reponse sur le controle {ControleId} "
+                        + "(conversation {ConversationId}).", controleDuRetrait, conversationId);
 
                     yield return retraitAjoute;
                 }
@@ -6730,7 +6734,10 @@ namespace SchoolWebApp.Api.Builders.impl
         [GeneratedRegex(@"Je retire toute la notion[\s  ]*«[^«»\r\n]+»[\s  ]*de ton programme[\s  ]*\?", RegexOptions.IgnoreCase)]
         private static partial Regex QuestionFermeeTexte();
 
-        [GeneratedRegex(@" (c est fait|c est note|(je|on) (la|le|les|l|te la|te le|te les) (retire|enleve|supprime)|je (retire|enleve|supprime) (les|la|le|l|du|des)|j ai (bien )?(retire|enleve|supprime)|on a (bien )?(retire|enleve)|(?<! (n|ne|rien n|pas)) (est|sont|a ete|ont ete) (bien )?(retire|retiree|retires|retirees|enleve|enlevee|enleves|enlevees|supprime|supprimee|supprimes|supprimees)|bien (retire|retiree|retires|retirees|enleve|enlevee|enleves|enlevees)|sort\w* (bien )?(de|du) (ton )?programme|(n est|ne sont|ne fait|ne font) plus (dans|partie)) ")]
+        // #67 v7 (verdict d'Omar v6, point 6) : « Je l'ai retirée », « Je te l'enlève », « Je vais la retirer », « Elle
+        // n'est plus au programme » ajoutés ; « c'est fait / c'est noté » seuls sortis d'ici (« C'est noté pour vendredi »,
+        // « C'est fait, bravo ») : voir `AnnonceUnRetraitFait`, qui ne les compte qu'après une demande de retrait.
+        [GeneratedRegex(@" ((je|on) (la|le|les|l|te la|te le|te les|te l) (retire|enleve|supprime)|(je|on) (vais|va) (la|le|les|l|te la|te le|te les|te l) (retirer|enlever|supprimer)|je (retire|enleve|supprime) (les|la|le|l|du|des)|(j|je l|je les|je te l|je te les|on l|on les) (ai|a) ((bien|aussi|deja|egalement) )?(retire|enleve|supprime)\w*|on a ((bien|aussi|deja|egalement) )?(retire|enleve)\w*|c est ((bien|deja) )?(retire|enleve|supprime)\w*|(?<! (n|ne|rien n|pas)) (est|sont|a ete|ont ete) (bien )?(retire|retiree|retires|retirees|enleve|enlevee|enleves|enlevees|supprime|supprimee|supprimes|supprimees)|bien (retire|retiree|retires|retirees|enleve|enlevee|enleves|enlevees)|sort\w* (bien )?(de|du) (ton )?programme|(n est|ne sont|ne fait|ne font) plus (dans|partie|au)) ")]
         private static partial Regex AnnonceRetrait();
 
         /// <summary>
@@ -6855,8 +6862,8 @@ namespace SchoolWebApp.Api.Builders.impl
             return "\n\n[S'IL TE DEMANDE DE RETIRER CE QU'IL VIENT DE NOMMER : " + string.Join(" ; ", morceaux) + ". Cette "
                 + "notion est TOUJOURS DANS SON PROGRAMME, entière : rien n'a été retiré, ne dis pas que c'est déjà fait. "
                 + "Dis-lui de quelle notion ce morceau fait partie et qu'une notion se garde ou se retire en entier ; s'il "
-                + "veut vraiment la retirer, pose-lui la question fermée sur la notion ENTIÈRE, seule dans sa phrase : « Je "
-                + "retire toute la notion « … » de ton programme ? », et attends son oui.]";
+                + "veut vraiment la retirer, propose-lui le bouton de retrait de la notion ENTIÈRE ([RETRAIT_PROPOSE] id=…) : "
+                + "seul son clic la retire.]";
         }
 
         /// <summary>Le sujet et les notions d'un bloc [CONTROLE_NOTIONS] : validation d'un examen blanc, ou ajout.</summary>
