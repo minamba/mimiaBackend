@@ -584,14 +584,34 @@ namespace SchoolWebApp.Api.Services
         /// <summary>Ce qui peut suivre le support dans une confirmation (#68 v11, élargi en v12) : « ici », « alors »,
         /// « donc », « c'est parti », « c'est noté », « bon choix », « très bien », « parfait », « ici même »,
         /// « choisi », « c'est très bien pour poser tes calculs », « marche très bien aussi », « est tout à fait
-        /// adapté », « donc je t'affiche le sujet en entier », « en main », « il est », « trois questions ».</summary>
+        /// adapté », « donc je t'affiche le sujet en entier », « en main », « il est », « trois questions ».
+        /// #68 v13 (Ismail, verdict sur la v12) : plus AUCUN complément libre — le texte libre après « c'est … pour » et
+        /// « donc je t'affiche » faisait lire des refus, des renvois et des corrections (« L'oral, c'est bien pour
+        /// réviser, mais pas pour une évaluation. », « Le cahier, c'est noté pour la prochaine fois. », « L'écran, donc
+        /// je t'affiche la correction de l'exercice. »). Les compléments sont une LISTE FERMÉE tirée des 268 réponses
+        /// réelles (<see cref="ComplementPourDuSupport"/>, <see cref="ComplementSujetAffiche"/>) : un complément qui
+        /// contient « pas », « mais », « prochaine », « demain », « plus tard », « correction » ou « réviser » n'y est
+        /// jamais.</summary>
         private const string SuiteDuSupport =
             @"(?:ici\s+même|ici|alors|donc|c['’]est\s+parti|bon\s+choix|très\s+bien|parfait|choisi|choisie"
-            + @"|c['’]est\s+(?:noté|parfait|très\s+bien|bien|top|idéal|mieux)(?:\s+pour\s+[^.!?…\n]{1,60})?"
+            + @"|c['’]est\s+(?:noté|parfait|très\s+bien|bien|top|idéal|mieux)(?:\s+" + ComplementPourDuSupport + @")?"
             + @"|(?:marche|convient|va)\s+(?:très\s+|tout\s+aussi\s+)?bien(?:\s+aussi)?"
             + @"|est\s+(?:tout\s+à\s+fait\s+|très\s+)?adapté(?:\s+pour\s+ça)?"
-            + @"|donc\s+je\s+t['’](?:affiche|écris|donne|mets)\s+[^.!?…\n]{1,60}"
+            + @"|donc\s+je\s+t['’](?:affiche|écris|donne|mets)\s+" + ComplementSujetAffiche
             + @"|en\s+main|il\s+est|(?:deux|trois|quatre|cinq)\s+questions)";
+
+        /// <summary>Le complément de « c'est très bien / parfait … » après le support (#68 v13), formes RÉELLES
+        /// seulement : « pour ça », « pour poser tes / les calculs (proprement) », « pour des (petits) calculs (à poser
+        /// au propre) ».</summary>
+        private const string ComplementPourDuSupport =
+            @"pour\s+(?:ça|cela"
+            + @"|poser\s+(?:tes|les)\s+(?:petits\s+)?calculs(?:\s+(?:proprement|au\s+propre))?"
+            + @"|(?:des|tes|les)\s+(?:petits\s+)?calculs(?:\s+à\s+poser)?(?:\s+(?:proprement|au\s+propre))?)";
+
+        /// <summary>Ce que le professeur affiche après « donc je t'affiche » (#68 v13), forme RÉELLE seulement :
+        /// « le sujet (en entier / complet)(, dès maintenant) ».</summary>
+        private const string ComplementSujetAffiche =
+            @"(?:le|ton|tout\s+le)\s+sujet(?:\s+(?:en\s+entier|complet))?(?:,?\s+dès\s+maintenant)?";
 
         /// <summary>
         /// LA PHRASE DE CONFIRMATION DU SUPPORT (#68 v11) — la phrase entière : [accord(s)] [prénom] [sujet + verbe au
