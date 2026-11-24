@@ -152,6 +152,9 @@ namespace SchoolWebApp.Api.Services
 
             if (question.Value.Decomposition is { } decomposition) return JugerDecomposition(decomposition, reponse);
 
+            // Signalement #76 : « entre 820 et 802, lequel est le plus grand ? ».
+            if (question.Value.Comparaison is { } comparaison) return JugerComparaison(comparaison, reponse);
+
             var verdict = JugerCalcul(question.Value.Expression!, question.Value.Resultat, reponse);
 
             // Signalement #70 : « 3 » pour « 2 + 1 + la retenue de 1 », c'est la retenue oubliée — l'erreur type du CE1.
@@ -217,7 +220,8 @@ namespace SchoolWebApp.Api.Services
             decimal valeur;
             if (DerniereQuestion(messages) is { } question)
             {
-                if (question.Decomposition is not null) return null;
+                // Ni décomposition, ni comparaison (#76) : le professeur doit pouvoir citer les deux nombres comparés.
+                if (question.Decomposition is not null || question.Comparaison is not null) return null;
                 if (!decimal.TryParse(question.Resultat.Replace(',', '.'), NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out valeur))
                     return null;
                 enonce = question.Suite is { } s ? s.Enonce : question.Expression + " = ?";
@@ -266,6 +270,7 @@ namespace SchoolWebApp.Api.Services
                 if (Felicite().IsMatch(message) || message.Contains("[TABLEAU_EFFACE]", StringComparison.OrdinalIgnoreCase)) return null;
                 if (Decompositions(message) is not { Count: 0 }) return null;
                 if (Suites(message) is { Count: > 0 }) return null;
+                if (Comparaisons(message) is not { Count: 0 }) return null;
             }
 
             return null;
@@ -299,7 +304,9 @@ namespace SchoolWebApp.Api.Services
         // ───────────── La question ─────────────
 
         /// <param name="Retenue">La retenue nommée dans le calcul (« 2 + 1 + la retenue de 1 », signalement #70), sinon null.</param>
-        private readonly record struct Question(string? Expression, string Resultat, DecompositionPosee? Decomposition, SuitePosee? Suite = null, decimal? Retenue = null);
+        /// <param name="Comparaison">« entre 820 et 802, lequel est le plus grand ? » (signalement #76), sinon null.</param>
+        private readonly record struct Question(string? Expression, string Resultat, DecompositionPosee? Decomposition, SuitePosee? Suite = null, decimal? Retenue = null,
+            ComparaisonPosee? Comparaison = null);
 
         /// <summary>
         /// Une décomposition à donner : le nombre, la valeur attendue de chaque rang (c, d, u), les rangs qu'on demande
@@ -414,6 +421,10 @@ namespace SchoolWebApp.Api.Services
                 // Signalement #53 : « Après 73, qu'est-ce que tu dis ? », « 71, 72, 73… ? ».
                 var suites = Suites(message);
 
+                // Signalement #76 : « entre 820 et 802, lequel est le plus grand ? ». Deux comparaisons différentes rendent le message illisible.
+                var comparaisons = Comparaisons(message);
+                if (comparaisons is null) return null;
+
                 // UNE RELANCE QUE LE JUGE DE SUITE NE SAIT PAS LIRE — tâche 1941 (bout en bout, conv. 749) : « compte
                 // encore 5 de plus en disant : 8, 9, 10, 11… à quel nombre tu arrives ? » (le pas annoncé, 5, n'est pas
                 // celui de la suite écrite) rendait le message illisible et faisait tomber le calcul posé plus haut : ni
@@ -421,13 +432,13 @@ namespace SchoolWebApp.Api.Services
                 // message est lu comme ses autres relances (mêmes règles, plus bas).
                 if (suites is null)
                 {
-                    if (calculs.Count + decompositions.Count > 0
+                    if (calculs.Count + decompositions.Count + comparaisons.Count > 0
                         || j + 1 >= recents.Count
                         || DerniereQuestion(recents.Skip(j + 1).Reverse()) is not { Expression: not null }) return null;
                     suites = [];
                 }
 
-                if (calculs.Count + decompositions.Count + suites.Count > 1) return null;
+                if (calculs.Count + decompositions.Count + suites.Count + comparaisons.Count > 1) return null;
 
                 if (suites.Count == 1)
                 {
@@ -459,7 +470,18 @@ namespace SchoolWebApp.Api.Services
                 }
 
                 // Un tableau réécrit, ou une relance qui n'est qu'un refus (« Non, … »), ne laisse ouverte qu'une SUITE.
-                if (seulementUneSuite && calculs.Count + decompositions.Count > 0) return null;
+                if (seulementUneSuite && calculs.Count + decompositions.Count + comparaisons.Count > 0) return null;
+
+                if (comparaisons.Count == 1)
+                {
+                    // Une relance d'une comparaison parle des deux nombres et de leurs chiffres (« Regarde les centaines de
+                    // chaque nombre : 347 a combien de centaines, et 582 en a combien ? », séance d'Adam, #76). Une réponse à
+                    // cette sous-question (« 3 et 5 ») ne nomme aucun des deux nombres : elle n'a pas de verdict.
+                    var c = comparaisons[0];
+                    return nombresDesRelances.All(NombresDUneRelanceDeComparaison(c).Contains)
+                        ? new Question(null, c.Attendu.ToString(CultureInfo.InvariantCulture), null, Comparaison: c)
+                        : null;
+                }
 
                 if (calculs.Count == 1)
                 {
