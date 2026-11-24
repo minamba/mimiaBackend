@@ -1151,10 +1151,11 @@ namespace SchoolWebApp.Api.Services
                     + "examen blanc. Une seule question, puis tu attends sa réponse.\n"
                     + "3. Quand il est d'accord, VALIDE le programme : termine ton message par ce bloc, avec les notions "
                     + "retenues recopiées AU MOT PRÈS de la liste (une notion ajoutée à sa demande : avec ses mots). S'IL "
-                    + "VEUT EN RETIRER UNE, tu ne la retires pas toi-même : pose-lui la question fermée, seule dans sa "
-                    + "phrase, avec le libellé exact de la liste : « Je retire toute la notion « <libellé exact> » de ton "
-                    + "programme ? », en DERNIÈRE question de ton message, et attends son oui ; c'est le serveur qui la "
-                    + "retire, et il te le dit : jamais « je retire », « c'est noté » ni « c'est fait » avant. Une notion se "
+                    + "VEUT EN RETIRER UNE (#67 v7) : ne la mets simplement pas dans ce bloc ; si elle est déjà dans son "
+                    + "programme, elle ne part que par le BOUTON : écris à la FIN de ton message [RETRAIT_PROPOSE] suivi de "
+                    + "son identifiant (id=…, donné par le serveur) ou de son libellé exact entre « », et dis-lui de cliquer "
+                    + "s'il veut la retirer. Rien de ce qu'il écrit (« oui », « retire-la ») ne retire quoi que ce soit ; "
+                    + "jamais « je la retire », « c'est noté » ni « c'est fait » pour un retrait. Une notion se "
                     + "garde ou se retire ENTIÈRE : s'il n'en refuse qu'un morceau, elle reste (dis-lui de quelle notion ce "
                     + "morceau fait partie) :\n"
                     + "[CONTROLE_NOTIONS]\n"
@@ -1172,10 +1173,11 @@ namespace SchoolWebApp.Api.Services
                     $"Son programme a été validé avec lui le {valide.ToLocalTime():dd/MM} : ce sont les notions de ce "
                     + "contrôle (pas forcément tous les dossiers ci-dessus : ceux qu'il a fait retirer n'y sont plus, et "
                     + "n'y reviennent pas). Ne le lui reproposes pas ; révise-le en t'appuyant sur ses documents. "
-                    + "S'il te dit qu'une notion ne sera finalement pas à son examen blanc, pose-lui la question fermée "
-                    + "« Je retire toute la notion « <libellé exact> » de ton programme ? » en DERNIÈRE question de ton "
-                    + "message, et attends son oui ; jamais « je retire », « c'est noté » ni « c'est fait » avant le fait "
-                    + "[RETRAIT] du serveur.");
+                    + "S'il te dit qu'une notion ne sera finalement pas à son examen blanc, elle ne part que par le BOUTON "
+                    + "(#67 v7) : écris à la FIN de ton message [RETRAIT_PROPOSE] id=<identifiant de cette notion, donné par "
+                    + "le serveur>, et dis-lui de cliquer s'il veut la retirer. SEUL SON CLIC RETIRE : rien de ce qu'il écrit "
+                    + "(« oui », « retire-la ») ne retire quoi que ce soit ; jamais « je la retire », « c'est noté » ni « c'est "
+                    + "fait » pour un retrait : le serveur te dit au message suivant « RETIRÉ : … » ou « GARDÉE : … ».");
             }
 
             // LE TEXTE DES DOCUMENTS, par dossier, dans la limite du contexte : le professeur prépare avec SES cours.
