@@ -202,7 +202,8 @@ namespace SchoolWebApp.Api.Builders.impl
             // accepté (après le clic, c'est vrai) : « il ne reste que 5 minutes » ou un rappel ordinaire ne déclenchent rien.
             var retraitEnJeu = BaliseRetraitPropose().IsMatch(texte)
                 || MorceauDeNotion.ParleDeRetrait(MarqueurClicRetrait().Replace(messageEleve ?? "", " "));
-            if (!reduit && !clicRetire && retraitEnJeu && ResteQueSansToutes(texte, libelles)) reduit = true;
+            if (!reduit && !clicRetire && retraitEnJeu
+                && ResteQueSansToutes(texte, libelles, NotionProposee(texte, programme)?.Libelle)) reduit = true;
 
             if (annonceFausse || reduit)
             {
@@ -286,23 +287,94 @@ namespace SchoolWebApp.Api.Builders.impl
         }
 
         /// <summary>
-        /// Une phrase « il ne (te) reste (donc / alors / plus / maintenant) que … » qui nomme au moins une notion du
-        /// programme, mais pas toutes (#67 v7, banc sur c82abb5). Hors tableau.
+        /// Une phrase qui AFFIRME le programme déjà réduit (#67 v7, banc sur c82abb5 ; resserrée en v8, faux positifs
+        /// F2/F3/F5 d'Omar) — hors tableau, les trois conditions ensemble :
+        ///   1. « il ne (te / nous) reste (donc / alors / plus / maintenant…) que » au PRÉSENT : « il ne restera / resterait
+        ///      que » décrit ce que le clic ferait, c'est vrai ;
+        ///   2. pas dans une proposition en « si » (« Si tu la retires, il ne reste que… ») ;
+        ///   3. ce qui suit « que » est le programme MOINS la notion proposée : soit « deux notions » (le nombre = programme
+        ///      moins une), soit une énumération d'autant d'éléments (coupée aux virgules et aux « et »), dont au moins un
+        ///      nomme une notion du programme, jamais deux la même, et aucun la notion proposée (balise de la réponse).
+        ///      « La cinétique » ne nomme aucun libellé (le mot n'y est pas) : on compte donc les éléments au lieu de
+        ///      comparer des ensembles. « il ne te reste plus que le temps de demi-réaction à revoir » (un seul élément sur
+        ///      trois notions) n'est pas un programme réduit.
         /// </summary>
-        internal static bool ResteQueSansToutes(string? texte, IReadOnlyList<string> libelles)
+        internal static bool ResteQueSansToutes(string? texte, IReadOnlyList<string> libelles, string? libellePropose)
         {
             var sans = ConfirmationDeRetrait.SansArdoise(texte);
             if (sans.Length == 0 || libelles.Count < 2) return false;
             return FinDePhrase().Split(sans).Any(p =>
             {
-                if (!ResteQue().IsMatch($" {LibelleNotion.CleSouple(p)} ")) return false;
-                var nommees = ConfirmationDeRetrait.NotionsNommees(p, libelles).Count;
-                return nommees >= 1 && nommees < libelles.Count;
+                var m = ResteQue().Match(p);
+                return m.Success && !DansUnSi(p, m.Index)
+                    && ProgrammeMoinsUne(p[(m.Index + m.Length)..], libelles, libellePropose);
             });
         }
 
-        [GeneratedRegex(@" il ne (te |nous )?rester?a? ((donc|alors|plus|maintenant|ensuite|desormais) )*que ")]
+        /// <summary>Ce qui suit « il ne reste que » : le programme moins une notion (condition 3 ci-dessus) ?</summary>
+        private static bool ProgrammeMoinsUne(string suite, IReadOnlyList<string> libelles, string? libellePropose)
+        {
+            var attendu = libelles.Count - 1;
+            var nombre = NombreDeNotions().Match(suite);
+            if (nombre.Success) return NombreEcrit(nombre.Groups["n"].Value) == attendu;
+
+            var fin = suite.IndexOfAny(['.', '!', '?', ';', ':', '\n', '—', '–', '(']);
+            var elements = Enumeration().Split(fin >= 0 ? suite[..fin] : suite)
+                .Where(e => !string.IsNullOrWhiteSpace(e)).ToList();
+            if (elements.Count != attendu) return false;
+
+            var nommees = elements.SelectMany(e => ConfirmationDeRetrait.NotionsNommees(e, libelles)).ToList();
+            return nommees.Count > 0
+                && nommees.Distinct().Count() == nommees.Count
+                && (libellePropose is null || !nommees.Contains(libellePropose));
+        }
+
+        private static int NombreEcrit(string n) => n.ToLowerInvariant() switch
+        {
+            "un" or "une" => 1, "deux" => 2, "trois" => 3, "quatre" => 4, "cinq" => 5, "six" => 6,
+            _ => int.TryParse(n, out var v) ? v : -1,
+        };
+
+        /// <summary>
+        /// « il ne reste que » est-il la principale d'une proposition en « si » ? Ce qui précède, dans la même proposition
+        /// (coupée aux « : ; — » et aux virgules, guillemets mis à part), commence par « si / s'il » — directement avant
+        /// (« Et si tu la retires il ne reste que ») ou dans le morceau juste avant la virgule (« Si tu cliques sur « Oui,
+        /// retirer », il ne te reste que »). « Oui, si je comprends bien, on retire les titrages : il ne reste que » et
+        /// « Même si c'est dommage, on retire…, il ne reste que » restent des affirmations.
+        /// </summary>
+        private static bool DansUnSi(string phrase, int position)
+        {
+            var avant = Guillemets().Replace(phrase[..position], "«»");
+            var coupe = avant.LastIndexOfAny([':', ';', '—', '–']);
+            if (coupe >= 0) avant = avant[(coupe + 1)..];
+            var morceaux = avant.Split(',');
+            var dernier = $" {LibelleNotion.CleSouple(morceaux[^1])} ";
+            if (SiEnTete().IsMatch(dernier)) return true;
+            return morceaux.Length > 1 && LiaisonSeule().IsMatch(dernier)
+                && SiEnTete().IsMatch($" {LibelleNotion.CleSouple(morceaux[^2])} ");
+        }
+
+        [GeneratedRegex(@"\bil\s+ne\s+(?:te\s+|nous\s+)?reste\s+(?:(?:donc|alors|plus|maintenant|ensuite|d[ée]sormais)\s+)*qu(?:e\s+|['’]\s*)", RegexOptions.IgnoreCase)]
         private static partial Regex ResteQue();
+
+        [GeneratedRegex(@"^\s*(?<n>une|un|deux|trois|quatre|cinq|six|\d+)\s+(?:seules?\s+)?notions?\b", RegexOptions.IgnoreCase)]
+        private static partial Regex NombreDeNotions();
+
+        [GeneratedRegex(@"\s*,\s*|\s+(?:et|ainsi que|puis)\s+", RegexOptions.IgnoreCase)]
+        private static partial Regex Enumeration();
+
+        [GeneratedRegex(@"«[^»]*»")]
+        private static partial Regex Guillemets();
+
+        [GeneratedRegex(@"^ ((et|mais|alors|donc|ok|oui|bon|d accord|accord) )*(si|s il|s ils) ")]
+        private static partial Regex SiEnTete();
+
+        [GeneratedRegex(@"^ *((et|alors|donc|eh bien|bien) +)*$")]
+        private static partial Regex LiaisonSeule();
+
+        /// <summary>La notion que propose la réponse : la première balise [RETRAIT_PROPOSE] qui désigne une ligne du programme.</summary>
+        private static NotionDuProgramme? NotionProposee(string texte, IReadOnlyList<NotionDuProgramme> programme) =>
+            BaliseRetraitPropose().Matches(texte).Select(m => Resoudre(m, programme)).FirstOrDefault(n => n is not null);
 
         [GeneratedRegex(@" ((ai|a|as|avons|ont|est|sont|a ete|ont ete) ((bien|aussi|deja|egalement) )?(retire|enleve|supprime)\w*|c est ((bien|deja) )?(retire|enleve|supprime|fait|note)\w*) ")]
         private static partial Regex RetraitPasse();

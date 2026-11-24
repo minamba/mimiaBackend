@@ -84,21 +84,6 @@ namespace SchoolWebApp.Domain.Repositories
             CancellationToken ct = default);
 
         /// <summary>
-        /// RETIRE DES NOTIONS DU PROGRAMME d'un contrôle, CONFIRMÉES par l'élève (signalement #67 v5). Le serveur ne
-        /// retire JAMAIS sur une interprétation de la phrase de l'élève : seulement les notions dont le professeur a
-        /// demandé le retrait par la question fermée, au libellé EXACT (« Je retire toute la notion « X » de ton
-        /// programme ? »), et auxquelles l'élève a répondu par un oui clair au tour suivant (voir
-        /// <see cref="Models.ConfirmationDeRetrait"/>). Chaque libellé doit nommer une ligne AU MOT PRÈS
-        /// (<see cref="Models.LibelleNotion.CleSouple"/>, sur son libellé ou celui de sa compétence) : aucun
-        /// rapprochement souple. Cloisonné comme l'ajout (élève ET matière). Une notion déjà jugée sur une copie corrigée
-        /// (résultat posé) n'est jamais retirée. Un retrait qui viderait le programme n'est pas appliqué (#67 v2). Rend
-        /// les lignes supprimées (restaurables) et les refus.
-        /// </summary>
-        Task<BilanRetrait> RetirerNotionsConfirmeesAsync(
-            int eleveId, int controleId, int matiereId,
-            IReadOnlyList<string> libellesExacts, CancellationToken ct = default);
-
-        /// <summary>
         /// LE RETRAIT PAR LE BOUTON — #67 v7 (seul chemin de retrait). L'élève a cliqué « Oui, retirer « X » » sous un
         /// message du professeur : la ligne <paramref name="notionId"/> du programme du contrôle
         /// <paramref name="controleId"/> sort, et RIEN d'autre. Cloisonné (le contrôle est à cet élève, la ligne à ce
