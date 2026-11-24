@@ -3680,7 +3680,7 @@ namespace SchoolWebApp.Api.Builders.impl
             IReadOnlyList<NotionDuProgramme> programmeDuTour = [];
 
             // LE RETRAIT D'UNE NOTION SE FAIT PAR LE BOUTON, ET PAR LUI SEUL — #67 v7. Plus aucun retrait sur le texte
-            // de l'élève (`RetraitConfirmeAsync` n'est plus appelé) : la route du clic a déjà retiré la ligne quand ce
+            // de l'élève (`RetraitConfirmeAsync` supprimé) : la route du clic a déjà retiré la ligne quand ce
             // message arrive, et le programme relu ci-dessous le montre.
 
             if (mode == ModesSeance.Controle && controleMode is int controlePrepare)
@@ -6401,9 +6401,8 @@ namespace SchoolWebApp.Api.Builders.impl
                 await CompleterProgrammeAsync(conversationId, eleveId, matiereId, niveauScolaireId, declare, travaillee, ct);
             }
 
-            // `retirer:` NE RETIRE PLUS RIEN (#67 v5) : le retrait se fait sur le oui de l'élève à la question fermée
-            // (voir `RetraitConfirmeAsync`). Le serveur a déjà ajouté à la réponse la phrase vraie et la question
-            // (`RetraitNonFaitDuTour`) ; ici, seulement la trace.
+            // `retirer:` NE RETIRE PLUS RIEN (#67 v5) : depuis la v7, seul le clic sur le bouton « Oui, retirer » retire
+            // (route ElevesController.RetirerNotion) ; ici, seulement la trace.
             foreach (var demande in declare.NotionsRetirees.Concat(declare.NotionsEnConflit).Distinct())
             {
                 _logger.LogWarning(
@@ -6413,89 +6412,8 @@ namespace SchoolWebApp.Api.Builders.impl
             }
         }
 
-        /// <summary>
-        /// LE RETRAIT CONFIRMÉ — #67 v5. Si le dernier message du professeur (<paramref name="dernier"/>) pose la question
-        /// fermée au libellé exact (<see cref="ConfirmationDeRetrait.QuestionFermee"/>) et que l'élève y répond par un oui
-        /// clair (<see cref="ConfirmationDeRetrait.OuiClair"/>), les notions demandées sortent du programme, au mot près.
-        /// Rend le FAIT à donner au professeur avant sa réponse (retiré, ou pas, et pourquoi) ; vide sans question fermée.
-        /// Chaque ligne supprimée est écrite EN ENTIER au journal (restaurable, #67 v2). Silencieux en cas d'échec : un
-        /// retrait raté ne doit pas faire perdre la séance.
-        /// </summary>
-        private async Task<(string Fait, DecisionDeRetrait Decision)> RetraitConfirmeAsync(
-            int conversationId, int eleveId, int matiereId, int controleId,
-            IReadOnlyList<DomainMessage> historique, string? messageEleve, CancellationToken ct)
-        {
-            // Le programme relu en base : la décision en a besoin (oui qui nomme une AUTRE notion, notion à nommer).
-            IReadOnlyList<string> programme = [];
-            try
-            {
-                programme = (await _controles.GetPreparationAsync(eleveId, controleId, ct))?.Notions
-                    .Select(n => n.Libelle).ToList() ?? [];
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                _logger.LogWarning(ex, "Programme du controle {ControleId} illisible pour la confirmation.", controleId);
-            }
-
-            var decision = DecisionDuTour(historique, messageEleve, programme);
-
-            if (decision.DemandeSansQuestion)
-            {
-                _logger.LogWarning(
-                    "Retrait NON applique sur le controle {ControleId} (eleve {EleveId}, conversation {ConversationId}) : "
-                    + "pas de question fermee valable au dernier message ({Nombre} notion(s) visee(s)).",
-                    controleId, eleveId, conversationId, decision.Evoquees.Count);
-
-                return (FaitSansQuestion(decision, programme), decision);
-            }
-
-            if (decision.Posees.Count == 0) return ("", decision);
-
-            if (!decision.OuiClair)
-            {
-                _logger.LogWarning(
-                    "Retrait NON applique sur le controle {ControleId} (eleve {EleveId}, conversation {ConversationId}) : "
-                    + "pas de oui clair a la question fermee ({Nombre} notion(s)).",
-                    controleId, eleveId, conversationId, decision.Posees.Count);
-
-                return (FaitDuRetrait(controleId, BilanRetrait.Vide, decision.Posees, ouiClair: false, programme), decision);
-            }
-
-            try
-            {
-                var bilan = await _controles.RetirerNotionsConfirmeesAsync(eleveId, controleId, matiereId, decision.AConfirmer, ct);
-
-                foreach (var ligne in bilan.Retirees)
-                {
-                    // Avertissement, pas information : une donnée d'élève supprimée doit rester au journal même quand
-                    // l'environnement ne garde que les avertissements (c'est le réglage de la copie de test).
-                    _logger.LogWarning(
-                        "Notion retiree du programme (restaurable) : {NotionRetiree}",
-                        System.Text.Json.JsonSerializer.Serialize(ligne));
-                }
-
-                foreach (var r in bilan.Refus)
-                {
-                    _logger.LogWarning(
-                        "Retrait NON applique sur le controle {ControleId} (eleve {EleveId}, conversation {ConversationId}) : "
-                        + "«{Demande}» — motif {Motif}.", controleId, eleveId, conversationId, r.Demande, r.Motif);
-                }
-
-                // LE PROGRAMME RELU APRÈS LE RETRAIT, EN ENTIER (#67 v5, bout en bout v5R-2 : l'ardoise réécrite « sans
-                // les titrages » oubliait aussi la 864, restée au programme) : le professeur recopie cette liste.
-                var apres = bilan.Retirees.Count == 0 ? programme
-                    : (await _controles.GetPreparationAsync(eleveId, controleId, ct))?.Notions.Select(n => n.Libelle).ToList()
-                      ?? programme;
-
-                return (FaitDuRetrait(controleId, bilan, decision.AConfirmer, ouiClair: true, apres), decision);
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                _logger.LogError(ex,
-                    "Echec du retrait de notions du programme (conversation {ConversationId}).", conversationId);
-                return (FaitDuRetrait(controleId, BilanRetrait.Vide, decision.AConfirmer, ouiClair: true, programme), decision);
-            }
-        }
+        // LE RETRAIT SUR UN « OUI » TAPÉ (#67 v5-v6, `RetraitConfirmeAsync`) A ÉTÉ SUPPRIMÉ en v7 : plus aucune méthode du
+        // builder n'appelle le dépôt pour retirer une notion. Seule la route du clic (ElevesController.RetirerNotion) retire.
 
         /// <summary>
         /// LA DÉCISION DU TOUR, À PARTIR DE L'HISTORIQUE — #67 v6 (verdict d'Omar, point 5). Le DERNIER message de
