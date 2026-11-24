@@ -100,6 +100,34 @@ namespace SchoolWebApp.Api.Services
         [GeneratedRegex(@"combien\s+(?:d'|d’|de\s+)(?<u>centaines|dizaines|unit[ée]s)", RegexOptions.IgnoreCase)]
         private static partial Regex RangDemande();
 
+        /// <summary>
+        /// LA QUESTION SUR UN SEUL RANG — Mins, le 24/11/2026, signalement #71 (Adam, CE1, nombres jusqu'à 1000) : Nora a
+        /// écrit 347 au tableau et demandé « Dans ce nombre, combien y a-t-il de centaines ? », puis « dans 347, combien y
+        /// a-t-il de dizaines ? », puis « combien reste-t-il d'unités dans 347 ? ». Le juge ne lisait que « combien de …
+        /// dans N » : aucun fait, et le professeur a validé 5 réponses fausses sur 5 (« 4 centaines », « 7 dizaines »,
+        /// « 9 unités », puis « 2 dizaines » pour 582), avant de récapituler « 347, c'est 4 centaines, 7 dizaines et
+        /// 9 unités ». Formes lues : « combien (y a-t-il | il y a | reste-t-il | il reste …) de/d' &lt;rang&gt; ».
+        /// </summary>
+        [GeneratedRegex(@"combien(?:\s+(?:y\s+a[-\s]t[-\s]il|il\s+y\s+a|y\s+en\s+a[-\s]t[-\s]il|reste[-\s]t[-\s]il|il\s+reste|en\s+reste[-\s]t[-\s]il"
+            + @"|as[-\s]tu|vois[-\s]tu|tu\s+vois|compte[s]?[-\s]tu|tu\s+comptes))?\s+(?:de\s+|d['’]\s*)(?<u>centaines?|dizaines?|unit[ée]s?)(?!\p{L})",
+            RegexOptions.IgnoreCase)]
+        private static partial Regex QuestionDUnRang();
+
+        [GeneratedRegex(@"(?<!\p{L})(?<u>centaines?|dizaines?|unit[ée]s?)(?!\p{L})", RegexOptions.IgnoreCase)]
+        private static partial Regex RangNomme();
+
+        /// <summary>Le nombre de la question : « dans 347 », « pour le nombre 582 » — pas « dans 2 dizaines » (une conversion).</summary>
+        [GeneratedRegex(@"(?<!\p{L})(?:dans|pour)\s+(?:le\s+nombre\s+)?(?<n>\d{1,4})(?!\d|,\d|\s*(?:centaines?|dizaines?|unit[ée]s?)(?!\p{L}))",
+            RegexOptions.IgnoreCase)]
+        private static partial Regex NombreDuRang();
+
+        /// <summary>« Dans ce nombre, … » : le nombre est celui écrit au tableau du même message.</summary>
+        [GeneratedRegex(@"(?<!\p{L})(?:ce|cet|le|du)\s+nombre(?!\p{L})", RegexOptions.IgnoreCase)]
+        private static partial Regex CeNombre();
+
+        [GeneratedRegex(@"\[ARDOISE\](?<c>.*?)\[/ARDOISE\]", RegexOptions.IgnoreCase | RegexOptions.Singleline)]
+        private static partial Regex Ardoise();
+
         [GeneratedRegex(@"\d+(?:[.,]\d+)?")]
         private static partial Regex NombreEnChiffres();
 
@@ -281,8 +309,18 @@ namespace SchoolWebApp.Api.Services
         /// </summary>
         private sealed record DecompositionPosee(int N, Dictionary<char, int> Attendues, HashSet<char> Demandes, bool Ordinaire, string Enonce)
         {
-            /// <summary>Le rang demandé vient d'une relance en mots (« Combien d'unités restent ? »), pas d'une case vide.</summary>
+            /// <summary>
+            /// Le rang demandé vient d'une relance en mots (« Combien d'unités restent ? ») ou d'une question en mots sur
+            /// un seul rang (« dans 347, combien y a-t-il de dizaines ? », signalement #71), pas d'une case vide.
+            /// </summary>
             public bool RangDeRelance { get; init; }
+
+            /// <summary>
+            /// La question ne porte que sur UN rang (signalement #71) : le verdict ne parle que de ce rang (deux questions
+            /// sur deux rangs du même nombre ne sont pas la même question pour le compte des erreurs), et une réponse
+            /// fausse reçoit l'indice de la place du chiffre.
+            /// </summary>
+            public bool QuestionDUnRang { get; init; }
         }
 
         [GeneratedRegex(@"combien\s+(?:de\s+|d'|d’)(?<x>\p{L}+)", RegexOptions.IgnoreCase)]
@@ -296,6 +334,30 @@ namespace SchoolWebApp.Api.Services
             + @"|\bdans\s+(?:\d{1,4}|une?|[\p{L}-]+)\s+(?:centaines?|dizaines?)\b"
             + @"|\b(?:centaines?|dizaines?)\s*,?\s*(?:c'est|c’est|vaut|valent|font|fait|égale|égalent)\s+(?:\d|combien)", RegexOptions.IgnoreCase)]
         private static partial Regex Conversion();
+
+        /// <summary>
+        /// Contrôle d'Omar (paquet 1, #71) : « combien de dizaines AU TOTAL / EN TOUT / ENTIÈRES dans 347 ? » attend toutes
+        /// les dizaines (34), pas le chiffre (4) ; le juge rendait JUSTE « 4 ». Pas de verdict.
+        /// Même chose pour « combien de dizaines COMPLÈTES dans 347 ? » (contrôle d'Omar v3, W08). « toutes les dizaines »
+        /// n'en fait PAS partie : « on a compté toutes les dizaines possibles » est une explication, pas la question (h46).
+        /// </summary>
+        [GeneratedRegex(@"(?<!\p{L})(?:au\s+total|en\s+tout|enti[èe]re?s?|en\s+totalit[ée]|compl[èe]te?s?)(?!\p{L})",
+            RegexOptions.IgnoreCase)]
+        private static partial Regex TotalDuRang();
+
+        /// <summary>
+        /// Contrôle d'Omar (paquet 1, #71) : « Dans 25 boîtes de dix crayons, combien y a-t-il de dizaines de crayons ? »,
+        /// « Dans 12 sachets de dix billes, combien de dizaines de billes ? » comptent des OBJETS groupés : le juge lisait
+        /// « combien de dizaines dans 25 » et jugeait FAUX la bonne réponse 25. Un nombre suivi d'un nom, un rang suivi de
+        /// « de &lt;nom&gt; », « de dix / de cent » : pas de verdict.
+        /// </summary>
+        [GeneratedRegex(@"(?<!\p{L})(?:centaines?|dizaines?|unit[ée]s?)\s+(?:de\s+|d['’]\s*)(?!(?:chaque|ce|cet|ces|ton|ta|tes|mon|ma|mes|son|sa|ses|la|le|les|leurs?|l['’]|un|une)(?!\p{L}))\p{L}"
+            + @"|(?<!\p{L})(?:de|d['’])\s*(?:dix|cent|mille|10|100|1000)(?![\d\p{L}])", RegexOptions.IgnoreCase)]
+        private static partial Regex DesObjets();
+
+        /// <summary>« Dans 25 boîtes… » : le nombre de la question est suivi d'un nom (pas d'un rang, pas de « combien »).</summary>
+        [GeneratedRegex(@"(?<![\d,])\d{1,4}[ \t]+(?!(?:centaines?|dizaines?|unit[ée]s?|combien)(?!\p{L}))\p{L}", RegexOptions.IgnoreCase)]
+        private static partial Regex NombreSuiviDUnNom();
 
         // « j'ai 7 ans », « attends 2 minutes », « c'est quoi 7 ? » : un nombre dans une phrase qui ne répond pas
         // (contrôle d'Omar, 20/11/2026). « 7 ? » tout court reste une réponse hésitante.
@@ -454,7 +516,10 @@ namespace SchoolWebApp.Api.Services
                 // (« il en reste », « ça fait », « en tout », « essaie »…) et ne cite aucun autre nombre que ceux du
                 // calcul. Sinon (« Maintenant, calcule 9 - 4. », « Combien de billes a Paul ? ») : on ne remonte plus.
                 // Une relance ne félicite pas : « Bravo, tu as trouvé le résultat ! Tu en veux un autre ? » clôt la question.
-                var rangs = RangDemande().Matches(message).Select(m => char.ToLowerInvariant(m.Groups["u"].Value[0])).Distinct().ToList();
+                // Signalement #71 : « Et combien y a-t-il d'unités ? » demande aussi un rang (QuestionDUnRang lit les mêmes
+                // formes que RangDemande, et celles en « y a-t-il », « reste-t-il »…).
+                var rangs = RangDemande().Matches(message).Concat(QuestionDUnRang().Matches(message))
+                    .Select(m => char.ToLowerInvariant(m.Groups["u"].Value[0])).Distinct().ToList();
 
                 // Un refus en tête (« Non, regarde : 78, 79, 80… ») ou une relance douce (« Pas grave, tu peux me le
                 // redire ? ») relance aussi une SUITE (retest #53) ; un calcul garde ses seuls mots de relance.
@@ -473,6 +538,10 @@ namespace SchoolWebApp.Api.Services
                 // combien d'unités ? » attend 20 (le nombre d'unités), pas le chiffre des unités (0). Un rang demandé avec
                 // « ça fait », « ça donne », « en tout » n'est pas la case du tableau : pas de verdict.
                 if (rangs.Count > 0 && Conversion().IsMatch(message)) return null;
+
+                // Contrôle d'Omar (paquet 1, #71) : « Et des dizaines au total ? », « combien de dizaines de crayons ? » ne
+                // relancent pas le chiffre du rang.
+                if (rangs.Count > 0 && (TotalDuRang().IsMatch(message) || DesObjets().IsMatch(message))) return null;
 
                 nombresDesRelances.AddRange(nombres);
                 var refuses = NombresRefuses(message);
@@ -494,6 +563,9 @@ namespace SchoolWebApp.Api.Services
         {
             var parNombre = new Dictionary<int, DecompositionPosee>();
 
+            // Signalement #71 : « dans 347, combien y a-t-il de dizaines ? » ne demande qu'un rang.
+            var unRang = DecompositionDUnRang(message);
+
             // La décomposition en toutes lettres ne vaut que si la question parle aussi des unités (ou des
             // centaines) : « combien de dizaines dans 47 ? » attend 4 ou 47 selon la classe, pas une décomposition.
             if (Regex.IsMatch(message, @"unit[ée]s|centaines", RegexOptions.IgnoreCase))
@@ -501,12 +573,18 @@ namespace SchoolWebApp.Api.Services
                 foreach (Match m in QuestionDecomposition().Matches(message))
                 {
                     var n = int.Parse(m.Groups["n"].Value, CultureInfo.InvariantCulture);
+
+                    // « Combien de centaines dans 582 ? » ne demande que les centaines : « 5 centaines » n'est pas incomplet.
+                    if (unRang is not null && unRang.N == n) continue;
+
                     var avecCentaines = n >= 100 || Regex.IsMatch(message, "centaines", RegexOptions.IgnoreCase);
                     var attendues = Ordinaire(n, avecCentaines);
                     parNombre[n] = new DecompositionPosee(n, attendues, attendues.Keys.ToHashSet(), true,
                         $"combien de {(avecCentaines ? "centaines, de dizaines" : "dizaines")} et d'unités dans {n}");
                 }
             }
+
+            if (unRang is not null && !parNombre.ContainsKey(unRang.N)) parNombre[unRang.N] = unRang;
 
             foreach (Match m in TableauATrous().Matches(message))
             {
@@ -523,6 +601,95 @@ namespace SchoolWebApp.Api.Services
             }
 
             return parNombre.Values.ToList();
+        }
+
+        /// <summary>
+        /// La question en mots sur UN SEUL rang d'un nombre de 10 à 999 (signalement #71) : « Dans ce nombre, combien y
+        /// a-t-il de centaines ? » (le nombre est le seul écrit au tableau du message), « dans 347, combien y a-t-il de
+        /// dizaines ? », « combien reste-t-il d'unités dans 347 ? », « Combien de centaines dans 582 ? ». Null si le
+        /// message demande plusieurs rangs (« combien de dizaines ? et d'unités ? » : la lecture ordinaire s'en charge),
+        /// si la phrase en nomme plusieurs, si elle convertit (« dans 2 dizaines, combien d'unités ? »), cite un autre
+        /// nombre, ou ne dit pas lequel.
+        /// Au CE1, « combien de dizaines dans 347 ? » attend 4 (le chiffre) ou 34 (toutes les dizaines) : les deux se
+        /// lisent juste (rang en mots, voir <see cref="JugerDecomposition"/>), seule une réponse qui ne vaut ni l'un ni
+        /// l'autre est FAUSSE.
+        /// </summary>
+        private static DecompositionPosee? DecompositionDUnRang(string message)
+        {
+            if (QuestionDUnRang().Matches(message).Select(m => char.ToLowerInvariant(m.Groups["u"].Value[0])).Distinct().Count() != 1) return null;
+
+            // Le nombre écrit seul au tableau du message (« [ARDOISE]347[/ARDOISE] »), pour « dans ce nombre ».
+            var ardoises = Ardoise().Matches(message);
+            int? auTableau = ardoises.Count == 1
+                && Regex.Match(ardoises[0].Groups["c"].Value, @"^[\s*_#]*(?<n>\d{1,4})[\s*_#]*$") is { Success: true } seulAuTableau
+                ? int.Parse(seulAuTableau.Groups["n"].Value, CultureInfo.InvariantCulture)
+                : null;
+
+            var texte = Regex.Replace(Ardoise().Replace(message, "\n"), @"\[[^\]]*\]", " ");
+            DecompositionPosee? trouvee = null;
+            foreach (Match phrase in Regex.Matches(texte, @"[^.!?\n]*\?"))
+            {
+                var p = phrase.Value;
+                var question = QuestionDUnRang().Match(p);
+                if (!question.Success) continue;
+
+                if (RangNomme().Matches(p).Select(m => char.ToLowerInvariant(m.Groups["u"].Value[0])).Distinct().Count() != 1) return null;
+                if (Conversion().IsMatch(p)) return null;
+
+                // Contrôle d'Omar (paquet 1) : « au total », « entières » (on attend 34, pas 4) ; des objets groupés (« 25 boîtes
+                // de dix crayons ») ou un nombre en lettres dans la phrase (« vingt-cinq boîtes ») : on ne sait pas ce qui est compté.
+                if (TotalDuRang().IsMatch(p) || DesObjets().IsMatch(p) || NombreSuiviDUnNom().IsMatch(p) || NombresEnLettres.Lire(p).Any(l => l.Valeur >= 2)) return null;
+
+                var nombres = NombreEnChiffres().Matches(p).Select(m => m.Value).Distinct().ToList();
+                int n;
+                if (nombres.Count == 0)
+                {
+                    if (!CeNombre().IsMatch(p) || auTableau is null) return null;
+                    n = auTableau.Value;
+                }
+                else
+                {
+                    var lus = NombreDuRang().Matches(p).Select(m => m.Groups["n"].Value).Distinct().ToList();
+                    if (lus.Count != 1 || nombres.Count != 1 || nombres[0] != lus[0]) return null;
+                    n = int.Parse(lus[0], CultureInfo.InvariantCulture);
+                }
+
+                var rang = char.ToLowerInvariant(question.Groups["u"].Value[0]);
+                if (n < 10 || n > 999 || n < Poids(rang)) return null;
+
+                var attendues = Ordinaire(n, n >= 100);
+                var nom = rang switch { 'c' => "de centaines", 'd' => "de dizaines", _ => "d'unités" };
+                var lue = new DecompositionPosee(n, attendues, [rang], true, $"combien {nom} dans {n}")
+                {
+                    RangDeRelance = true,
+                    QuestionDUnRang = true,
+                };
+
+                // Deux phrases sur des nombres différents : on ne choisit pas.
+                if (trouvee is not null && trouvee.N != n) return null;
+                trouvee = lue;
+            }
+
+            return trouvee;
+        }
+
+        /// <summary>
+        /// L'indice d'une réponse fausse à une question sur un rang (signalement #71 : « regarde le chiffre du milieu… ») :
+        /// la PLACE du chiffre, jamais sa valeur.
+        /// </summary>
+        private static string IndiceDuRang(int n, char rang)
+        {
+            var chiffres = n.ToString(CultureInfo.InvariantCulture).Length;
+            var (nom, place) = rang switch
+            {
+                'c' => ("centaines", "le premier chiffre, à gauche"),
+                'd' => ("dizaines", chiffres == 3 ? "le chiffre du milieu" : "le premier chiffre, à gauche"),
+                _ => ("unités", "le dernier chiffre, à droite"),
+            };
+            // Sans parenthèse : le professeur recopiait les parenthèses du fait en aparté (tâche 1320).
+            var ordre = chiffres == 3 ? "les centaines, les dizaines, puis les unités" : "les dizaines, puis les unités";
+            return $"Son erreur : il n'a pas pris le bon chiffre. Fais-lui regarder le chiffre des {nom} de {n} : c'est {place} ; "
+                + $"de gauche à droite, on lit {ordre}. Ne lui dis pas ce chiffre.";
         }
 
         /// <summary>« 20 = 2 dizaines + ? unités » → 20, on attend 2 dizaines et 0 unité, on demande les unités.</summary>
@@ -972,21 +1139,35 @@ namespace SchoolWebApp.Api.Services
                 var rang = d.Demandes.Single();
 
                 // Rang venu d'une relance en mots : « 20 » pour « combien d'unités ? » est le nombre d'unités de 20, une
-                // lecture juste de la question (contrôle d'Omar). On ne le juge pas faux.
-                if (d.RangDeRelance && (int)seul.Value != d.Attendues[rang] && seul.Value * Poids(rang) == d.N) return null;
+                // lecture juste de la question (contrôle d'Omar). On ne le juge pas faux. De même « 34 » pour « combien de
+                // dizaines dans 347 ? » : toutes ses dizaines (signalement #71).
+                if (d.RangDeRelance && (int)seul.Value != d.Attendues[rang] && (int)seul.Value == d.N / Poids(rang)) return null;
+
+                // « 40 » ou « quarante » pour « combien de dizaines dans 347 ? » : la VALEUR du bon chiffre, pas un mauvais
+                // chiffre ; l'indice « il n'a pas pris le bon chiffre » serait faux (contrôle d'Omar, paquet 1). Pas de verdict.
+                if (d.QuestionDUnRang && Poids(rang) > 1 && d.Attendues[rang] != 0 && (int)seul.Value == d.Attendues[rang] * Poids(rang)) return null;
 
                 var attenduDuRang = new Dictionary<char, int> { [rang] = d.Attendues[rang] };
                 var donneDuRang = new Dictionary<char, int> { [rang] = (int)seul.Value };
-                return new Verdict(d.Enonce, Decrire(attenduDuRang), Decrire(donneDuRang),
-                    (int)seul.Value == d.Attendues[rang] ? Jugement.Juste : Jugement.Faux);
+                return AvecIndiceDuRang(d, new Verdict(d.Enonce, Decrire(attenduDuRang), Decrire(donneDuRang),
+                    (int)seul.Value == d.Attendues[rang] ? Jugement.Juste : Jugement.Faux));
             }
 
             // « 2 dizaines » quand le tableau ne demande que les unités : il ne répond pas à la question posée.
             if (!parties.Keys.Any(d.Demandes.Contains)) return null;
 
+            // « 34 dizaines » pour « combien de dizaines dans 347 ? » : toutes ses dizaines, une lecture juste de la
+            // question (signalement #71). On ne le juge pas faux.
+            if (d.RangDeRelance && d.Demandes.Count == 1 && parties.Count == 1
+                && parties.TryGetValue(d.Demandes.Single(), out var seulRang) && seulRang != d.Attendues[d.Demandes.Single()]
+                && seulRang == d.N / Poids(d.Demandes.Single())) return null;
+
             // Des centaines dans une question qui n'en parle pas : on compte quand même leur valeur.
+            // Une question sur un seul rang (#71) n'attend que ce rang.
             var total = parties.Sum(p => p.Value * Poids(p.Key));
-            var attendu = Decrire(d.Attendues);
+            var attendu = Decrire(d.QuestionDUnRang
+                ? d.Attendues.Where(a => d.Demandes.Contains(a.Key)).ToDictionary(a => a.Key, a => a.Value)
+                : d.Attendues);
             var donne = Decrire(parties);
 
             var conformes = parties.All(p => d.Attendues.TryGetValue(p.Key, out var a) && a == p.Value);
@@ -1001,8 +1182,14 @@ namespace SchoolWebApp.Api.Services
             // Après une relance en mots (« combien d'unités ? »), « 20 unités » répond aussi : on ne tranche pas.
             if (total == d.N) return d.Ordinaire && !d.RangDeRelance ? new Verdict(d.Enonce, attendu, donne, Jugement.AutreDecomposition) : null;
 
-            return new Verdict(d.Enonce, attendu, donne, Jugement.Faux);
+            return AvecIndiceDuRang(d, new Verdict(d.Enonce, attendu, donne, Jugement.Faux));
         }
+
+        /// <summary>Une réponse fausse à une question sur un seul rang (#71) reçoit l'indice de la place du chiffre.</summary>
+        private static Verdict AvecIndiceDuRang(DecompositionPosee d, Verdict v) =>
+            v.Jugement == Jugement.Faux && d.QuestionDUnRang && d.Demandes.Count == 1
+                ? v with { Indice = IndiceDuRang(d.N, d.Demandes.Single()) }
+                : v;
 
         private static int? ValeurDuMot(string mot)
         {
