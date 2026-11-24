@@ -441,10 +441,12 @@ namespace SchoolWebApp.Api.Services
         }
 
         /// <summary>Ce qui sépare les mots d'une construction de choix : espaces, ponctuation (sauf « ? » et
-        /// l'apostrophe), guillemets, émojis.</summary>
-        private const string Bruit = @"[\s,.!…;:\-–—""«»()\p{So}\p{Cs}\p{Sk}\p{M}]";
+        /// l'apostrophe), guillemets, émojis. #68 v12 : astérisque et tiret bas du gras / de l'italique
+        /// (« **Très bien, au cahier !** »).</summary>
+        private const string Bruit = @"[\s,.!…;:\-–—""«»()*_\p{So}\p{Cs}\p{Sk}\p{M}]";
 
-        /// <summary>Une formule de politesse ou d'acquiescement (#68 v11) — une seule par message.</summary>
+        /// <summary>Une formule de politesse ou d'acquiescement (#68 v11) — deux au plus par message (#68 v12 :
+        /// « oui l'ordi stp », « l'ordi stp merci »).</summary>
         private const string Politesse =
             @"(?:stp|svp|s['’]il\s+te\s+pla[iî]t|s['’]il\s+vous\s+pla[iî]t|merci|oui|ouais|ok|okay|d['’]accord|euh|bah|ben|bon|alors|allez)";
 
@@ -453,15 +455,16 @@ namespace SchoolWebApp.Api.Services
         /// suivis au besoin d'un infinitif de travail (« je préfère le faire sur le cahier »).</summary>
         private const string VerbeDeChoix =
             @"(?:(?:moi\s*,?\s*)?(?:je\s+|j['’]\s*)(?:préfère|préfèrerais|préférerais|prefere|preferes?|veux|voudrais|choisis|prends|reste|fais|compose|vais)"
-            + @"(?:\s+(?:le\s+faire|faire|composer|répondre|repondre|rester))?"
+            + @"(?:\s+(?:le\s+faire|faire|composer|répondre|repondre|rester|prendre|utiliser))?"
             + @"|on\s+(?:fait|reste|prend)|plutôt|plutot|moi|va\s+pour)";
 
         /// <summary>Un support dit par l'élève dans une construction de choix (#68 v11) : un nom de support avec
         /// au plus une préposition et un article (« cahier », « l'ordi », « à l'oral », « sur le cahier »,
         /// « par écrit »), ou un adverbe / infinitif / gérondif (oralement, ici, en tapant, écrire, taper, parler),
-        /// ou « j'écris / je tape / je parle » SEULS. Pas « j'ai écrit », ni « c'est écrit ».</summary>
+        /// ou « j'écris / je tape / je parle » SEULS. Pas « j'ai écrit », ni « c'est écrit ». #68 v12 : l'apostrophe
+        /// oubliée (« sur l ordi », « lordi »).</summary>
         private const string SupportEleve =
-            @"(?:(?:(?:au|aux|le|la|les|l['’]|mon|ma|mes|sur|à|a|en|par|avec)\s*(?:(?:le|la|les|l['’]|mon|ma|mes|une|un|ton|ta)\s*)?)?"
+            @"(?:(?:(?:au|aux|le|la|les|l\s*['’]?|mon|ma|mes|sur|à|a|en|par|avec)\s*(?:(?:le|la|les|l\s*['’]?|mon|ma|mes|une|un|ton|ta)\s*)?)?"
             + @"(?:cahiers?|cachier|papier|feuilles?|ordinateurs?|ordis?|claviers?|écran|ecran|oral|orale|écrit|ecrit|écrite|ecrite|micro|voix\s+haute|la\s+main)"
             + @"|oralement|ici|en\s+tapant|en\s+écrivant|en\s+ecrivant|écrire|ecrire|taper|parler|j['’]\s*écris|j['’]\s*ecris|je\s+tape|je\s+parle)";
 
@@ -473,9 +476,14 @@ namespace SchoolWebApp.Api.Services
         /// <summary>
         /// LA CONSTRUCTION DE CHOIX (#68 v11) : le message entier est le cœur du choix, avec au plus une formule de
         /// politesse avant OU après (« à l'oral stp », « oui l'ordi », « moi je veux à l'écrit », « je reste ici »).
+        /// #68 v12 (Omar, verdict sur c53fe78) : DEUX formules au plus, avant et / ou après (« oui l'ordi stp »,
+        /// « l'ordi stp merci », « ok oui cahier »), jamais trois.
         /// </summary>
-        [GeneratedRegex(@"^" + Bruit + @"*(?:" + Politesse + Bruit + @"+" + CoeurDuChoix + @"|" + CoeurDuChoix
-            + @"(?:" + Bruit + @"+" + Politesse + @")?)" + Bruit + @"*$",
+        [GeneratedRegex(@"^" + Bruit + @"*(?:"
+            + Politesse + Bruit + @"+" + Politesse + Bruit + @"+" + CoeurDuChoix
+            + @"|" + Politesse + Bruit + @"+" + CoeurDuChoix + @"(?:" + Bruit + @"+" + Politesse + @")?"
+            + @"|" + CoeurDuChoix + @"(?:" + Bruit + @"+" + Politesse + @"){0,2}"
+            + @")" + Bruit + @"*$",
             RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 200)]
         private static partial Regex ConstructionDeChoix();
 
@@ -483,7 +491,7 @@ namespace SchoolWebApp.Api.Services
         /// clavier, écran, taper) et ceux d'une question « écrit ou oral ? » du professeur. #68 v10 : écrire,
         /// écris, tape / en tapant, oralement, parler, ici, ordis.</summary>
         private const string MotsDeSupport =
-            @"cahier|cachier|papier|feuille|à\s+la\s+main|a\s+la\s+main|ordinateurs?|ordis?|clavier|écran|ecran"
+            @"cahier|cachier|papier|feuille|à\s+la\s+main|a\s+la\s+main|ordinateurs?|ordis?|lordis?|lordinateurs?|clavier|écran|ecran"
             + @"|tap(?:er|e|es|ant|é|ée)|oral|orale|oralement|à\s+voix\s+haute|au\s+micro|micro"
             + @"|écrit|ecrit|écrite|ecrite|par\s+écrit|écrire|ecrire|écris|ecris|en\s+écrivant|parl(?:er|e|ant)|ici";
 
@@ -533,35 +541,72 @@ namespace SchoolWebApp.Api.Services
             return false;
         }
 
-        /// <summary>Un accord du professeur devant le support confirmé (#68 v11).</summary>
+        /// <summary>Un accord du professeur devant le support confirmé (#68 v11). #68 v12 : « super / excellent
+        /// choix », « comme tu veux », « dans ce cas », « je choisis pour toi » (l'élève a dit « comme tu veux »).</summary>
         private const string AccordDuProf =
             @"(?:très\s+bien|bien|parfait|super|génial|d['’]accord|ok|okay|entendu|c['’]est\s+noté|noté|top|excellent"
-            + @"|(?:très\s+)?bon\s+choix|ça\s+marche|allez|alors|bon|oui|c['’]est\s+parti|pas\s+de\s+souci|aucun\s+souci"
-            + @"|bien\s+reçu|va\s+pour|ok\s+pour)";
+            + @"|(?:(?:très\s+)?bon|super|excellent|beau)\s+choix|ça\s+marche|allez|alors|bon|oui|c['’]est\s+parti|pas\s+de\s+souci|aucun\s+souci"
+            + @"|bien\s+reçu|va\s+pour|ok\s+pour|comme\s+tu\s+veux|comme\s+tu\s+préfères|dans\s+ce\s+cas|je\s+choisis\s+pour\s+toi)";
+
+        /// <summary>Le prénom de l'élève, en majuscule, juste après un accord (#68 v12 : « Très bien, Adam, au
+        /// cahier ! », « Très bien Inès, à l'écran. ») — jamais un impératif ni un mot de phrase écrit en tête
+        /// (« Très bien, Prends ton cahier. » reste refusé).</summary>
+        private const string PrenomApresAccord =
+            @"(?-i:(?!(?:Question|Voici|Voilà|Prends|Prenez|Relis|Note|Ouvre|Sors|Garde|Range|Pose|Regarde|Prépare|Utilise|Mets"
+            + @"|Écris|Ecris|Réponds|Fais|Tu|On|Je|Nous|Vous|Ici|Ce|Cette|Le|La|Les|Au|Sur|Ton|Ta|Pour)(?!\p{L}))"
+            + @"\p{Lu}\p{Ll}+(?:-\p{Lu}\p{Ll}+)?)";
 
         /// <summary>Sujet + verbe de composition au PRÉSENT (#68 v11) : « tu composes », « on reste », « on fait
-        /// ça », « tu réponds ». Ni « tu as … », ni « tu feras », ni « tu peux », ni « tu travailles ».</summary>
+        /// ça », « tu réponds ». Ni « tu as … », ni « tu feras », ni « tu peux », ni « tu travailles ».
+        /// #68 v12 (Omar, 268 réponses réelles) : « on part sur », « on le fait à », « on continue sur », « on est
+        /// parti à », « tu fais l'évaluation sur », « je te propose (de rester) », « ce sera », « c'est parti pour
+        /// ton évaluation sur », « allons-y », « (c'est noté) que tu restes ».</summary>
         private const string VerbeDuProf =
-            @"(?:tu|on|nous)\s+(?:composes|compose|composons|réponds|répond|répondons|fais|fait|faisons|restes|reste|restons"
-            + @"|passes|passe|passons|choisis|choisit|prends|prend|écris|écrit|écrivons|y\s+vas|y\s+va)(?:\s+(?:ça|donc|alors|tout))?";
+            @"(?:(?:tu|on|nous)\s+(?:composes|compose|composons|réponds|répond|répondons|fais|fait|faisons|restes|reste|restons"
+            + @"|passes|passe|passons|choisis|choisit|prends|prend|écris|écrit|écrivons|y\s+vas|y\s+va"
+            + @"|pars|part|partons|continues|continue|continuons|est\s+partis?|le\s+fais|le\s+fait|la\s+fais|la\s+fait)"
+            + @"(?:\s+(?:ça|donc|alors|tout|l['’]évaluation|ton\s+évaluation|le\s+contrôle|ton\s+contrôle))?"
+            + @"|je\s+te\s+propose(?:\s+de\s+(?:rester|faire|composer|continuer|répondre|travailler)(?:\s+(?:ça|l['’]évaluation))?)?"
+            + @"|ce\s+sera|allons-y|on\s+y\s+va|que\s+tu\s+(?:restes|composes|réponds|fais|prends|choisis)"
+            + @"|c['’]est\s+parti\s+pour\s+(?:l['’]évaluation|ton\s+évaluation|le\s+contrôle|ton\s+contrôle))";
 
         /// <summary>Le support confirmé par le professeur (#68 v11) : « au cahier », « le cahier », « sur ta
         /// feuille », « à la main », « à l'écran », « sur l'ordinateur », « à l'oral », « à l'écrit », « l'oral »,
         /// « au clavier », « oralement », « à voix haute », « au micro », « par écrit », éventuellement après
-        /// « pour » (« Va pour le cahier », « C'est parti pour l'oral »). Pas « feuille » ni « papier » nus.</summary>
+        /// « pour » (« Va pour le cahier », « C'est parti pour l'oral »). Pas « feuille » ni « papier » nus.
+        /// #68 v12 : le support sans article (« sur ordinateur », « sur cahier », « cahier choisi »).</summary>
         private const string SupportDuProf =
             @"(?:pour\s+)?(?:au\s+cahier|(?:sur\s+)?(?:ton|le)\s+cahier|sur\s+(?:une|ta)\s+feuille|à\s+la\s+main"
             + @"|(?:à|sur)\s+l['’](?:écran|ordinateur|ordi)|à\s+l['’](?:oral|écrit)|l['’](?:ordinateur|ordi|oral|écrit|écran)"
-            + @"|(?:au|le)\s+clavier|oralement|à\s+voix\s+haute|au\s+micro|par\s+écrit)";
+            + @"|(?:au|le)\s+clavier|oralement|à\s+voix\s+haute|au\s+micro|par\s+écrit"
+            + @"|(?:(?:sur|à|en)\s+)?(?:ordinateur|ordi|cahier|écran))";
+
+        /// <summary>Ce qui peut suivre le support dans une confirmation (#68 v11, élargi en v12) : « ici », « alors »,
+        /// « donc », « c'est parti », « c'est noté », « bon choix », « très bien », « parfait », « ici même »,
+        /// « choisi », « c'est très bien pour poser tes calculs », « marche très bien aussi », « est tout à fait
+        /// adapté », « donc je t'affiche le sujet en entier », « en main », « il est », « trois questions ».</summary>
+        private const string SuiteDuSupport =
+            @"(?:ici\s+même|ici|alors|donc|c['’]est\s+parti|bon\s+choix|très\s+bien|parfait|choisi|choisie"
+            + @"|c['’]est\s+(?:noté|parfait|très\s+bien|bien|top|idéal|mieux)(?:\s+pour\s+[^.!?…\n]{1,60})?"
+            + @"|(?:marche|convient|va)\s+(?:très\s+|tout\s+aussi\s+)?bien(?:\s+aussi)?"
+            + @"|est\s+(?:tout\s+à\s+fait\s+|très\s+)?adapté(?:\s+pour\s+ça)?"
+            + @"|donc\s+je\s+t['’](?:affiche|écris|donne|mets)\s+[^.!?…\n]{1,60}"
+            + @"|en\s+main|il\s+est|(?:deux|trois|quatre|cinq)\s+questions)";
 
         /// <summary>
-        /// LA PHRASE DE CONFIRMATION DU SUPPORT (#68 v11) — la phrase entière : [accord(s)] [sujet + verbe au présent]
-        /// [ici] support [ici / alors / donc / c'est parti / c'est noté / bon choix / très bien / parfait].
-        /// « Très bien, au cahier ! », « D'accord, tu composes ici à l'écran. », « Parfait, à l'oral. »,
-        /// « Super, on reste ici à l'écran. », « Alors on fait ça à l'oral. », « Va pour le cahier ! ».
+        /// LA PHRASE DE CONFIRMATION DU SUPPORT (#68 v11) — la phrase entière : [accord(s)] [prénom] [sujet + verbe au
+        /// présent] [ici] support [suite]. « Très bien, au cahier ! », « D'accord, tu composes ici à l'écran. »,
+        /// « Parfait, à l'oral. », « Super, on reste ici à l'écran. », « Alors on fait ça à l'oral. », « Va pour le
+        /// cahier ! ». #68 v12 (Omar, verdict sur c53fe78 : sur les 268 réponses réelles du modèle, la v11 n'en lisait
+        /// plus que 12) : « Bien, on part sur ton cahier. », « Bien reçu, on le fait à l'ordinateur. », « D'accord,
+        /// cahier choisi. », « Parfait, le cahier, c'est très bien… », « Très bien, Adam, au cahier ! », « Comme tu
+        /// veux, je choisis pour toi : on fait ça à l'écran. », « Je te propose de rester à l'écran. »,
+        /// « **Très bien, au cahier !** ». La porte « juste après » (<see cref="TopDepartAuTour"/>) reste la seule
+        /// à l'écouter.
         /// </summary>
-        [GeneratedRegex(@"^" + Bruit + @"*(?:" + AccordDuProf + Bruit + @"+)*(?:" + VerbeDuProf + Bruit + @"+)?(?:ici" + Bruit + @"+)?"
-            + SupportDuProf + @"(?:" + Bruit + @"+(?:ici|alors|donc|c['’]est\s+parti|c['’]est\s+noté|bon\s+choix|très\s+bien|parfait))?"
+        [GeneratedRegex(@"^" + Bruit + @"*(?:(?:" + AccordDuProf + Bruit + @"+)+" + PrenomApresAccord + Bruit + @"+)?"
+            + @"(?:" + AccordDuProf + Bruit + @"+)*(?:" + VerbeDuProf + Bruit + @"+)?(?:ici" + Bruit + @"+)?"
+            + SupportDuProf + @"(?:" + Bruit + @"+" + SuiteDuSupport + @")?"
             + Bruit + @"*$",
             RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 200)]
         private static partial Regex ConfirmationDuSupport();
