@@ -243,6 +243,7 @@ namespace SchoolWebApp.Domain.Emails
                     {
                         contenu = CssDangereux.Replace(
                             contenu, m => m.Value.StartsWith('-') ? "x-moz-bloque" : "x-" + m.Value.Replace(":", "-").Replace("(", "-"));
+                        contenu = ChevronsDuCss(contenu);
                     }
                     else
                     {
@@ -254,6 +255,30 @@ namespace SchoolWebApp.Domain.Emails
                     i = debutFin;  // la balise de fin est lue au tour suivant
                 }
             }
+        }
+
+        /// <summary>
+        /// AUCUN `&lt;` DANS UNE FEUILLE DE STYLE (contrôle d'Omar, v3) : un navigateur actuel lit le contenu de `style`
+        /// comme du texte brut, mais un analyseur plus ancien (parse5 6.0.1, anciens navigateurs) l'ignore dans un
+        /// `select` et y lit des balises — `&lt;select&gt;&lt;style&gt;&lt;/select&gt;&lt;img src=x onerror=…&gt;&lt;/style&gt;` y
+        /// donnait un vrai `&lt;img onerror&gt;`. Chaque `&lt;` devient l'échappement CSS `\3c ` (même caractère pour le
+        /// CSS, aucune balise possible pour un analyseur HTML, quel qu'il soit). Seule exception : la marque `&lt;!--`
+        /// des vieux mails (« CDO », ignorée du CSS ; l'échapper casserait la 1re règle) — elle ne peut ouvrir qu'un
+        /// commentaire, et tout autre `&lt;` qui suivrait est neutralisé. Une feuille sans `&lt;` (celle de Slimane) ne
+        /// change pas d'un octet.
+        /// </summary>
+        private static string ChevronsDuCss(string css)
+        {
+            if (css.IndexOf('<') < 0) return css;
+
+            var sb = new StringBuilder(css.Length + 8);
+            for (var k = 0; k < css.Length; k++)
+            {
+                if (css[k] == '<' && string.CompareOrdinal(css, k, "<!--", 0, 4) != 0) sb.Append(@"\3c ");
+                else sb.Append(css[k]);
+            }
+
+            return sb.ToString();
         }
 
         /// <summary>
@@ -516,8 +541,31 @@ namespace SchoolWebApp.Domain.Emails
 
         // ------------------------------------------------------- entités du HTML5
 
+        /// <summary>
+        /// Une entité numérique prend TOUS ses chiffres, comme le navigateur (contrôle d'Omar, v3) : la v2 bornait à 8
+        /// chiffres décimaux et 7 hexadécimaux, et `&amp;#0000000058;` (des zéros devant) restait non décodé ici alors
+        /// que Chrome y lit `:` — `javascript&amp;#0000000058;alert(1)` passait pour une adresse relative.
+        /// </summary>
         private static readonly Regex Entite = new(
-            @"&(?:#(?<dec>[0-9]{1,8});?|#[xX](?<hex>[0-9a-fA-F]{1,7});?|(?<nom>[a-zA-Z][a-zA-Z0-9]{1,31});)", RegexOptions.Compiled);
+            @"&(?:#(?<dec>[0-9]+);?|#[xX](?<hex>[0-9a-fA-F]+);?|(?<nom>[a-zA-Z][a-zA-Z0-9]{1,31});)", RegexOptions.Compiled);
+
+        /// <summary>
+        /// La valeur d'une entité numérique, plafonnée juste au-dessus de 0x10FFFF (aucun débordement, quel que soit
+        /// le nombre de chiffres) : au-delà, le navigateur lit U+FFFD.
+        /// </summary>
+        private static int ValeurNumerique(string chiffres, int @base)
+        {
+            const int AuDela = 0x110000;
+            var valeur = 0;
+            foreach (var c in chiffres)
+            {
+                var chiffre = c <= '9' ? c - '0' : (c | 0x20) - 'a' + 10;
+                valeur = valeur * @base + chiffre;
+                if (valeur >= AuDela) return AuDela;
+            }
+
+            return valeur;
+        }
 
         /// <summary>
         /// Les entités du HTML5 qui ne sont pas dans le HTML 4 (que décode `WebUtility.HtmlDecode`) et qui servent à
@@ -546,10 +594,10 @@ namespace SchoolWebApp.Domain.Emails
                     if (m.Groups["dec"].Success || m.Groups["hex"].Success)
                     {
                         var code = m.Groups["dec"].Success
-                            ? long.Parse(m.Groups["dec"].Value)
-                            : Convert.ToInt64(m.Groups["hex"].Value, 16);
+                            ? ValeurNumerique(m.Groups["dec"].Value, 10)
+                            : ValeurNumerique(m.Groups["hex"].Value, 16);
                         if (code is <= 0 or > 0x10FFFF or (>= 0xD800 and <= 0xDFFF)) return "\ufffd";
-                        return char.ConvertFromUtf32((int)code);
+                        return char.ConvertFromUtf32(code);
                     }
 
                     var nom = m.Groups["nom"].Value;

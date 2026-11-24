@@ -226,6 +226,49 @@ namespace SchoolWebApp.Tests
             Assert.DoesNotMatch(@"(?i)<[^>]*\son\w+\s*=|<script|javascript:|<svg|<iframe", propre);
         }
 
+        /// <summary>
+        /// CONTRÔLE D'OMAR SUR LA v2 (24/11/2026), sondes N1-N50 rejouées dans Chrome 157 et parse5 6.0.1.
+        /// 1. Une entité numérique prend TOUS ses chiffres (zéros devant compris), comme le navigateur : la v2 bornait à
+        ///    8 / 7 chiffres et `javascript&amp;#0000000058;` restait une « adresse relative », exécutée au clic.
+        /// 2. Aucun `&lt;` dans une feuille de style (`\3c `) : dans un `select`, un analyseur ancien lisait des balises.
+        /// </summary>
+        [Theory]
+        // N1-N5, N38 : entités à zéros devant, avec ou sans guillemets, sans `;`, dans `form action`
+        [InlineData("<a href=\"javascript&#0000000058;alert(1)\">x</a>", "<a href=\"#\">x</a>")]
+        [InlineData("<a href=\"javascript&#x00000003a;alert(1)\">x</a>", "<a href=\"#\">x</a>")]
+        [InlineData("<a href=javascript&#0000000058;alert(1)>x</a>", "<a href=\"#\">x</a>")]
+        [InlineData("<a href=\"javascript&#000000000000058alert(1)\">x</a>", "<a href=\"#\">x</a>")]
+        [InlineData("<form action=\"javascript&#0000000058;alert(1)\"><input type=submit></form>", "<form action=\"#\"><input type=submit></form>")]
+        [InlineData("<a href=\"javascript&#X0000003A;alert(1)\">x</a>", "<a href=\"#\">x</a>")]
+        [InlineData("<a href=\"&#0000000000000000106;avascript:alert(1)\">x</a>", "<a href=\"#\">x</a>")]
+        // au-delà de 0x10FFFF (quel que soit le nombre de chiffres) : U+FFFD, comme le navigateur, sans débordement
+        [InlineData("<a href=\"&#99999999999999999999999;javascript:alert(1)\">x</a>", "<a href=\"#\">x</a>")]
+        [InlineData("<a href=\"&#x110000;javascript:alert(1)\">x</a>", "<a href=\"#\">x</a>")]
+        // N6, N48 (et N7, N9, N29, N33, N35) : le contenu d'un `style` ne porte plus aucun `<`
+        [InlineData("<select><style></select><img src=x onerror=alert(1)></style>", "<select><style>\\3c /select>\\3c img src=x onerror=alert(1)></style>")]
+        [InlineData("<select><style></select><svg onload=alert(1)></style>", "<select><style>\\3c /select>\\3c svg onload=alert(1)></style>")]
+        [InlineData("<select><style></select><a href=\"javascript:alert(1)\">x</a></style>", "<select><style>\\3c /select>\\3c a href=\"x-javascript-alert(1)\">x\\3c /a></style>")]
+        [InlineData("<style><img src=x onerror=alert(1)></style>", "<style>\\3c img src=x onerror=alert(1)></style>")]
+        [InlineData("<table><tr><td><style></td></tr></table><img src=x onerror=alert(1)></style>", "<table><tr><td><style>\\3c /td>\\3c /tr>\\3c /table>\\3c img src=x onerror=alert(1)></style>")]
+        // la marque `<!--` des vieux mails reste (l'échapper casserait la 1re règle) ; tout autre `<` est échappé
+        [InlineData("<style><!-- p{color:red} a<b{x:1} --></style>", "<style><!-- p{color:red} a\\3c b{x:1} --></style>")]
+        public void Les_contournements_du_controle_d_Omar_v2_sont_nettoyes(string colle, string attendu)
+        {
+            var propre = HtmlComplet.Nettoyer(colle);
+            Assert.Equal(attendu, propre);
+            Assert.Equal(propre, HtmlComplet.Nettoyer(propre));
+            Assert.DoesNotMatch(@"(?i)<[^>]*\son\w+\s*=|<script|javascript:|<svg|<iframe|<img[^>]*onerror", propre);
+        }
+
+        [Theory]
+        // Une entité légitime à zéros devant, une feuille de style sans `<` : recopiées à l'octet.
+        [InlineData("<a href=\"https://mimia.fr/?a=1&#0000038;b=2\">x</a>")]
+        [InlineData("<a href=\"https://mimia.fr/&#x00000041;\">x</a>")]
+        [InlineData("<style>@media (max-width:600px){.c{width:100%!important}} a>b{color:#fff}</style>")]
+        [InlineData("<style><!-- p{color:red} --></style>")]
+        public void Le_html_sain_du_controle_v2_reste_intact(string propre) =>
+            Assert.Equal(propre, HtmlComplet.Nettoyer(propre));
+
         [Fact]
         public void Le_nettoyage_de_la_maquette_reelle_ne_retire_que_ses_notes()
         {
@@ -348,6 +391,32 @@ namespace SchoolWebApp.Tests
 
             const string avecPied = "<html><body><p>Info</p><p>Vous recevez ce message parce que vous avez un compte&nbsp;Mimia.</p></body></html>";
             Assert.Equal(avecPied, Service().ComposerHtmlComplet(EnHtmlComplet(avecPied), variables));
+
+            // Espaces variées entre les mots (retour à la ligne, insécable) : toujours reconnue.
+            const string avecPiedCoupe = "<p>Info</p><p>Vous recevez ce message parce\n que vous avez&#160;un compte Mimia.</p>";
+            Assert.Equal(avecPiedCoupe, Service().ComposerHtmlComplet(EnHtmlComplet(avecPiedCoupe), variables));
+        }
+
+        [Fact]
+        public void Information_qui_cite_le_compte_Mimia_dans_le_corps_garde_son_pied()
+        {
+            // Contrôle d'Omar sur la v2 : « compte Mimia » seul suffisait à supprimer le pied. C'est la PHRASE du pied
+            // (« … parce que vous avez un compte Mimia ») qui compte, pas une mention du compte dans le message.
+            var variables = new Dictionary<string, ValeurVariable>();
+            DiffusionService.RetirerLienDesinscription(variables);
+            var service = Service();
+
+            foreach (var corps in new[]
+                     {
+                         "<html><body><p>Connectez-vous à votre compte Mimia pour découvrir la nouveauté.</p></body></html>",
+                         "<html><body><p>Votre compte&nbsp;Mimia évolue.</p></body></html>",
+                     })
+            {
+                var html = service.ComposerHtmlComplet(EnHtmlComplet(corps), variables);
+                Assert.Contains(service.ComposerMentionPied(), html);
+                Assert.Single(System.Text.RegularExpressions.Regex.Matches(html, "parce que vous avez un compte Mimia"));
+                Assert.EndsWith("</td></tr></table></body></html>", html);
+            }
         }
 
         [Fact]

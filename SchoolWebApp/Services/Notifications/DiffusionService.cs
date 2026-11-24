@@ -435,9 +435,14 @@ namespace SchoolWebApp.Api.Services.Notifications
             return HtmlComplet.LierImagesDuSite(AdressesEnTexte(html));
         }
 
-        /// <summary>La mention du pied d'information, quelle que soit l'espace entre les mots.</summary>
+        /// <summary>
+        /// La phrase du pied d'information elle-même (« … parce que vous avez un compte Mimia »), quelle que soit
+        /// l'espace entre les mots. Contrôle d'Omar, v3 : la v2 cherchait « compte Mimia » seul, et « Connectez-vous à
+        /// votre compte Mimia » dans le corps du mail suffisait à faire disparaître le pied.
+        /// </summary>
         private static readonly Regex CompteMimia = new(
-            @"compte(?:\s|&nbsp;|&#160;|&#xa0;|\xa0)+Mimia", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+            string.Join(@"(?:\s|&nbsp;|&#160;|&#xa0;|\xa0)+", "parce", "que", "vous", "avez", "un", "compte", "Mimia"),
+            RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
         /// <summary>Un commentaire (laissé tel quel), ou un lien `&lt;a …&gt;…&lt;/a&gt;`.</summary>
         private static readonly Regex LienOuCommentaire = new(
