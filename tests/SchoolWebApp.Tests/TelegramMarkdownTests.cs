@@ -172,49 +172,43 @@ namespace SchoolWebApp.Tests
         }
 
         /// <summary>
-        /// ESSAI RÉEL, INACTIF PAR DÉFAUT : ne fait rien sans `MIMIA_TELEGRAM_ESSAI=1`. Avec, envoie les deux alertes
-        /// de la veille des tarifs (les coupables du 23/11) au salon donné par `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID`
-        /// et vérifie que Telegram les accepte EN MARKDOWNV2 (aucun refus, donc aucun repli en texte brut).
+        /// ESSAI RÉEL CONTRE L'ANALYSEUR DE TELEGRAM, SANS RIEN ENVOYER (24/11/2026). Inactif par défaut : ne fait rien
+        /// sans `MIMIA_TELEGRAM_ESSAI=1` et `TELEGRAM_BOT_TOKEN` (n'importe quel bot valide).
+        ///
+        /// Telegram analyse le MarkdownV2 AVANT de chercher le salon : vers le salon inexistant « 0 », un texte fautif
+        /// répond « can't parse entities », un texte valide « chat not found ». On soumet ainsi chaque alerte, telle que
+        /// le service la construit, au vrai analyseur de Telegram — et aucun message n'arrive nulle part.
         /// </summary>
         [Fact]
-        public async Task Essai_reel_des_alertes_de_la_veille_des_tarifs()
+        public async Task Essai_reel_chaque_alerte_passe_l_analyseur_de_Telegram_sans_envoi()
         {
             var jeton = Environment.GetEnvironmentVariable("TELEGRAM_BOT_TOKEN");
-            var salon = Environment.GetEnvironmentVariable("TELEGRAM_CHAT_ID");
-            if (Environment.GetEnvironmentVariable("MIMIA_TELEGRAM_ESSAI") != "1"
-                || string.IsNullOrWhiteSpace(jeton) || string.IsNullOrWhiteSpace(salon)) return;
+            if (Environment.GetEnvironmentVariable("MIMIA_TELEGRAM_ESSAI") != "1" || string.IsNullOrWhiteSpace(jeton)) return;
 
-            var fabrique = new Mock<IHttpClientFactory>();
-            fabrique.Setup(f => f.CreateClient(It.IsAny<string>())).Returns(() => new HttpClient());
-            var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
+            var refus = new List<string>();
+
+            foreach (var cas in ToutesLesAlertes())
             {
-                ["TelegramContact:BotToken"] = jeton,
-                ["TelegramContact:ChatId"] = salon,
-            }).Build();
-            var journal = new JournalEnMemoire();
-            var service = new TelegramService(fabrique.Object, config, journal);
+                var (nom, envoyer) = ((string)cas[0], (Func<TelegramService, Task>)cas[1]);
+                var (service, faux) = Creer();
+                await envoyer(service);
 
-            await service.NotifierTarifAsync("ESSAI Mins (à ignorer)", "modele-essai-1.0", ["Entrée : 0.40 $ → 0.50 $"]);
-            await service.NotifierVeilleTarifsAsync("ESSAI Mins (à ignorer)", "Essai du correctif MarkdownV2, aucune action.");
+                var reponse = await client.PostAsync(
+                    $"https://api.telegram.org/bot{jeton}/sendMessage",
+                    new FormUrlEncodedContent(new Dictionary<string, string>
+                    {
+                        ["chat_id"] = "0",
+                        ["text"] = faux.Envois[0]["text"],
+                        ["parse_mode"] = "MarkdownV2",
+                    }));
+                var corps = await reponse.Content.ReadAsStringAsync();
 
-            Assert.True(journal.Lignes.Count == 0, string.Join("\n", journal.Lignes));
-        }
-
-        private sealed class JournalEnMemoire : Microsoft.Extensions.Logging.ILogger<TelegramService>
-        {
-            public List<string> Lignes { get; } = [];
-
-            public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
-
-            public bool IsEnabled(Microsoft.Extensions.Logging.LogLevel niveau) => true;
-
-            public void Log<TState>(Microsoft.Extensions.Logging.LogLevel niveau, Microsoft.Extensions.Logging.EventId id,
-                TState etat, Exception? ex, Func<TState, Exception?, string> formater)
-            {
-                // Le corps d'un refus Telegram ne contient jamais le jeton ; on garde quand même ex.Message seul.
-                if (niveau >= Microsoft.Extensions.Logging.LogLevel.Warning)
-                    Lignes.Add($"{niveau} : {formater(etat, ex)} {ex?.Message}");
+                // Seul « chat not found » prouve que le texte a passé l'analyse ; tout le reste est un échec.
+                if (!corps.Contains("chat not found", StringComparison.OrdinalIgnoreCase)) refus.Add($"{nom} : {corps}");
             }
+
+            Assert.True(refus.Count == 0, string.Join("\n", refus));
         }
 
         [Fact]
