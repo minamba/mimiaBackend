@@ -2595,6 +2595,15 @@ namespace SchoolWebApp.Api.Controllers
                 valeurs["signature"] = signataire.Signature;
             }
 
+            // LE MODE « HTML COMPLET » (24/11/2026) : l'aperçu montre le HTML collé tel qu'il partira (même composition
+            // que l'envoi), le lien de désinscription à sa place s'il s'agit d'une promotion.
+            if (SchoolWebApp.Domain.Emails.HtmlComplet.Est(texte))
+            {
+                valeurs["corpsMessage"] = string.Empty;
+                valeurs[SchoolWebApp.Domain.Emails.HtmlComplet.Cle] = diffusion.ComposerHtmlComplet(
+                    texte!, offres ? LienDesinscriptionApercu() : SansLienDesinscription());
+            }
+
             var html = await email.RendreAsync(sujet ?? string.Empty, "diffusion", valeurs);
 
             // LES IMAGES, EN BASE64 POUR L'APERÇU SEULEMENT.

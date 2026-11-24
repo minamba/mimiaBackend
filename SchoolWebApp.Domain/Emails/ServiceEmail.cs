@@ -84,6 +84,7 @@ namespace SchoolWebApp.Domain.Emails
                 }
 
                 ImagesSignature.Attacher(constructeur);
+                HtmlComplet.AttacherImagesDuSite(constructeur);
 
                 message.Body = constructeur.ToMessageBody();
 
@@ -213,6 +214,7 @@ namespace SchoolWebApp.Domain.Emails
 
                         AttacherLogo(constructeur);
                         ImagesSignature.Attacher(constructeur);
+                        HtmlComplet.AttacherImagesDuSite(constructeur);
 
                         foreach (var image in imagesIntegrees ?? [])
                         {
@@ -374,6 +376,7 @@ namespace SchoolWebApp.Domain.Emails
 
                     var constructeur = new BodyBuilder { HtmlBody = corps, TextBody = VersTexte(corps) };
                     AttacherLogo(constructeur);
+                    HtmlComplet.AttacherImagesDuSite(constructeur);
 
                     // Les mêmes gestes que la diffusion : l'identifiant de l'image
                     // EST la référence du corps, et le constructeur est neuf à
@@ -585,6 +588,11 @@ namespace SchoolWebApp.Domain.Emails
         /// </summary>
         private static void AttacherLogo(BodyBuilder constructeur)
         {
+            // SEULEMENT S'IL EST CITÉ (24/11/2026) : tout mail mis dans l'enveloppe le cite ; un HTML complet (mode
+            // « HTML complet » du message de diffusion) a ses propres images, et une pièce liée que rien ne cite
+            // s'affiche en pièce jointe dans certaines messageries.
+            if (constructeur.HtmlBody?.Contains("cid:logoMimia", StringComparison.Ordinal) != true) return;
+
             using var flux = Assemblee.GetManifestResourceStream(
                 "SchoolWebApp.Domain.Emails.Ressources.bann_mail.jpg");
 
@@ -603,6 +611,9 @@ namespace SchoolWebApp.Domain.Emails
         {
             // Les images de la signature, jointes elles aussi dans un vrai envoi.
             var corps = ImagesSignature.EnDataUri(await ConstruireCorpsAsync(sujet, gabarit, valeurs));
+
+            // Les images du site d'un HTML complet (`cid:mimia-email-…`), en base64 elles aussi.
+            corps = HtmlComplet.ImagesDuSiteEnDataUri(corps);
 
             // Dans un mail la bannière est une pièce jointe liée (cid:). Un
             // navigateur ne sait pas résoudre ces adresses : on l'incorpore en
@@ -623,6 +634,14 @@ namespace SchoolWebApp.Domain.Emails
         private async Task<string> ConstruireCorpsAsync(
             string sujet, string gabarit, IDictionary<string, string> valeurs)
         {
+            // LE MODE « HTML COMPLET » (24/11/2026) : le HTML déjà composé (nettoyé, lien de désinscription signé, pied
+            // légal si besoin — voir `DiffusionService.ComposerHtmlComplet`) part TEL QUEL, sans le gabarit ni
+            // l'enveloppe du site : la maquette validée porte son en-tête, son pré-entête et son pied.
+            if (valeurs.TryGetValue(HtmlComplet.Cle, out var complet) && !string.IsNullOrWhiteSpace(complet))
+            {
+                return complet;
+            }
+
             var contenu = Remplacer(await LireAsync(gabarit), valeurs);
 
             var enveloppe = new Dictionary<string, string>(valeurs)

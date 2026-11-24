@@ -59,6 +59,14 @@ namespace SchoolWebApp.Api.Services.Notifications
         /// </summary>
         string ComposerCorps(string texte, int nombreImages, IReadOnlyDictionary<string, ValeurVariable>? variables);
 
+        /// <summary>
+        /// LE MODE « HTML COMPLET » (Min's, le 24/11/2026) : le HTML collé par l'admin (texte terminé par
+        /// `HtmlComplet.Marqueur`), nettoyé, ses variables remplacées — `{{lien_desinscription}}` par le lien SIGNÉ du
+        /// parent —, le pied légal ajouté si une promotion n'a pas la balise, et les images du site liées par `cid:`.
+        /// Le résultat part tel quel (`valeurs[HtmlComplet.Cle]`), sans l'enveloppe du site.
+        /// </summary>
+        string ComposerHtmlComplet(string texte, IReadOnlyDictionary<string, ValeurVariable>? variables);
+
         /// <summary>Les variables d'un texte simple — un objet, un titre. Sans HTML.</summary>
         string RemplacerVariables(string? texte, IReadOnlyDictionary<string, ValeurVariable>? variables);
 
@@ -348,6 +356,86 @@ namespace SchoolWebApp.Api.Services.Notifications
             return sb.ToString();
         }
 
+        /// <summary>`{{cle}}` dans un HTML complet, avec l'espace qui le précède (comme `Variable`).</summary>
+        private static readonly Regex VariableHtml = new(@"(\s?)\{\{\s*(\w+)\s*\}\}", RegexOptions.Compiled);
+
+        /// <summary>Le SIRET de `MentionIdentite`, quelle que soit la façon de l'espacer (`&amp;nbsp;`, espaces…).</summary>
+        private static readonly Regex SiretPresent = new(@"924\D{0,12}291\D{0,12}800", RegexOptions.Compiled);
+
+        private static readonly Regex FinDuCorps = new(@"</body\s*>", RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.RightToLeft);
+
+        private static bool EstLienDesinscription(string cle) =>
+            cle.Replace("_", string.Empty).Equals("liendesinscription", StringComparison.OrdinalIgnoreCase);
+
+        /// <summary>Vrai si la position tombe DANS une balise (une valeur d'attribut : `href="{{…}}"`).</summary>
+        private static bool DansUneBalise(string html, int position) =>
+            position > 0 && html.LastIndexOf('<', position - 1) > html.LastIndexOf('>', position - 1);
+
+        public string ComposerHtmlComplet(string texte, IReadOnlyDictionary<string, ValeurVariable>? variables)
+        {
+            // NETTOYÉ À CHAQUE COMPOSITION, pas seulement à l'enregistrement : ce qui part est toujours passé par ici.
+            var html = HtmlComplet.Nettoyer(HtmlComplet.Contenu(texte));
+
+            // LE LIEN SIGNÉ DU PARENT : présent seulement pour une promotion (case cochée), `#` dans l'aperçu.
+            var lien = variables is null
+                ? null
+                : ClesLienDesinscription
+                    .Select(cle => variables.TryGetValue(cle, out var v) ? v.Lien : null)
+                    .FirstOrDefault(l => !string.IsNullOrEmpty(l));
+
+            // Lue APRÈS le nettoyage : une balise citée dans un commentaire de la maquette ne compte pas.
+            var balisePresente = ContientLienDesinscription(html);
+
+            html = VariableHtml.Replace(html, m =>
+            {
+                var espace = m.Groups[1].Value;
+                var cle = m.Groups[2].Value;
+                var dansBalise = DansUneBalise(html, m.Groups[2].Index);
+
+                if (EstLienDesinscription(cle))
+                {
+                    // `href="{{lien_desinscription}}"` (maquette de Slimane) : l'ADRESSE ; dans le texte : un lien.
+                    if (lien is null) return dansBalise ? espace + "#" : string.Empty;
+                    return dansBalise
+                        ? espace + WebUtility.HtmlEncode(lien)
+                        : espace + $"<a href=\"{WebUtility.HtmlEncode(lien)}\" style=\"color:inherit; text-decoration:underline;\">"
+                          + "Se désinscrire</a>";
+                }
+
+                // Une variable inconnue reste visible, comme dans le mode texte.
+                if (variables is null || !variables.TryGetValue(cle, out var valeur)) return m.Value;
+
+                if (dansBalise) return espace + WebUtility.HtmlEncode(valeur.Lien ?? valeur.Texte);
+                return string.IsNullOrEmpty(valeur.Texte) ? string.Empty : espace + EnHtml(valeur);
+            });
+
+            // LE GARDE-FOU DE LA PROMOTION (tâche du 24/11/2026) : sans la balise, le pied commercial complet
+            // (consentement, identité, lien signé) est ajouté ; avec la balise mais sans le SIRET, l'identité seule.
+            // Le HTML de Slimane porte les deux : rien n'est ajouté, son pied n'apparaît qu'une fois.
+            if (lien is not null)
+            {
+                string? ajout = null;
+                if (!balisePresente) ajout = ComposerMentionPied(lien, CategorieDesabonnement.Diffusion);
+                else if (!SiretPresent.IsMatch(html)) ajout = WebUtility.HtmlEncode(MentionIdentite);
+
+                if (ajout is not null) html = AjouterPied(html, ajout);
+            }
+
+            return HtmlComplet.LierImagesDuSite(html);
+        }
+
+        /// <summary>Le pied ajouté, juste avant `&lt;/body&gt;` (ou à la fin s'il n'y en a pas).</summary>
+        private static string AjouterPied(string html, string mention)
+        {
+            var bloc = "<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\">"
+                       + "<tr><td align=\"center\" style=\"padding:18px 24px 26px 24px; "
+                       + "font-family:-apple-system,'Segoe UI',Helvetica,Arial,sans-serif; font-size:11.5px; line-height:1.6; "
+                       + $"color:#a5abb8;\">{mention}</td></tr></table>";
+
+            var fin = FinDuCorps.Match(html);
+            return fin.Success ? html.Insert(fin.Index, bloc) : html + bloc;
+        }
+
         public string RemplacerVariables(string? texte, IReadOnlyDictionary<string, ValeurVariable>? variables)
         {
             if (string.IsNullOrEmpty(texte) || variables is not { Count: > 0 }) return texte ?? string.Empty;
@@ -594,18 +682,24 @@ namespace SchoolWebApp.Api.Services.Notifications
 
                     var sujetPersonnel = RemplacerVariables(sujet, variables);
 
+                    var htmlComplet = HtmlComplet.Est(texte);
+
                     var valeurs = new Dictionary<string, string>
                     {
                         ["titre"] = sujetPersonnel,
                         // Le Titre est du TEXTE, comme le corps (22/11/2026) : échappé
                         // APRÈS les variables, le prénom saisi par un parent compris.
                         ["titreMessage"] = WebUtility.HtmlEncode(RemplacerVariables(titre, variables)),
-                        ["corpsMessage"] = ComposerCorps(texte, images.Count, variables),
+                        ["corpsMessage"] = htmlComplet ? string.Empty : ComposerCorps(texte, images.Count, variables),
                         ["blocPiecesJointes"] = blocPieces,
                         ["mentionPied"] = offres
                             ? ComposerMentionPied(lienDesinscription, CategorieDesabonnement.Diffusion)
                             : ComposerMentionPied(),
                     };
+
+                    // LE MODE « HTML COMPLET » (24/11/2026) : le HTML collé part tel quel, composé pour ce parent (lien
+                    // signé à la place de la balise). La liste, la case Promotion et `List-Unsubscribe` ne changent pas.
+                    if (htmlComplet) valeurs[HtmlComplet.Cle] = ComposerHtmlComplet(texte, variables);
 
                     bool envoye;
 

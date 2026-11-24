@@ -81,6 +81,14 @@ namespace SchoolWebApp.Api.Services.Notifications
                 ["mentionPied"] = mentionPied ?? _diffusion.ComposerMentionPied(),
             };
 
+            // LE MODE « HTML COMPLET » (24/11/2026) : le HTML collé part tel quel, sans l'enveloppe du site — aperçu,
+            // envoi à un parent et courriel programmé compris (un seul chemin de composition).
+            if (HtmlComplet.Est(modele.Texte))
+            {
+                valeurs["corpsMessage"] = string.Empty;
+                valeurs[HtmlComplet.Cle] = _diffusion.ComposerHtmlComplet(modele.Texte!, variables);
+            }
+
             return new CourrielCompose(sujet, valeurs, images, documents);
         }
     }

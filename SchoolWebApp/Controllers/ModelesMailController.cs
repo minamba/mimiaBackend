@@ -51,6 +51,12 @@ namespace SchoolWebApp.Api.Controllers
 
         private const int LongueurTexteMax = 20_000;
 
+        /// <summary>
+        /// Un HTML complet (mode « HTML complet », 24/11/2026) : une maquette de 600 px en CSS en ligne pèse vite
+        /// 15 000 caractères ; 100 000 laissent de la marge sans laisser entrer n'importe quoi.
+        /// </summary>
+        private const int LongueurHtmlMax = 100_000;
+
         private static readonly CultureInfo Francais = CultureInfo.GetCultureInfo("fr-FR");
 
         private static readonly string[] ImagesAcceptees =
@@ -841,7 +847,11 @@ namespace SchoolWebApp.Api.Controllers
         {
             if ((sujet?.Length ?? 0) > 150) return "L'objet dépasse 150 caractères.";
             if ((titre?.Length ?? 0) > 150) return "Le titre dépasse 150 caractères.";
-            if ((texte?.Length ?? 0) > LongueurTexteMax) return "Le message dépasse 20 000 caractères.";
+            if (HtmlComplet.Est(texte))
+            {
+                if (texte!.Length > LongueurHtmlMax) return "Le HTML dépasse 100 000 caractères.";
+            }
+            else if ((texte?.Length ?? 0) > LongueurTexteMax) return "Le message dépasse 20 000 caractères.";
             if ((nom?.Trim().Length ?? 0) > 120) return "Le nom du template dépasse 120 caractères.";
             if ((description?.Trim().Length ?? 0) > 500) return "La description dépasse 500 caractères.";
 
