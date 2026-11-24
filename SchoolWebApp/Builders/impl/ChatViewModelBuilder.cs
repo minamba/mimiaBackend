@@ -3993,6 +3993,12 @@ namespace SchoolWebApp.Api.Builders.impl
             var evaluationEngagee = !controleOuvert && LecteurEvaluation.EstEngagee(
                 historique.Select(m => (string?)m.Contenu).Append(contenu));
 
+            // #68 v9 (décision du coordinateur) : le filet du top départ ne joue qu'une fois le SUPPORT CHOISI
+            // (clic sur un des deux boutons, ou support nommé par l'élève après [SUPPORT_EVALUATION]). Avant,
+            // jamais : une correction au présent (« Je corrige la première question : … ») n'ouvre plus le contrôle.
+            var supportChoisi = evaluationEngagee && LecteurEvaluation.SupportChoisi(
+                historique.Select(m => ((string?)m.Role, (string?)m.Contenu)).Append(((string?)"user", (string?)contenu)));
+
             if (secondesRestantes is int restant && restant > 0)
             {
                 declencheur += "\n\n" + PromptsPedagogiques.MarqueurTempsDuTour(
@@ -4945,7 +4951,7 @@ namespace SchoolWebApp.Api.Builders.impl
             // (chrono, dépassement) et, au tour suivant, `EstOuvert` donne au
             // professeur la consigne du contrôle jusqu'à la note.
             string? debutAjoute = null;
-            if (evaluationEngagee && bilan.Task.IsCompletedSuccessfully
+            if (evaluationEngagee && supportChoisi && bilan.Task.IsCompletedSuccessfully
                 && LecteurEvaluation.TopDepartSansBalise((await bilan.Task).TexteComplet))
             {
                 debutAjoute = "\n" + LecteurEvaluation.Debut;

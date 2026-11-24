@@ -345,6 +345,92 @@ namespace SchoolWebApp.Api.Services
         public const int ToursSansTopDepart = 4;
 
         /// <summary>
+        /// LE SUPPORT DE L'ÉVALUATION EST-IL CHOISI ? — #68 v9, décision du coordinateur (piste d'Omar,
+        /// 23/11/2026) : on arrête les listes d'exclusions de phrases. Le filet du top départ ne peut se
+        /// déclencher qu'APRÈS le choix du support ; avant, jamais, quelle que soit la phrase. Les
+        /// corrections au présent (« Je corrige la première question : il manquait l'unité. ») arrivent
+        /// avant ce moment : elles ne déclenchent plus rien, sans qu'aucune liste ait à les connaître.
+        ///
+        /// Choisi = depuis le dernier événement qui clôt (copie rendue, abandon, report, ouverture, fin de
+        /// séance, nouvelle séance — les mêmes que <see cref="EstEngagee"/>) et dans la même fenêtre de
+        /// <see cref="ToursSansTopDepart"/> réponses :
+        /// - l'élève a cliqué sur un des deux boutons (le fait joint par l'écran, « [ÉVALUATION AU CAHIER … » /
+        ///   « [ÉVALUATION À L'ORDINATEUR … ») ;
+        /// - OU le professeur a posé [SUPPORT_EVALUATION] et l'élève a répondu APRÈS par écrit ou à l'oral en
+        ///   nommant un support (« cahier », « l'ordi », « à l'oral », « par écrit »…) : un message court qui
+        ///   n'hésite pas entre deux (<see cref="SupportDit"/>, même lexique que l'écran,
+        ///   `lireReponseSupportEvaluation`, plus l'oral et l'écrit). L'écran ne joint le fait qu'au clic : la
+        ///   réponse dite reste un message d'élève.
+        ///
+        /// Un message du professeur qui repose [SUPPORT_EVALUATION] rouvre la question : ce qui a été répondu
+        /// AVANT lui ne compte plus.
+        /// </summary>
+        /// <param name="fil">Tout le fil, du plus ancien au plus récent, le message de l'élève du tour compris ;
+        /// le rôle vaut « user » pour l'élève, autre chose pour le professeur.</param>
+        public static bool SupportChoisi(IEnumerable<(string? Role, string? Contenu)> fil)
+        {
+            var distance = 0;
+            var repondu = false;
+            foreach (var (role, message) in fil.Reverse())
+            {
+                if (string.IsNullOrEmpty(message)) continue;
+
+                if (message.Contains(Abandon, StringComparison.Ordinal)) return false;
+                if (message.Contains("[/EVALUATION]", StringComparison.OrdinalIgnoreCase)) return false;
+                if (message.Contains(Debut, StringComparison.Ordinal)) return false;
+                if (message.Contains("[EVALUATION_PREVUE]", StringComparison.OrdinalIgnoreCase)) return false;
+                if (message.Contains("[FIN_SEANCE]", StringComparison.Ordinal)
+                    || message.Contains("[RAPPORT]", StringComparison.OrdinalIgnoreCase)) return false;
+
+                var eleve = role == "user";
+
+                // Le clic : le fait de l'écran.
+                if (eleve && (message.Contains("[ÉVALUATION AU CAHIER", StringComparison.Ordinal)
+                    || message.Contains("[ÉVALUATION À L’ORDINATEUR", StringComparison.Ordinal)
+                    || message.Contains("[ÉVALUATION À L'ORDINATEUR", StringComparison.Ordinal)))
+                    return distance < 2 * ToursSansTopDepart;
+
+                // La question posée : choisie seulement si l'élève a nommé un support APRÈS elle.
+                if (!eleve && message.Contains(BaliseSupport, StringComparison.OrdinalIgnoreCase))
+                    return repondu && distance < 2 * ToursSansTopDepart;
+
+                if (message.Contains("[TABLEAU_EFFACE]", StringComparison.Ordinal)) return false;
+
+                if (eleve && SupportDit(message)) repondu = true;
+
+                distance++;
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// L'élève nomme-t-il un support dans ce message (#68 v9) ? Mêmes règles que l'écran
+        /// (`lireReponseSupportEvaluation`) : un message court (120 caractères au plus) qui nomme un support
+        /// sans en opposer deux (« cahier ou ordi ? » ne choisit rien).
+        /// </summary>
+        public static bool SupportDit(string? message)
+        {
+            var dit = (message ?? string.Empty).Trim();
+            if (dit.Length == 0 || dit.Length > 120) return false;
+
+            return MotDeSupport().IsMatch(dit) && !SupportsOpposes().IsMatch(dit);
+        }
+
+        /// <summary>Les mots d'un support : ceux de l'écran (cahier, papier, feuille, à la main / ordinateur, ordi,
+        /// clavier, écran, taper) et ceux d'une question « écrit ou oral ? » du professeur.</summary>
+        private const string MotsDeSupport =
+            @"cahier|cachier|papier|feuille|à\s+la\s+main|a\s+la\s+main|ordinateur|ordi|clavier|écran|ecran|taper"
+            + @"|oral|orale|à\s+voix\s+haute|au\s+micro|écrit|ecrit|écrite|par\s+écrit";
+
+        [GeneratedRegex(@"(?<!\p{L})(?:" + MotsDeSupport + @")(?!\p{L})", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+        private static partial Regex MotDeSupport();
+
+        [GeneratedRegex(@"(?<!\p{L})(?:" + MotsDeSupport + @")(?!\p{L})[^.!?\n]{0,40}(?<!\p{L})ou(?!\p{L})[^.!?\n]{0,40}(?<!\p{L})(?:" + MotsDeSupport + @")(?!\p{L})",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+        private static partial Regex SupportsOpposes();
+
+        /// <summary>
         /// La première question d'un contrôle, écrite comme telle : « Question 1 : »,
         /// « **Question 1** — », « Question 1. », « Question un. », « Question 1 sur 3 »,
         /// « Question 1 » seule sur sa ligne, « Première question. / , / : »,
@@ -388,89 +474,37 @@ namespace SchoolWebApp.Api.Services
         /// #68 v8 (Omar, régression v7 : « (la) première question : » partout se déclenchait sur
         /// les CORRECTIONS au présent — la faille existait déjà pour « Question 1 : ») :
         /// - ce qui suit les deux-points ne doit pas être un verdict ou une correction
-        ///   (<see cref="PasUnVerdict"/> : « juste », « faux », « bien vu », « parfait », « c'est
+        ///   (`PasUnVerdict`, retiré en v9 : « juste », « faux », « bien vu », « parfait », « c'est
         ///   juste », « tu avais… », « il manquait… », « elle était… ») ;
-        /// - pas après un verbe de reprise (<see cref="PasApresReprise"/> : « Je reprends / corrige /
+        /// - pas après un verbe de reprise (`PasApresReprise`, retiré en v9 : « Je reprends / corrige /
         ///   relis la », « Revenons à la », « Regardons la », « On reprend la »), ni après « à la »
         ///   en début de phrase (« À la première question : tu as… » ; « Passons à la » reste un
-        ///   départ), ni après « ta » (<see cref="PasApresPossessif"/> : « Super, ta première
+        ///   départ), ni après « ta » (`PasApresPossessif`, retiré en v9 : « Super, ta première
         ///   question : », sauf « Voici ta », « Je te pose ta ») ;
         /// - un message qui FINIT par une demande de support ou de pause n'est jamais un top
-        ///   départ (voir <see cref="TopDepartSansBalise"/>) ;
+        ///   départ (`FinitSurSupportOuPause`, retiré en v9) ;
         /// - « Ensuite, / Puis, question 1 : » suivis d'un énoncé à l'IMPÉRATIF (« calcule k. »)
-        ///   sont rattrapés (<see cref="ApresMotDeSuite"/>) : lus vrais en v6, faux en v7.
+        ///   sont rattrapés (`ApresMotDeSuite`, retiré en v9) : lus vrais en v6, faux en v7.
+        ///
+        /// #68 v9 (décision du coordinateur, piste d'Omar : « la liste noire ne pourra jamais être complète ») —
+        /// les exclusions de phrases de la v8 sont RETIRÉES (verdict après les deux-points, verbe de reprise,
+        /// « à la », « ta », fin sur une demande de support ou de pause, mot de suite + impératif) : chacune
+        /// cassait de vrais départs (« Question 1 : tu avais 12 billes… », « Super, ta première question : … »,
+        /// « Question 1 : … Tu réponds à l'écrit ou à l'oral ? »). Les corrections qu'elles écartaient arrivent
+        /// AVANT le choix du support, et le filet ne joue plus qu'APRÈS (<see cref="SupportChoisi"/>, appelé
+        /// par le builder). Restent celles de la v7 (futur, mots de discours, préposition), utiles après le
+        /// choix (« Je vais te poser la question 1 : elle portera sur k. »). « Ensuite, » et « Puis, » ne sont
+        /// plus des mots de discours : « Ensuite, question 1 : combien font 7 × 8 ? » est un départ.
         /// </summary>
-        [GeneratedRegex(PasAuFutur + PasApresMotDeDiscours + PasApresPreposition + PasApresReprise + PasApresPossessif + @"\bQuestion\s*(?:n°\s*|numéro\s*)?(?:1|un|une)\b\**[ \t]*:" + PasUnVerdict
-            + @"|" + PasAuFutur + PasApresMotDeDiscours + PasApresPreposition + PasApresReprise + PasApresPossessif + @"\bpremière\s+question\b\**[ \t]*:" + PasUnVerdict
-            + @"|" + ApresMotDeSuite + @"(?:\bQuestion\s*(?:n°\s*|numéro\s*)?(?:1|un|une)\b|\bpremière\s+question\b)\**[ \t]*:[ \t]*\**[ \t]*(?=" + Imperatif + @")"
-            + @"|" + ApresVerbeDeLancement + PasAuFutur + PasApresReprise + PasApresPossessif + @"\bQuestion\s*(?:n°\s*|numéro\s*)?(?:1|un|une)\b\**(?:\s*[.)\-–—]|\s+sur\s+(?:\d+|deux|trois|quatre|cinq)\b)" + PasUnVerdict
+        [GeneratedRegex(PasAuFutur + PasApresMotDeDiscours + PasApresPreposition + @"\bQuestion\s*(?:n°\s*|numéro\s*)?(?:1|un|une)\b\**[ \t]*:"
+            + @"|" + PasAuFutur + PasApresMotDeDiscours + PasApresPreposition + @"\bpremière\s+question\b\**[ \t]*:"
+            + @"|" + ApresVerbeDeLancement + PasAuFutur + @"\bQuestion\s*(?:n°\s*|numéro\s*)?(?:1|un|une)\b\**(?:\s*[.)\-–—]|\s+sur\s+(?:\d+|deux|trois|quatre|cinq)\b)"
             + @"|" + DebutDePhrase + @"\bQuestion\s*(?:n°\s*|numéro\s*)?(?:1|un|une)\b\**[ \t]*\**[ \t]*\r?$"
-            + @"|" + DebutDePhrase + @"\bPremière\s+question\b\**(?:\s*[:.,!\-–—]|[ \t]*\r?$)" + PasUnVerdict
-            + @"|" + PasAuFutur + PasApresReprise + PasApresPossessif + @"\bQ\s?1\s*[:.)\-–—]" + PasUnVerdict
-            + @"|^[ \t]*\**1[.)]\**[ \t]+(?=\S)" + PasUnVerdict,
+            + @"|" + DebutDePhrase + @"\bPremière\s+question\b\**(?:\s*[:.,!\-–—]|[ \t]*\r?$)"
+            + @"|" + PasAuFutur + @"\bQ\s?1\s*[:.)\-–—]"
+            + @"|^[ \t]*\**1[.)]\**[ \t]+(?=\S)",
             RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Multiline)]
         private static partial Regex PremiereQuestion();
-
-        /// <summary>
-        /// Ce qui suit « Question 1 : » n'est pas un VERDICT ni une CORRECTION (#68 v8, Omar point A.1) :
-        /// « La première question : bien vu. », « Ta première question : juste, la deuxième : à revoir. »,
-        /// « Je reprends la première question : tu avais oublié l'unité. », « … : il manquait l'unité. »,
-        /// « … : elle était fausse. », « Très bien, Lina, première question : c'est juste. ».
-        /// Volontairement étroit : « il manque un mot, lequel ? », « tu as 3 pommes… » restent des énoncés.
-        /// </summary>
-        private const string PasUnVerdict =
-            @"(?![ \t]*\**[ \t]*(?:"
-            + @"(?:juste|faux|fausse|exacte?|inexacte?|correcte?|incorrecte?|parfaite?|presque|partielle?|partiellement|incomplète?"
-            + @"|réussie?|ratée?|validée?|bravo|bonne\s+réponse|mauvaise\s+réponse|à\s+revoir|à\s+reprendre|à\s+corriger)\b"
-            + @"|bien\s+(?:vu|joué|trouvé|répondu|fait)\b"
-            + @"|c['’]est\s+(?:juste|faux|bon|bien|correct|exact|parfait|réussi|presque|ça)\b"
-            + @"|tu\s+(?:avais|étais|n['’]avais|n['’]as\s+pas|as\s+(?:bien|mal|juste|trouvé|répondu|eu|oublié|écrit|fait|donné|réussi|raté|confondu|mis|calculé|compris|su|perdu))\b"
-            + @"|il\s+(?:manquait|fallait|aurait\s+fallu|y\s+avait)\b"
-            + @"|elle\s+(?:était|a\s+été|n['’]était)\b"
-            // « elle est » seul n'est pas un verdict (« Première question, elle est déjà au tableau », bEC-8 t3, vrai départ) ;
-            // suivi d'un jugement, si (« Tu verras, la première question : elle est facile. »).
-            + @"|elle\s+(?:est|sera|n['’]est\s+pas)\s+(?:(?:très|plutôt|assez|pas|toute)\s+)?(?:juste|fausse|exacte|correcte|incorrecte|bonne|réussie|ratée"
-            + @"|facile|difficile|simple|dure|compliquée|longue|courte)\b"
-            + @"|celle-ci\b|ta\s+réponse\b|ton\s+(?:résultat|calcul)\b"
-            + @"|[✅❌✔✓✗✘]))";
-
-        /// <summary>
-        /// Pas après un verbe de REPRISE (#68 v8) : « Je reprends / Je corrige / Je relis (ta) la première
-        /// question : », « Revenons à la question 1 : », « Regardons la première question : », « On
-        /// reprend la… » parlent d'une question déjà faite.
-        /// </summary>
-        private const string PasApresReprise =
-            @"(?<!\b(?:reprends|reprend|reprenons|reprendre|corrige|corrigeons|corriger|relis|relit|relisons|relire"
-            + @"|regardons|revoyons|revoir|revenons|revenir|reviens|retournons|retourne|retourner|repassons)"
-            + @"[ \t]+(?:(?:à|sur)[ \t]+)?(?:(?:ensemble|vite|rapidement|maintenant|d['’]abord)[ \t]+)?(?:la|ta|ma|cette|une)[ \t]+)"
-            // « À la première question : tu as bien répondu. » — « à la » en début de phrase ; « Passons à la » reste un départ.
-            + @"(?<!(?:^|[.!?…:;,])[ \t]*\**[ \t]*à[ \t]+(?:la|ta)[ \t]+)";
-
-        /// <summary>
-        /// Pas après « ta » (#68 v8) : « C'est noté. Ta première question : … », « Super, ta première
-        /// question : parfait. », « Je relis ta première question : » — sauf quand « ta » suit un mot de
-        /// départ (« Voici ta », « Je te pose ta », « C'est parti pour ta », « Commençons par ta »).
-        /// </summary>
-        private const string PasApresPossessif =
-            @"(?<!(?<!\b(?:voici|voilà|pour|par|avec|pose|donne|envoie|affiche|écris|lance)[ \t]+)\bta[ \t]+)";
-
-        /// <summary>
-        /// « Ensuite, question 1 : calcule k. », « Puis, première question : calcule k. » (#68 v8, Omar
-        /// point A.2) : un mot de suite, puis un énoncé à l'impératif — c'est un départ. Sans énoncé à
-        /// l'impératif (« Ensuite, première question. », « Ensuite, question 1 : tu avais… »), non.
-        /// </summary>
-        private const string ApresMotDeSuite =
-            @"(?<=(?:^|[.!?…:;]|[\p{So}\p{Cs}])[ \t]*\**[ \t]*(?:et[ \t]+)?\b(?:ensuite|puis)[ \t]*,?[ \t]*(?:la[ \t]+)?)" + PasAuFutur;
-
-        /// <summary>Un énoncé qui commence par un verbe de consigne à l'impératif (« calcule », « donne », « écris »…).</summary>
-        private const string Imperatif =
-            @"(?:calcule|calculez|donne|donnez|écris|écrivez|trouve|trouvez|explique|expliquez|cite|citez|résous|résolvez|complète|complétez"
-            + @"|indique|indiquez|dis|dites|conjugue|conjuguez|traduis|traduisez|simplifie|simplifiez|développe|développez|factorise|factorisez"
-            + @"|détermine|déterminez|justifie|justifiez|compare|comparez|range|rangez|classe|classez|souligne|soulignez|entoure|entourez"
-            + @"|relie|reliez|lis|lisez|recopie|recopiez|propose|proposez|décris|décrivez|nomme|nommez|choisis|choisissez|montre|montrez"
-            + @"|démontre|démontrez|convertis|convertissez|place|placez|vérifie|vérifiez|réponds|répondez|exprime|exprimez|rédige|rédigez"
-            + @"|associe|associez|accorde|accordez|transforme|transformez|remplace|remplacez|réécris|réécrivez|résume|résumez|identifie"
-            + @"|identifiez|précise|précisez|repère|repérez|construis|construisez|trace|tracez|mesure|mesurez|estime|estimez|arrondis|arrondissez)\b";
 
         /// <summary>
         /// Ce qui précède un titre ou un début de phrase (#68 v5) : début de ligne,
@@ -492,10 +526,12 @@ namespace SchoolWebApp.Api.Services
         /// les mots de discours (<see cref="MotsDeDiscours"/> : « Attention, », « Rappel, »,
         /// « Consigne, », « Ensuite, »…) et de correction (« Bravo, », « Merci, », « Oui, »)
         /// sont exclus ; les prénoms composés passent (« Jean-Pierre, », « Marie-Ève, »).
+        ///
+        /// #68 v9 : « Ensuite, » et « Puis, » comptent parmi les interjections (« Ensuite, première question. »).
         /// </summary>
         private const string DebutDePhrase =
             @"(?<=(?:^|[.!?…:;]|[\p{So}\p{Cs}])[ \t]*(?:[*_#>]+[ \t]*){0,3}(?:[\p{So}\p{Cs}]+[ \t]*)?"
-            + @"(?:(?:et|allez|alors|bon|bien|donc|ok|okay|parfait|super|très\s+bien|c['’]est\s+parti|go)[ \t]*[,!]*[ \t]*){0,3}"
+            + @"(?:(?:et|allez|alors|bon|bien|donc|ok|okay|parfait|super|très\s+bien|c['’]est\s+parti|go|ensuite|puis)[ \t]*[,!]*[ \t]*){0,3}"
             + @"(?:(?-i:\p{Lu}\p{Ll}*(?:['’\-]\p{Lu}?\p{Ll}+)*)(?<!\b(?:" + MotsDeDiscours + @"|merci|oui|non|désolée?|pardon|raté|correct|incorrect|perdu))[ \t]*,[ \t]*)?"
             + @"(?:(?:voici|voilà)[ \t]+(?:la|ta|ma)[ \t]+|c['’]est[ \t]+parti[ \t]+pour[ \t]+(?:la|ta)[ \t]+"
             + @"|(?:commençons|démarrons|attaquons|on[ \t]+(?:commence|démarre|attaque))[ \t]+(?:par|avec)[ \t]+(?:la|ta)[ \t]+)?)";
@@ -504,9 +540,11 @@ namespace SchoolWebApp.Api.Services
         /// Les mots de discours qui ne sont ni un prénom ni un départ (#68 v7, Omar point 2) :
         /// « Attention, première question : … », « Rappel, … », « Consigne, … » annoncent une
         /// remarque, pas le top départ ; « Bravo, », « Juste, », « Faux, » corrigent.
+        /// #68 v9 : « Ensuite, » et « Puis, » n'en sont plus (« Ensuite, question 1 : combien font 7 × 8 ? » est un
+        /// départ) ; « Ensuite, je te poserai la question 1 : » reste écarté par le futur.
         /// </summary>
         private const string MotsDeDiscours =
-            @"attention|rappel|consigne|remarque|ensuite|puis|enfin|note|nb|important|astuce|conseil|indice|correction"
+            @"attention|rappel|consigne|remarque|enfin|note|nb|important|astuce|conseil|indice|correction"
             + @"|rectification|exemple|bravo|exact|juste|faux|presque|dommage|bref|sinon|rappelle-toi|souviens-toi";
 
         /// <summary>Pas juste après un mot de discours (« Attention, première question : »), article compris.</summary>
@@ -623,29 +661,15 @@ namespace SchoolWebApp.Api.Services
 
             // #68 v8 (Omar, état armé : « Je corrige la première question : il manquait l'unité. Tu choisis
             // l'écrit ou l'oral ? ») : le support n'est pas encore choisi — la balise ouvrirait le contrôle avant
-            // le choix et « à l'oral » serait noté comme la réponse à la question 1.
+            // le choix et « à l'oral » serait noté comme la réponse à la question 1. Gardé en v9 : c'est la même
+            // règle structurelle que `SupportChoisi` (une réponse qui repose la question du support la rouvre).
             if (reponse.Contains(BaliseSupport, StringComparison.OrdinalIgnoreCase)) return false;
 
             var texte = Bloc().Replace(reponse, string.Empty);
 
             if (AttendLePret().IsMatch(texte) && !InviteARepondre().IsMatch(texte)) return false;
-
-            if (FinitSurSupportOuPause().IsMatch(texte)) return false;
-
             return PremiereQuestion().IsMatch(texte);
         }
-
-        /// <summary>
-        /// La réponse FINIT par une demande de support ou de pause (#68 v8) : « Tu choisis l'écrit ou l'oral ? »,
-        /// « Cahier ou ordinateur ? », « On fait une petite pause ? », « Prenons une pause. ». L'élève doit
-        /// encore répondre à cela : ce n'est pas le top départ, quoi qu'il y ait plus haut.
-        /// </summary>
-        [GeneratedRegex(@"(?:\b(?:écrit|cahier|papier|oral|ordinateur|écran|clavier)\b[^.!?\n]*\bou\b[^.!?\n]*\b(?:écrit|cahier|papier|oral|ordinateur|écran|clavier)\b[^.!?\n]*\?"
-            + @"|\bpause\b[^.!?\n]*\?"
-            + @"|\b(?:on\s+fait|faisons|prenons|prends|on\s+prend)\s+une\s+(?:petite\s+)?pause\b[^.!?\n]*[.!…])"
-            + @"[\s\p{So}\p{Cs}*_»""”)]*\z",
-            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
-        private static partial Regex FinitSurSupportOuPause();
 
         /// <summary>La balise du choix du support (deux boutons à l'écran).</summary>
         public const string BaliseSupport = "[SUPPORT_EVALUATION]";
