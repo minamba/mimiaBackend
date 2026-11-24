@@ -147,6 +147,23 @@ namespace SchoolWebApp.Api.Services.Notifications
 
     public class TelegramService : ITelegramService
     {
+        /// <summary>Le client HTTP nommé des alertes (voir <see cref="AjouterClientHttp"/>).</summary>
+        public const string NomClientHttp = "Telegram";
+
+        /// <summary>
+        /// LE JETON DU BOT NE DOIT JAMAIS ARRIVER DANS LES JOURNAUX (24/11/2026).
+        ///
+        /// Telegram met le jeton DANS L'ADRESSE (…/bot&lt;jeton&gt;/sendMessage), et
+        /// la fabrique HTTP de .NET journalise l'adresse de chaque requête au
+        /// niveau Information (« Start processing HTTP request POST … »), deux
+        /// lignes par envoi : avec le client par défaut, chaque alerte écrivait
+        /// le jeton en clair dans les journaux de l'API. Ce client nommé n'a
+        /// aucun de ces journaux ; nos propres messages (refus, repli, panne)
+        /// ne citent que la réponse de Telegram et le salon, jamais le jeton.
+        /// </summary>
+        public static IHttpClientBuilder AjouterClientHttp(IServiceCollection services) =>
+            services.AddHttpClient(NomClientHttp).RemoveAllLoggers();
+
         private readonly IHttpClientFactory _fabrique;
         private readonly ILogger<TelegramService> _logger;
 
@@ -643,7 +660,7 @@ namespace SchoolWebApp.Api.Services.Notifications
 
             try
             {
-                var client = _fabrique.CreateClient();
+                var client = _fabrique.CreateClient(NomClientHttp);
 
                 // Court : une alerte en retard ne sert à rien, et une alerte
                 // qui traîne retiendrait le fil d'exécution qui l'a déclenchée.

@@ -1,6 +1,8 @@
 using System.Net;
 using System.Text;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using SchoolWebApp.Api.Services.Fournisseurs;
@@ -235,6 +237,76 @@ namespace SchoolWebApp.Tests
 
             Assert.Equal(16, n);
             Assert.True(refus.Count == 0, string.Join("\n", refus));
+        }
+
+        private sealed class JournalCapture : ILoggerProvider
+        {
+            public List<string> Lignes { get; } = [];
+
+            public ILogger CreateLogger(string categorie) => new Journal(categorie, Lignes);
+
+            public void Dispose() { }
+
+            private sealed class Journal(string categorie, List<string> lignes) : ILogger
+            {
+                public IDisposable? BeginScope<TEtat>(TEtat etat) where TEtat : notnull => null;
+
+                public bool IsEnabled(LogLevel niveau) => true;
+
+                public void Log<TEtat>(LogLevel niveau, EventId id, TEtat etat, Exception? ex, Func<TEtat, Exception?, string> f)
+                {
+                    lock (lignes) lignes.Add($"{niveau} {categorie} : {f(etat, ex)} {ex}");
+                }
+            }
+        }
+
+        /// <summary>
+        /// LE JETON N'APPARAÎT DANS AUCUN JOURNAL, REPLI COMPRIS (24/11/2026). Même câblage que Program.cs : vraie
+        /// fabrique HTTP (client par défaut + <see cref="TelegramService.AjouterClientHttp"/>), journaux capturés dès le
+        /// niveau Trace. Seul le réseau est remplacé : Telegram refuse la mise en forme puis le texte brut, puis le
+        /// réseau tombe. Avec le client par défaut, la fabrique écrivait l'adresse …/bot&lt;jeton&gt;/sendMessage deux
+        /// fois par requête, au niveau Information.
+        /// </summary>
+        [Fact]
+        public async Task Le_jeton_n_apparait_dans_aucun_journal_repli_compris()
+        {
+            const string Jeton = "123456:JETON-SECRET-DE-TEST";
+            var reseauEnPanne = false;
+            var requetes = 0;
+            var capture = new JournalCapture();
+
+            var services = new ServiceCollection();
+            services.AddLogging(b => b.AddProvider(capture).SetMinimumLevel(LogLevel.Trace));
+            services.AddHttpClient();
+            services.ConfigureHttpClientDefaults(b => b.ConfigurePrimaryHttpMessageHandler(() => new FauxTelegram(_ =>
+            {
+                requetes++;
+                if (reseauEnPanne) throw new HttpRequestException("Connexion refusée (api.telegram.org:443)");
+                return new HttpResponseMessage(HttpStatusCode.BadRequest)
+                {
+                    Content = new StringContent("{\"ok\":false,\"error_code\":400,\"description\":\"Bad Request: can't parse entities: Character '.' is reserved\"}"),
+                };
+            })));
+            TelegramService.AjouterClientHttp(services);
+            services.AddSingleton<IConfiguration>(new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["TelegramContact:BotToken"] = Jeton,
+                ["TelegramContact:ChatId"] = "salon-factice",
+            }).Build());
+            services.AddSingleton<TelegramService>();
+            using var fournisseur = services.BuildServiceProvider();
+            var service = fournisseur.GetRequiredService<TelegramService>();
+
+            await service.NotifierVeilleTarifsAsync("Anthropic", "page illisible");   // refus, repli, refus
+            reseauEnPanne = true;
+            await service.NotifierVeilleTarifsAsync("Anthropic", "page illisible");   // panne réseau
+
+            Assert.Equal(3, requetes);
+            Assert.Contains(capture.Lignes, l => l.Contains("renvoi en texte brut"));
+            Assert.Contains(capture.Lignes, l => l.Contains("envoi refuse (400)"));
+            Assert.Contains(capture.Lignes, l => l.Contains("envoi impossible vers le salon"));
+            var fuites = capture.Lignes.Where(l => l.Contains("JETON-SECRET") || l.Contains("/bot")).ToList();
+            Assert.True(fuites.Count == 0, string.Join("\n", fuites.Select(l => l.Replace(Jeton, "<jeton>"))));
         }
 
         [Fact]

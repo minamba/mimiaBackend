@@ -59,6 +59,8 @@ builder.Services.AddHttpClient();
 // emprunte ses connexions à la fabrique.
 builder.Services.AddSingleton<SchoolWebApp.Api.Services.Notifications.ITelegramService,
                               SchoolWebApp.Api.Services.Notifications.TelegramService>();
+// Son client HTTP ne journalise pas les adresses : le jeton du bot y figure.
+SchoolWebApp.Api.Services.Notifications.TelegramService.AjouterClientHttp(builder.Services);
 
 // La diffusion d un message a tous les parents. Singleton : c est lui qui
 // porte le verrou « une seule diffusion a la fois », et deux instances ne se
