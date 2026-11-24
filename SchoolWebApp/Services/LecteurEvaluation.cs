@@ -408,20 +408,93 @@ namespace SchoolWebApp.Api.Services
         /// L'élève nomme-t-il un support dans ce message (#68 v9) ? Mêmes règles que l'écran
         /// (`lireReponseSupportEvaluation`) : un message court (120 caractères au plus) qui nomme un support
         /// sans en opposer deux (« cahier ou ordi ? » ne choisit rien).
+        ///
+        /// #68 v10 (Omar, verdict sur 4b8198c) — un mot du lexique ne suffit plus :
+        /// - le message ne POSE PAS DE QUESTION (point d'interrogation ou mot interrogatif) : « j'ai écrit 0,07 à
+        ///   la 1, c'est juste ? », « c'est quoi l'oral déjà ? » ne choisissent rien ;
+        /// - il ne contient ni NÉGATION ni ABSENCE (« pas », « n' », « jamais », « sans », « oublié », « perdu »,
+        ///   « en panne », « à l'école »…) : « mon cahier est à l'école » ne choisit pas le cahier ;
+        /// - il ne contient pas de CHIFFRE (une réponse à une question, pas un support) ;
+        /// - lexique élargi (rappel perdu de la v8) : écrire / écris, taper / en tapant, oralement, parler,
+        ///   « ici », ordis.
+        /// Les réponses qui ne nomment rien (« comme tu veux », « peu importe ») sont couvertes par le
+        /// professeur qui nomme le support avant le départ (<see cref="SupportNommeAvantDepart"/>).
         /// </summary>
         public static bool SupportDit(string? message)
         {
             var dit = (message ?? string.Empty).Trim();
             if (dit.Length == 0 || dit.Length > 120) return false;
+            if (dit.Contains('?') || MotInterrogatif().IsMatch(dit)) return false;
+            if (NegationOuAbsence().IsMatch(dit) || dit.Any(char.IsDigit)) return false;
 
             return MotDeSupport().IsMatch(dit) && !SupportsOpposes().IsMatch(dit);
         }
 
         /// <summary>Les mots d'un support : ceux de l'écran (cahier, papier, feuille, à la main / ordinateur, ordi,
-        /// clavier, écran, taper) et ceux d'une question « écrit ou oral ? » du professeur.</summary>
+        /// clavier, écran, taper) et ceux d'une question « écrit ou oral ? » du professeur. #68 v10 : écrire,
+        /// écris, tape / en tapant, oralement, parler, ici, ordis.</summary>
         private const string MotsDeSupport =
-            @"cahier|cachier|papier|feuille|à\s+la\s+main|a\s+la\s+main|ordinateur|ordi|clavier|écran|ecran|taper"
-            + @"|oral|orale|à\s+voix\s+haute|au\s+micro|écrit|ecrit|écrite|par\s+écrit";
+            @"cahier|cachier|papier|feuille|à\s+la\s+main|a\s+la\s+main|ordinateurs?|ordis?|clavier|écran|ecran"
+            + @"|tap(?:er|e|es|ant|é|ée)|oral|orale|oralement|à\s+voix\s+haute|au\s+micro|micro"
+            + @"|écrit|ecrit|écrite|ecrite|par\s+écrit|écrire|ecrire|écris|ecris|en\s+écrivant|parl(?:er|e|ant)|ici";
+
+        /// <summary>Un mot interrogatif (#68 v10) : l'élève pose une question, même sans « ? ».</summary>
+        [GeneratedRegex(@"(?<!\p{L})(?:quoi|comment|pourquoi|combien|quel|quelle|quels|quelles|qui|où|est-ce|c['’]est\s+juste)(?!\p{L})",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+        private static partial Regex MotInterrogatif();
+
+        /// <summary>Une négation ou une absence (#68 v10) : « je n'ai pas de cahier », « j'ai oublié mon cahier »,
+        /// « mon cahier est à l'école », « l'ordi est en panne », « sans le cahier ».</summary>
+        [GeneratedRegex(@"(?<!\p{L})(?:pas|jamais|aucun|aucune|sans|ni|ne|n['’]|oublié|oubliée|oublie|perdu|perdue|cassé|cassée|panne"
+            + @"|à\s+l['’]école|a\s+l['’]ecole|au\s+collège|au\s+lycée|en\s+classe|dans\s+(?:mon|ma|le|la)\s+(?:sac|casier|cartable)"
+            + @"|chez\s+(?:moi|mon|ma|mes|mamie|papi|papa|maman))(?!\p{L})",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+        private static partial Regex NegationOuAbsence();
+
+        /// <summary>
+        /// LE PROFESSEUR NOMME LE SUPPORT AVANT LE DÉPART (#68 v10, Omar point 2) : « Très bien, au cahier !
+        /// Question 1 : … », « D'accord, tu composes ici à l'écran. Question 1 : … ». Couvre les élèves qui
+        /// choisissent sans nommer (« comme tu veux », « peu importe ») ou avec des mots hors lexique. Le support doit
+        /// être nommé AVANT la première question, dans une phrase qui n'est pas une question et qui n'en oppose
+        /// pas deux (« Tu préfères le cahier ou l'ordi ? Bon, question 1 : » ne choisit rien).
+        /// </summary>
+        public static bool SupportNommeAvantDepart(string? reponse)
+        {
+            if (string.IsNullOrEmpty(reponse)) return false;
+            var texte = Bloc().Replace(reponse, string.Empty);
+            var depart = PremiereQuestion().Match(texte);
+            if (!depart.Success || depart.Index == 0) return false;
+
+            foreach (Match phrase in PhraseAvecFin().Matches(texte[..depart.Index]))
+            {
+                var p = phrase.Value;
+                if (p.TrimEnd().EndsWith('?')) continue;
+                if (SupportNommeParLeProf().IsMatch(p) && !SupportsOpposes().IsMatch(p)) return true;
+            }
+            return false;
+        }
+
+        /// <summary>Une phrase et sa ponctuation finale (le reste sans ponctuation compte aussi).</summary>
+        [GeneratedRegex(@"[^.!?…\n]+[.!?…]*", RegexOptions.CultureInvariant)]
+        private static partial Regex PhraseAvecFin();
+
+        /// <summary>Le support dit par le PROFESSEUR (#68 v10) : formes avec article ou préposition seulement
+        /// (« au cahier », « à l'écran », « l'oral », « à l'écrit ») — pas « oral » ou « écrit » nus (« l'épreuve
+        /// écrite du brevet »).</summary>
+        [GeneratedRegex(@"(?<!\p{L})(?:(?:au|ton|le|sur\s+(?:ton|le))\s+cahier|(?:sur\s+)?(?:papier|feuille)|à\s+la\s+main"
+            + @"|(?:à|sur|de)\s+l['’](?:ordinateur|ordi|écran)|(?:l['’]|à\s+l['’]|sur\s+l['’])(?:ordinateur|ordi)|(?:au|le)\s+clavier|à\s+l['’]écran"
+            + @"|l['’]oral|à\s+l['’]oral|oralement|à\s+voix\s+haute|au\s+micro|l['’]écrit|à\s+l['’]écrit|par\s+écrit)(?!\p{L})",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+        private static partial Regex SupportNommeParLeProf();
+
+        /// <summary>
+        /// LE FILET COMPLET DU TOP DÉPART (#68 v10), tel que le builder l'appelle quand l'évaluation est engagée :
+        /// le support est choisi (<see cref="SupportChoisi"/> : clic, ou support dit par l'élève) OU le professeur le
+        /// nomme avant la première question (<see cref="SupportNommeAvantDepart"/>), ET la réponse pose la première
+        /// question sans balise (<see cref="TopDepartSansBalise"/>).
+        /// </summary>
+        public static bool TopDepartApresSupport(bool supportChoisi, string? reponse) =>
+            (supportChoisi || SupportNommeAvantDepart(reponse)) && TopDepartSansBalise(reponse);
 
         [GeneratedRegex(@"(?<!\p{L})(?:" + MotsDeSupport + @")(?!\p{L})", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
         private static partial Regex MotDeSupport();
@@ -496,8 +569,8 @@ namespace SchoolWebApp.Api.Services
         /// choix (« Je vais te poser la question 1 : elle portera sur k. »). « Ensuite, » et « Puis, » ne sont
         /// plus des mots de discours : « Ensuite, question 1 : combien font 7 × 8 ? » est un départ.
         /// </summary>
-        [GeneratedRegex(PasAuFutur + PasApresMotDeDiscours + PasApresPreposition + @"\bQuestion\s*(?:n°\s*|numéro\s*)?(?:1|un|une)\b\**[ \t]*:"
-            + @"|" + PasAuFutur + PasApresMotDeDiscours + PasApresPreposition + @"\bpremière\s+question\b\**[ \t]*:"
+        [GeneratedRegex(PasAuFutur + PasApresMotDeDiscours + PasApresPreposition + @"\bQuestion\s*(?:n°\s*|numéro\s*)?(?:1|un|une)\b" + AvantLesDeuxPoints
+            + @"|" + PasAuFutur + PasApresMotDeDiscours + PasApresPreposition + @"\bpremière\s+question\b" + AvantLesDeuxPoints
             + @"|" + ApresVerbeDeLancement + PasAuFutur + @"\bQuestion\s*(?:n°\s*|numéro\s*)?(?:1|un|une)\b\**(?:\s*[.)\-–—]|\s+sur\s+(?:\d+|deux|trois|quatre|cinq)\b)"
             + @"|" + DebutDePhrase + @"\bQuestion\s*(?:n°\s*|numéro\s*)?(?:1|un|une)\b\**[ \t]*\**[ \t]*\r?$"
             + @"|" + DebutDePhrase + @"\bPremière\s+question\b\**(?:\s*[:.,!\-–—]|[ \t]*\r?$)"
@@ -505,6 +578,15 @@ namespace SchoolWebApp.Api.Services
             + @"|^[ \t]*\**1[.)]\**[ \t]+(?=\S)",
             RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Multiline)]
         private static partial Regex PremiereQuestion();
+
+        /// <summary>
+        /// Entre « Question 1 » / « première question » et les deux-points (#68 v10, les deux trous signalés par Omar) :
+        /// le gras, le nombre de questions entre parenthèses (« Première question (sur 3) : ») et un adverbe de moment
+        /// (« je pose la question 1 tout de suite : »). Pas une parenthèse quelconque : « Question 1 (à revoir) : »
+        /// est une correction (corpus wEO3-5 t5).
+        /// </summary>
+        private const string AvantLesDeuxPoints =
+            @"\**(?:[ \t]*\([ \t]*sur[ \t]+(?:\d+|deux|trois|quatre|cinq)[ \t]*\))?(?:[ \t]+(?:tout[ \t]+de[ \t]+suite|maintenant|directement|alors|donc))?\**[ \t]*:";
 
         /// <summary>
         /// Ce qui précède un titre ou un début de phrase (#68 v5) : début de ligne,
@@ -668,8 +750,25 @@ namespace SchoolWebApp.Api.Services
             var texte = Bloc().Replace(reponse, string.Empty);
 
             if (AttendLePret().IsMatch(texte) && !InviteARepondre().IsMatch(texte)) return false;
+
+            // #68 v10 (Omar point 1) : la règle STRUCTURELLE de la v8 revient, partie SUPPORT seulement — une réponse
+            // qui FINIT en redemandant le support (« Alors, cahier ou ordinateur ? », « Tu choisis lequel ? ») n'est
+            // pas un départ : l'élève doit encore choisir.
+            if (FinitSurSupport().IsMatch(texte)) return false;
+
             return PremiereQuestion().IsMatch(texte);
         }
+
+        /// <summary>
+        /// La réponse FINIT par une demande de support (#68 v8, partie support remise en v10) : « Tu choisis l'écrit ou
+        /// l'oral ? », « Cahier ou ordinateur ? », « Tu choisis lequel ? », « Lequel tu préfères ? ». La partie
+        /// « pause » de la v8 n'est pas remise.
+        /// </summary>
+        [GeneratedRegex(@"(?:\b(?:écrit|cahier|papier|oral|ordinateur|ordi|écran|clavier)\b[^.!?\n]*\bou\b[^.!?\n]*\b(?:écrit|cahier|papier|oral|ordinateur|ordi|écran|clavier)\b[^.!?\n]*\?"
+            + @"|\b(?:tu\s+(?:choisis|prends|préfères)\s+(?:lequel|laquelle)|(?:lequel|laquelle)\s+(?:tu\s+)?(?:choisis|prends|préfères))\b[^.!?\n]*\?)"
+            + @"[\s\p{So}\p{Cs}*_»""”)]*\z",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+        private static partial Regex FinitSurSupport();
 
         /// <summary>La balise du choix du support (deux boutons à l'écran).</summary>
         public const string BaliseSupport = "[SUPPORT_EVALUATION]";

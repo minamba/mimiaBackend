@@ -4951,8 +4951,10 @@ namespace SchoolWebApp.Api.Builders.impl
             // (chrono, dépassement) et, au tour suivant, `EstOuvert` donne au
             // professeur la consigne du contrôle jusqu'à la note.
             string? debutAjoute = null;
-            if (evaluationEngagee && supportChoisi && bilan.Task.IsCompletedSuccessfully
-                && LecteurEvaluation.TopDepartSansBalise((await bilan.Task).TexteComplet))
+            // #68 v10 : le support compte aussi pour choisi quand le professeur le nomme lui-même avant la première
+            // question (« Très bien, au cahier ! Question 1 : … » après « comme tu veux »).
+            if (evaluationEngagee && bilan.Task.IsCompletedSuccessfully
+                && LecteurEvaluation.TopDepartApresSupport(supportChoisi, (await bilan.Task).TexteComplet))
             {
                 debutAjoute = "\n" + LecteurEvaluation.Debut;
 
