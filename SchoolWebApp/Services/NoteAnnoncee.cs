@@ -63,8 +63,11 @@ namespace SchoolWebApp.Api.Services
         // chose que la note de cette copie — une note PASSÉE (« La dernière fois tu avais 9 sur 20 », « 17,5/20 au contrôle
         // d'avant »), une note de CLASSE (« ton contrôle de classe : 8 sur 20 »), une fraction, une probabilité, une
         // moyenne. Elle n'est ni « la note dite » ni une note à comparer.
-        [GeneratedRegex(@"\b(?:avais|aviez|dernière\s+fois|fois\s+d['’]avant|précédente?|d['’]avant|dernier\s+contrôle|classe|hier"
-            + @"|semaine\s+dernière|fraction|probabilité|chances?|proportion|moyenne|pourcentage)\b",
+        // #75 v3 (Omar point 1) : + les SEUILS (« tu dépasses largement les 10 sur 20 », « au-dessus de », « la barre des »,
+        // « plus de », « au moins »…), et « dernier(s) / précédent(s) » sous toutes leurs formes (« au dernier contrôle »).
+        [GeneratedRegex(@"\b(?:avais|aviez|dernière\s+fois|fois\s+d['’]avant|précédente?s?|d['’]avant|derni(?:er|ère)s?\s+(?:contrôle|évaluation|devoir|interro\w*|test|cours|séance)|classe|hier"
+            + @"|semaine\s+dernière|mois\s+dernier|fraction|probabilité|chances?|proportion|moyenne|pourcentage"
+            + @"|dépass\w*|au[- ]dessus|au[- ]dessous|en\s+dessous|au[- ]delà|barre|seuil|objectif|plus\s+de|moins\s+de|au\s+moins|vises?|visais)\b",
             RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
         private static partial Regex AutreNote();
 
@@ -137,6 +140,11 @@ namespace SchoolWebApp.Api.Services
                 if (MotOperateurAvant().IsMatch(avant) || MotOperateurApres().IsMatch(apres)) continue;
                 if (AutreNote().IsMatch(proposition)) continue;
 
+                // #75 v3 (Omar point 1) : le repère peut suivre le nombre (« Tu as eu 12 sur 20 la semaine dernière, et
+                // aujourd'hui… », « 12 sur 20 au dernier contrôle, là c'est 15 ») : la fin de SA proposition compte aussi.
+                var finProposition = apres.IndexOfAny(['.', '!', '?', ';', ',', ':', '\n']);
+                if (AutreNote().IsMatch(finProposition < 0 ? apres : apres[..finProposition])) continue;
+
                 // Toute la phrase compte pour une mention qui n'est pas introduite (« Au contrôle de classe, 8 sur 20. »,
                 // « Avec 12 et 14 sur 20, ta moyenne est de 13 ») ; seule sa proposition pour « … tu avais 9 sur 20,
                 // aujourd'hui tu as 15 sur 20 » ou « tu as 15 sur 20, ta moyenne monte à 14 ».
@@ -194,13 +202,24 @@ namespace SchoolWebApp.Api.Services
             if (declaree is null || declaree.Questions.Count == 0) return null;
 
             copie = declaree.Note;
-            dite = Lire(message);
-            if (dite is null) return null;
+            var noteCopie = copie.Value;
+
+            // #75 v3 (piste du coordinateur, mesurée sur les 205 copies du corpus : 39 rectifications v2 sur 39 couvertes,
+            // aucune rectification v2 sans écart du champ) — LE CHAMP DÉCIDE. Le professeur écrit sa note dans `note:` en même
+            // temps qu'il la dit ; si ce champ vaut la note recalculée (à moins d'un demi-point), il n'a pas annoncé de note
+            // fausse, quoi qu'on croie lire dans son texte (notes passées, seuils, fractions) : pas de rectification.
+            if (NoteDuBloc(message) is not double champ || Math.Abs(champ - noteCopie) < Ecart - 1e-9) return null;
 
             // #75 v2 (Omar point B.3) : aucune rectification si UNE des notes lues vaut celle de la copie (« La dernière
             // fois 9 sur 20, aujourd'hui 15 sur 20 » pour une copie à 15) — on ne corrige que ce qui est sûrement faux.
-            var noteCopie = copie.Value;
-            if (Lectures(message).Any(l => Math.Abs(l.Valeur - noteCopie) < Ecart - 1e-9)) return null;
+            var lues = Lectures(message);
+            if (lues.Any(l => Math.Abs(l.Valeur - noteCopie) < Ecart - 1e-9)) return null;
+
+            // La note citée dans « et pas … » : celle du champ si elle est prononcée telle quelle (le cas du #75 : `note: 11`,
+            // « 11 sur 20 ») ; sinon celle que le texte dit (« Tu as 2,3 sur 20 » pour `note: 2`, eEO3e-3 t6) ; une note
+            // jamais dite (« 25 % ») ne se rectifie pas : l'élève n'a pas entendu de « sur 20 » à corriger.
+            dite = lues.Any(l => Math.Abs(l.Valeur - champ) < 1e-9) || Prononcee(message, champ) ? champ : Lire(message);
+            if (dite is null) return null;
 
             // LA QUESTION RESTE LA DERNIÈRE CHOSE DITE. Relevé dans le message réel du #75 : le professeur rend la note,
             // commence la correction et finit sur une question (« … et l'autre, à ton avis, placée où ? »). La phrase
@@ -212,6 +231,34 @@ namespace SchoolWebApp.Api.Services
                 + (question is null ? string.Empty : " Je te repose ma question. " + question);
         }
 
+        [GeneratedRegex(@"\[EVALUATION\](?<corps>.*?)\[/EVALUATION\]", RegexOptions.Singleline | RegexOptions.IgnoreCase)]
+        private static partial Regex BlocEvaluation();
+
+        /// <summary>
+        /// Le champ STRUCTURÉ `note:` du bloc [EVALUATION], tel que le professeur l'a écrit (avant le recalcul par les
+        /// verdicts) — #75 v3. Null sans bloc ou sans note lisible.
+        /// </summary>
+        public static double? NoteDuBloc(string? message)
+        {
+            if (string.IsNullOrEmpty(message)) return null;
+            var bloc = BlocEvaluation().Match(message);
+            return bloc.Success ? LecteurBloc.Note(LecteurBloc.Champs(bloc.Groups["corps"].Value), "note") : null;
+        }
+
+        /// <summary>Le nombre <paramref name="note"/> est-il dit « sur 20 » quelque part dans le texte (sans aucun filtre) ?</summary>
+        private static bool Prononcee(string? message, double note)
+        {
+            foreach (Match m in Mention().Matches(Parle(message)))
+            {
+                if (Valeur(m.Groups["nombre"].Value) is not double v) continue;
+                if (m.Groups["decimale"].Success) v += Decimale(m.Groups["decimale"].Value);
+                if (m.Groups["demi"].Success) v += 0.5;
+                if (Math.Abs(v - note) < 1e-9) return true;
+            }
+
+            return false;
+        }
+
         /// <summary>
         /// La question sur laquelle finit ce que le professeur DIT (avant le bloc, tableau et balises écartés) ; null si
         /// son texte ne finit pas sur une question. Une question courte (« Et l'autre, placée où ? ») reprend la phrase
@@ -219,12 +266,23 @@ namespace SchoolWebApp.Api.Services
         /// </summary>
         public static string? QuestionEnSuspens(string? message)
         {
-            var parle = Balise().Replace(Parle(message), " ").TrimEnd();
-            if (!parle.EndsWith('?')) return null;
+            var parle = Balise().Replace(BlocTechnique().Replace(Parle(message), " "), " ").TrimEnd();
 
+            // #75 v3 (Omar points 2 et 3) : les balises de LANGUE ([EN], [ES], [DE], [IT], [AR], [ZH], [FR]) et de VITESSE
+            // ([VITESSE:lent]) restent dans la question reposée — c'est elles qui la font lire avec la bonne voix
+            // (VoixEnClair) — mais elles ne cachent plus la fin de la question : « … ? [/ES] » finit bien sur une question.
             var fin = parle.Length;
+            while (true)
+            {
+                var sansEspace = parle[..fin].TrimEnd().Length;
+                var queue = LangueOuVitesseEnFin().Match(parle[..sansEspace]);
+                if (!queue.Success) { fin = sansEspace; break; }
+                fin = queue.Index;
+            }
+            if (fin == 0 || parle[fin - 1] != '?') return null;
+
             var debut = DebutDePhrase(parle, fin - 1);
-            var question = parle[debut..fin].Trim();
+            var question = parle[debut..].Trim();
             if (question.Length == 0) return null;
 
             // #75 v2 (Omar point B.5) : une question qui contient elle-même une note (« Tu as 11 sur 20, tu veux qu'on
@@ -238,8 +296,36 @@ namespace SchoolWebApp.Api.Services
                 if (phrase.Length > 0 && !Mention().IsMatch(phrase)) question = phrase + " " + question;
             }
 
+            return Equilibrer(question);
+        }
+
+        /// <summary>
+        /// Une question coupée au milieu d'un passage en langue (« [EN]Hello. How are you?[/EN] » → « How are you?[/EN] »)
+        /// retrouve sa balise ouvrante, et une balise ouverte sans fermeture est refermée : la voix ne change jamais
+        /// de langue au mauvais endroit (#75 v3, Omar point 3).
+        /// </summary>
+        private static string Equilibrer(string question)
+        {
+            foreach (var langue in new[] { "FR", "EN", "ES", "DE", "IT", "AR", "ZH" })
+            {
+                var ouvre = $"[{langue}]"; var ferme = $"[/{langue}]";
+                var iFerme = question.IndexOf(ferme, StringComparison.Ordinal);
+                var iOuvre = question.IndexOf(ouvre, StringComparison.Ordinal);
+                if (iFerme >= 0 && (iOuvre < 0 || iFerme < iOuvre)) question = ouvre + question;
+                if (question.LastIndexOf(ouvre, StringComparison.Ordinal) > question.LastIndexOf(ferme, StringComparison.Ordinal))
+                    question += ferme;
+            }
+
             return question;
         }
+
+        /// <summary>Une balise de langue ou de vitesse en fin de texte (après la question).</summary>
+        [GeneratedRegex(@"\[/?(?:FR|EN|ES|DE|IT|AR|ZH)\]$|\[VITESSE(?::[^\]]*)?\]$")]
+        private static partial Regex LangueOuVitesseEnFin();
+
+        /// <summary>Les blocs techniques à contenu ([JEU]CE1/course-des-tables[/JEU], [PROJET]…[/PROJET]) : retirés entiers.</summary>
+        [GeneratedRegex(@"\[(JEU|PROJET)\].*?(?:\[/\1\]|$)", RegexOptions.Singleline)]
+        private static partial Regex BlocTechnique();
 
         /// <summary>Juste après la fin de la phrase précédente (. ! ? … ou saut de ligne), en remontant depuis <paramref name="avant"/> exclu.</summary>
         private static int DebutDePhrase(string texte, int avant)
@@ -269,8 +355,12 @@ namespace SchoolWebApp.Api.Services
         /// « [MAJUSCULES] », dont la concentration « [A] » de la question reposée (« calcule [A] à t = 20 s ? » devenait
         /// « calcule à t = 20 s ? », 3 fois sur 10 au corpus). Une balise de l'application a un nom à tiret bas
         /// (SUPPORT_EVALUATION, TABLEAU_EFFACE, FIN_SEANCE, LECTURE_IMAGE:…) ou est l'une des balises d'un mot ci-dessous.
+        ///
+        /// #75 v3 (Omar points 2 et 3) : TECHNIQUES seulement. [FR] et [EN] n'en font plus partie (la question reposée
+        /// était lue avec la mauvaise voix) ; [JEU], [PROJET], [CONVERSATION] s'y ajoutent. Les balises de langue et de
+        /// vitesse restent intactes (voir <see cref="QuestionEnSuspens"/>).
         /// </summary>
-        [GeneratedRegex(@"\[/?(?:[A-Z]+(?:_[A-Z]+)+|EVALUATION|RAPPORT|FICHE|ARDOISE|DICTEE|FIGURE|FR|EN)(?::[^\]]*)?\]")]
+        [GeneratedRegex(@"\[/?(?:[A-Z]+(?:_[A-Z]+)+|EVALUATION|RAPPORT|FICHE|ARDOISE|DICTEE|FIGURE|JEU|PROJET|CONVERSATION)(?::[^\]]*)?\]")]
         private static partial Regex Balise();
 
         /// <summary>
@@ -279,10 +369,13 @@ namespace SchoolWebApp.Api.Services
         /// </summary>
         public static string Phrase(double copie, double dite) =>
             $"\n\nPetite rectification : en recomptant tes réponses une par une, ta note est de {Format(copie)} sur 20, "
-            + $"et pas {Format(dite)}. C'est cette note-là qui est sur ta copie.";
+            + $"et pas {FormatDite(dite)}. C'est cette note-là qui est sur ta copie.";
 
         /// <summary>Comme sur la copie (« 0.# ») : 15, 13,3, 12,5.</summary>
         public static string Format(double note) => note.ToString("0.#", Fr);
+
+        /// <summary>La note dite, telle qu'elle a été dite (« 0.## », #75 v3, Omar point 4) : 18,75 et non 18,8.</summary>
+        public static string FormatDite(double note) => note.ToString("0.##", Fr);
 
         private static double? Valeur(string brut)
         {
