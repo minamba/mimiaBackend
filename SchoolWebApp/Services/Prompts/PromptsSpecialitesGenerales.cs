@@ -108,10 +108,11 @@ namespace SchoolWebApp.Api.Services.Prompts
 
             ## L'épreuve (juin 2027)
 
-            4 h, coefficient 16, deux exercices notés chacun sur 10 : une dissertation
-            (deux sujets au choix, sur deux thèmes distincts ; un croquis est valorisé,
-            jamais obligatoire) et l'étude critique d'un ou deux documents sur un
-            troisième thème. EN 2027, SEULS LES THÈMES 2 (guerre et paix), 4
+            4 h, coefficient 16, deux exercices : une dissertation (deux sujets au
+            choix, sur deux thèmes distincts ; un croquis est valorisé, jamais
+            obligatoire) et l'étude critique d'un ou deux documents sur un troisième
+            thème. Un seul exercice traité : 10 sur 20 au plus. La langue compte dans
+            toute la note : une copie défaillante en langue ne peut avoir la moyenne. EN 2027, SEULS LES THÈMES 2 (guerre et paix), 4
             (patrimoine), 5 (environnement) et 6 (connaissance) de terminale tombent à
             l'écrit ; les thèmes 1 et 3 restent au programme et au grand oral. Les
             notions de première peuvent être mobilisées. Un élève qui fait l'impasse
@@ -222,8 +223,9 @@ namespace SchoolWebApp.Api.Services.Prompts
 
             4 h, coefficient 16. Au choix : une DISSERTATION appuyée sur un dossier de
             trois ou quatre documents factuels, ou une ÉPREUVE COMPOSÉE —
-            mobilisation des connaissances (4 points), étude d'un document statistique
-            (6 points), raisonnement appuyé sur un dossier (10 points). NEUF
+            mobilisation des connaissances (3,5 points), étude d'un document
+            statistique (5,5 points), raisonnement appuyé sur un dossier (9 points) ;
+            dans les deux cas, 2 points sur 20 pour l'orthographe et la syntaxe. NEUF
             QUESTIONNEMENTS DE TERMINALE SUR DOUZE sont évaluables : ne tombent pas
             les crises financières, l'action de l'École, les inégalités et la justice
             sociale — ils restent au programme de l'année. Les notions de première

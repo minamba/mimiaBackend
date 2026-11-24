@@ -129,6 +129,11 @@ namespace SchoolWebApp.Api.Services.Voix
             // Gemini parle d'abord. Les treize timbres pris, il double Théo
             // (EPPCS, la matière la moins entendue), même genre. Non mesuré.
             ["hugo"] = "alloy",
+
+            // Le professeur d'ingénierie de STI2D (23/11/2026) : OpenAI n'est que
+            // son secours. Il double Karim (STMG), qu'un élève de STI2D n'entend
+            // jamais. Non mesuré.
+            ["lucas"] = "verse",
         };
 
         // IL MANQUE UNE VOIX DE FEMME, ET C'EST ARITHMÉTIQUE. Sept professeures
@@ -186,6 +191,7 @@ namespace SchoolWebApp.Api.Services.Voix
             ["youssef"] = "onyx",
             ["maelle"] = "coral",
             ["hugo"] = "ash",       // double le secours de Minamba ; non mesuré
+            ["lucas"] = "fable",    // double le secours de Karim (STMG) ; non mesuré
         };
 
         private const string VoixParDefaut = "coral";

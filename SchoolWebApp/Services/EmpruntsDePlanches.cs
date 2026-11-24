@@ -65,6 +65,16 @@ namespace SchoolWebApp.Api.Services
                     "pc-capteur", "pc-pression-fluide",
                 ],
 
+                // STI2D — ingénierie (23/11/2026) : la chaîne d'énergie, les
+                // circuits, le magnétisme, le mouvement et les ondes. Aucune
+                // planche propre à l'ingénierie n'est encore importée.
+                ["INGENIERIE"] =
+                [
+                    "pc-chaine-energetique", "pc-circuit-serie", "pc-circuit-derivation",
+                    "pc-circuit-rc", "pc-aimant-champ", "pc-mouvement-vecteurs",
+                    "pc-spectre-electromagnetique", "pc-capteur",
+                ],
+
             };
 
         /// <summary>Cette planche est-elle servie au professeur de cette matière ?</summary>

@@ -326,6 +326,32 @@ namespace SchoolWebApp.Dal.Seed
     ///
     /// L'économie a UN programme pour trois ans, sans découpage par classe :
     /// la répartition par classe est la nôtre, et le dit.
+    ///
+    /// SEPTIÈME PASSE, LE 23 NOVEMBRE 2026 : LA STI2D. Camara : « une nouvelle
+    /// filière à intégrer, exactement comme pour les autres ». Retirée le
+    /// 14/09/2026 faute de référentiel, la série revient avec le sien ; sources
+    /// dans `ReferentielSti2d` et `ReferentielSti2dPcm` :
+    ///
+    ///   IT, I2D (1re), 2I2D + AC, EE, ITEC, SIN (Tle)
+    ///                             arrêté du 17/01/2019, MENE1901591A, annexe 1
+    ///   Physique-chimie et maths (1re)
+    ///                             même arrêté, annexe 2
+    ///   Physique-chimie et maths (Tle)
+    ///                             arrêté du 19/07/2019, MENE1921261A, annexe 3
+    ///
+    /// L'ingénierie a son professeur, Lucas (matière INGENIERIE, rétablie).
+    /// « Physique-chimie et mathématiques » n'est PAS une matière : sa
+    /// physique-chimie rejoint Yann (PHYSIQUE_CHIMIE), ses maths Nora (MATHS),
+    /// dans le même appel que leurs lignes existantes. +264 compétences
+    /// d'ingénierie, +127 de physique-chimie, +47 de maths.
+    ///
+    /// LE MÊME JOUR, LA « PHYSIQUE-CHIMIE ET MATHÉMATIQUES » DE STL — un autre
+    /// texte que celui de STI2D, partagé de la même façon (`ReferentielStlPcm`) :
+    ///
+    ///   PCM de STL (1re)          arrêté du 17/01/2019, MENE1901645A, annexe 3
+    ///   PCM de STL (Tle)          arrêté du 19/07/2019, MENE1921260A, annexe 1
+    ///
+    /// +149 compétences de physique-chimie, +39 de maths.
     /// </summary>
     public static class ReferentielSeeder
     {
@@ -336,7 +362,12 @@ namespace SchoolWebApp.Dal.Seed
             await SeedAcademiesAsync(context, ct);
             await SeedPeriodesVacancesAsync(context, ct);
 
-            await SeedCompetencesAsync(context, "MATHS", ReferentielMaths.Competences, ct);
+            // Les maths de la « physique-chimie et mathématiques » de STI2D
+            // rejoignent celles de Nora dans le même appel (septième passe).
+            await SeedCompetencesAsync(context, "MATHS",
+                ReferentielMaths.Competences
+                    .Concat(ReferentielsSeriesTechnologiques.Maths)
+                    .ToArray(), ct);
 
             // Le tronc commun de la voie technologique rejoint le fichier de sa
             await SeedCompetencesAsync(context, "FRANCAIS",
@@ -377,6 +408,7 @@ namespace SchoolWebApp.Dal.Seed
             await SeedCompetencesAsync(context, "BIOLOGIE_HUMAINE", ReferentielsSeriesTechnologiques.BiologieHumaine, ct);
             await SeedCompetencesAsync(context, "BIOTECHNOLOGIES", ReferentielsSeriesTechnologiques.Biotechnologies, ct);
             await SeedCompetencesAsync(context, "SPCL", ReferentielsSeriesTechnologiques.Spcl, ct);
+            await SeedCompetencesAsync(context, "INGENIERIE", ReferentielsSeriesTechnologiques.Ingenierie, ct);
 
             // LA VOIE PROFESSIONNELLE, ÉTAPE 3 (16/10/2026) — voir la sixième passe.
             await SeedCompetencesAsync(context, "PSE", ReferentielVoiePro.Pse, ct);
@@ -514,6 +546,13 @@ namespace SchoolWebApp.Dal.Seed
                 ("TERMINALE_ST2S",  "Terminale ST2S",  "Lycee", 12),
                 ("PREMIERE_STL",    "Première STL",    "Lycee", 11),
                 ("TERMINALE_STL",   "Terminale STL",   "Lycee", 12),
+
+                // LA STI2D, RÉTABLIE LE 23/11/2026. Semée un temps le 14/09/2026 puis retirée de cette table :
+                // les bases semées ce jour-là (le poste de Camara) gardaient ses deux lignes, la prod ne les a
+                // jamais eues. Rouvrir la classe dans `VoiesScolaires` ne suffisait donc pas : sans ces deux
+                // lignes, la classe n'existait pas en prod et ne s'affichait nulle part (vu le 24/11/2026).
+                ("PREMIERE_STI2D",  "Première STI2D",  "Lycee", 11),
+                ("TERMINALE_STI2D", "Terminale STI2D", "Lycee", 12),
             };
 
             // Libellés d'origine, remplacés depuis.
@@ -737,8 +776,9 @@ namespace SchoolWebApp.Dal.Seed
                 // déjà.
                 //
                 // AUCUNE MATIÈRE SANS RÉFÉRENTIEL — Camara, le 14/09/2026. La STI2D
-                // et « physique-chimie et mathématiques » (STI2D et STL) n'ont pas
-                // de programme vérifié : elles ne sont pas semées.
+                // l'a retrouvé le 23/11/2026 (voir plus bas). « Physique-chimie et
+                // mathématiques » n'est toujours pas une matière : en STI2D comme en
+                // STL (depuis le 23/11/2026), elle se partage entre Yann et Nora.
                 ("SCIENCES_GESTION",      "Sciences de gestion et numérique",                "agent-sciences-gestion",      "Karim",  "karim",  "#166534",  9, true, 11, 12, "Organisations, données et décisions de gestion"),
                 ("MANAGEMENT",            "Management",                                      "agent-management",            "Karim",  "karim",  "#166534", 10, true, 11, 12, "Comprendre et décider dans une organisation"),
                 ("DROIT_ECONOMIE",        "Droit et économie",                               "agent-droit-economie",        "Karim",  "karim",  "#166534", 11, true, 11, 12, "Les règles du droit et les mécanismes économiques"),
@@ -746,6 +786,15 @@ namespace SchoolWebApp.Dal.Seed
                 ("BIOLOGIE_HUMAINE",      "Biologie et physiopathologie humaines",           "agent-biologie-humaine",      "Inès",   "ines",   "#5C7F14", 15, true, 11, 12, "Le corps humain, la santé et la maladie"),
                 ("BIOTECHNOLOGIES",       "Biochimie, biologie et biotechnologies",          "agent-biotechnologies",       "Inès",   "ines",   "#5C7F14", 16, true, 11, 12, "Le vivant étudié au laboratoire"),
                 ("SPCL",                  "Sciences physiques et chimiques en laboratoire",  "agent-spcl",                  "Yann",   "yann",   "#6B4400", 17, true, 11, 12, "Mesurer, analyser et synthétiser au laboratoire"),
+
+                // LA STI2D RÉTABLIE — Camara, le 23/11/2026 : « une nouvelle filière à intégrer, exactement comme pour les
+                // autres », avec un professeur à elle : Lucas. Une seule matière pour l'ingénierie (innovation
+                // technologique et I2D en première, 2I2D en terminale, et son enseignement spécifique — AC, EE, ITEC ou
+                // SIN — rangé dedans, comme l'option de STMG). « Physique-chimie et mathématiques » n'est PAS une matière :
+                // sa physique-chimie va chez Yann, ses maths chez Nora (décision de Camara du même jour).
+                // Ordre 12, celui qu'elle avait déjà, juste après STMG. Gris ardoise : aucun professeur ne le porte (7,6:1
+                // sur blanc). PROVISOIRE, à revoir sur son portrait comme la veste de Minamba.
+                ("INGENIERIE",            "Ingénierie, innovation et développement durable", "agent-ingenierie",            "Lucas",  "lucas",  "#475569", 12, true, 11, 12, "Concevoir, simuler et expérimenter des produits durables"),
 
                 // LES SPÉCIALITÉS DE LA VOIE GÉNÉRALE — 14/09/2026. Un CHOIX de la
                 // famille : `VoiesScolaires` ne les ouvre qu'en première et
@@ -869,6 +918,8 @@ namespace SchoolWebApp.Dal.Seed
                 // Le sarcelle de Nora, que la NSI portait avant d'avoir son
                 // professeur, puis le violet essayé le même jour pour Minamba.
                 ["NSI"] = new[] { "#0E7C7B", "#8158DA" },
+                // L'olive de sa première vie (14/09/2026), trop proche de celle d'Inès.
+                ["INGENIERIE"] = new[] { "#3F6212" },
             };
 
             var existants = await context.Matieres.ToListAsync(ct);
@@ -882,7 +933,7 @@ namespace SchoolWebApp.Dal.Seed
             // raison : non pas l'absence de référentiel, mais le choix de Camara de ne
             // pas les faire enseigner. Le mécanisme, lui, est le même.
             foreach (var retiree in existants.Where(x =>
-                         (x.Code is "INGENIERIE" or "PHYSIQUE_CHIMIE_MATHS"
+                         (x.Code is "PHYSIQUE_CHIMIE_MATHS"
                               or "MUSIQUE" or "DANSE")
                          && x.Active))
             {

@@ -247,7 +247,24 @@ namespace SchoolWebApp.Dal.Seed
                 dateConnue: false, texteOfficiel: "Arrêtés du 17/01/2019 (MENE1901645A) et du 19/07/2019 (MENE1921260A)",
                 notes: "Revérification annuelle. La page Éduscol de la série signale un nouveau programme.",
                 url: "https://eduscol.education.gouv.fr/5859/programmes-et-ressources-en-serie-stl",
-                matieresCodes: "BIOTECHNOLOGIES;SPCL", niveauxCodes: "PREMIERE_STL;TERMINALE_STL", ct: ct);
+                // PHYSIQUE_CHIMIE et MATHS depuis le 23/11/2026 : la « physique-chimie et mathématiques » de STL
+                // (MENE1901645A annexe 3, MENE1921260A annexe 1) se partage entre Yann et Nora.
+                matieresCodes: "BIOTECHNOLOGIES;SPCL;PHYSIQUE_CHIMIE;MATHS", niveauxCodes: "PREMIERE_STL;TERMINALE_STL", ct: ct);
+
+            // LA STI2D, RÉTABLIE LE 23/11/2026 (ReferentielSti2d, ReferentielSti2dPcm). Ce jour-là, Cloudflare
+            // refusait ce poste de développement sur TOUTES les pages Éduscol — y compris celles que le worker
+            // local avait lues sans encombre à 2 h. Titre confirmé sur la copie de l'Internet Archive du
+            // 18/05/2026 ; la stabilité de l'empreinte n'a pas pu être mesurée ce jour-là (le worker classe un
+            // défi en injoignable, jamais en changement). La physique-chimie et mathématiques est suivie ici avec
+            // les deux matières qui la portent dans Mimia.
+            await repository.SeedSiAbsenteAsync(
+                "STI2D (spécialités)", "1re et Tle STI2D", new DateTime(2027, 8, 1),
+                dateConnue: false, texteOfficiel: "Arrêtés du 17/01/2019 (MENE1901591A, annexes 1 et 2) et du 19/07/2019 (MENE1921261A, annexe 3)",
+                notes: "Revérification annuelle. La page Éduscol de la série signale un nouveau programme : "
+                    + "innovation technologique, I2D, 2I2D et ses quatre enseignements spécifiques (AC, EE, ITEC, SIN) "
+                    + "chez Lucas ; physique-chimie et mathématiques partagée entre Yann et Nora.",
+                url: "https://eduscol.education.gouv.fr/5856/programmes-et-ressources-en-serie-sti2d",
+                matieresCodes: "INGENIERIE;PHYSIQUE_CHIMIE;MATHS", niveauxCodes: "PREMIERE_STI2D;TERMINALE_STI2D", ct: ct);
 
             await repository.SeedSiAbsenteAsync(
                 "Français (voie technologique)", "1re technologique", new DateTime(2027, 8, 1),
@@ -335,9 +352,29 @@ namespace SchoolWebApp.Dal.Seed
                 url: "https://eduscol.education.gouv.fr/5616/les-epreuves-terminales-du-baccalaureat-technologique",
                 matieresCodes: "BIOTECHNOLOGIES;SPCL;PHILOSOPHIE", niveauxCodes: "TERMINALE_STL;TERMINALE_TECHNO", ct: ct);
 
+            // Page propre à la série STL, ajoutée le 23/11/2026 avec la physique-chimie et mathématiques. Titre
+            // confirmé sur la copie de l'Internet Archive du 18/04/2026.
+            await repository.SeedSiAbsenteAsync(
+                "Bac STL (épreuves)", "Tle STL", new DateTime(2027, 8, 1),
+                dateConnue: false, texteOfficiel: "Note de service MENE2622647N (BO spécial n° 4 du 17/09/2026), qui abroge MENE2001092N",
+                notes: "Revérifier les épreuves avant d'écrire l'examen BAC_STL_2028.",
+                url: "https://eduscol.education.gouv.fr/5628/baccalaureat-technologique-serie-sciences-et-technologies-de-laboratoire-stl",
+                matieresCodes: "PHYSIQUE_CHIMIE;MATHS;BIOTECHNOLOGIES;SPCL", niveauxCodes: "TERMINALE_STL", ct: ct);
+
+            // Page propre à la série, comme STMG et ST2S. Titre confirmé sur la copie de l'Internet Archive du
+            // 21/04/2026, qui citait encore la note de 2025 (MENE2515695N) : sa mise à jour la fera sonner.
+            await repository.SeedSiAbsenteAsync(
+                "Bac STI2D (épreuves)", "Tle STI2D", new DateTime(2027, 8, 1),
+                dateConnue: false, texteOfficiel: "Notes de service MENE2622646N (BO spécial n° 4 du 17/09/2026) et MENE2624111N (pratique de 2I2D, BO n° 38 du 08/10/2026)",
+                notes: "Revérifier les épreuves avant d'écrire l'examen BAC_STI2D_2028.",
+                url: "https://eduscol.education.gouv.fr/5640/baccalaureat-technologique-serie-sciences-et-technologies-de-l-industrie-et-du-developpement-durable-sti2d",
+                matieresCodes: "INGENIERIE;PHYSIQUE_CHIMIE;MATHS", niveauxCodes: "TERMINALE_STI2D", ct: ct);
+
             await repository.SeedSiAbsenteAsync(
                 "Épreuve anticipée de mathématiques", "1re", new DateTime(2027, 8, 1),
-                dateConnue: false, texteOfficiel: "Arrêté du 10/06/2025 (MENE2508110A) ; note de service MENE2515469N",
+                // La note MENE2515469N a été remplacée par MENE2622640N (BO spécial n° 4 du 17/09/2026). Le texte
+                // officiel d'une ligne déjà en base ne se réécrit pas (SeedSiAbsente) : ceci vaut pour une base neuve.
+                dateConnue: false, texteOfficiel: "Arrêté du 10/06/2025 (MENE2508110A) ; note de service MENE2622640N",
                 notes: "Première passation le 21/06/2027 (au titre de la session 2028), sur les programmes de "
                     + "première de 2026. La liste des automatismes 2026-2027 n'était pas publiée au 14/09/2026.",
                 url: "https://eduscol.education.gouv.fr/5688/epreuve-anticipee-de-mathematiques-aux-baccalaureats-general-et-technologique",

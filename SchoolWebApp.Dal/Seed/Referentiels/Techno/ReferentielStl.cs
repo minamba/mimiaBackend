@@ -10,7 +10,7 @@ namespace SchoolWebApp.Dal.Seed.Referentiels.Techno
         // =============================================================================
         // RÉFÉRENTIELS DE LA SÉRIE TECHNOLOGIQUE STL (sciences et technologies de laboratoire)
         // Enseignements de spécialité de première et de terminale — hors « Physique-chimie
-        // et mathématiques » (traité par un autre agent).
+        // et mathématiques » (voir ReferentielStlPcm).
         //
         // PROVENANCE — textes téléchargés et lus le 14/09/2026. Rien n'est écrit de mémoire.
         // Copies locales : techno\sources\stl\ (PDF + .txt extraits par pdftotext -layout).

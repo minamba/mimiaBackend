@@ -15,9 +15,10 @@ namespace SchoolWebApp.Domain.Models
     /// LES SÉRIES TECHNOLOGIQUES — voulues par Camara le 14/09/2026, puis
     /// ramenées le même jour aux séries les plus suivies et à une seule classe
     /// par année : « il faut rester dans les classes les plus connues ».
-    /// STMG, ST2S, STL. La STI2D n'y est pas : sa recherche de programmes n'a
+    /// STMG, ST2S, STL. La STI2D n'y était pas : sa recherche de programmes n'avait
     /// rien donné, et « je préfère ne rien ajouter que laisser visible une
-    /// matière qui n'a pas de référentiel ». L'option de terminale (mercatique, systèmes
+    /// matière qui n'a pas de référentiel ». Elle les rejoint le 23/11/2026,
+    /// programmes lus dans leurs annexes officielles. L'option de terminale (mercatique, systèmes
     /// d'information et numérique…) n'est PAS une classe : elle se range dans la
     /// matière, et le professeur la demande à l'élève.
     ///
@@ -71,13 +72,11 @@ namespace SchoolWebApp.Domain.Models
             new("PREMIERE_STL",    11, ["STL"],   ["T"], true, GroupeTechno),
             new("TERMINALE_STL",   12, ["STL"],   ["T"], true, GroupeTechno),
 
-            // RETIRÉES LE 14/09/2026, APRÈS AVOIR ÉTÉ SEMÉES : la STI2D n'a pas
-            // de référentiel. Ces deux classes restent connues ici pour ne plus
-            // être proposées — une classe absente de cette table se choisirait
-            // par défaut — et, si un élève y a été inscrit entre-temps, pour
-            // qu'il reçoive au moins le tronc commun technologique.
-            new("PREMIERE_STI2D",  11, ["STI2D"], ["T"], false, GroupeTechno),
-            new("TERMINALE_STI2D", 12, ["STI2D"], ["T"], false, GroupeTechno),
+            // RETIRÉES LE 14/09/2026 FAUTE DE RÉFÉRENTIEL, RÉTABLIES LE 23/11/2026 : Camara, « une nouvelle filière à
+            // intégrer, exactement comme pour les autres ». Programmes lus dans les annexes officielles (arrêtés
+            // MENE1901591A et MENE1921261A) : voir ReferentielSti2d et ReferentielSti2dPcm.
+            new("PREMIERE_STI2D",  11, ["STI2D"], ["T"], true, GroupeTechno),
+            new("TERMINALE_STI2D", 12, ["STI2D"], ["T"], true, GroupeTechno),
         ];
 
         /// <summary>
@@ -95,7 +94,9 @@ namespace SchoolWebApp.Domain.Models
         /// retirer du seul semeur les aurait laissées actives en base, donc ouvertes.
         /// </remarks>
         private static readonly HashSet<string> MatieresRetirees =
-            new(["INGENIERIE", "PHYSIQUE_CHIMIE_MATHS", "MUSIQUE", "DANSE"],
+            // INGENIERIE rétablie le 23/11/2026 (STI2D, professeur Lucas). « Physique-chimie et mathématiques » reste
+            // retirée COMME MATIÈRE : en STI2D, sa partie physique-chimie va chez Yann et sa partie maths chez Nora.
+            new(["PHYSIQUE_CHIMIE_MATHS", "MUSIQUE", "DANSE"],
                 StringComparer.OrdinalIgnoreCase);
 
         private static readonly IReadOnlyDictionary<string, Classe> ParCode =
@@ -117,6 +118,7 @@ namespace SchoolWebApp.Domain.Models
                 ["BIOLOGIE_HUMAINE"] = ["ST2S"],
                 ["BIOTECHNOLOGIES"] = ["STL"],
                 ["SPCL"] = ["STL"],
+                ["INGENIERIE"] = ["STI2D"],
 
                 // La voie professionnelle (16/10/2026) : ses deux matières
                 // générales propres, de la seconde à la terminale pro.
@@ -126,16 +128,17 @@ namespace SchoolWebApp.Domain.Models
             };
 
         /// <summary>Les séries sans SVT : leur biologie a un autre nom et un autre programme.</summary>
-        private static readonly string[] SeriesSansSvt = ["STMG", "ST2S", "STL"];
+        private static readonly string[] SeriesSansSvt = ["STMG", "ST2S", "STL", "STI2D"];
 
         /// <summary>
-        /// Les séries sans physique-chimie sous ce nom. En STL, c'est « physique-chimie
-        /// et mathématiques », qui n'a pas encore de référentiel et n'est donc pas
-        /// proposée : Camara, le 14/09/2026, « je préfère ne rien ajouter que
-        /// laisser visible une matière qui n'a pas de référentiel ». La ST2S garde
-        /// la physique-chimie : pour la santé en première, chimie en terminale.
+        /// Les séries sans physique-chimie sous ce nom. La STL en faisait partie tant
+        /// que sa « physique-chimie et mathématiques » n'avait pas de référentiel
+        /// (Camara, le 14/09/2026 : « je préfère ne rien ajouter que laisser visible
+        /// une matière qui n'a pas de référentiel »). Depuis le 23/11/2026, sa partie
+        /// physique-chimie est chez Yann, comme en STI2D. La ST2S garde la
+        /// physique-chimie : pour la santé en première, chimie en terminale.
         /// </summary>
-        private static readonly string[] SeriesSansPhysiqueChimie = ["STMG", "STL"];
+        private static readonly string[] SeriesSansPhysiqueChimie = ["STMG"];
 
         /// <summary>
         /// LES CLASSES OÙ UNE LV2 EXISTE — de la 5e à la terminale, voies générale

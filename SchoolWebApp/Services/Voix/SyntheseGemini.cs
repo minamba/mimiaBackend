@@ -70,6 +70,13 @@ namespace SchoolWebApp.Api.Services.Voix
             // Camara le 16/10/2026, parmi six voix d'homme encore libres
             // (audition, une même phrase).
             ["hugo"] = "Sadachbia",
+
+            // LE PROFESSEUR D'INGÉNIERIE DE STI2D (23/11/2026) — PROVISOIRE,
+            // choisie sur la description de Google (« ferme »), jamais
+            // entendue. Restaient libres en voix d'homme : Fenrir, Enceladus,
+            // Umbriel, Algenib, Rasalgethi, Alnilam, Zubenelgenubi. À trancher
+            // à l'oreille par Camara, comme Hugo.
+            ["lucas"] = "Alnilam",
         };
 
         private const string VoixParDefaut = "Kore";

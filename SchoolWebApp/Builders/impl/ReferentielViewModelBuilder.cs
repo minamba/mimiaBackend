@@ -269,6 +269,7 @@ namespace SchoolWebApp.Api.Builders.impl
                 case "SCIENCES_GESTION" or "MANAGEMENT" or "DROIT_ECONOMIE": return "Série STMG";
                 case "SANITAIRE_SOCIAL" or "BIOLOGIE_HUMAINE": return "Série ST2S";
                 case "BIOTECHNOLOGIES" or "SPCL": return "Série STL";
+                case "INGENIERIE": return "Série STI2D";
                 case "ESPAGNOL" or "ALLEMAND" or "ITALIEN" or "CHINOIS" or "ARABE": return "En LV2";
                 case "PSE" or "ECONOMIE_DROIT" or "ECONOMIE_GESTION": return "Voie professionnelle";
             }
@@ -313,6 +314,7 @@ namespace SchoolWebApp.Api.Builders.impl
             "BIOLOGIE_HUMAINE" => "Biologie humaine",
             "BIOTECHNOLOGIES" => "Biotechnologies",
             "SPCL" => "SPCL",
+            "INGENIERIE" => "Ingénierie (2I2D)",
             "PSE" => "PSE",
             "ECONOMIE_DROIT" => "Économie-droit (bac pro)",
             "ECONOMIE_GESTION" => "Économie-gestion (bac pro)",

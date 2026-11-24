@@ -755,7 +755,7 @@ namespace SchoolWebApp.Dal.Seed.Referentiels
                 // discriminant ne figure pas au programme »). MATH_1TEC_VA_ESPERANCE
                 // perd la variance et l'écart type, hors programme.
                 //
-                // L'épreuve anticipée (note MENE2515469N) ne porte que sur les
+                // L'épreuve anticipée (note MENE2622640N, qui remplace MENE2515469N) ne porte que sur les
                 // domaines communs : ni « Algorithmique et programmation » ni
                 // « Activités géométriques » (STD2A). La base ne connaît pas la
                 // série : les deux blocs sont gardés pour tous.

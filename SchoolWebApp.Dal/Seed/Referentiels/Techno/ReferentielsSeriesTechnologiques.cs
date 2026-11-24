@@ -3,8 +3,8 @@ namespace SchoolWebApp.Dal.Seed.Referentiels.Techno
     /// <summary>
     /// LA RÉPARTITION DES PROGRAMMES DES SÉRIES TECHNOLOGIQUES ENTRE LES MATIÈRES.
     ///
-    /// Trois séries depuis le 14/09/2026 — STMG, ST2S, STL ; la STI2D n'a pas de référentiel —, une classe
-    /// par année. Les fichiers `Referentiel<Série>` recopient les textes
+    /// Trois séries depuis le 14/09/2026 — STMG, ST2S, STL —, quatre depuis le 23/11/2026 avec la STI2D,
+    /// une classe par année. Les fichiers `Referentiel<Série>` recopient les textes
     /// officiels tels qu'ils sont découpés ; une matière de Mimia, elle, est un
     /// professeur. Quand un programme est enseigné par deux professeurs, il se
     /// partage ici, et nulle part ailleurs :
@@ -13,12 +13,18 @@ namespace SchoolWebApp.Dal.Seed.Referentiels.Techno
     ///     la chimie à Yann, la biologie à Inès ;
     ///   - la terminale STMG « management, sciences de gestion et numérique » :
     ///     le domaine de chaque ligne dit si elle relève du management ou de la
-    ///     gestion.
+    ///     gestion ;
+    ///   - la « physique-chimie et mathématiques » de STI2D, première et
+    ///     terminale : sa physique-chimie à Yann, ses maths à Nora (décision de
+    ///     Camara, 23/11/2026). Le texte sépare déjà les deux programmes. Même
+    ///     partage pour celle de STL, un AUTRE texte (ajoutée le même jour).
     ///
     /// LES OPTIONS DE TERMINALE NE SONT PAS DES CLASSES. Les quatre
     /// enseignements spécifiques de STMG se rangent dans les sciences de
     /// gestion, chacun signalé par son nom dans le domaine : l'élève n'en suit
-    /// qu'un, et c'est au professeur de le lui demander.
+    /// qu'un, et c'est au professeur de le lui demander. Même règle pour les
+    /// quatre enseignements spécifiques de STI2D (AC, EE, ITEC, SIN), rangés
+    /// dans l'ingénierie de Lucas.
     ///
     /// UNE MATIÈRE EXISTANTE GARDE SON FICHIER : ce qui s'y ajoute passe dans le
     /// même appel au semeur, faute de quoi il rendrait obsolètes les lignes de
@@ -77,6 +83,23 @@ namespace SchoolWebApp.Dal.Seed.Referentiels.Techno
         public static (string Niveau, string Code, string Domaine, string Libelle, int Ordre)[] Spcl =>
             Ensemble(ReferentielStl.SPCL1, ReferentielStl.SPCLT);
 
+        // ----------------------------------------------------------- STI2D
+        /// <summary>
+        /// Tout l'enseignement technologique de la STI2D, chez Lucas :
+        /// innovation technologique et I2D en première, tronc commun de 2I2D en
+        /// terminale, puis les quatre enseignements spécifiques, rangés comme
+        /// les options de STMG — même classe, nom de l'option dans le domaine.
+        /// </summary>
+        public static (string Niveau, string Code, string Domaine, string Libelle, int Ordre)[] Ingenierie =>
+            Ensemble(
+                ReferentielSti2d.IT1,
+                ReferentielSti2d.I2D1,
+                ReferentielSti2d.I2DT,
+                Option(ReferentielSti2d.AC, "architecture et construction"),
+                Option(ReferentielSti2d.EE, "énergies et environnement"),
+                Option(ReferentielSti2d.ITEC, "innovation technologique et éco-conception"),
+                Option(ReferentielSti2d.SIN, "systèmes d'information et numérique"));
+
         // ---------------------------- tronc commun de la voie technologique
         /// <summary>
         /// Français de première : même programme que la voie générale, mais un
@@ -99,10 +122,24 @@ namespace SchoolWebApp.Dal.Seed.Referentiels.Techno
 
         // --------------------------------------- matières déjà existantes
         /// <summary>
-        /// La physique-chimie de ST2S : physique-chimie pour la santé en
-        /// première, partie chimie de la terminale.
+        /// La physique-chimie de ST2S (physique-chimie pour la santé en
+        /// première, partie chimie de la terminale) et la partie physique-chimie
+        /// des « physique-chimie et mathématiques » de STI2D et de STL.
         /// </summary>
         public static (string Niveau, string Code, string Domaine, string Libelle, int Ordre)[] PhysiqueChimie =>
-            Ensemble(ReferentielSt2s.PCS1, ReferentielSt2s.CBPHT.Where(EstChimie));
+            Ensemble(
+                ReferentielSt2s.PCS1, ReferentielSt2s.CBPHT.Where(EstChimie),
+                ReferentielSti2dPcm.PCMP1, ReferentielSti2dPcm.PCMPT,
+                ReferentielStlPcm.PCMLP1, ReferentielStlPcm.PCMLPT);
+
+        /// <summary>
+        /// La partie mathématiques des « physique-chimie et mathématiques »
+        /// de STI2D et de STL. Elle s'ajoute au tronc commun de maths de la voie
+        /// technologique, déjà dans `ReferentielMaths`.
+        /// </summary>
+        public static (string Niveau, string Code, string Domaine, string Libelle, int Ordre)[] Maths =>
+            Ensemble(
+                ReferentielSti2dPcm.PCMM1, ReferentielSti2dPcm.PCMMT,
+                ReferentielStlPcm.PCMLM1, ReferentielStlPcm.PCMLMT);
     }
 }
