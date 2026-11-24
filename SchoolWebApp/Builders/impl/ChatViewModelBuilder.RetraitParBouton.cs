@@ -93,7 +93,9 @@ namespace SchoolWebApp.Api.Builders.impl
                 + "[RETRAIT_PROPOSE] id=<identifiant> de CETTE notion (une seule par message) : l'écran lui montrera deux "
                 + "boutons, « Oui, retirer » et « Non, la garder ». Dis-lui simplement de cliquer s'il veut la retirer. "
                 + "N'écris jamais « je la retire », « c'est retiré », « c'est fait » ni « c'est noté » pour un retrait : "
-                + "c'est SON CLIC qui retire, et le serveur te le dira au message suivant. Ne propose un retrait que s'il "
+                + "c'est SON CLIC qui retire, et le serveur te le dira au message suivant. Tant qu'il n'a pas cliqué, la "
+                + "notion est TOUJOURS dans son programme : n'écris pas « on retire… », « on enlève… », « il ne reste (donc) que… » ni un "
+                + "programme sans elle ; écris « si tu veux la retirer, clique sur « Oui, retirer » ». Ne propose un retrait que s'il "
                 + "l'a demandé. Une notion se garde ou se retire entière. SON PROGRAMME, RELU EN BASE (identifiants) : "
                 + string.Join(" ; ", programme.Select(n => $"id={n.Id} « {n.Libelle} »")) + ".]";
         }
@@ -193,6 +195,15 @@ namespace SchoolWebApp.Api.Builders.impl
             var absentes = AbsentesDuTableau(texte, libelles);
             var reduit = absentes.Count > 0 || AffirmeUnProgrammeReduit(texte, programme.Count);
 
+            // #67 v7 (banc bouton sur c82abb5, R-1) : « Pas de souci, on retire les titrages — il ne reste donc que la
+            // cinétique et les couples acide-base. » écrit AVANT le clic, bouton juste en dessous : programme réduit
+            // affirmé, rien corrigé. « Il ne reste (donc) que » + au moins une notion nommée mais pas toutes ne compte que
+            // quand un retrait est en jeu à ce tour (balise dans la réponse, ou l'élève parle de retrait) et sans clic
+            // accepté (après le clic, c'est vrai) : « il ne reste que 5 minutes » ou un rappel ordinaire ne déclenchent rien.
+            var retraitEnJeu = BaliseRetraitPropose().IsMatch(texte)
+                || MorceauDeNotion.ParleDeRetrait(MarqueurClicRetrait().Replace(messageEleve ?? "", " "));
+            if (!reduit && !clicRetire && retraitEnJeu && ResteQueSansToutes(texte, libelles)) reduit = true;
+
             if (annonceFausse || reduit)
             {
                 var debut = annonceFausse && !clicRetire ? "Pour être exact, je n'ai rien retiré : " : "Pour être exact, ";
@@ -273,6 +284,25 @@ namespace SchoolWebApp.Api.Builders.impl
             return MorceauDeNotion.ParleDeRetrait(MarqueurClicRetrait().Replace(messageEleve ?? "", " "))
                 && phrases.Any(p => CestFaitSeul().IsMatch(p));
         }
+
+        /// <summary>
+        /// Une phrase « il ne (te) reste (donc / alors / plus / maintenant) que … » qui nomme au moins une notion du
+        /// programme, mais pas toutes (#67 v7, banc sur c82abb5). Hors tableau.
+        /// </summary>
+        internal static bool ResteQueSansToutes(string? texte, IReadOnlyList<string> libelles)
+        {
+            var sans = ConfirmationDeRetrait.SansArdoise(texte);
+            if (sans.Length == 0 || libelles.Count < 2) return false;
+            return FinDePhrase().Split(sans).Any(p =>
+            {
+                if (!ResteQue().IsMatch($" {LibelleNotion.CleSouple(p)} ")) return false;
+                var nommees = ConfirmationDeRetrait.NotionsNommees(p, libelles).Count;
+                return nommees >= 1 && nommees < libelles.Count;
+            });
+        }
+
+        [GeneratedRegex(@" il ne (te |nous )?rester?a? ((donc|alors|plus|maintenant|ensuite|desormais) )*que ")]
+        private static partial Regex ResteQue();
 
         [GeneratedRegex(@" ((ai|a|as|avons|ont|est|sont|a ete|ont ete) ((bien|aussi|deja|egalement) )?(retire|enleve|supprime)\w*|c est ((bien|deja) )?(retire|enleve|supprime|fait|note)\w*) ")]
         private static partial Regex RetraitPasse();
