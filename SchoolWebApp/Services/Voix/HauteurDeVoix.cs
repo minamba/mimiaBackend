@@ -26,7 +26,7 @@ namespace SchoolWebApp.Api.Services.Voix
         /// <summary>Les professeurs à voix d'homme (voix Gemini de SyntheseGemini).</summary>
         private static readonly HashSet<string> VoixDHomme = new(StringComparer.OrdinalIgnoreCase)
         {
-            "adrien", "salim", "yann", "karim", "theo", "minamba", "jonas", "youssef", "hugo", "lucas",
+            "adrien", "salim", "yann", "karim", "theo", "minamba", "jonas", "youssef", "hugo", "lucas", "amine",
         };
 
         public static bool EstUneVoixDHomme(string? avatar) => avatar is not null && VoixDHomme.Contains(avatar);

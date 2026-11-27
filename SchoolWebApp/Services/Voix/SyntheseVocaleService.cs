@@ -134,6 +134,11 @@ namespace SchoolWebApp.Api.Services.Voix
             // son secours. Il double Karim (STMG), qu'un élève de STI2D n'entend
             // jamais. Non mesuré.
             ["lucas"] = "verse",
+
+            // Le professeur de technologie du collège (25/11/2026) : OpenAI n'est
+            // que son secours. Il double Lucas, qui n'enseigne qu'au lycée : aucun
+            // élève n'entend les deux. Non mesuré.
+            ["amine"] = "verse",
         };
 
         // IL MANQUE UNE VOIX DE FEMME, ET C'EST ARITHMÉTIQUE. Sept professeures
@@ -192,6 +197,7 @@ namespace SchoolWebApp.Api.Services.Voix
             ["maelle"] = "coral",
             ["hugo"] = "ash",       // double le secours de Minamba ; non mesuré
             ["lucas"] = "fable",    // double le secours de Karim (STMG) ; non mesuré
+            ["amine"] = "fable",    // double Lucas (lycée seul) ; non mesuré
         };
 
         private const string VoixParDefaut = "coral";

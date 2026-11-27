@@ -393,6 +393,8 @@ namespace SchoolWebApp.Dal.Seed
                     .Concat(ReferentielsSeriesTechnologiques.PhysiqueChimie)
                     .ToArray(), ct);
             await SeedCompetencesAsync(context, "SVT", ReferentielSvt.Competences, ct);
+            // La technologie du cycle 4 (25/11/2026) : voir ReferentielTechnologie.
+            await SeedCompetencesAsync(context, "TECHNOLOGIE", ReferentielTechnologie.Competences, ct);
             await SeedCompetencesAsync(context, "PHILOSOPHIE",
                 ReferentielPhilosophie.Competences
                     .Concat(ReferentielsSeriesTechnologiques.Philosophie)
@@ -795,6 +797,15 @@ namespace SchoolWebApp.Dal.Seed
                 // Ordre 12, celui qu'elle avait déjà, juste après STMG. Gris ardoise : aucun professeur ne le porte (7,6:1
                 // sur blanc). PROVISOIRE, à revoir sur son portrait comme la veste de Minamba.
                 ("INGENIERIE",            "Ingénierie, innovation et développement durable", "agent-ingenierie",            "Lucas",  "lucas",  "#475569", 12, true, 11, 12, "Concevoir, simuler et expérimenter des produits durables"),
+
+                // LA TECHNOLOGIE DU COLLÈGE — Camara, le 25/11/2026 : « comment ça se fait qu'on n'a pas de professeur
+                // de technologie alors que c'est obligatoire ». Jamais construite jusque-là : « Sciences et
+                // technologie » s'arrête en 6e, et la 5e ne gardait que la physique-chimie et la SVT. Matière
+                // obligatoire de la 5e à la 3e, troisième discipline possible de l'épreuve de sciences du brevet.
+                // Un professeur à elle : Amine (choix de Camara). Ordre 13 : juste après la SVT au collège. Orange
+                // d'atelier, celui de Théo (EPPCS, lycée seul) : aucun élève ne voit les deux. PROVISOIRE, à revoir
+                // sur son portrait comme pour Lucas. Référentiel : `ReferentielTechnologie`.
+                ("TECHNOLOGIE",           "Technologie",                                     "agent-technologie",           "Amine",  "amine",  "#C2410C", 13, true, 7, 9, "Comprendre, réparer et programmer les objets du quotidien"),
 
                 // LES SPÉCIALITÉS DE LA VOIE GÉNÉRALE — 14/09/2026. Un CHOIX de la
                 // famille : `VoiesScolaires` ne les ouvre qu'en première et

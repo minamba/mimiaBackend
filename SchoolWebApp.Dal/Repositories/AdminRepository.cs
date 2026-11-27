@@ -1180,6 +1180,12 @@ FROM sys.database_files;";
                 .CountAsync(c => c.Nature == NaturesCours.Podcasts
                                  && c.EnvoyeLe != null && c.EnvoyeLe >= debutUtc && c.EnvoyeLe < finUtc);
 
+            // LES DOCUMENTS ENVOYÉS PAR LES ENFANTS — Camara, le 26/11/2026 : « uploader un document coûte de
+            // l'argent ». Comme les fiches et les podcasts : une dépense des familles, pas une tâche de fond.
+            var postesDocuments = postes.Where(p => OriginesDocuments.Contains(p.Origine)).ToList();
+            postes = postes.Except(postesDocuments).ToList();
+            var documents = postesDocuments.Sum(p => p.Dollars);
+
             var tachesDeFond = postes.Sum(p => p.Dollars);
 
             return new CoutPeriode
@@ -1202,7 +1208,9 @@ FROM sys.database_files;";
                 PodcastsAppels = postesPodcasts.Sum(p => p.Appels) + appelsVoixPodcasts.Sum(a => a.Appels),
                 PodcastsEpisodes = episodesPodcasts,
                 PodcastsCours = coursPodcasts,
-                TotalDollars = Math.Round(dialogue + voix + tachesDeFond + fiches + podcasts, 4),
+                DocumentsDollars = Math.Round(documents, 4),
+                DocumentsAppels = postesDocuments.Sum(p => p.Appels),
+                TotalDollars = Math.Round(dialogue + voix + tachesDeFond + fiches + podcasts + documents, 4),
                 MinutesTravaillees = await MinutesTravailleesAsync(debut, fin),
             };
         }
@@ -1827,6 +1835,19 @@ GROUP BY parent_id";
 
         /// <summary>Les origines des appels des fiches de révision : `fiches-lecture`, `fiches-redaction`.</summary>
         private const string PrefixeFiches = "fiches-";
+
+        /// <summary>
+        /// Les origines des appels qui lisent un document ENVOYÉ PAR UN ENFANT (26/11/2026) : pièce jointe de séance
+        /// (TranscriptionDocumentsWorker), cours d'un contrôle (worker et AgentPedagogiqueService), documents d'un
+        /// examen blanc et leur rangement (LecteurExamensBlancs). Une nouvelle lecture de document s'ajoute ici.
+        /// </summary>
+        internal static readonly HashSet<string> OriginesDocuments = new(StringComparer.Ordinal)
+        {
+            "transcription-document",
+            "transcription-cours-controle",
+            "transcription-examen-blanc",
+            "examen-blanc-dossiers",
+        };
 
         /// <summary>Les appels de synthèse journalisés d'un modèle, et leurs jetons.</summary>
         private sealed record AppelsVoix(string? Modele, int Appels, long Entree, long Sortie);

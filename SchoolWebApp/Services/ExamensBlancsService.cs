@@ -15,7 +15,7 @@ namespace SchoolWebApp.Api.Services
     /// le fichier sur le disque (sous-dossier <c>examens-blancs/</c>), la ligne en base, le texte des documents Word,
     /// Excel et PowerPoint extrait tout de suite et sans modèle.
     ///
-    /// CE QUI CHANGE : vingt documents par matière, et AUCUN plafond de pages ni de taille propre (100 Mo par
+    /// CE QUI CHANGE : vingt documents par matière, et AUCUN plafond de pages ni de taille propre (200 Mo par
     /// fichier, pour le serveur seulement). La lecture des photos et des PDF, les notions et le programme viennent
     /// aux étapes suivantes.
     /// </summary>
@@ -107,8 +107,31 @@ namespace SchoolWebApp.Api.Services
                 return new ResultatDocumentExamenBlanc(null, MessageStockageIndisponible, StockageIndisponible: true);
             }
 
+            // UN PDF AVEC QUELQUES OCTETS DEVANT « %PDF » (25/11/2026) : rendu propre AVANT tout le reste, pour que le
+            // disque, la lecture et le modèle voient un PDF ordinaire.
+            var tailleRecue = donnees.Length;
+            donnees = ValidationPieceJointe.RognerAvantPdf(donnees);
+
             var verdict = ValidationDocumentCours.ValiderSansPlafond(donnees, typeAnnonce, ExamensBlancs.TailleMax);
-            if (!verdict.Accepte) return new ResultatDocumentExamenBlanc(null, verdict.Motif);
+            if (!verdict.Accepte)
+            {
+                // LE REFUS DANS LES JOURNAUX (25/11/2026) : il ne partait qu'à l'écran, et un « je n'arrive plus à
+                // importer » ne se diagnostiquait qu'avec une capture. Le motif, le type annoncé, la taille et les huit
+                // premiers octets (la signature) : rien du contenu.
+                _logger.LogInformation(
+                    "Document d'examen blanc REFUSE (eleve {EleveId}, examen {ExamenBlancId}, ligne {Ligne}) : {Motif} "
+                    + "| type annonce {Type} | {Taille} octets | debut {Debut}",
+                    eleveId, examenBlancId, matiereLigneId, verdict.Motif, typeAnnonce ?? "(aucun)", tailleRecue,
+                    Convert.ToHexString(donnees.AsSpan(0, Math.Min(8, donnees.Length))));
+                return new ResultatDocumentExamenBlanc(null, verdict.Motif);
+            }
+
+            if (donnees.Length != tailleRecue)
+            {
+                _logger.LogInformation(
+                    "Document d'examen blanc : {Octets} octet(s) retire(s) avant l'en-tete %PDF (examen {ExamenBlancId}).",
+                    tailleRecue - donnees.Length, examenBlancId);
+            }
 
             var nom = string.IsNullOrWhiteSpace(nomFichier) ? "document" : Path.GetFileName(nomFichier).Trim();
             if (nom.Length > 200) nom = nom[^200..];
@@ -185,6 +208,28 @@ namespace SchoolWebApp.Api.Services
 
             await EffacerAsync(eleveId, restes, ct);
             return true;
+        }
+
+        /// <summary>
+        /// MODIFIER LA DATE ET L'HEURE — Camara, le 25/11/2026 : « il faudrait qu'on puisse le modifier comme pour les
+        /// contrôles ». Le contrôle caché de chaque matière suit, SUJET INCHANGÉ : un sujet changé ferait repartir son
+        /// programme (ControleScolaireRepository.ModifierAsync), et la préparation déjà faite doit rester. Rend null si
+        /// l'examen blanc n'est pas à l'élève.
+        /// </summary>
+        public async Task<ModificationExamenBlanc?> ModifierDateAsync(
+            int eleveId, int examenBlancId, DateTime dateExamen, TimeSpan? heureExamen, CancellationToken ct)
+        {
+            var resultat = await _examens.ModifierDateAsync(eleveId, examenBlancId, dateExamen, heureExamen, DateTime.UtcNow, ct);
+            if (resultat is null || resultat.DateDejaPrise) return resultat;
+
+            foreach (var controleId in resultat.Controles)
+            {
+                var controle = await _controles.GetAsync(eleveId, controleId, ct);
+                if (controle is null) continue;
+                await _controles.ModifierAsync(eleveId, controleId, controle.Sujet, dateExamen.Date, heureExamen, ct);
+            }
+
+            return resultat;
         }
 
         public async Task<bool> SupprimerAsync(int eleveId, int examenBlancId, CancellationToken ct)

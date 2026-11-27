@@ -314,6 +314,8 @@ builder.Services.AddScoped<IEvaluationPrevueRepository, EvaluationPrevueReposito
 builder.Services.AddScoped<IControleScolaireRepository, ControleScolaireRepository>();
 // LES EXAMENS BLANCS (23/11/2026) : leurs lignes en base, leurs fichiers dans le sous-dossier examens-blancs/.
 builder.Services.AddScoped<IExamenBlancRepository, ExamenBlancRepository>();
+builder.Services.AddScoped<ICalendrierExamensRepository, CalendrierExamensRepository>();
+builder.Services.AddScoped<SchoolWebApp.Api.Services.CalendrierExamensService>();
 builder.Services.AddScoped<SchoolWebApp.Api.Services.ExamensBlancsService>();
 // Étape 2 : lire les photos et PDF, ranger les documents en dossiers par notion (ExamensBlancsWorker).
 builder.Services.AddScoped<SchoolWebApp.Api.Services.LecteurExamensBlancs>();
@@ -824,6 +826,8 @@ using (var scope = app.Services.CreateScope())
             await ReferentielSeeder.SeedAsync(db);
             await EcheanceReferentielSeeder.SeedAsync(db);
             await ExamenSeeder.SeedAsync(db);
+            // Les dates officielles de la session 2027 (25/11/2026) : semées si absentes, jamais réécrites.
+            await CalendrierExamensSeeder.SeedAsync(db);
             await MotsVerifiesSeeder.SeedAsync(db);
             await OffresSeeder.SeedAsync(db);
 

@@ -89,6 +89,9 @@ namespace SchoolWebApp.Dal.Entities
         public virtual DbSet<ControleNotion> ControlesNotions { get; set; }
         public virtual DbSet<ControleDocument> ControlesDocuments { get; set; }
         public virtual DbSet<ExamenBlanc> ExamensBlancs { get; set; }
+
+        /// <summary>Les dates officielles des épreuves (25/11/2026) : validées, ou proposées par la veille.</summary>
+        public virtual DbSet<DateEpreuveOfficielle> DatesEpreuvesOfficielles { get; set; }
         public virtual DbSet<ExamenBlancMatiere> ExamensBlancsMatieres { get; set; }
         public virtual DbSet<ExamenBlancDocument> ExamensBlancsDocuments { get; set; }
         public virtual DbSet<ExamenBlancNotion> ExamensBlancsNotions { get; set; }
@@ -2804,6 +2807,34 @@ namespace SchoolWebApp.Dal.Entities
                 entity.Property(e => e.Active).HasColumnName("active");
 
                 entity.HasIndex(e => e.Code).IsUnique();
+            });
+
+            // ---------------------------------------------------------------
+            // DATES OFFICIELLES DES ÉPREUVES (25/11/2026) — validée ou proposée
+            // ---------------------------------------------------------------
+            modelBuilder.Entity<DateEpreuveOfficielle>(entity =>
+            {
+                entity.ToTable("DateEpreuveOfficielle");
+                entity.HasKey(e => e.Id);
+
+                entity.Property(e => e.Id).HasColumnName("id");
+                entity.Property(e => e.EpreuveCode).IsRequired().HasMaxLength(60).HasColumnName("epreuve_code");
+                entity.Property(e => e.Etat).IsRequired().HasMaxLength(12).HasColumnName("etat");
+                entity.Property(e => e.Nature).IsRequired().HasMaxLength(12).HasColumnName("nature");
+                entity.Property(e => e.DateEpreuve).HasColumnName("date_epreuve");
+                entity.Property(e => e.DateFin).HasColumnName("date_fin");
+                entity.Property(e => e.HeureDebut).HasColumnName("heure_debut");
+                entity.Property(e => e.HeureFin).HasColumnName("heure_fin");
+                entity.Property(e => e.RemplacementLe).HasColumnName("remplacement_le");
+                entity.Property(e => e.SourceLibelle).IsRequired().HasMaxLength(300).HasColumnName("source_libelle");
+                entity.Property(e => e.SourceUrl).IsRequired().HasMaxLength(500).HasColumnName("source_url");
+                entity.Property(e => e.AnnexeUrl).HasMaxLength(500).HasColumnName("annexe_url");
+                entity.Property(e => e.Extrait).HasMaxLength(1000).HasColumnName("extrait");
+                entity.Property(e => e.DateCreation).HasColumnName("date_creation");
+                entity.Property(e => e.ProposeLe).HasColumnName("propose_le");
+                entity.Property(e => e.ValideLe).HasColumnName("valide_le");
+
+                entity.HasIndex(e => new { e.EpreuveCode, e.Etat }).IsUnique();
             });
 
             // ---------------------------------------------------------------

@@ -77,6 +77,11 @@ namespace SchoolWebApp.Api.Services.Voix
             // Umbriel, Algenib, Rasalgethi, Alnilam, Zubenelgenubi. À trancher
             // à l'oreille par Camara, comme Hugo.
             ["lucas"] = "Alnilam",
+            // LE PROFESSEUR DE TECHNOLOGIE DU COLLÈGE (25/11/2026) — PROVISOIRE,
+            // choisie sur la description de Google (« décontractée »), jamais
+            // entendue. Restent libres en voix d'homme : Fenrir, Enceladus,
+            // Algenib, Rasalgethi, Zubenelgenubi. À trancher à l'oreille par Camara.
+            ["amine"] = "Umbriel",
         };
 
         private const string VoixParDefaut = "Kore";

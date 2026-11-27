@@ -102,7 +102,7 @@ namespace SchoolWebApp.Tests
             var etat = new EtatFournisseur
             {
                 Code = "openai", Nom = Piege, Usage = Piege, LienFacturation = "https://platform.openai.com/a_b?c=d",
-                Statut = StatutFournisseur.CreditEpuise, CodeHttp = 429, CodeErreur = "insufficient_quota", Detail = Piege,
+                Statut = StatutFournisseur.CreditEpuise, CodeHttp = 429, CodeErreur = "insufficient_quota", Detail = Piege, Environnement = "DEV", FinCle = "a_b*",
                 VerifieLe = DateTime.UtcNow,
             };
 

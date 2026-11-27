@@ -40,6 +40,15 @@ namespace SchoolWebApp.Domain.Repositories
         /// </summary>
         Task<RestesExamenBlanc?> RetirerMatiereAsync(int eleveId, int examenBlancId, int matiereLigneId, CancellationToken ct = default);
 
+        /// <summary>
+        /// Change la date et l'heure d'un examen blanc (25/11/2026). Rend null s'il n'est pas à l'élève, ou
+        /// <see cref="ModificationExamenBlanc.DateDejaPrise"/> si un AUTRE examen blanc de l'élève tombe déjà ce
+        /// jour-là (ils ne se fusionnent pas en silence) ; sinon les contrôles cachés de ses matières, à déplacer.
+        /// </summary>
+        Task<ModificationExamenBlanc?> ModifierDateAsync(
+            int eleveId, int examenBlancId, DateTime dateExamen, TimeSpan? heureExamen, DateTime maintenant,
+            CancellationToken ct = default);
+
         /// <summary>Supprime l'examen blanc entier ; rend les chemins des fichiers à effacer, ou null.</summary>
         Task<RestesExamenBlanc?> SupprimerAsync(int eleveId, int examenBlancId, CancellationToken ct = default);
 

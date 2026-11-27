@@ -268,7 +268,8 @@ namespace SchoolWebApp.Api.Workers
 
         protected override string Libelle => "Google Gemini";
 
-        protected override string Adresse => "https://ai.google.dev/gemini-api/docs/pricing.md.txt";
+        // La page a déménagé le 26/11/2026 (l'ancienne adresse, ai.google.dev/gemini-api/docs/pricing.md.txt, redirige ici).
+        protected override string Adresse => "https://aistudio.google.com/docs/pricing.md.txt";
 
         protected override PrixLus? Lire(string page, string modele) =>
             LecteurGrilleTarifs.LireGemini(page, modele, DateTime.UtcNow);

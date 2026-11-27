@@ -806,8 +806,8 @@ namespace SchoolWebApp.Api.Services
         /// le voir se produire, c'est dans la conversation. La séance suivante
         /// repart d'un contexte recalculé.
         ///
-        /// RECALCULÉ À CHAQUE DÉBUT DE SÉANCE (premier accueil, retour, séance
-        /// enchaînée) et après une heure sans tour — le cache d'Anthropic ne
+        /// RECALCULÉ À CHAQUE DÉBUT DE SÉANCE (premier accueil, séance enchaînée ;
+        /// plus au retour depuis le 27/11/2026, voir plus bas) et après une heure sans tour — le cache d'Anthropic ne
         /// vit pas plus longtemps de toute façon. La clé porte la classe et la
         /// matière : un parent qui change la classe de son enfant n'hérite pas
         /// d'un contexte périmé.
@@ -847,8 +847,13 @@ namespace SchoolWebApp.Api.Services
             var cle = $"contexte-seance:{conversation.Id}:{eleve.Id}:{eleve.NiveauScolaireId}:{conversation.MatiereId}"
                 + $":{conversation.ModeSeance}:{conversation.ModeControleId}:{nbCours}{etatExamenBlanc}";
 
+            // LE RETOUR NE RECALCULE PLUS — Camara, le 27/11/2026, après mesure d'un contrôle de français de 1 h 20 (5,20 $) :
+            // cinq retours dans la soirée (« Quitter » puis revenir, parfois 30 secondes plus tard) ont chacun recalculé le
+            // contexte, donc réécrit tout ce qui suit le Noyau, ~0,15 $ à chaque fois — près d'un quart du cours. Un enfant
+            // qui revient DANS L'HEURE retrouve le contexte figé de sa séance (même règle que pendant la séance : « ce qu'on
+            // perd : rien d'utile ») ; au-delà, l'entrée a expiré d'elle-même et le contexte est recalculé. Les retours après
+            // un contrôle abandonné ou une dictée interrompue n'ont jamais recalculé : rien ne change pour eux.
             var debutDeSeance = accueil is TypeAccueil.PremiereSeance
-                or TypeAccueil.Retour
                 or TypeAccueil.NouvelleSeance;
 
             if (!debutDeSeance && _memoire.TryGetValue(cle, out string? fige) && fige is not null)
@@ -870,6 +875,13 @@ namespace SchoolWebApp.Api.Services
                 SlidingExpiration = TimeSpan.FromHours(1),
                 AbsoluteExpirationRelativeToNow = TimeSpan.FromHours(4),
             });
+
+            // LA TRACE D'UN RECALCUL (27/11/2026) : chaque recalcul fait réécrire ~15 000 à 35 000 jetons. La même soirée en
+            // montrait aussi en pleine séance, sans retour (20 h 05) ; la raison et la clé disent lequel des éléments a bougé
+            // (documents du cours, examen blanc, mode). `docker logs mimia | grep "Contexte de seance recalcule"`.
+            _logger.LogInformation(
+                "Contexte de seance recalcule (conversation {ConversationId}, raison {Raison}, accueil {Accueil}, cle {Cle}, {Longueur} caracteres).",
+                conversation.Id, debutDeSeance ? "debut-de-seance" : "absent-ou-cle-changee", accueil, cle, contexte.Length);
 
             return contexte;
         }

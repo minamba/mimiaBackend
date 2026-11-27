@@ -204,6 +204,8 @@ namespace SchoolWebApp.Api.Builders.impl
                     "CHINOIS" => ("Chinois", "你好 ! On apprend à entendre les tons, à tracer les caractères un trait après l'autre, et à dire ses premières phrases."),
                     "ARABE" => ("Arabe", "مرحبا ! On apprend à lire et à écrire l'arabe lettre par lettre, à le parler, et on découvre le monde arabe."),
                     "SVT" => ("SVT", "Le vivant, le corps humain, la Terre : on part de ce qu'on observe pour comprendre comment tout cela fonctionne."),
+                    // La technologie du collège (25/11/2026), professeur Amine.
+                    "TECHNOLOGIE" => ("Technologie", "Ton téléphone, un vélo électrique, une box internet : on regarde comment ils marchent, comment on les répare et comment on les programme. Et on apprend à choisir un objet pour de bonnes raisons."),
                     "PHILOSOPHIE" => ("Philosophie", "Penser par soi-même, ça s'apprend : on pose le problème, on argumente, et la dissertation devient beaucoup moins intimidante."),
                     "SCIENCES_GESTION" or "MANAGEMENT" or "DROIT_ECONOMIE" => ("Management / Droit et économie", "L'économie, le droit et la gestion sont partout autour de toi : on part d'exemples concrets pour comprendre les décisions."),
                     // « STSS » ne disait rien à une famille : Camara voulait un nom

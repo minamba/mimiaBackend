@@ -156,7 +156,7 @@ namespace SchoolWebApp.Api.Services
             var textes = liste
                 .Skip(Math.Max(debut, liste.Count - MessagesRecents))
                 .Select(m => m.Contenu ?? string.Empty)
-                .Append(PhraseDuMinuteur().Replace(ListeDesDictees().Replace(messageEleve ?? string.Empty, " "), " "))
+                .Append(SansRappelsDeLApplication(messageEleve))
                 .ToList();
 
             var concernes = new List<PromptsPedagogiques.ExerciceLangue>();
@@ -174,6 +174,26 @@ namespace SchoolWebApp.Api.Services
                 concernes.Add(PromptsPedagogiques.ExerciceLangue.ExpressionEcrite);
 
             return concernes;
+        }
+
+        /// <summary>
+        /// LES RAPPELS DE L'APPLICATION NE SONT PAS DES EXERCICES. Le message du tour porte, en plus des mots de l'élève,
+        /// des rappels écrits par le code ; ceux qui citent un mot déclencheur sans parler de l'exercice sont retirés AVANT
+        /// la recherche — le professeur, lui, les lit tels quels. La liste des dictées archivées et la phrase du minuteur
+        /// (19/09/2026), puis la règle des questions complètes (27/11/2026) : sa phrase « plus haut dans la conversation »
+        /// chargeait les consignes d'expression orale (~4 400 jetons, sous le titre « EXERCICES EN COURS ») à CHAQUE tour
+        /// de tous les cours de langue, français compris, depuis son arrivée le 21/11/2026 ; et le fait du tableau effacé
+        /// (`FaitTableauEfface`), dont « un texte à dicter » chargeait les consignes de dictée (~16 000 jetons) à chaque
+        /// arrivée et chaque retour, pour les retirer au tour suivant. Garde-fou :
+        /// `DetecteurExercicesLangueTests`, qui échoue si un rappel envoyé hors exercice redéclenche un exercice.
+        /// </summary>
+        private static string SansRappelsDeLApplication(string? messageEleve)
+        {
+            var texte = (messageEleve ?? string.Empty)
+                .Replace(PromptsPedagogiques.RegleDesQuestionsCompletes, " ", StringComparison.Ordinal)
+                .Replace(PromptsPedagogiques.FaitTableauEfface, " ", StringComparison.Ordinal);
+
+            return PhraseDuMinuteur().Replace(ListeDesDictees().Replace(texte, " "), " ");
         }
     }
 }

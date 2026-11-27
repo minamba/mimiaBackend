@@ -213,12 +213,14 @@ namespace SchoolWebApp.Dal.Seed
                 + "trois exercices.",
                 "Toutes les réponses sont rédigées, même les plus courtes. Porte sur le programme de 3e.");
 
-            Epreuve(brevet, "DNB_2027_SCIENCES", "Brevet de sciences", "PHYSIQUE_CHIMIE;SVT", Cycle4, 4,
+            // LA TECHNOLOGIE REJOINT L'ÉPREUVE (25/11/2026) : elle a enfin son professeur, Amine, et son référentiel
+            // (programme du BO n° 9 du 29/02/2024, en vigueur en 3e depuis la rentrée 2026).
+            Epreuve(brevet, "DNB_2027_SCIENCES", "Brevet de sciences", "PHYSIQUE_CHIMIE;SVT;TECHNOLOGIE", Cycle4, 4,
                 "1 h · coefficient 2 — deux disciplines sur trois (physique-chimie, SVT, technologie), annoncées "
                 + "deux mois avant l'examen : 30 minutes et 10 points chacune, dont 1 point pour la maîtrise de la "
                 + "langue. Une seule copie.",
-                "Porte sur le programme du cycle 4. La technologie, troisième discipline possible, n'est "
-                + "pas encore couverte par Mimia.");
+                "Porte sur le programme du cycle 4. Les deux disciplines tirées sont annoncées deux mois avant : "
+                + "c'est sur elles que la révision se concentre.");
 
             // ------------------------------- BAC DE FRANÇAIS — première générale
             var francaisGeneral = Examen(context, existants, "BACFR_G_2027", "Bac de français et de maths",

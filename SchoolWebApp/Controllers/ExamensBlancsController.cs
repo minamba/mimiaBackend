@@ -166,6 +166,68 @@ namespace SchoolWebApp.Api.Controllers
             }
         }
 
+        public sealed class ModificationRequest
+        {
+            [Required]
+            public DateTime? DateExamen { get; set; }
+
+            /// <summary>Facultative, « HH:mm:ss » ; null l'efface.</summary>
+            public TimeSpan? HeureExamen { get; set; }
+        }
+
+        /// <summary>
+        /// MODIFIER LA DATE ET L'HEURE — Camara, le 25/11/2026 : « comme pour les contrôles ». Les matières, elles, se
+        /// changent une à une (ajouter, retirer). Le contrôle caché de chaque matière suit la nouvelle date.
+        /// </summary>
+        [HttpPut("{examenId:int}")]
+        [SchoolWebApp.Api.Auth.AutoriseEleve]
+        [SwaggerResponse(204, "Modifié.")]
+        [SwaggerResponse(400, "Date passée.")]
+        [SwaggerResponse(403, "Réservé aux abonnés.")]
+        [SwaggerResponse(404, "Examen blanc inexistant ou n'appartenant pas à cet élève.")]
+        [SwaggerResponse(409, "Un autre examen blanc tombe déjà ce jour-là.")]
+        public async Task<IActionResult> Modifier(
+            int id, int examenId,
+            [FromBody] ModificationRequest requete,
+            [FromServices] AccesForfaitService acces,
+            [FromServices] ExamensBlancsService service,
+            CancellationToken ct)
+        {
+            if (!ModelState.IsValid || requete.DateExamen is not DateTime date) return BadRequest(ModelState);
+
+            try
+            {
+                if (await _resolveur.ResoudreEleveAsync(id) is null) return NotFound();
+
+                if (!(await acces.LirePourEleveAsync(id, ct)).Ouvert)
+                {
+                    return StatusCode(403, new { message = MessageReserveAbonnes });
+                }
+
+                // Même règle qu'à l'ajout : on ne le déplace pas dans le passé.
+                if (date.Date < DateTime.Today) return BadRequest(new { message = "Choisis une date à venir." });
+
+                var resultat = await service.ModifierDateAsync(id, examenId, date, requete.HeureExamen, ct);
+                if (resultat is null) return NotFound();
+
+                if (resultat.DateDejaPrise)
+                {
+                    return Conflict(new
+                    {
+                        message = "Tu as déjà un examen blanc ce jour-là. Ajoute plutôt tes matières à celui-là, "
+                                + "ou choisis un autre jour.",
+                    });
+                }
+
+                return NoContent();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Erreur lors de la modification de l'examen blanc {ExamenId}.", examenId);
+                return StatusCode(500, new { message = "Une erreur est survenue, veuillez réessayer." });
+            }
+        }
+
         [HttpDelete("{examenId:int}")]
         [SchoolWebApp.Api.Auth.AutoriseEleve]
         [SwaggerResponse(204, "Supprimé, avec ses fichiers.")]
@@ -219,7 +281,7 @@ namespace SchoolWebApp.Api.Controllers
 
             if (fichier.Length > ExamensBlancs.TailleMax)
             {
-                return BadRequest(new { message = "Ce fichier dépasse 100 Mo : enregistre-le en plus léger (en PDF, ou sans ses plus grosses images)." });
+                return BadRequest(new { message = "Ce fichier dépasse 200 Mo : enregistre-le en plus léger (en PDF, ou sans ses plus grosses images)." });
             }
 
             try
@@ -247,6 +309,87 @@ namespace SchoolWebApp.Api.Controllers
             {
                 _logger.LogError(ex, "Erreur lors de l'ajout d'un document a l'examen blanc {ExamenId}.", examenId);
                 return StatusCode(500, new { message = "Le document n'a pas pu être envoyé. Tu peux réessayer ?" });
+            }
+        }
+
+        /// <summary>
+        /// LE QR CODE DES DOCUMENTS — Camara, le 25/11/2026 : « comme pour les contrôles ». L'élève photographie ses
+        /// cours avec son téléphone ; les photos vont à cette matière de l'examen blanc (`ScanMobileController`).
+        /// </summary>
+        [HttpPost("{examenId:int}/matieres/{ligneId:int}/documents/scan-mobile")]
+        [SchoolWebApp.Api.Auth.AutoriseEleve]
+        [SwaggerResponse(200, "Le jeton du QR code et son expiration.")]
+        [SwaggerResponse(403, "Réservé aux abonnés.")]
+        [SwaggerResponse(404, "Matière inexistante ou n'appartenant pas à cet élève.")]
+        public async Task<IActionResult> CreerScanDocuments(
+            int id, int examenId, int ligneId,
+            [FromServices] AccesForfaitService acces,
+            [FromServices] SchoolWebApp.Api.Services.ScanMobile.JetonsScanMobile jetons,
+            CancellationToken ct)
+        {
+            try
+            {
+                if (await _resolveur.ResoudreEleveAsync(id) is null) return NotFound();
+
+                var ligne = (await _examens.GetAsync(id, examenId, ct))?.Matieres.FirstOrDefault(m => m.Id == ligneId);
+                if (ligne is null) return NotFound();
+
+                if (!(await acces.LirePourEleveAsync(id, ct)).Ouvert)
+                {
+                    return StatusCode(403, new { message = MessageReserveAbonnes });
+                }
+
+                var (jeton, expireLe) = jetons.CreerPourExamenBlanc(
+                    id, examenId, ligneId, $"{ligne.MatiereLibelle} — tes cours", DateTime.UtcNow);
+
+                return Ok(new { jeton, expireLe });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Echec de la creation d'un QR code sur l'examen blanc {ExamenId}.", examenId);
+                return StatusCode(500, new { message = "Une erreur est survenue, veuillez réessayer." });
+            }
+        }
+
+        [HttpGet("{examenId:int}/matieres/{ligneId:int}/documents/scan-mobile/{jeton}")]
+        [SchoolWebApp.Api.Auth.AutoriseEleve]
+        [SwaggerResponse(200, "attente, recu (avec les documents) ou expire.")]
+        [SwaggerResponse(404, "Matière inexistante ou n'appartenant pas à cet élève.")]
+        public async Task<IActionResult> EtatScanDocuments(
+            int id, int examenId, int ligneId, string jeton,
+            [FromServices] SchoolWebApp.Api.Services.ScanMobile.JetonsScanMobile jetons,
+            CancellationToken ct)
+        {
+            try
+            {
+                if (await _resolveur.ResoudreEleveAsync(id) is null) return NotFound();
+
+                var ligne = (await _examens.GetAsync(id, examenId, ct))?.Matieres.FirstOrDefault(m => m.Id == ligneId);
+                if (ligne is null) return NotFound();
+
+                var (etat, ids, termine) = jetons.EtatExamenBlanc(jeton, ligneId, DateTime.UtcNow);
+
+                var recus = ligne.Documents
+                    .Where(d => ids.Contains(d.Id))
+                    .Select(DocumentExamenBlancVue.Depuis)
+                    .ToList();
+
+                return Ok(new
+                {
+                    etat = etat switch
+                    {
+                        SchoolWebApp.Api.Services.ScanMobile.EtatJetonScan.Recu when recus.Count > 0 => "recu",
+                        SchoolWebApp.Api.Services.ScanMobile.EtatJetonScan.Attente => "attente",
+                        _ => "expire",
+                    },
+                    documents = recus,
+                    termine,
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Echec du releve d'un QR code sur l'examen blanc {ExamenId}.", examenId);
+                return StatusCode(500, new { message = "Une erreur est survenue, veuillez réessayer." });
             }
         }
 

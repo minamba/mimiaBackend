@@ -80,8 +80,13 @@ namespace SchoolWebApp.Api.Services.PiecesJointes
             // Le type annoncé par le navigateur n'est qu'un indice : c'est la
             // signature qui fait foi. On refuse quand même le désaccord, parce
             // qu'il n'a aucune raison légitime de se produire.
-            if (!string.IsNullOrWhiteSpace(typeAnnonce)
-                && !string.Equals(typeAnnonce, typeReel, StringComparison.OrdinalIgnoreCase))
+            //
+            // SAUF QUAND L'ANNONCE NE DIT RIEN (25/11/2026) : un PDF reçu par WhatsApp ou par mail arrive souvent
+            // annoncé « application/octet-stream » (« un fichier quelconque »), ou sous un ancien nom (« application/
+            // x-pdf », « image/jpg »). Ce n'est pas un désaccord : la signature tranche seule. Une maman était bloquée
+            // sur le bloc physique-chimie d'un brevet blanc.
+            var annonce = NormaliserTypeAnnonce(typeAnnonce);
+            if (annonce is not null && !string.Equals(annonce, typeReel, StringComparison.OrdinalIgnoreCase))
             {
                 return new VerdictPieceJointe(false, "Ce fichier ne correspond pas à son format.");
             }
@@ -89,6 +94,76 @@ namespace SchoolWebApp.Api.Services.PiecesJointes
             if (typeReel != TypePdf) return new VerdictPieceJointe(true, null, 0);
 
             return CompterPages(donnees, pagesMax);
+        }
+
+        /// <summary>
+        /// Les annonces qui ne disent rien du format : on les ignore, la signature décidera.
+        /// </summary>
+        private static readonly HashSet<string> AnnoncesSansValeur = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "application/octet-stream", "binary/octet-stream", "application/binary", "application/unknown",
+            "application/x-download", "application/download", "application/force-download",
+        };
+
+        /// <summary>Les anciens noms d'un format, ramenés au nom que la signature donne.</summary>
+        private static readonly Dictionary<string, string> AliasDeTypes = new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["application/x-pdf"] = TypePdf,
+            ["application/acrobat"] = TypePdf,
+            ["applications/vnd.pdf"] = TypePdf,
+            ["text/pdf"] = TypePdf,
+            ["text/x-pdf"] = TypePdf,
+            ["image/jpg"] = TypeJpeg,
+            ["image/pjpeg"] = TypeJpeg,
+            ["image/x-png"] = TypePng,
+        };
+
+        /// <summary>
+        /// Le type annoncé, ramené à ce qui compare : null s'il ne dit rien (vide, « fichier quelconque »), son nom
+        /// courant s'il porte un ancien nom. Les paramètres (« ; charset=… ») sont retirés.
+        /// </summary>
+        public static string? NormaliserTypeAnnonce(string? typeAnnonce)
+        {
+            if (string.IsNullOrWhiteSpace(typeAnnonce)) return null;
+
+            var type = typeAnnonce.Split(';')[0].Trim();
+            if (type.Length == 0 || AnnoncesSansValeur.Contains(type)) return null;
+
+            return AliasDeTypes.TryGetValue(type, out var courant) ? courant : type;
+        }
+
+        /// <summary>
+        /// Jusqu'où chercher « %PDF » : la norme le permet dans le premier kilo-octet, et les lecteurs l'acceptent.
+        /// </summary>
+        public const int FenetreEnTetePdf = 1024;
+
+        /// <summary>
+        /// La position de « %PDF » dans le premier kilo-octet : 0 pour un PDF ordinaire, plus si un logiciel a mis
+        /// quelques octets devant (espaces, marque d'encodage, en-tête d'un scanner), -1 si ce n'est pas un PDF.
+        /// </summary>
+        public static int DebutPdf(byte[] o)
+        {
+            var limite = Math.Min(o.Length, FenetreEnTetePdf) - 4;
+            for (var i = 0; i <= limite; i++)
+            {
+                if (o[i] == 0x25 && o[i + 1] == 0x50 && o[i + 2] == 0x44 && o[i + 3] == 0x46) return i;
+            }
+
+            return -1;
+        }
+
+        /// <summary>
+        /// Un PDF dont « %PDF » arrive après quelques octets, rendu propre : les octets d'avant sont retirés, pour que
+        /// tout ce qui suit (signature, lecture, modèle) voie un PDF ordinaire. Tout autre fichier est rendu tel quel.
+        /// </summary>
+        public static byte[] RognerAvantPdf(byte[] o)
+        {
+            // Jamais un fichier déjà reconnu (une photo dont les métadonnées contiendraient « %PDF »), ni un document
+            // Office (une archive « PK ») : seuls les fichiers sans signature connue sont examinés.
+            if (ReconnaitreType(o) is not null || (o.Length >= 2 && o[0] == 0x50 && o[1] == 0x4B)) return o;
+
+            var debut = DebutPdf(o);
+            return debut > 0 ? o[debut..] : o;
         }
 
         /// <summary>Le type réel, lu dans les premiers octets. Null si inconnu.</summary>

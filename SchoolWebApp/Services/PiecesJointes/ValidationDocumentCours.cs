@@ -17,13 +17,13 @@ namespace SchoolWebApp.Api.Services.PiecesJointes
         /// <summary>
         /// LES EXAMENS BLANCS N'ONT NI PLAFOND DE PAGES NI PLAFOND DE TAILLE PROPRE — Camara, le 23/11/2026 : « un enfant
         /// bloqué parce que son document est trop gros, je pourrais perdre des clients ». Seul le plafond technique
-        /// (100 Mo, <c>ExamensBlancs.TailleMax</c>) demeure. Le format, lui, se vérifie comme ailleurs : un .doc de
+        /// (200 Mo, <c>ExamensBlancs.TailleMax</c>) demeure. Le format, lui, se vérifie comme ailleurs : un .doc de
         /// 1997 reste illisible, et le conseil de l'enregistrer en .docx vaut toujours.
         /// </summary>
         public static VerdictDocumentCours ValiderSansPlafond(byte[] donnees, string? typeAnnonce, int tailleMax)
         {
             if (donnees.Length == 0) return new VerdictDocumentCours(false, "Le fichier est vide.");
-            if (donnees.Length > tailleMax) return new VerdictDocumentCours(false, "Ce fichier dépasse 100 Mo : enregistre-le en plus léger (en PDF, ou sans ses plus grosses images).");
+            if (donnees.Length > tailleMax) return new VerdictDocumentCours(false, $"Ce fichier dépasse {tailleMax / (1024 * 1024)} Mo : enregistre-le en plus léger (en PDF, ou sans ses plus grosses images).");
 
             var office = ExtracteurTexteOffice.ReconnaitreType(donnees);
             if (office is not null)

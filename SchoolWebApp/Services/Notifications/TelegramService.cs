@@ -498,11 +498,15 @@ namespace SchoolWebApp.Api.Services.Notifications
         {
             var sb = new StringBuilder();
 
+            // [PROD] OU [DEV] EN TÊTE (25/11/2026) : l'API locale de Camara écrit sur le même salon que la prod, et
+            // une alerte de son PC a été prise pour une panne de mimia.fr. L'aperçu de la notification le dit déjà.
+            var etiquette = string.IsNullOrWhiteSpace(etat.Environnement) ? string.Empty : $"\\[{Echapper(etat.Environnement)}\\] ";
+
             // La pastille en tête : c'est tout ce qu'on voit dans l'aperçu
             // d'une notification, et elle dit déjà s'il faut agir.
             if (retabli)
             {
-                sb.AppendLine($"🟢 *{Echapper(etat.Nom)} fonctionne de nouveau*");
+                sb.AppendLine($"🟢 {etiquette}*{Echapper(etat.Nom)} fonctionne de nouveau*");
                 sb.AppendLine($"— Rétabli : {Echapper(etat.Usage)}");
             }
             else
@@ -511,7 +515,7 @@ namespace SchoolWebApp.Api.Services.Notifications
                     ? "🔴"
                     : "🟠";
 
-                sb.AppendLine($"{pastille} *{Echapper(etat.Nom)} : {Echapper(libelleStatut)}*");
+                sb.AppendLine($"{pastille} {etiquette}*{Echapper(etat.Nom)} : {Echapper(libelleStatut)}*");
                 sb.AppendLine($"— Touché : {Echapper(etat.Usage)}");
 
                 if (etat.CodeHttp is not null || !string.IsNullOrWhiteSpace(etat.CodeErreur))
@@ -528,6 +532,17 @@ namespace SchoolWebApp.Api.Services.Notifications
                 {
                     sb.AppendLine($"— Recharger : {Echapper(etat.LienFacturation)}");
                 }
+            }
+
+            // OÙ, ET QUELLE CLÉ : la fin de la clé est celle que la console affiche (« …vQAA »), de quoi la retrouver
+            // dans la liste sans jamais l'écrire.
+            if (!string.IsNullOrWhiteSpace(etat.Environnement))
+            {
+                var ou = etat.Environnement == "PROD"
+                    ? "production (mimia.fr)"
+                    : "développement (API locale : user-secrets du PC)";
+                var cle = string.IsNullOrWhiteSpace(etat.FinCle) ? string.Empty : $", clé …{etat.FinCle}";
+                sb.AppendLine($"— Où : {Echapper(ou + cle)}");
             }
 
             sb.AppendLine($"— Le : {Echapper(ALHeureDeParis(etat.VerifieLe ?? DateTime.UtcNow))} \\(Paris\\)");

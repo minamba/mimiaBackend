@@ -89,6 +89,9 @@ namespace SchoolWebApp.Domain.Models
         public int Pourcent { get; set; }
 
         public List<MatiereEpreuvePreparation> Matieres { get; set; } = [];
+
+        /// <summary>La date officielle VALIDÉE de l'épreuve (25/11/2026), ou null si elle n'est pas encore connue.</summary>
+        public DateEpreuveOfficielle? DateOfficielle { get; set; }
     }
 
     /// <summary>

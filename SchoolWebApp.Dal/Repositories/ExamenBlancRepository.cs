@@ -156,6 +156,34 @@ namespace SchoolWebApp.Dal.Repositories
             return new M.RestesExamenBlanc(chemins, controles);
         }
 
+        public async Task<M.ModificationExamenBlanc?> ModifierDateAsync(
+            int eleveId, int examenBlancId, DateTime dateExamen, TimeSpan? heureExamen, DateTime maintenant,
+            CancellationToken ct = default)
+        {
+            var examen = await _context.ExamensBlancs
+                .Include(e => e.Matieres)
+                .FirstOrDefaultAsync(e => e.Id == examenBlancId && e.EleveId == eleveId, ct);
+
+            if (examen is null) return null;
+
+            var jour = dateExamen.Date;
+
+            // UN EXAMEN BLANC PAR JOUR : c'est la date qui range les matières (AjouterMatiereAsync). En déplacer un sur
+            // le jour d'un autre les fusionnerait sans le dire — on refuse, l'élève choisit.
+            if (jour != examen.DateExamen.Date
+                && await _context.ExamensBlancs.AnyAsync(e => e.EleveId == eleveId && e.Id != examenBlancId && e.DateExamen == jour, ct))
+            {
+                return M.ModificationExamenBlanc.Prise;
+            }
+
+            examen.DateExamen = jour;
+            examen.HeureExamen = heureExamen;
+            examen.DateModification = maintenant;
+            await _context.SaveChangesAsync(ct);
+
+            return new M.ModificationExamenBlanc(false, examen.Matieres.Select(m => m.ControleId).OfType<int>().ToList());
+        }
+
         public async Task<M.RestesExamenBlanc?> SupprimerAsync(int eleveId, int examenBlancId, CancellationToken ct = default)
         {
             var examen = await _context.ExamensBlancs
@@ -282,7 +310,7 @@ namespace SchoolWebApp.Dal.Repositories
             ExamenBlancMatiereId = d.ExamenBlancMatiereId,
             NomFichier = d.NomFichier,
             TypeMime = d.TypeMime,
-            // Long en base (jusqu'à 100 Mo, sans plafond propre) ; l'affichage n'en a pas besoin au-delà.
+            // Long en base (jusqu'à 200 Mo, sans plafond propre) ; l'affichage n'en a pas besoin au-delà.
             Taille = (int)Math.Min(d.Taille, int.MaxValue),
             NombrePages = d.NombrePages,
             Chemin = d.Chemin,

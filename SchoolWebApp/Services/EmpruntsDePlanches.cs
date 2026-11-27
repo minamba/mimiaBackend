@@ -66,13 +66,43 @@ namespace SchoolWebApp.Api.Services
                 ],
 
                 // STI2D — ingénierie (23/11/2026) : la chaîne d'énergie, les
-                // circuits, le magnétisme, le mouvement et les ondes. Aucune
-                // planche propre à l'ingénierie n'est encore importée.
+                // circuits, le magnétisme, le mouvement et les ondes.
+                // 25/11/2026 (Camara : « et aussi pour la matière de Lucas ») : les
+                // 24 schémas des sciences de l'ingénieur, qui couvrent le programme
+                // de STI2D (chaînes de puissance et d'information, SysML, liaisons,
+                // électricité, asservissement, thermique, réseaux, IA), et le
+                // réseau local de NSI. Aucune planche propre à l'ingénierie.
                 ["INGENIERIE"] =
                 [
                     "pc-chaine-energetique", "pc-circuit-serie", "pc-circuit-derivation",
                     "pc-circuit-rc", "pc-aimant-champ", "pc-mouvement-vecteurs",
                     "pc-spectre-electromagnetique", "pc-capteur",
+                    "si-effort-flux-puissance", "si-chaine-puissance", "si-sysml-exigences-cas",
+                    "si-graphe-liaisons", "si-trame-encapsulation", "si-asservissement-boucle",
+                    "si-trois-realites-ecarts", "si-etats-transitions", "si-chaine-information",
+                    "si-liaisons-normalisees", "si-bielle-manivelle", "si-diagramme-blocs-internes",
+                    "si-lois-kirchhoff", "si-pont-en-h", "si-bilan-pertes-sankey", "si-champ-vitesses",
+                    "si-isolement-statique", "si-cone-frottement", "si-charges-ouvrage",
+                    "si-modulation-numerique", "si-architecture-objets-connectes", "si-reponses-modeles",
+                    "si-intelligence-artificielle", "si-transferts-thermiques",
+                    "nsi-reseau-local",
+                ],
+
+                // TECHNOLOGIE DU COLLÈGE (25/11/2026) : en attendant ses propres
+                // schémas (préfixe « te- », catalogue du même jour), ce qui colle au
+                // cycle 4 ailleurs. Les schémas de technologie de 6e (objet
+                // technique, cycle de vie, levier, sources et conversion d'énergie,
+                // réseau) : la 5e part de là. Électricité et énergie de la
+                // physique-chimie. Les chaînes d'énergie et d'information et l'IA
+                // des sciences de l'ingénieur ; réseau, octet et arborescence de NSI.
+                ["TECHNOLOGIE"] =
+                [
+                    "sc-objet-technique", "sc-cycle-vie-objet", "sc-levier", "sc-sources-energie",
+                    "sc-chaine-conversion-energie", "sc-symboles-electriques", "sc-reseau-informatique",
+                    "pc-chaine-energetique", "pc-circuit-serie", "pc-circuit-derivation", "pc-capteur",
+                    "pc-symboles-electriques", "pc-signal-information",
+                    "si-chaine-information", "si-chaine-puissance", "si-intelligence-artificielle",
+                    "nsi-reseau-local", "nsi-octet-bases", "nsi-arborescence-droits",
                 ],
 
             };

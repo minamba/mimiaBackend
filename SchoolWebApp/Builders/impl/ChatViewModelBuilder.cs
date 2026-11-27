@@ -3495,21 +3495,10 @@ namespace SchoolWebApp.Api.Builders.impl
             // nombre ; c'est LectureDesNombres.FaitReprise qui le dit au professeur, plus bas (« le tableau n'est pas vide »).
             if (nouvelleArrivee && repriseNombres is null)
             {
-                declencheur += "\n\n[LE TABLEAU VIENT D'ÊTRE EFFACÉ : l'élève a un "
-                    + "tableau noir sous les yeux. Ce que tu y avais écrit la "
-                    + "dernière fois, tu t'en souviens ; lui ne le voit plus. Si "
-                    + "tu reprends un exercice, un énoncé, les valeurs d'un "
-                    + "problème, un calcul ou une figure — même déjà écrits "
-                    + "avant —, RÉÉCRIS-LES dans un bloc [ARDOISE] dans CE "
-                    + "message, juste après les avoir dits. Le bloc ne se "
-                    + "prononce pas : il ne compte pas dans la longueur de ton "
-                    + "message. Seule exception, comme toujours : un texte à "
-                    + "dicter ne va jamais au tableau. Une FIGURE, elle, ne se "
-                    + "réécrit pas : elle se remet par sa clé, [ARDOISE] "
-                    + "SCHEMA:la-cle [/ARDOISE]. Et si la figure dont tu te "
-                    + "souviens n'est PAS dans ta liste de planches, tu ne peux "
-                    + "pas la réafficher du tout : change d'exercice plutôt que "
-                    + "de faire chercher à l'élève ce que personne ne voit.]";
+                // LE TEXTE EST DANS PromptsPedagogiques.FaitTableauEfface (27/11/2026), mot pour mot : le détecteur
+                // d'exercices de langue doit pouvoir l'ignorer — son « un texte à dicter » chargeait les consignes de
+                // dictée (~16 000 jetons) à chaque arrivée et à chaque retour de tous les cours de langue.
+                declencheur += "\n\n" + PromptsPedagogiques.FaitTableauEfface;
             }
             else if (!nouvelleArrivee)
             {

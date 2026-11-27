@@ -266,6 +266,10 @@ namespace SchoolWebApp.Dal.Repositories
             var codesMatieres = epreuves.SelectMany(e => Codes(e.MatieresCodes))
                 .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
 
+            // LES DATES OFFICIELLES VALIDÉES (25/11/2026) : seules celles que l'administrateur a validées se montrent.
+            var codesEpreuves = epreuves.Select(e => e.Code).ToList();
+            var dates = await new CalendrierExamensRepository(_context).GetValideesAsync(codesEpreuves, ct);
+
             var codesNiveaux = epreuves.SelectMany(e => Codes(e.NiveauxProgrammeCodes))
                 .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
 
@@ -461,6 +465,7 @@ namespace SchoolWebApp.Dal.Repositories
                         ? 0
                         : (int)Math.Round(matieresEpreuve.Average(x => (double)x.Preparation.Pourcent)),
                     Matieres = matieresEpreuve,
+                    DateOfficielle = dates.GetValueOrDefault(epreuve.Code),
                 });
             }
 

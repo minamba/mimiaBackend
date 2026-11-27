@@ -23,7 +23,9 @@ namespace SchoolWebApp.Api.Services.ScanMobile
     /// Où va la photo : une séance (<see cref="ConversationId"/>), ou le cours
     /// d'un contrôle (<see cref="ControleId"/>, depuis le 26/09/2026).
     /// </summary>
-    public record DestinationScan(int ConversationId, int? ControleId, int EleveId, int? CoursImporteId = null, string? NatureCours = null);
+    public record DestinationScan(
+        int ConversationId, int? ControleId, int EleveId, int? CoursImporteId = null, string? NatureCours = null,
+        int? ExamenBlancId = null, int? ExamenBlancLigneId = null);
 
     /// <summary>
     /// LES QR CODES DU SCANNER, LE TEMPS QU'ILS SERVENT.
@@ -77,6 +79,13 @@ namespace SchoolWebApp.Api.Services.ScanMobile
 
             /// <summary>Fiches ou podcasts (15/11/2026) : le cours importé appartient à l'un des deux.</summary>
             public string? NatureCours { get; init; }
+
+            /// <summary>
+            /// Une matière d'examen blanc (25/11/2026), quatrième destination : ses documents, comme le cours d'un
+            /// contrôle. `ExamenBlancId` accompagne la ligne : le service d'ajout vérifie les deux.
+            /// </summary>
+            public int? ExamenBlancId { get; init; }
+            public int? ExamenBlancLigneId { get; init; }
             public int EleveId { get; init; }
             public string? ProfPrenom { get; init; }
             public string? Matiere { get; init; }
@@ -154,7 +163,9 @@ namespace SchoolWebApp.Api.Services.ScanMobile
                 if (entree!.Termine || entree.EnCours || entree.PiecesJointes.Count >= PiecesMax) return false;
 
                 entree.EnCours = true;
-                destination = new DestinationScan(entree.ConversationId, entree.ControleId, entree.EleveId, entree.CoursImporteId, entree.NatureCours);
+                destination = new DestinationScan(
+                    entree.ConversationId, entree.ControleId, entree.EleveId, entree.CoursImporteId, entree.NatureCours,
+                    entree.ExamenBlancId, entree.ExamenBlancLigneId);
                 return true;
             }
         }
@@ -228,6 +239,66 @@ namespace SchoolWebApp.Api.Services.ScanMobile
 
                 return (jeton, expireLe);
             }
+        }
+
+        /// <summary>
+        /// Un QR code pour les documents d'une matière d'examen blanc — Camara, le 25/11/2026 : « comme pour les
+        /// contrôles ». Même vie : dix minutes, plusieurs photos, « terminé » ; celui qui n'a rien reçu est remplacé.
+        /// </summary>
+        public (string Jeton, DateTime ExpireLe) CreerPourExamenBlanc(
+            int eleveId, int examenBlancId, int ligneId, string? matiere, DateTime maintenant)
+        {
+            Nettoyer(maintenant);
+
+            lock (_verrou)
+            {
+                foreach (var (cle, entree) in _entrees)
+                {
+                    if (entree.ExamenBlancLigneId == ligneId && entree.PiecesJointes.Count == 0 && !entree.EnCours)
+                    {
+                        _entrees.TryRemove(cle, out _);
+                    }
+                }
+
+                var jeton = AuthentificationEleve.GenererJeton();
+                var expireLe = maintenant + Validite;
+
+                _entrees[AuthentificationEleve.Hacher(jeton)] = new Entree
+                {
+                    ExamenBlancId = examenBlancId,
+                    ExamenBlancLigneId = ligneId,
+                    EleveId = eleveId,
+                    Matiere = matiere,
+                    ExpireLe = expireLe,
+                };
+
+                return (jeton, expireLe);
+            }
+        }
+
+        /// <summary>Même lecture que <see cref="Etat"/>, pour le QR code d'une matière d'examen blanc.</summary>
+        public (EtatJetonScan Etat, IReadOnlyList<int> Documents, bool Termine) EtatExamenBlanc(
+            string? jeton, int ligneId, DateTime maintenant)
+        {
+            if (string.IsNullOrWhiteSpace(jeton)
+                || !_entrees.TryGetValue(AuthentificationEleve.Hacher(jeton), out var entree)
+                || entree.ExamenBlancLigneId != ligneId)
+            {
+                return (EtatJetonScan.Expire, Array.Empty<int>(), false);
+            }
+
+            int[] recues;
+            bool termine;
+            lock (_verrou)
+            {
+                recues = entree.PiecesJointes.ToArray();
+                termine = entree.Termine;
+            }
+
+            if (recues.Length > 0) return (EtatJetonScan.Recu, recues, termine);
+            return entree.ExpireLe > maintenant
+                ? (EtatJetonScan.Attente, recues, termine)
+                : (EtatJetonScan.Expire, recues, termine);
         }
 
         /// <summary>Même lecture que <see cref="Etat"/>, pour le QR code d'un cours importé.</summary>

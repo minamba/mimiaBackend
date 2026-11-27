@@ -43,6 +43,7 @@ namespace SchoolWebApp.Api.Services.Fournisseurs
         private readonly ITelegramService _telegram;
         private readonly ILogger<SurveillanceFournisseurs> _logger;
         private readonly CompteurGemini _compteurGemini;
+        private readonly IHostEnvironment _environnement;
 
         public SurveillanceFournisseurs(
             HttpClient http,
@@ -54,8 +55,10 @@ namespace SchoolWebApp.Api.Services.Fournisseurs
             IServiceScopeFactory scopes,
             ITelegramService telegram,
             ILogger<SurveillanceFournisseurs> logger,
-            CompteurGemini compteurGemini)
+            CompteurGemini compteurGemini,
+            IHostEnvironment environnement)
         {
+            _environnement = environnement ?? throw new ArgumentNullException(nameof(environnement));
             _compteurGemini = compteurGemini ?? throw new ArgumentNullException(nameof(compteurGemini));
             _telegram = telegram ?? throw new ArgumentNullException(nameof(telegram));
             _http = http ?? throw new ArgumentNullException(nameof(http));
@@ -293,11 +296,18 @@ namespace SchoolWebApp.Api.Services.Fournisseurs
         {
             var dejaSignale = _etats.DernierSignaleTelegram(etat.Code);
 
+            // D'OÙ ET AVEC QUELLE CLÉ (25/11/2026) : l'API locale et la prod écrivent sur le même Telegram.
+            var message = etat with
+            {
+                Environnement = _environnement.IsProduction() ? "PROD" : "DEV",
+                FinCle = FinDeCle(etat.Code),
+            };
+
             if (StatutFournisseur.EnDefaut(etat.Statut))
             {
                 if (dejaSignale == etat.Statut) return;
 
-                await _telegram.NotifierFournisseurAsync(etat, StatutFournisseur.Libelle(etat.Statut), retabli: false);
+                await _telegram.NotifierFournisseurAsync(message, StatutFournisseur.Libelle(etat.Statut), retabli: false);
                 _etats.MarquerSignaleTelegram(etat.Code, etat.Statut);
                 return;
             }
@@ -306,9 +316,26 @@ namespace SchoolWebApp.Api.Services.Fournisseurs
                 && dejaSignale is not null
                 && StatutFournisseur.EnDefaut(dejaSignale))
             {
-                await _telegram.NotifierFournisseurAsync(etat, StatutFournisseur.Libelle(etat.Statut), retabli: true);
+                await _telegram.NotifierFournisseurAsync(message, StatutFournisseur.Libelle(etat.Statut), retabli: true);
                 _etats.MarquerSignaleTelegram(etat.Code, etat.Statut);
             }
+        }
+
+        /// <summary>
+        /// Les quatre derniers caractères de la clé que la sonde a utilisée — ceux que la console affiche. Rien pour
+        /// une clé trop courte : quatre caractères d'une clé de huit en diraient trop.
+        /// </summary>
+        private string? FinDeCle(string code)
+        {
+            var cle = code switch
+            {
+                EtatFournisseurs.Anthropic => _configuration["Claude:ApiKey"] ?? Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY"),
+                EtatFournisseurs.OpenAi => _voix.ApiKey,
+                EtatFournisseurs.Gemini => _voix.GeminiApiKey,
+                _ => null,
+            };
+
+            return cle is { Length: >= 20 } ? cle.Trim()[^4..] : null;
         }
 
         /// <summary>

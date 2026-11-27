@@ -26,7 +26,7 @@ namespace SchoolWebApp.Domain.Models
         /// parce que son document est trop gros, je pourrais perdre des clients »). Seul ce plafond technique demeure,
         /// pour qu'un fichier de plusieurs gigaoctets ne fasse pas tomber le serveur pendant l'envoi.
         /// </summary>
-        public const int TailleMax = 100 * 1024 * 1024;
+        public const int TailleMax = 200 * 1024 * 1024; // 200 Mo depuis le 25/11/2026 (Camara), 100 avant
 
         /// <summary>Les fichiers s'effacent deux mois après la date de l'examen blanc.</summary>
         public const int MoisConservation = 2;
@@ -160,6 +160,15 @@ namespace SchoolWebApp.Domain.Models
 
     /// <summary>Ce qu'il faut effacer après le retrait d'une matière ou d'un examen blanc : fichiers et contrôles cachés.</summary>
     public record RestesExamenBlanc(IReadOnlyList<string> Chemins, IReadOnlyList<int> Controles);
+
+    /// <summary>
+    /// Le résultat d'un changement de date (25/11/2026) : refusé si un autre examen blanc tombe déjà ce jour-là, sinon
+    /// les contrôles cachés de ses matières, à déplacer à la nouvelle date.
+    /// </summary>
+    public record ModificationExamenBlanc(bool DateDejaPrise, IReadOnlyList<int> Controles)
+    {
+        public static readonly ModificationExamenBlanc Prise = new(true, []);
+    }
 
     /// <summary>
     /// L'examen blanc vu depuis la séance de préparation de son contrôle caché (étape 3) : de quoi dire au professeur

@@ -167,7 +167,7 @@ namespace SchoolWebApp.Api.Services.Tarifs
 
             var standard = Array.FindIndex(lignes, debut, fin - debut,
                 l => l.Trim().Equals("### Standard", StringComparison.OrdinalIgnoreCase));
-            if (standard < 0) return null;
+            if (standard < 0) return LireGeminiOnglets(lignes, debut, fin, aujourdhui);
 
             decimal? Ligne(string intitule)
             {
@@ -183,6 +183,82 @@ namespace SchoolWebApp.Api.Services.Tarifs
                 }
 
                 return null;
+            }
+
+            var entree = Ligne("Input price");
+            var sortie = Ligne("Output price");
+            if (sortie is null) return null;
+
+            return new PrixLus(
+                entree,
+                sortie,
+                Math.Round(sortie.Value * JetonsAudioParSecondeGemini * 60m / 1_000_000m, 5));
+        }
+
+        /// <summary>
+        /// LA PAGE EN ONGLETS — constaté le 26/11/2026 (alerte Telegram « gemini-3.8-flash-lite-tts introuvable ») : la
+        /// page a déménagé (`aistudio.google.com/docs/pricing.md.txt`, l'ancienne adresse redirige) et ses tableaux ne
+        /// sont plus des lignes « | … | » sous « ### Standard », mais des onglets et des listes :
+        ///
+        ///   {% tab title="Standard" %}
+        ///   {% table %}
+        ///   * Feature            * Free Tier          * Paid Tier, per 1M tokens in USD
+        ///   ---
+        ///   * Input price
+        ///   * Free of charge
+        ///   * $0.50 (text) through December 31, 2026.
+        ///   $1.00 (text) starting January 1, 2027.
+        ///   ---
+        ///   * Output price …
+        ///
+        /// Une rangée par bloc entre deux « --- » ; chaque cellule commence par « * », et la dernière (la payante) peut
+        /// continuer sur les lignes suivantes. Mêmes règles qu'avant : le prix du jour, la colonne payante.
+        /// </summary>
+        private static PrixLus? LireGeminiOnglets(string[] lignes, int debut, int fin, DateTime aujourdhui)
+        {
+            var onglet = Array.FindIndex(lignes, debut, fin - debut,
+                l => l.Contains("{% tab title=\"Standard\"", StringComparison.OrdinalIgnoreCase));
+            if (onglet < 0) return null;
+
+            var finOnglet = Array.FindIndex(lignes, onglet + 1, fin - onglet - 1,
+                l => l.Contains("{% /tab %}", StringComparison.OrdinalIgnoreCase));
+            if (finOnglet < 0) finOnglet = fin;
+
+            // Les rangées : des listes de cellules, séparées par « --- ».
+            var rangees = new List<List<string>>();
+            var courante = new List<string>();
+
+            for (var i = onglet + 1; i < finOnglet; i++)
+            {
+                var ligne = lignes[i].Trim();
+
+                if (ligne == "---")
+                {
+                    if (courante.Count > 0) rangees.Add(courante);
+                    courante = [];
+                    continue;
+                }
+
+                if (ligne.StartsWith("{%", StringComparison.Ordinal) || ligne.Length == 0) continue;
+
+                if (ligne.StartsWith("* ", StringComparison.Ordinal))
+                {
+                    courante.Add(ligne[2..].Trim());
+                }
+                else if (courante.Count > 0)
+                {
+                    courante[^1] += " " + ligne;
+                }
+            }
+
+            if (courante.Count > 0) rangees.Add(courante);
+
+            decimal? Ligne(string intitule)
+            {
+                var rangee = rangees.FirstOrDefault(r =>
+                    r.Count >= 2 && r[0].Equals(intitule, StringComparison.OrdinalIgnoreCase));
+
+                return rangee is null ? null : PrixDuJour(rangee[^1], aujourdhui);
             }
 
             var entree = Ligne("Input price");

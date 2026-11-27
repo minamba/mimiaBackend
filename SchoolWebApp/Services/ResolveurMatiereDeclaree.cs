@@ -69,6 +69,10 @@ namespace SchoolWebApp.Api.Services
             ["chimie"] = "PHYSIQUE_CHIMIE",
             ["physique_chimie"] = "PHYSIQUE_CHIMIE",
 
+            // La technologie du collège (25/11/2026) : « techno » est le mot de l'élève.
+            ["techno"] = "TECHNOLOGIE",
+            ["technologie"] = "TECHNOLOGIE",
+
             ["histoire"] = "HISTOIRE_GEO",
             ["geo"] = "HISTOIRE_GEO",
             ["geographie"] = "HISTOIRE_GEO",

@@ -89,7 +89,9 @@ namespace SchoolWebApp.Api.Controllers
         [SwaggerResponse(404, "QR code inconnu, expiré ou déjà utilisé.")]
         public async Task<IActionResult> Envoyer(
             string jeton, IFormFile fichier, [FromServices] Services.CoursDuControleService cours,
-            [FromServices] Services.MesFiches.ImportCoursService importCours)
+            [FromServices] Services.MesFiches.ImportCoursService importCours,
+            [FromServices] Services.ExamensBlancsService examensBlancs,
+            [FromServices] Services.Paiement.AccesForfaitService acces)
         {
             if (fichier is null || fichier.Length == 0)
             {
@@ -123,6 +125,32 @@ namespace SchoolWebApp.Api.Controllers
                 {
                     var ajout = await cours.AjouterAsync(
                         destination.EleveId, controleId, fichier.FileName, fichier.ContentType,
+                        flux.ToArray(), HttpContext.RequestAborted);
+
+                    if (ajout.Document is null)
+                    {
+                        _jetons.Liberer(jeton);
+                        return ajout.StockageIndisponible
+                            ? StatusCode(503, new { message = ajout.Motif })
+                            : BadRequest(new { message = ajout.Motif });
+                    }
+
+                    _jetons.Livrer(jeton, ajout.Document.Id);
+                    return Ok(new { recu = true });
+                }
+
+                // UNE MATIÈRE D'EXAMEN BLANC — 25/11/2026 : la photo rejoint ses documents, par la même porte que
+                // l'ordinateur (ExamensBlancsService), et la même règle : réservé aux abonnés.
+                if (destination.ExamenBlancId is int examenBlancId && destination.ExamenBlancLigneId is int ligneId)
+                {
+                    if (!(await acces.LirePourEleveAsync(destination.EleveId, HttpContext.RequestAborted)).Ouvert)
+                    {
+                        _jetons.Liberer(jeton);
+                        return StatusCode(403, new { message = ExamensBlancsController.MessageReserveAbonnes });
+                    }
+
+                    var ajout = await examensBlancs.AjouterAsync(
+                        destination.EleveId, examenBlancId, ligneId, fichier.FileName, fichier.ContentType,
                         flux.ToArray(), HttpContext.RequestAborted);
 
                     if (ajout.Document is null)

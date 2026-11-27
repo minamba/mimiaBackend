@@ -12,7 +12,8 @@ namespace SchoolWebApp.Api.Services
     /// La page n'a pas pu être lue sur le site officiel, mais sur la copie de
     /// l'Internet Archive de cette date. Null : lue en direct.
     /// </param>
-    public record ReleveVeille(bool Reussi, string? Hash, DateTime? CopieDu = null);
+    /// <param name="Texte">Le texte visible lu (25/11/2026) : la veille du calendrier des examens en tire ses propositions.</param>
+    public record ReleveVeille(bool Reussi, string? Hash, DateTime? CopieDu = null, string? Texte = null);
 
     public interface IVeilleReferentielService
     {
@@ -187,7 +188,7 @@ namespace SchoolWebApp.Api.Services
                 _logger.LogInformation(
                     "Veille referentiel : {Url} lue sur la copie de l'Internet Archive du {Copie:dd/MM/yyyy}.", url, copieDu);
 
-                return new ReleveVeille(true, Empreinte(texte), copieDu);
+                return new ReleveVeille(true, Empreinte(texte), copieDu, texte);
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
@@ -320,7 +321,7 @@ namespace SchoolWebApp.Api.Services
                     return new ReleveVeille(false, null);
                 }
 
-                return new ReleveVeille(true, Empreinte(texte));
+                return new ReleveVeille(true, Empreinte(texte), Texte: texte);
             }
             catch (OperationCanceledException)
             {

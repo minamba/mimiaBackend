@@ -1420,6 +1420,95 @@ namespace SchoolWebApp.Dal.Migrations
                     b.ToTable("CreditFichesFamille", (string)null);
                 });
 
+            modelBuilder.Entity("SchoolWebApp.Dal.Entities.DateEpreuveOfficielle", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasColumnName("id");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("AnnexeUrl")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)")
+                        .HasColumnName("annexe_url");
+
+                    b.Property<DateTime>("DateCreation")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("date_creation");
+
+                    b.Property<DateTime>("DateEpreuve")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("date_epreuve");
+
+                    b.Property<DateTime?>("DateFin")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("date_fin");
+
+                    b.Property<string>("EpreuveCode")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("nvarchar(60)")
+                        .HasColumnName("epreuve_code");
+
+                    b.Property<string>("Etat")
+                        .IsRequired()
+                        .HasMaxLength(12)
+                        .HasColumnType("nvarchar(12)")
+                        .HasColumnName("etat");
+
+                    b.Property<string>("Extrait")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)")
+                        .HasColumnName("extrait");
+
+                    b.Property<TimeSpan?>("HeureDebut")
+                        .HasColumnType("time")
+                        .HasColumnName("heure_debut");
+
+                    b.Property<TimeSpan?>("HeureFin")
+                        .HasColumnType("time")
+                        .HasColumnName("heure_fin");
+
+                    b.Property<string>("Nature")
+                        .IsRequired()
+                        .HasMaxLength(12)
+                        .HasColumnType("nvarchar(12)")
+                        .HasColumnName("nature");
+
+                    b.Property<DateTime?>("ProposeLe")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("propose_le");
+
+                    b.Property<DateTime?>("RemplacementLe")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("remplacement_le");
+
+                    b.Property<string>("SourceLibelle")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)")
+                        .HasColumnName("source_libelle");
+
+                    b.Property<string>("SourceUrl")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)")
+                        .HasColumnName("source_url");
+
+                    b.Property<DateTime?>("ValideLe")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("valide_le");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EpreuveCode", "Etat")
+                        .IsUnique();
+
+                    b.ToTable("DateEpreuveOfficielle", (string)null);
+                });
+
             modelBuilder.Entity("SchoolWebApp.Dal.Entities.DesabonnementMail", b =>
                 {
                     b.Property<int>("Id")

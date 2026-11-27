@@ -63,6 +63,9 @@ namespace SchoolWebApp.Domain.Models
             "avis",
             "schemas",
             "programme",
+
+            // LES DATES OFFICIELLES DES ÉPREUVES (25/11/2026) : la veille propose, l'administrateur valide.
+            "sessions_examens",
             "periodes",
             "signalements",
 

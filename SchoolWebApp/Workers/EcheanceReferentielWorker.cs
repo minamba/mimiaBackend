@@ -231,6 +231,24 @@ namespace SchoolWebApp.Api.Workers
                 // comparer au relevé SUIVANT, et non plus seulement au tout
                 // premier.
                 await repository.EnregistrerReleveAsync(echeance.Id, releve.Hash, statut, maintenant, releve.CopieDu, ct);
+
+                // LE CALENDRIER DES EXAMENS (25/11/2026, formule B) : une page du calendrier qui change — ou qu'on lit pour
+                // la première fois — est lue par CalendrierExamensService, qui PROPOSE les dates nouvelles à Camara
+                // (onglet « Sessions d'examens »). Rien n'est visible des familles avant sa validation.
+                if (echeance.MatiereLibelle == SchoolWebApp.Domain.Models.CalendrierExamens.LibelleVeille
+                    && statut != EcheanceReferentielRepository.StatutInchangee
+                    && !string.IsNullOrWhiteSpace(releve.Texte))
+                {
+                    try
+                    {
+                        var calendrier = scope.ServiceProvider.GetRequiredService<Services.CalendrierExamensService>();
+                        await calendrier.ProposerAsync(releve.Texte, echeance.Url, releve.CopieDu, ct);
+                    }
+                    catch (Exception ex) when (ex is not OperationCanceledException)
+                    {
+                        _logger.LogError(ex, "Calendrier des examens : lecture de {Url} impossible.", echeance.Url);
+                    }
+                }
             }
         }
 

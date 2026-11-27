@@ -112,6 +112,19 @@ namespace SchoolWebApp.Api.Services.Fournisseurs
         /// <summary>Le code d'erreur du fournisseur, tel quel (`insufficient_quota`…).</summary>
         public string? CodeErreur { get; init; }
 
+        /// <summary>
+        /// D'OÙ VIENT L'ALERTE — Camara, le 25/11/2026 : une alerte « clé refusée » de son API locale a été prise
+        /// pour une panne de prod (les deux écrivent sur le même Telegram). « PROD » ou « DEV », posé par la
+        /// surveillance au moment de prévenir ; null ailleurs.
+        /// </summary>
+        public string? Environnement { get; init; }
+
+        /// <summary>
+        /// Les quatre derniers caractères de la clé sondée, comme la console du fournisseur les affiche
+        /// (« sk-ant-api03-G3E…vQAA ») : de quoi reconnaître la clé sans jamais l'écrire. Null si pas de clé.
+        /// </summary>
+        public string? FinCle { get; init; }
+
         /// <summary>Le message du fournisseur, en anglais, tronqué.</summary>
         public string? Detail { get; init; }
 

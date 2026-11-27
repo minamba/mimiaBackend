@@ -459,6 +459,17 @@ namespace SchoolWebApp.Domain.Models
         /// <summary>Cours envoyés en podcast sur la période.</summary>
         public int PodcastsCours { get; set; }
 
+        /// <summary>
+        /// LES DOCUMENTS ENVOYÉS PAR LES ENFANTS (26/11/2026) — Camara : « dans la partie consommé par les familles,
+        /// le prix de quand un enfant upload un document ». La lecture d'une pièce jointe de séance, du cours d'un
+        /// contrôle, des documents d'un examen blanc et leur rangement par matière : sortis des frais de fond. Ce que le
+        /// professeur en dit ensuite en séance reste dans le dialogue.
+        /// </summary>
+        public decimal DocumentsDollars { get; set; }
+
+        /// <summary>Appels au modèle pour lire ou ranger ces documents.</summary>
+        public int DocumentsAppels { get; set; }
+
         public decimal TotalDollars { get; set; }
 
         /// <summary>Tours de parole du professeur sur la période.</summary>

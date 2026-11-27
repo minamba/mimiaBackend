@@ -266,6 +266,39 @@ namespace SchoolWebApp.Dal.Seed
                 url: "https://eduscol.education.gouv.fr/5856/programmes-et-ressources-en-serie-sti2d",
                 matieresCodes: "INGENIERIE;PHYSIQUE_CHIMIE;MATHS", niveauxCodes: "PREMIERE_STI2D;TERMINALE_STI2D", ct: ct);
 
+            // LA TECHNOLOGIE DU COLLÈGE, CONSTRUITE LE 25/11/2026 (ReferentielTechnologie, professeur Amine). Programme
+            // du BO n° 9 du 29/02/2024, en vigueur en 3e depuis la rentrée 2026. Un projet d'aménagement est publié
+            // sur Éduscol STI sans être paru au BO : c'est lui que cette veille doit voir arriver. Page lue ce jour-là
+            // sur la copie de l'Internet Archive (Cloudflare refusait le poste).
+            await repository.SeedSiAbsenteAsync(
+                "Technologie", "5e, 4e, 3e", new DateTime(2027, 8, 1),
+                dateConnue: false, texteOfficiel: "Arrêté du 09/02/2024 (MENE2402802A), BO n° 9 du 29/02/2024",
+                notes: "Revérification annuelle. Un projet d'aménagement du programme de technologie du cycle 4 "
+                    + "circule (Éduscol STI) sans parution au BO au 25/11/2026 : à reprendre s'il paraît.",
+                url: "https://eduscol.education.gouv.fr/5745/ressources-d-accompagnement-du-programme-de-technologie-au-cycle-4",
+                matieresCodes: "TECHNOLOGIE", niveauxCodes: "CINQUIEME;QUATRIEME;TROISIEME", ct: ct);
+
+            // LE CALENDRIER DES EXAMENS (25/11/2026, formule B voulue par Camara) : ces deux pages ne sont pas des
+            // programmes. Quand l'une change, le worker la fait lire (CalendrierExamensService) et PROPOSE les nouvelles
+            // dates dans l'onglet « Sessions d'examens » ; Camara valide, les liens des sources sous les yeux. La page du
+            // ministère garde son numéro (341384) d'une session à l'autre : c'est elle qui verra paraître la session
+            // 2028. Celle d'Éduscol change d'adresse chaque année : à remplacer à la rentrée 2027.
+            await repository.SeedSiAbsenteAsync(
+                SchoolWebApp.Domain.Models.CalendrierExamens.LibelleVeille, "Brevet, bac, bac pro (session 2027)",
+                new DateTime(2027, 8, 1), dateConnue: false,
+                texteOfficiel: "Note de service MENE2622686N, BO spécial n° 2 du 25 août 2026",
+                notes: "Page d'Éduscol de la session 2027. Un changement produit des propositions de dates à valider "
+                    + "dans Admin › Sessions d'examens. À remplacer par la page de la session 2028 à la rentrée 2027.",
+                url: "https://eduscol.education.gouv.fr/5697/dates-des-examens-2027", ct: ct);
+            await repository.SeedSiAbsenteAsync(
+                SchoolWebApp.Domain.Models.CalendrierExamens.LibelleVeille, "Brevet, bac, CAP (page du ministère)",
+                new DateTime(2027, 8, 1), dateConnue: false,
+                texteOfficiel: "Note de service MENE2622686N, BO spécial n° 2 du 25 août 2026",
+                notes: "Page « Baccalauréat, brevet, CAP : le calendrier » du ministère, même numéro chaque année : elle "
+                    + "annonce la session suivante. Un changement produit des propositions à valider dans Admin › Sessions "
+                    + "d'examens ; une nouvelle session (2028) demande aussi d'écrire ses examens dans ExamenSeeder.",
+                url: "https://www.education.gouv.fr/reussir-au-lycee/baccalaureat-brevet-cap-le-calendrier-2027-341384", ct: ct);
+
             await repository.SeedSiAbsenteAsync(
                 "Français (voie technologique)", "1re technologique", new DateTime(2027, 8, 1),
                 dateConnue: false, texteOfficiel: "Arrêté du 17/01/2019 (MENE1901575A, annexe 2), œuvres renouvelées chaque année",

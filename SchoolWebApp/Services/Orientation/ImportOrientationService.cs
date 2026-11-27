@@ -19,8 +19,9 @@ namespace SchoolWebApp.Api.Services.Orientation
     ///                      pro, CAP, familles de métiers de 2de pro…) ;
     ///       60113f395cce6  Idéo — enseignements de spécialité de 1re générale ;
     ///       60113c3d5fee0  Idéo — enseignements optionnels et langues de 2de GT.
-    ///     LES FICHIERS FIXES, PAS L'API : <c>api.opendata.onisep.fr/downloads/
-    ///     &lt;jeu&gt;/&lt;jeu&gt;.json</c>, ceux que référence data.gouv.fr. L'API de
+    ///     LES FICHIERS FIXES, PAS L'API : <c>data.onisep.fr/api/v1/downloads/
+    ///     &lt;jeu&gt;/&lt;jeu&gt;.json</c> (depuis le 26/11/2026 ; avant,
+    ///     api.opendata.onisep.fr), ceux que référence data.gouv.fr. L'API de
     ///     l'Onisep est limitée à CINQ requêtes par jour sans compte (mesuré le
     ///     11/10/2026 : « Daily-Request-Limit: 5 », puis 429) ; les fichiers
     ///     fixes ne comptent pas dans ce quota.
@@ -65,8 +66,12 @@ namespace SchoolWebApp.Api.Services.Orientation
         public const string JeuSpecialites = "60113f395cce6";
         public const string JeuOptions2de = "60113c3d5fee0";
 
-        /// <summary>Le fichier fixe d'un jeu Onisep, hors quota de l'API.</summary>
-        private const string FichierOnisep = "https://api.opendata.onisep.fr/downloads/{0}/{0}.json";
+        /// <summary>
+        /// Le fichier fixe d'un jeu Onisep, hors quota de l'API. L'ONISEP A DÉMÉNAGÉ SES FICHIERS (constaté le
+        /// 26/11/2026) : l'ancienne adresse <c>api.opendata.onisep.fr/downloads/…</c> répond 404, la nouvelle est celle
+        /// que référence data.gouv.fr. Mêmes jeux, mêmes colonnes ; seule l'adresse a changé.
+        /// </summary>
+        public const string FichierOnisep = "https://data.onisep.fr/api/v1/downloads/{0}/{0}.json";
 
         private const string ExportAnnuaire =
             "https://data.education.gouv.fr/api/explore/v2.1/catalog/datasets/fr-en-annuaire-education/exports/json"
